@@ -5,8 +5,10 @@
 #![allow(dead_code)]
 
 pub mod a2a; // A2A (Agent-to-Agent) Protocol Gateway
+pub mod alerting; // Alerting system (Slack, webhooks)
 pub mod analytics;
 pub mod audio; // Audio API (transcription, translation, speech)
+pub mod audit; // Audit logging system
 // pub mod base_provider;  // Removed: unused dead code
 pub mod batch;
 pub mod budget; // Budget management system
@@ -16,8 +18,10 @@ pub mod completion; // Core completion API
 pub mod cost; // Unified cost calculation system
 pub mod embedding; // Core embedding API (Python LiteLLM compatible)
 pub mod function_calling; // Function calling support for AI providers
+pub mod guardrails; // Content safety and validation system
 pub mod health; // Health monitoring system
 pub mod integrations; // External integrations (Langfuse, etc.)
+pub mod ip_access; // IP-based access control
 pub mod keys; // API Key Management System
 pub mod mcp; // MCP (Model Context Protocol) Gateway
 pub mod models;

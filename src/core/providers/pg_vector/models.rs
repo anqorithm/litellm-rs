@@ -31,7 +31,7 @@ pub enum FilterOp {
 
 impl FilterOp {
     /// Convert to SQL operator string
-    pub fn to_sql(&self) -> &'static str {
+    pub fn as_sql(self) -> &'static str {
         match self {
             FilterOp::Eq => "=",
             FilterOp::Ne => "!=",
@@ -135,8 +135,7 @@ impl MetadataFilter {
 
         // Ensure it starts with a letter or underscore
         if sanitized.is_empty()
-            || (!sanitized.chars().next().unwrap().is_alphabetic()
-                && sanitized.chars().next().unwrap() != '_')
+            || (!sanitized.starts_with(|c: char| c.is_alphabetic()) && !sanitized.starts_with('_'))
         {
             "invalid_field".to_string()
         } else {
@@ -154,7 +153,7 @@ impl MetadataFilter {
             FilterOp::IsNull => (format!("{} IS NULL", jsonb_field), None),
             FilterOp::IsNotNull => (format!("{} IS NOT NULL", jsonb_field), None),
             _ => {
-                let sql = format!("{} {} ${}", jsonb_field, self.op.to_sql(), param_index);
+                let sql = format!("{} {} ${}", jsonb_field, self.op.as_sql(), param_index);
                 (sql, self.value.clone())
             }
         }
@@ -521,7 +520,7 @@ impl SearchOptions {
         let filter = MetadataFilter::eq(field, value);
         self.metadata_filters = Some(
             self.metadata_filters
-                .unwrap_or_else(MetadataFilters::new)
+                .unwrap_or_default()
                 .add(filter),
         );
         self

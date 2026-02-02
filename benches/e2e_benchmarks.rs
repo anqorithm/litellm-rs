@@ -162,7 +162,7 @@ fn bench_header_processing(c: &mut Criterion) {
 fn bench_model_routing(c: &mut Criterion) {
     let mut group = c.benchmark_group("model_routing");
 
-    let models = vec![
+    let models = [
         "gpt-4",
         "gpt-4-turbo",
         "gpt-4-turbo-preview",
