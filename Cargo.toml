@@ -74,7 +74,16 @@ lru = "0.16"
 # Object storage (S3 compatible)
 object_store = { version = "0.11", features = ["aws", "gcp", "azure"], optional = true }
 aws-sdk-s3 = { version = "1.120", optional = true }
+aws-sdk-secretsmanager = { version = "1.70", optional = true }
 aws-config = { version = "1.5", optional = true }
+
+# Cloud secret managers
+google-cloud-secretmanager-v1 = { version = "1.4", optional = true }
+google-cloud-auth = { version = "1.5", optional = true }
+azure_security_keyvault_secrets = { version = "0.10", optional = true }
+azure_identity = { version = "0.31", optional = true }
+azure_core = { version = "0.31", optional = true }
+vaultrs = { version = "0.7", optional = true }
 
 # Vector database client
 qdrant-client = { version = "1.12", optional = true }
@@ -169,6 +178,13 @@ sqlite = ["sea-orm/sqlx-sqlite", "sea-orm/runtime-tokio-rustls"]
 redis = ["dep:redis"]
 s3 = ["dep:object_store", "dep:aws-sdk-s3", "dep:aws-config"]
 
+# Secret managers
+aws-secrets = ["dep:aws-sdk-secretsmanager", "dep:aws-config"]
+gcp-secrets = ["dep:google-cloud-secretmanager-v1", "dep:google-cloud-auth"]
+azure-secrets = ["dep:azure_security_keyvault_secrets", "dep:azure_identity", "dep:azure_core"]
+vault-secrets = ["dep:vaultrs"]
+cloud-secrets = ["aws-secrets", "gcp-secrets", "azure-secrets", "vault-secrets"]
+
 # Monitoring and observability
 metrics = ["dep:prometheus", "dep:sysinfo"]
 tracing = ["dep:opentelemetry", "dep:opentelemetry-jaeger"]
@@ -180,7 +196,7 @@ analytics = ["metrics"]
 enterprise = ["analytics", "vector-db"]
 
 # Full feature set
-full = ["postgres", "redis", "s3", "metrics", "tracing", "vector-db", "websockets", "analytics"]
+full = ["postgres", "redis", "s3", "metrics", "tracing", "vector-db", "websockets", "analytics", "cloud-secrets"]
 
 # Metadata
 [package.metadata.docs.rs]

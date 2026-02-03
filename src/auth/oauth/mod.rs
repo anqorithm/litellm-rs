@@ -10,6 +10,7 @@ pub mod client;
 pub mod config;
 pub mod handlers;
 pub mod middleware;
+pub mod providers;
 pub mod session;
 pub mod types;
 
@@ -21,6 +22,7 @@ pub use client::OAuthClient;
 pub use config::{OAuthConfig, OAuthProvider};
 pub use handlers::configure_routes;
 pub use middleware::OAuthMiddleware;
+pub use providers::{OidcDiscovery, OidcProvider, OidcProviderConfig};
 pub use session::{InMemorySessionStore, SessionStore};
 pub use types::{OAuthState, TokenResponse, UserInfo};
 

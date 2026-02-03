@@ -17,6 +17,7 @@ pub mod cache_manager;
 pub mod completion; // Core completion API
 pub mod cost; // Unified cost calculation system
 pub mod embedding; // Core embedding API (Python LiteLLM compatible)
+pub mod fine_tuning; // Fine-tuning API
 pub mod function_calling; // Function calling support for AI providers
 pub mod guardrails; // Content safety and validation system
 pub mod health; // Health monitoring system
@@ -28,8 +29,10 @@ pub mod models;
 pub mod observability; // Advanced observability and monitoring
 pub mod providers;
 pub mod rate_limiter; // Rate limiting system
+pub mod realtime; // Realtime WebSocket API
 pub mod rerank; // Rerank API for RAG systems
 pub mod router;
+pub mod secret_managers; // Secret management system
 pub mod security;
 pub mod semantic_cache;
 pub mod streaming;
