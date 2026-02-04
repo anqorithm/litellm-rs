@@ -12,6 +12,7 @@ mod context;
 mod embeddings;
 mod images;
 mod models;
+mod provider_selection;
 
 // Public re-exports for backward compatibility
 pub use audio::{audio_speech, audio_transcriptions, audio_translations};

@@ -3,14 +3,17 @@
 use crate::core::models::ApiKey;
 use crate::core::models::RequestContext;
 use crate::core::models::user::types::User;
-use actix_web::http::header::HeaderMap;
-use actix_web::{HttpRequest, Result as ActixResult};
+use actix_web::{HttpMessage, HttpRequest, Result as ActixResult};
+use serde_json::json;
+use std::time::{Duration, UNIX_EPOCH};
 use tracing::debug;
 
 /// Get request context from headers and middleware extensions
 pub fn get_request_context(req: &HttpRequest) -> ActixResult<RequestContext> {
-    // In a real implementation, this would extract the context from request extensions
-    // that were set by the authentication middleware
+    if let Some(context) = req.extensions().get::<RequestContext>() {
+        return Ok(context.clone());
+    }
+
     let mut context = RequestContext::new();
 
     // Extract request ID
@@ -27,21 +30,19 @@ pub fn get_request_context(req: &HttpRequest) -> ActixResult<RequestContext> {
         }
     }
 
+    context.client_ip = req.connection_info().peer_addr().map(|ip| ip.to_string());
+
     Ok(context)
 }
 
 /// Extract user from request extensions
-pub fn get_authenticated_user(_headers: &HeaderMap) -> Option<User> {
-    // In a real implementation, this would extract the user from request extensions
-    // that were set by the authentication middleware
-    None
+pub fn get_authenticated_user(req: &HttpRequest) -> Option<User> {
+    req.extensions().get::<User>().cloned()
 }
 
 /// Extract API key from request extensions
-pub fn get_authenticated_api_key(_headers: &HeaderMap) -> Option<ApiKey> {
-    // In a real implementation, this would extract the API key from request extensions
-    // that were set by the authentication middleware
-    None
+pub fn get_authenticated_api_key(req: &HttpRequest) -> Option<ApiKey> {
+    req.extensions().get::<ApiKey>().cloned()
 }
 
 /// Check if user has permission for the requested operation
@@ -58,6 +59,36 @@ pub async fn log_api_usage(context: &RequestContext, model: &str, tokens_used: u
         "API usage: user_id={:?}, model={}, tokens={}, cost={}",
         context.user_id, model, tokens_used, cost
     );
+}
+
+/// Convert API RequestContext to core context used by providers
+pub fn to_core_context(context: &RequestContext) -> crate::core::types::RequestContext {
+    let mut core_context = crate::core::types::RequestContext::new();
+    core_context.request_id = context.request_id.clone();
+    core_context.user_id = context.user_id.map(|id| id.to_string());
+    core_context.client_ip = context.client_ip.clone();
+    core_context.user_agent = context.user_agent.clone();
+    core_context.headers = context.headers.clone();
+    core_context.trace_id = context.trace_id.clone();
+    core_context.span_id = context.span_id.clone();
+
+    let ts_ms = context.timestamp.timestamp_millis();
+    if ts_ms >= 0 {
+        core_context.start_time = UNIX_EPOCH + Duration::from_millis(ts_ms as u64);
+    }
+
+    if let Some(team_id) = context.team_id {
+        core_context
+            .metadata
+            .insert("team_id".to_string(), json!(team_id.to_string()));
+    }
+    if let Some(api_key_id) = context.api_key_id {
+        core_context
+            .metadata
+            .insert("api_key_id".to_string(), json!(api_key_id.to_string()));
+    }
+
+    core_context
 }
 
 #[cfg(test)]
@@ -130,16 +161,16 @@ mod tests {
 
     #[test]
     fn test_get_authenticated_user_returns_none() {
-        let headers = HeaderMap::new();
-        assert!(get_authenticated_user(&headers).is_none());
+        let req = actix_web::test::TestRequest::default().to_http_request();
+        assert!(get_authenticated_user(&req).is_none());
     }
 
     // ==================== get_authenticated_api_key Tests ====================
 
     #[test]
     fn test_get_authenticated_api_key_returns_none() {
-        let headers = HeaderMap::new();
-        assert!(get_authenticated_api_key(&headers).is_none());
+        let req = actix_web::test::TestRequest::default().to_http_request();
+        assert!(get_authenticated_api_key(&req).is_none());
     }
 
     // ==================== log_api_usage Tests ====================

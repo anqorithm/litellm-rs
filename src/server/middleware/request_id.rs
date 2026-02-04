@@ -46,13 +46,22 @@ where
     forward_ready!(service);
 
     fn call(&self, mut req: ServiceRequest) -> Self::Future {
-        let request_id = Uuid::new_v4().to_string();
+        let existing = req
+            .headers()
+            .get("x-request-id")
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_string);
 
-        req.headers_mut().insert(
-            actix_web::http::header::HeaderName::from_static("x-request-id"),
-            HeaderValue::from_str(&request_id)
-                .unwrap_or_else(|_| HeaderValue::from_static("invalid")),
-        );
+        let request_id = if let Some(id) = existing {
+            id
+        } else {
+            let id = Uuid::new_v4().to_string();
+            req.headers_mut().insert(
+                actix_web::http::header::HeaderName::from_static("x-request-id"),
+                HeaderValue::from_str(&id).unwrap_or_else(|_| HeaderValue::from_static("invalid")),
+            );
+            id
+        };
 
         debug!("Processing request: {}", request_id);
 

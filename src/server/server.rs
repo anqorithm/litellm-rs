@@ -4,6 +4,7 @@
 
 use crate::config::{Config, ServerConfig};
 use crate::server::handlers::health_check;
+use crate::server::middleware::{AuthMiddleware, RequestIdMiddleware};
 use crate::server::routes;
 use crate::server::state::AppState;
 use crate::services::pricing::PricingService;
@@ -146,6 +147,8 @@ impl HttpServer {
             .wrap(cors)
             .wrap(Logger::default())
             .wrap(DefaultHeaders::new().add(("Server", "LiteLLM-RS")))
+            .wrap(AuthMiddleware)
+            .wrap(RequestIdMiddleware)
             .route("/health", web::get().to(health_check))
             .configure(routes::ai::configure_routes)
             .configure(routes::pricing::configure_pricing_routes)

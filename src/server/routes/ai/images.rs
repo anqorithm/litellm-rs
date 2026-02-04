@@ -4,13 +4,15 @@ use crate::core::models::RequestContext;
 use crate::core::models::openai::{ImageGenerationRequest, ImageGenerationResponse};
 use crate::core::providers::ProviderRegistry;
 use crate::core::types::ImageGenerationRequest as CoreImageRequest;
+use crate::core::types::ProviderCapability;
 use crate::server::routes::errors;
 use crate::server::state::AppState;
 use crate::utils::error::GatewayError;
 use actix_web::{HttpRequest, HttpResponse, Result as ActixResult, web};
 use tracing::{error, info};
 
-use super::context::get_request_context;
+use super::context::{get_request_context, to_core_context};
+use super::provider_selection::select_provider_for_optional_model;
 
 /// Image generation endpoint
 ///
@@ -39,12 +41,17 @@ pub async fn image_generations(
 pub async fn handle_image_generation_via_pool(
     pool: &ProviderRegistry,
     request: ImageGenerationRequest,
-    _context: RequestContext,
+    context: RequestContext,
 ) -> Result<ImageGenerationResponse, GatewayError> {
-    // Convert to core request format
+    let selection = select_provider_for_optional_model(
+        pool,
+        request.model.as_deref(),
+        ProviderCapability::ImageGeneration,
+    )?;
+
     let core_request = CoreImageRequest {
         prompt: request.prompt,
-        model: request.model,
+        model: selection.1,
         n: request.n,
         size: request.size,
         response_format: request.response_format,
@@ -53,16 +60,10 @@ pub async fn handle_image_generation_via_pool(
         style: None,
     };
 
-    // Create core context
-    let core_context = crate::core::types::RequestContext::new();
+    let core_context = to_core_context(&context);
 
-    // Find a provider that supports image generation
-    let provider = pool
-        .get_provider("openai")
-        .ok_or_else(|| GatewayError::internal("No provider available for image generation"))?;
-
-    // Call the provider's image generation method
-    let core_response = provider
+    let core_response = selection
+        .0
         .image_generation(core_request, core_context)
         .await
         .map_err(|e| GatewayError::internal(format!("Image generation error: {}", e)))?;

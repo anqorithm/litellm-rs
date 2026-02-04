@@ -71,7 +71,7 @@ pub async fn change_password(
     info!("Password change request");
 
     // Get authenticated user
-    let user = match get_authenticated_user(req.headers()) {
+    let user = match get_authenticated_user(&req) {
         Some(user) => user,
         None => {
             return Ok(HttpResponse::Unauthorized()

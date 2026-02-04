@@ -3,14 +3,17 @@
 use crate::core::models::RequestContext;
 use crate::core::models::openai::{EmbeddingRequest, EmbeddingResponse};
 use crate::core::providers::ProviderRegistry;
-use crate::core::types::{EmbeddingInput, EmbeddingRequest as CoreEmbeddingRequest};
+use crate::core::types::{
+    EmbeddingInput, EmbeddingRequest as CoreEmbeddingRequest, ProviderCapability,
+};
 use crate::server::routes::errors;
 use crate::server::state::AppState;
 use crate::utils::error::GatewayError;
 use actix_web::{HttpRequest, HttpResponse, Result as ActixResult, web};
 use tracing::{error, info};
 
-use super::context::get_request_context;
+use super::context::{get_request_context, to_core_context};
+use super::provider_selection::select_provider_for_model;
 
 /// Embeddings endpoint
 ///
@@ -39,7 +42,7 @@ pub async fn embeddings(
 pub async fn handle_embedding_via_pool(
     pool: &ProviderRegistry,
     request: EmbeddingRequest,
-    _context: RequestContext,
+    context: RequestContext,
 ) -> Result<EmbeddingResponse, GatewayError> {
     // Convert OpenAI format request to core format
     let input = match &request.input {
@@ -58,8 +61,11 @@ pub async fn handle_embedding_via_pool(
         }
     };
 
+    let selection =
+        select_provider_for_model(pool, &request.model, ProviderCapability::Embeddings)?;
+
     let core_request = CoreEmbeddingRequest {
-        model: request.model.clone(),
+        model: selection.model,
         input,
         user: request.user,
         encoding_format: None,
@@ -67,17 +73,10 @@ pub async fn handle_embedding_via_pool(
         task_type: None,
     };
 
-    // Convert RequestContext to core type
-    let core_context = crate::core::types::RequestContext::new();
+    let core_context = to_core_context(&context);
 
-    // Find a provider that supports embeddings
-    let provider = pool
-        .get_provider("openai")
-        .or_else(|| pool.get_provider("azure"))
-        .ok_or_else(|| GatewayError::internal("No provider available for embeddings"))?;
-
-    // Call the provider's embedding method
-    let core_response = provider
+    let core_response = selection
+        .provider
         .embedding(core_request, core_context)
         .await
         .map_err(|e| GatewayError::internal(format!("Embedding error: {}", e)))?;

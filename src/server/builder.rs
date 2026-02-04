@@ -64,6 +64,9 @@ pub async fn run_server() -> Result<()> {
         }
     };
 
+    // Ensure configuration is valid (including defaults)
+    config.validate()?;
+
     // Create and start server
     let server = HttpServer::new(&config).await?;
     info!(

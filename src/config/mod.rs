@@ -90,6 +90,11 @@ impl Config {
     pub fn validate(&self) -> Result<()> {
         debug!("Validating configuration");
 
+        // Validate gateway configuration (providers, storage, auth basics)
+        self.gateway
+            .validate()
+            .map_err(|e| GatewayError::Config(format!("Gateway config error: {}", e)))?;
+
         // Validate server configuration
         self.gateway
             .server
@@ -192,7 +197,7 @@ monitoring:
     #[test]
     fn test_default_config() {
         let config = Config::default();
-        assert!(config.validate().is_ok());
+        assert!(config.validate().is_err());
     }
 
     #[test]

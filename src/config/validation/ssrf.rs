@@ -3,7 +3,7 @@
 //! This module provides validation functions to protect against SSRF attacks
 //! by checking URLs for private/internal IP addresses and blocked hosts.
 
-use std::net::{IpAddr, Ipv4Addr};
+use std::net::{IpAddr, Ipv4Addr, ToSocketAddrs};
 use url::Url;
 
 /// Validate a URL against SSRF attacks
@@ -110,6 +110,27 @@ pub fn validate_url_against_ssrf(url_str: &str, context: &str) -> Result<(), Str
                     "{} URL host '{}' is a hex-encoded private IP address (SSRF protection)",
                     context, host
                 ));
+            }
+        }
+    }
+
+    // Resolve DNS to ensure host does not map to private/internal IPs
+    let host_is_literal = host.parse::<IpAddr>().is_ok()
+        || (host.starts_with('[') && host.ends_with(']'))
+        || host.chars().all(|c| c.is_ascii_digit())
+        || host.starts_with("0x")
+        || host.starts_with("0X");
+
+    if !host_is_literal {
+        let port = url.port_or_known_default().unwrap_or(80);
+        if let Ok(addrs) = (host, port).to_socket_addrs() {
+            for addr in addrs {
+                if is_private_or_internal_ip(&addr.ip()) {
+                    return Err(format!(
+                        "{} URL host '{}' resolves to a private/internal IP address (SSRF protection)",
+                        context, host
+                    ));
+                }
             }
         }
     }

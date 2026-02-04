@@ -3,18 +3,18 @@
 //! This endpoint converts legacy text completions to chat completions format
 //! since most modern providers only support chat completions.
 
-use crate::core::completion::{CompletionOptions, completion};
 use crate::core::models::RequestContext;
 use crate::core::models::openai::{CompletionRequest, CompletionResponse};
 use crate::core::providers::ProviderRegistry;
-use crate::core::types::{ChatMessage, MessageContent, MessageRole};
+use crate::core::types::{ChatMessage, MessageContent, MessageRole, ProviderCapability};
 use crate::server::routes::errors;
 use crate::server::state::AppState;
 use crate::utils::error::GatewayError;
 use actix_web::{HttpRequest, HttpResponse, Result as ActixResult, web};
 use tracing::{error, info};
 
-use super::context::get_request_context;
+use super::context::{get_request_context, to_core_context};
+use super::provider_selection::select_provider_for_model;
 
 /// Text completions endpoint (legacy)
 ///
@@ -44,23 +44,36 @@ pub async fn completions(
 ///
 /// Converts legacy text completion request to chat completion format
 pub async fn handle_completion_via_pool(
-    _pool: &ProviderRegistry,
+    pool: &ProviderRegistry,
     request: CompletionRequest,
-    _context: RequestContext,
+    context: RequestContext,
 ) -> Result<CompletionResponse, GatewayError> {
-    // Convert prompt to chat message
-    let messages = vec![ChatMessage {
-        role: MessageRole::User,
-        content: Some(MessageContent::Text(request.prompt.clone())),
-        thinking: None,
-        name: None,
-        tool_calls: None,
-        tool_call_id: None,
-        function_call: None,
-    }];
+    if request.stream.unwrap_or(false) {
+        return Err(GatewayError::validation(
+            "Streaming text completions are not supported",
+        ));
+    }
 
-    // Build completion options
-    let options = CompletionOptions {
+    let selection =
+        select_provider_for_model(pool, &request.model, ProviderCapability::ChatCompletion)?;
+
+    let logit_bias = request.logit_bias.map(|bias| {
+        bias.into_iter()
+            .map(|(key, value)| (key, value as f32))
+            .collect()
+    });
+
+    let options = crate::core::types::ChatRequest {
+        model: selection.model,
+        messages: vec![ChatMessage {
+            role: MessageRole::User,
+            content: Some(MessageContent::Text(request.prompt.clone())),
+            thinking: None,
+            name: None,
+            tool_calls: None,
+            tool_call_id: None,
+            function_call: None,
+        }],
         temperature: request.temperature.map(|t| t as f32),
         max_tokens: request.max_tokens,
         top_p: request.top_p.map(|t| t as f32),
@@ -70,11 +83,16 @@ pub async fn handle_completion_via_pool(
         stream: false,
         user: request.user,
         n: request.n,
+        logprobs: request.logprobs.map(|_| true),
+        top_logprobs: request.logprobs,
+        logit_bias,
         ..Default::default()
     };
 
-    // Call completion API
-    let response = completion(&request.model, messages, Some(options))
+    let core_context = to_core_context(&context);
+    let response = selection
+        .provider
+        .chat_completion(options, core_context)
         .await
         .map_err(|e| GatewayError::internal(format!("Completion error: {}", e)))?;
 

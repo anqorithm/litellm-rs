@@ -6,12 +6,12 @@ use async_trait::async_trait;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::core::traits::integration::{
-    CacheHitEvent, EmbeddingEndEvent, EmbeddingStartEvent, Integration,
-    IntegrationResult, LlmEndEvent, LlmErrorEvent, LlmStartEvent, LlmStreamEvent,
+    CacheHitEvent, EmbeddingEndEvent, EmbeddingStartEvent, Integration, IntegrationResult,
+    LlmEndEvent, LlmErrorEvent, LlmStartEvent, LlmStreamEvent,
 };
 
 /// Prometheus integration configuration
@@ -59,11 +59,15 @@ fn default_true() -> bool {
 }
 
 fn default_latency_buckets() -> Vec<f64> {
-    vec![10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 2500.0, 5000.0, 10000.0]
+    vec![
+        10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 2500.0, 5000.0, 10000.0,
+    ]
 }
 
 fn default_token_buckets() -> Vec<f64> {
-    vec![10.0, 50.0, 100.0, 500.0, 1000.0, 2000.0, 4000.0, 8000.0, 16000.0]
+    vec![
+        10.0, 50.0, 100.0, 500.0, 1000.0, 2000.0, 4000.0, 8000.0, 16000.0,
+    ]
 }
 
 impl Default for PrometheusConfig {
@@ -113,12 +117,14 @@ impl Gauge {
 
     fn inc(&self) {
         let current = f64::from_bits(self.value.load(Ordering::Relaxed));
-        self.value.store((current + 1.0).to_bits(), Ordering::Relaxed);
+        self.value
+            .store((current + 1.0).to_bits(), Ordering::Relaxed);
     }
 
     fn dec(&self) {
         let current = f64::from_bits(self.value.load(Ordering::Relaxed));
-        self.value.store((current - 1.0).to_bits(), Ordering::Relaxed);
+        self.value
+            .store((current - 1.0).to_bits(), Ordering::Relaxed);
     }
 
     fn get(&self) -> f64 {
@@ -150,7 +156,8 @@ impl Histogram {
         // Update sum and count
         let sum_bits = self.sum.load(Ordering::Relaxed);
         let current_sum = f64::from_bits(sum_bits);
-        self.sum.store((current_sum + value).to_bits(), Ordering::Relaxed);
+        self.sum
+            .store((current_sum + value).to_bits(), Ordering::Relaxed);
         self.count.fetch_add(1, Ordering::Relaxed);
 
         // Update bucket counts
@@ -208,20 +215,20 @@ impl Labels {
 /// Metrics storage
 struct Metrics {
     // Request counters
-    requests_total: RwLock<HashMap<Labels, Counter>>,
-    requests_success: RwLock<HashMap<Labels, Counter>>,
-    requests_error: RwLock<HashMap<Labels, Counter>>,
+    requests_total: RwLock<HashMap<Labels, Arc<Counter>>>,
+    requests_success: RwLock<HashMap<Labels, Arc<Counter>>>,
+    requests_error: RwLock<HashMap<Labels, Arc<Counter>>>,
 
     // Token counters
-    input_tokens_total: RwLock<HashMap<Labels, Counter>>,
-    output_tokens_total: RwLock<HashMap<Labels, Counter>>,
+    input_tokens_total: RwLock<HashMap<Labels, Arc<Counter>>>,
+    output_tokens_total: RwLock<HashMap<Labels, Arc<Counter>>>,
 
     // Cost tracking
     cost_total: RwLock<HashMap<Labels, AtomicU64>>,
 
     // Latency histograms
-    request_latency: RwLock<HashMap<Labels, Histogram>>,
-    ttft_latency: RwLock<HashMap<Labels, Histogram>>,
+    request_latency: RwLock<HashMap<Labels, Arc<Histogram>>>,
+    ttft_latency: RwLock<HashMap<Labels, Arc<Histogram>>>,
 
     // Active requests gauge
     active_requests: Gauge,
@@ -258,50 +265,35 @@ impl Metrics {
         }
     }
 
-    fn get_or_create_counter<'a>(
-        map: &'a RwLock<HashMap<Labels, Counter>>,
+    fn get_or_create_counter(
+        map: &RwLock<HashMap<Labels, Arc<Counter>>>,
         labels: &Labels,
-    ) -> &'a Counter {
-        // Check if exists
-        {
-            let read = map.read();
-            if read.contains_key(labels) {
-                // SAFETY: We're returning a reference to data that lives as long as the map
-                let ptr = read.get(labels).unwrap() as *const Counter;
-                drop(read);
-                return unsafe { &*ptr };
-            }
+    ) -> Arc<Counter> {
+        if let Some(counter) = map.read().get(labels).cloned() {
+            return counter;
         }
 
-        // Create new
         let mut write = map.write();
-        write.entry(labels.clone()).or_default();
-        let ptr = write.get(labels).unwrap() as *const Counter;
-        drop(write);
-        unsafe { &*ptr }
+        write
+            .entry(labels.clone())
+            .or_insert_with(|| Arc::new(Counter::default()))
+            .clone()
     }
 
-    fn get_or_create_histogram<'a>(
-        map: &'a RwLock<HashMap<Labels, Histogram>>,
+    fn get_or_create_histogram(
+        map: &RwLock<HashMap<Labels, Arc<Histogram>>>,
         labels: &Labels,
         buckets: &[f64],
-    ) -> &'a Histogram {
-        // Check if exists
-        {
-            let read = map.read();
-            if read.contains_key(labels) {
-                let ptr = read.get(labels).unwrap() as *const Histogram;
-                drop(read);
-                return unsafe { &*ptr };
-            }
+    ) -> Arc<Histogram> {
+        if let Some(histogram) = map.read().get(labels).cloned() {
+            return histogram;
         }
 
-        // Create new
         let mut write = map.write();
-        write.entry(labels.clone()).or_insert_with(|| Histogram::new(buckets.to_vec()));
-        let ptr = write.get(labels).unwrap() as *const Histogram;
-        drop(write);
-        unsafe { &*ptr }
+        write
+            .entry(labels.clone())
+            .or_insert_with(|| Arc::new(Histogram::new(buckets.to_vec())))
+            .clone()
     }
 }
 
@@ -329,18 +321,25 @@ impl PrometheusIntegration {
         let prefix = &self.config.prefix;
 
         // Helper to render counter
-        let render_counter = |name: &str, help: &str, map: &RwLock<HashMap<Labels, Counter>>| {
-            let mut lines = Vec::new();
-            lines.push(format!("# HELP {}_{} {}", prefix, name, help));
-            lines.push(format!("# TYPE {}_{} counter", prefix, name));
+        let render_counter =
+            |name: &str, help: &str, map: &RwLock<HashMap<Labels, Arc<Counter>>>| {
+                let mut lines = Vec::new();
+                lines.push(format!("# HELP {}_{} {}", prefix, name, help));
+                lines.push(format!("# TYPE {}_{} counter", prefix, name));
 
-            let read = map.read();
-            for (labels, counter) in read.iter() {
-                let label_str = labels.to_prometheus_string(&self.config.labels);
-                lines.push(format!("{}_{}{} {}", prefix, name, label_str, counter.get()));
-            }
-            lines.join("\n")
-        };
+                let read = map.read();
+                for (labels, counter) in read.iter() {
+                    let label_str = labels.to_prometheus_string(&self.config.labels);
+                    lines.push(format!(
+                        "{}_{}{} {}",
+                        prefix,
+                        name,
+                        label_str,
+                        counter.get()
+                    ));
+                }
+                lines.join("\n")
+            };
 
         // Render request counters
         output.push_str(&render_counter(
@@ -515,7 +514,8 @@ impl Integration for PrometheusIntegration {
         }
 
         if let Some(output_tokens) = event.output_tokens {
-            let counter = Metrics::get_or_create_counter(&self.metrics.output_tokens_total, &labels);
+            let counter =
+                Metrics::get_or_create_counter(&self.metrics.output_tokens_total, &labels);
             counter.inc_by(output_tokens as u64);
         }
 
