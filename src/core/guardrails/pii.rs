@@ -28,10 +28,7 @@ impl PIIGuardrail {
         for pii_type in config.effective_types() {
             if let Some(pattern) = Self::get_pattern(&pii_type) {
                 let regex = Regex::new(pattern).map_err(|e| {
-                    GuardrailError::Config(format!(
-                        "Invalid regex for {:?}: {}",
-                        pii_type, e
-                    ))
+                    GuardrailError::Config(format!("Invalid regex for {:?}: {}", pii_type, e))
                 })?;
                 patterns.insert(pii_type, regex);
             }
@@ -47,8 +44,12 @@ impl PIIGuardrail {
             PIIType::Phone => Some(r"\b(?:\+?1[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?)?\d{3}[-.\s]?\d{4}\b"),
             PIIType::CreditCard => Some(r"\b(?:\d{4}[-\s]?){3}\d{4}\b"),
             PIIType::SSN => Some(r"\b\d{3}[-\s]?\d{2}[-\s]?\d{4}\b"),
-            PIIType::IpAddress => Some(r"\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b"),
-            PIIType::DateOfBirth => Some(r"\b(?:0?[1-9]|1[0-2])[/\-](?:0?[1-9]|[12]\d|3[01])[/\-](?:19|20)\d{2}\b"),
+            PIIType::IpAddress => Some(
+                r"\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b",
+            ),
+            PIIType::DateOfBirth => {
+                Some(r"\b(?:0?[1-9]|1[0-2])[/\-](?:0?[1-9]|[12]\d|3[01])[/\-](?:19|20)\d{2}\b")
+            }
             PIIType::Passport => Some(r"\b[A-Z]{1,2}\d{6,9}\b"),
             PIIType::DriversLicense => Some(r"\b[A-Z]{1,2}\d{5,8}\b"),
             PIIType::BankAccount => Some(r"\b\d{8,17}\b"),
@@ -87,9 +88,10 @@ impl PIIGuardrail {
 
     /// Check if a match is in the allow list
     fn is_allowed(&self, text: &str) -> bool {
-        self.config.allow_list.iter().any(|allowed| {
-            text.eq_ignore_ascii_case(allowed)
-        })
+        self.config
+            .allow_list
+            .iter()
+            .any(|allowed| text.eq_ignore_ascii_case(allowed))
     }
 
     /// Mask PII in text
@@ -183,7 +185,6 @@ impl Guardrail for PIIGuardrail {
         }
     }
 }
-
 
 #[cfg(test)]
 mod tests {

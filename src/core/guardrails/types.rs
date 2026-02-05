@@ -458,7 +458,9 @@ mod tests {
         let mut result = ModerationResult::new();
         result.flagged = true;
         result.categories.insert(ModerationCategory::Hate, true);
-        result.categories.insert(ModerationCategory::Violence, false);
+        result
+            .categories
+            .insert(ModerationCategory::Violence, false);
         result.category_scores.insert(ModerationCategory::Hate, 0.9);
 
         assert!(result.is_flagged());
@@ -503,10 +505,7 @@ mod tests {
     #[test]
     fn test_check_result_merge() {
         let r1 = CheckResult::pass();
-        let violations = vec![Violation::new(
-            ViolationType::PromptInjection,
-            "Injection",
-        )];
+        let violations = vec![Violation::new(ViolationType::PromptInjection, "Injection")];
         let r2 = CheckResult::block(violations);
 
         let merged = r1.merge(r2);

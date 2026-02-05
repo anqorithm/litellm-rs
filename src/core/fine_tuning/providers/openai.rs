@@ -11,9 +11,10 @@ use tracing::{debug, warn};
 use super::{FineTuningError, FineTuningProvider, FineTuningResult};
 use crate::core::fine_tuning::config::ProviderFineTuningConfig;
 use crate::core::fine_tuning::types::{
-    CreateJobRequest, FineTuningCheckpoint, FineTuningJob, ListEventsParams,
-    ListEventsResponse, ListJobsParams, ListJobsResponse,
+    CreateJobRequest, FineTuningCheckpoint, FineTuningJob, ListEventsParams, ListEventsResponse,
+    ListJobsParams, ListJobsResponse,
 };
+use crate::utils::net::http::create_custom_client;
 
 /// OpenAI fine-tuning provider
 pub struct OpenAIFineTuningProvider {
@@ -25,10 +26,8 @@ pub struct OpenAIFineTuningProvider {
 impl OpenAIFineTuningProvider {
     /// Create a new OpenAI fine-tuning provider
     pub fn new(config: ProviderFineTuningConfig) -> Self {
-        let client = Client::builder()
-            .timeout(Duration::from_secs(config.timeout_seconds))
-            .build()
-            .unwrap_or_default();
+        let client =
+            create_custom_client(Duration::from_secs(config.timeout_seconds)).unwrap_or_default();
 
         let api_base = config
             .api_base
@@ -49,9 +48,7 @@ impl OpenAIFineTuningProvider {
 
     /// Create from environment variable
     pub fn from_env() -> Option<Self> {
-        std::env::var("OPENAI_API_KEY")
-            .ok()
-            .map(Self::from_api_key)
+        std::env::var("OPENAI_API_KEY").ok().map(Self::from_api_key)
     }
 
     /// Build authorization header
@@ -73,7 +70,10 @@ impl OpenAIFineTuningProvider {
         let url = format!("{}{}", self.api_base, path);
         let auth = self.auth_header()?;
 
-        let mut request = self.client.request(method, &url).header("Authorization", auth);
+        let mut request = self
+            .client
+            .request(method, &url)
+            .header("Authorization", auth);
 
         // Add organization header if configured
         if let Some(ref org) = self.config.organization_id {
@@ -92,16 +92,18 @@ impl OpenAIFineTuningProvider {
 
         debug!("OpenAI fine-tuning request: {}", url);
 
-        let response = request.send().await.map_err(|e| {
-            FineTuningError::network(format!("Request failed: {}", e))
-        })?;
+        let response = request
+            .send()
+            .await
+            .map_err(|e| FineTuningError::network(format!("Request failed: {}", e)))?;
 
         let status = response.status();
 
         if status.is_success() {
-            response.json::<T>().await.map_err(|e| {
-                FineTuningError::other(format!("Failed to parse response: {}", e))
-            })
+            response
+                .json::<T>()
+                .await
+                .map_err(|e| FineTuningError::other(format!("Failed to parse response: {}", e)))
         } else {
             let error_body = response.text().await.unwrap_or_default();
             warn!("OpenAI API error: {} - {}", status, error_body);
@@ -315,7 +317,10 @@ mod tests {
 
         assert_eq!(openai_request.model, "gpt-3.5-turbo");
         assert_eq!(openai_request.training_file, "file-abc123");
-        assert_eq!(openai_request.validation_file, Some("file-def456".to_string()));
+        assert_eq!(
+            openai_request.validation_file,
+            Some("file-def456".to_string())
+        );
         assert_eq!(openai_request.suffix, Some("my-model".to_string()));
     }
 

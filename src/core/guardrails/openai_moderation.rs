@@ -11,9 +11,10 @@ use std::time::Duration;
 use super::config::OpenAIModerationConfig;
 use super::traits::Guardrail;
 use super::types::{
-    CheckResult, GuardrailError, GuardrailResult, ModerationCategory, ModerationResult,
-    Violation, ViolationType,
+    CheckResult, GuardrailError, GuardrailResult, ModerationCategory, ModerationResult, Violation,
+    ViolationType,
 };
+use crate::utils::net::http::create_custom_client;
 
 /// OpenAI Moderation API guardrail
 pub struct OpenAIModerationGuardrail {
@@ -24,9 +25,7 @@ pub struct OpenAIModerationGuardrail {
 impl OpenAIModerationGuardrail {
     /// Create a new OpenAI moderation guardrail
     pub fn new(config: OpenAIModerationConfig) -> GuardrailResult<Self> {
-        let client = Client::builder()
-            .timeout(Duration::from_millis(config.timeout_ms))
-            .build()
+        let client = create_custom_client(Duration::from_millis(config.timeout_ms))
             .map_err(|e| GuardrailError::Config(format!("Failed to create HTTP client: {}", e)))?;
 
         Ok(Self { config, client })
@@ -39,9 +38,10 @@ impl OpenAIModerationGuardrail {
 
     /// Call the OpenAI moderation API
     async fn call_api(&self, content: &str) -> GuardrailResult<ModerationApiResponse> {
-        let api_key = self.config.api_key.as_ref().ok_or_else(|| {
-            GuardrailError::Config("OpenAI API key not configured".to_string())
-        })?;
+        let api_key =
+            self.config.api_key.as_ref().ok_or_else(|| {
+                GuardrailError::Config("OpenAI API key not configured".to_string())
+            })?;
 
         let url = format!("{}/moderations", self.config.base_url);
 
@@ -170,13 +170,18 @@ impl Guardrail for OpenAIModerationGuardrail {
         let violations = self.create_violations(&moderation_result);
 
         if violations.is_empty() {
-            Ok(CheckResult::pass()
-                .with_metadata("moderation_result", serde_json::to_value(&moderation_result)?))
+            Ok(CheckResult::pass().with_metadata(
+                "moderation_result",
+                serde_json::to_value(&moderation_result)?,
+            ))
         } else {
             let mut result = CheckResult::block(violations);
             result.action = self.config.action;
             result.passed = self.config.action != super::types::GuardrailAction::Block;
-            result = result.with_metadata("moderation_result", serde_json::to_value(&moderation_result)?);
+            result = result.with_metadata(
+                "moderation_result",
+                serde_json::to_value(&moderation_result)?,
+            );
             Ok(result)
         }
     }
@@ -305,9 +310,13 @@ mod tests {
         let mut result = ModerationResult::new();
         result.flagged = true;
         result.categories.insert(ModerationCategory::Hate, true);
-        result.categories.insert(ModerationCategory::Violence, false);
+        result
+            .categories
+            .insert(ModerationCategory::Violence, false);
         result.category_scores.insert(ModerationCategory::Hate, 0.8);
-        result.category_scores.insert(ModerationCategory::Violence, 0.1);
+        result
+            .category_scores
+            .insert(ModerationCategory::Violence, 0.1);
 
         let violations = guardrail.create_violations(&result);
         assert_eq!(violations.len(), 1);

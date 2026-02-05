@@ -15,6 +15,7 @@ use crate::core::traits::integration::{
     CacheHitEvent, EmbeddingEndEvent, EmbeddingStartEvent, Integration, IntegrationError,
     IntegrationResult, LlmEndEvent, LlmErrorEvent, LlmStartEvent, LlmStreamEvent,
 };
+use crate::utils::net::http::create_custom_client;
 
 /// Helicone configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -212,10 +213,9 @@ impl HeliconeIntegration {
             ));
         }
 
-        let http_client = Client::builder()
-            .timeout(Duration::from_secs(30))
-            .build()
-            .map_err(|e| IntegrationError::connection(format!("Failed to create HTTP client: {}", e)))?;
+        let http_client = create_custom_client(Duration::from_secs(30)).map_err(|e| {
+            IntegrationError::connection(format!("Failed to create HTTP client: {}", e))
+        })?;
 
         info!("Helicone integration initialized");
 
@@ -301,7 +301,10 @@ impl Integration for HeliconeIntegration {
 
         let pending = PendingRequest {
             model: event.model.clone(),
-            provider: event.provider.clone().unwrap_or_else(|| "unknown".to_string()),
+            provider: event
+                .provider
+                .clone()
+                .unwrap_or_else(|| "unknown".to_string()),
             start_time: Self::current_timestamp_ms(),
             properties: self.build_properties(&[]),
         };
@@ -322,13 +325,19 @@ impl Integration for HeliconeIntegration {
 
         let (start_time, properties) = match pending {
             Some(p) => (p.start_time, p.properties),
-            None => (Self::current_timestamp_ms() - event.latency_ms, self.build_properties(&[])),
+            None => (
+                Self::current_timestamp_ms() - event.latency_ms,
+                self.build_properties(&[]),
+            ),
         };
 
         let log_entry = HeliconeLogEntry {
             request_id: event.request_id.clone(),
             model: event.model.clone(),
-            provider: event.provider.clone().unwrap_or_else(|| "unknown".to_string()),
+            provider: event
+                .provider
+                .clone()
+                .unwrap_or_else(|| "unknown".to_string()),
             prompt_tokens: event.input_tokens,
             completion_tokens: event.output_tokens,
             total_tokens: match (event.input_tokens, event.output_tokens) {
@@ -370,7 +379,10 @@ impl Integration for HeliconeIntegration {
         let log_entry = HeliconeLogEntry {
             request_id: event.request_id.clone(),
             model: event.model.clone(),
-            provider: event.provider.clone().unwrap_or_else(|| "unknown".to_string()),
+            provider: event
+                .provider
+                .clone()
+                .unwrap_or_else(|| "unknown".to_string()),
             prompt_tokens: None,
             completion_tokens: None,
             total_tokens: None,
@@ -401,7 +413,10 @@ impl Integration for HeliconeIntegration {
     async fn on_embedding_start(&self, event: &EmbeddingStartEvent) -> IntegrationResult<()> {
         let pending = PendingRequest {
             model: event.model.clone(),
-            provider: event.provider.clone().unwrap_or_else(|| "unknown".to_string()),
+            provider: event
+                .provider
+                .clone()
+                .unwrap_or_else(|| "unknown".to_string()),
             start_time: Self::current_timestamp_ms(),
             properties: self.build_properties(&[("type", "embedding")]),
         };
@@ -429,7 +444,10 @@ impl Integration for HeliconeIntegration {
         let log_entry = HeliconeLogEntry {
             request_id: event.request_id.clone(),
             model: event.model.clone(),
-            provider: event.provider.clone().unwrap_or_else(|| "unknown".to_string()),
+            provider: event
+                .provider
+                .clone()
+                .unwrap_or_else(|| "unknown".to_string()),
             prompt_tokens: event.total_tokens,
             completion_tokens: None,
             total_tokens: event.total_tokens,
@@ -491,7 +509,10 @@ mod tests {
         assert_eq!(config.cache_ttl_seconds, 7200);
         assert!(config.enable_rate_limit);
         assert_eq!(config.rate_limit_policy, Some("10/minute".to_string()));
-        assert_eq!(config.custom_properties.get("env"), Some(&"test".to_string()));
+        assert_eq!(
+            config.custom_properties.get("env"),
+            Some(&"test".to_string())
+        );
         assert_eq!(config.user_id, Some("user-123".to_string()));
     }
 

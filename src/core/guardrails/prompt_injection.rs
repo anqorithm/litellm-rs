@@ -66,43 +66,84 @@ impl PromptInjectionGuardrail {
     fn builtin_patterns() -> GuardrailResult<Vec<CompiledPattern>> {
         let patterns = vec![
             // Instruction override attempts
-            (r"(?i)ignore\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?|rules?)", "ignore_previous", 0.9),
-            (r"(?i)disregard\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?|rules?)", "disregard_previous", 0.9),
-            (r"(?i)forget\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?|rules?)", "forget_previous", 0.9),
-
+            (
+                r"(?i)ignore\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?|rules?)",
+                "ignore_previous",
+                0.9,
+            ),
+            (
+                r"(?i)disregard\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?|rules?)",
+                "disregard_previous",
+                0.9,
+            ),
+            (
+                r"(?i)forget\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?|rules?)",
+                "forget_previous",
+                0.9,
+            ),
             // Role manipulation
             (r"(?i)you\s+are\s+now\s+(a|an|the)\s+", "role_change", 0.7),
             (r"(?i)act\s+as\s+(a|an|if\s+you\s+were)\s+", "act_as", 0.6),
             (r"(?i)pretend\s+(to\s+be|you\s+are)\s+", "pretend", 0.7),
             (r"(?i)roleplay\s+as\s+", "roleplay", 0.6),
-
             // System prompt extraction
-            (r"(?i)(show|reveal|display|print|output|tell\s+me)\s+(me\s+)?(your|the)\s+(system\s+)?(prompt|instructions?|rules?)", "extract_prompt", 0.9),
-            (r"(?i)what\s+(are|is)\s+your\s+(system\s+)?(prompt|instructions?|rules?)", "query_prompt", 0.8),
-            (r"(?i)repeat\s+(your|the)\s+(system\s+)?(prompt|instructions?)", "repeat_prompt", 0.9),
-
+            (
+                r"(?i)(show|reveal|display|print|output|tell\s+me)\s+(me\s+)?(your|the)\s+(system\s+)?(prompt|instructions?|rules?)",
+                "extract_prompt",
+                0.9,
+            ),
+            (
+                r"(?i)what\s+(are|is)\s+your\s+(system\s+)?(prompt|instructions?|rules?)",
+                "query_prompt",
+                0.8,
+            ),
+            (
+                r"(?i)repeat\s+(your|the)\s+(system\s+)?(prompt|instructions?)",
+                "repeat_prompt",
+                0.9,
+            ),
             // Jailbreak attempts
             (r"(?i)do\s+anything\s+now", "dan_jailbreak", 0.95),
             (r"(?i)jailbreak(ed)?", "jailbreak_mention", 0.8),
-            (r"(?i)bypass\s+(your\s+)?(restrictions?|limitations?|filters?|safety)", "bypass_safety", 0.9),
-
+            (
+                r"(?i)bypass\s+(your\s+)?(restrictions?|limitations?|filters?|safety)",
+                "bypass_safety",
+                0.9,
+            ),
             // Delimiter injection
             (r"```system", "system_delimiter", 0.85),
             (r"\[SYSTEM\]", "system_tag", 0.85),
             (r"<\|system\|>", "system_token", 0.9),
             (r"<\|im_start\|>", "im_start_token", 0.9),
-
             // Encoding tricks
-            (r"(?i)base64\s*:\s*[A-Za-z0-9+/=]{20,}", "base64_payload", 0.7),
-            (r"(?i)decode\s+(this|the\s+following)\s*(base64|hex|rot13)", "decode_request", 0.75),
-
+            (
+                r"(?i)base64\s*:\s*[A-Za-z0-9+/=]{20,}",
+                "base64_payload",
+                0.7,
+            ),
+            (
+                r"(?i)decode\s+(this|the\s+following)\s*(base64|hex|rot13)",
+                "decode_request",
+                0.75,
+            ),
             // Multi-turn manipulation
-            (r"(?i)in\s+your\s+(next|following)\s+(response|message|reply)", "next_response", 0.6),
+            (
+                r"(?i)in\s+your\s+(next|following)\s+(response|message|reply)",
+                "next_response",
+                0.6,
+            ),
             (r"(?i)from\s+now\s+on", "from_now_on", 0.5),
-
             // Output manipulation
-            (r"(?i)respond\s+(only\s+)?with\s+(yes|no|true|false|1|0)", "force_output", 0.5),
-            (r"(?i)your\s+(only|sole)\s+(response|output|answer)\s+(should|must|will)\s+be", "constrain_output", 0.6),
+            (
+                r"(?i)respond\s+(only\s+)?with\s+(yes|no|true|false|1|0)",
+                "force_output",
+                0.5,
+            ),
+            (
+                r"(?i)your\s+(only|sole)\s+(response|output|answer)\s+(should|must|will)\s+be",
+                "constrain_output",
+                0.6,
+            ),
         ];
 
         patterns
@@ -152,7 +193,11 @@ impl PromptInjectionGuardrail {
         }
 
         // Sort by severity (highest first)
-        matches.sort_by(|a, b| b.severity.partial_cmp(&a.severity).unwrap_or(std::cmp::Ordering::Equal));
+        matches.sort_by(|a, b| {
+            b.severity
+                .partial_cmp(&a.severity)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         matches
     }
 

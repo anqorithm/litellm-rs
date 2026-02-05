@@ -11,6 +11,7 @@ use tracing::{debug, error, warn};
 
 use super::config::LangfuseConfig;
 use super::types::{IngestionBatch, IngestionEvent, IngestionResponse};
+use crate::utils::net::http::create_custom_client;
 
 /// Langfuse client errors
 #[derive(Debug, Error)]
@@ -64,11 +65,7 @@ impl LangfuseClient {
             ));
         }
 
-        let client = Client::builder()
-            .timeout(Duration::from_secs(DEFAULT_TIMEOUT_SECS))
-            .pool_idle_timeout(Duration::from_secs(90))
-            .pool_max_idle_per_host(10)
-            .build()?;
+        let client = create_custom_client(Duration::from_secs(DEFAULT_TIMEOUT_SECS))?;
 
         Ok(Self {
             client: Arc::new(client),

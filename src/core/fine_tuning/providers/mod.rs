@@ -8,8 +8,8 @@ use async_trait::async_trait;
 use std::sync::Arc;
 
 use super::types::{
-    CreateJobRequest, FineTuningCheckpoint, FineTuningJob, ListEventsParams,
-    ListEventsResponse, ListJobsParams, ListJobsResponse,
+    CreateJobRequest, FineTuningCheckpoint, FineTuningJob, ListEventsParams, ListEventsResponse,
+    ListJobsParams, ListJobsResponse,
 };
 
 /// Result type for fine-tuning operations
@@ -113,10 +113,7 @@ pub trait FineTuningProvider: Send + Sync {
     ) -> FineTuningResult<ListEventsResponse>;
 
     /// List checkpoints for a fine-tuning job (optional)
-    async fn list_checkpoints(
-        &self,
-        _job_id: &str,
-    ) -> FineTuningResult<Vec<FineTuningCheckpoint>> {
+    async fn list_checkpoints(&self, _job_id: &str) -> FineTuningResult<Vec<FineTuningCheckpoint>> {
         Ok(vec![])
     }
 }

@@ -10,6 +10,7 @@ use tracing::{debug, error, warn};
 
 use super::config::{SlackConfig, WebhookConfig};
 use super::types::{Alert, AlertError, AlertResult};
+use crate::utils::net::http::create_custom_client;
 
 /// Trait for alert channels
 #[async_trait]
@@ -40,9 +41,7 @@ pub struct SlackChannel {
 impl SlackChannel {
     /// Create a new Slack channel
     pub fn new(config: SlackConfig) -> AlertResult<Self> {
-        let client = Client::builder()
-            .timeout(Duration::from_millis(config.timeout_ms))
-            .build()
+        let client = create_custom_client(Duration::from_millis(config.timeout_ms))
             .map_err(|e| AlertError::Config(format!("Failed to create HTTP client: {}", e)))?;
 
         Ok(Self { config, client })
@@ -175,9 +174,7 @@ pub struct WebhookChannel {
 impl WebhookChannel {
     /// Create a new webhook channel
     pub fn new(config: WebhookConfig) -> AlertResult<Self> {
-        let client = Client::builder()
-            .timeout(Duration::from_millis(config.timeout_ms))
-            .build()
+        let client = create_custom_client(Duration::from_millis(config.timeout_ms))
             .map_err(|e| AlertError::Config(format!("Failed to create HTTP client: {}", e)))?;
 
         Ok(Self { config, client })
@@ -264,7 +261,10 @@ impl AlertChannel for WebhookChannel {
             return Ok(());
         }
 
-        debug!("Sending alert to webhook {}: {}", self.config.name, alert.id);
+        debug!(
+            "Sending alert to webhook {}: {}",
+            self.config.name, alert.id
+        );
 
         self.send_with_retries(alert).await?;
 

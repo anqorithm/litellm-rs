@@ -9,8 +9,8 @@ use tracing::{debug, info};
 use super::config::FineTuningConfig;
 use super::providers::{BoxedFineTuningProvider, FineTuningError, FineTuningResult};
 use super::types::{
-    CreateJobRequest, FineTuningCheckpoint, FineTuningJob, ListEventsParams,
-    ListEventsResponse, ListJobsParams, ListJobsResponse,
+    CreateJobRequest, FineTuningCheckpoint, FineTuningJob, ListEventsParams, ListEventsResponse,
+    ListJobsParams, ListJobsResponse,
 };
 
 /// Fine-tuning manager
@@ -39,7 +39,11 @@ impl FineTuningManager {
     }
 
     /// Register a fine-tuning provider
-    pub async fn register_provider(&self, name: impl Into<String>, provider: BoxedFineTuningProvider) {
+    pub async fn register_provider(
+        &self,
+        name: impl Into<String>,
+        provider: BoxedFineTuningProvider,
+    ) {
         let name = name.into();
         info!("Registering fine-tuning provider: {}", name);
         self.providers.write().await.insert(name, provider);
@@ -83,7 +87,9 @@ impl FineTuningManager {
     fn resolve_provider_name<'a>(&'a self, provider: Option<&'a str>) -> FineTuningResult<&'a str> {
         provider
             .or(self.config.default_provider.as_deref())
-            .ok_or_else(|| FineTuningError::invalid_request("No provider specified and no default configured"))
+            .ok_or_else(|| {
+                FineTuningError::invalid_request("No provider specified and no default configured")
+            })
     }
 
     /// Create a fine-tuning job
@@ -136,7 +142,10 @@ impl FineTuningManager {
         let provider_name = self.resolve_provider_name(provider_name)?;
         let provider = self.get_provider(provider_name).await?;
 
-        info!("Cancelling fine-tuning job {} on provider {}", job_id, provider_name);
+        info!(
+            "Cancelling fine-tuning job {} on provider {}",
+            job_id, provider_name
+        );
 
         provider.cancel_job(job_id).await
     }
@@ -167,7 +176,10 @@ impl FineTuningManager {
     }
 
     /// List jobs from all providers
-    pub async fn list_all_jobs(&self, params: ListJobsParams) -> HashMap<String, FineTuningResult<ListJobsResponse>> {
+    pub async fn list_all_jobs(
+        &self,
+        params: ListJobsParams,
+    ) -> HashMap<String, FineTuningResult<ListJobsResponse>> {
         let providers = self.providers.read().await;
         let mut results = HashMap::new();
 
@@ -217,8 +229,8 @@ mod tests {
     use super::*;
     use crate::core::fine_tuning::providers::FineTuningProvider;
     use crate::core::fine_tuning::types::{FineTuningJobStatus, ListJobsResponse};
-    use std::sync::atomic::{AtomicU32, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicU32, Ordering};
 
     /// Mock provider for testing
     struct MockFineTuningProvider {
@@ -377,7 +389,10 @@ mod tests {
 
         manager.register_provider("mock", provider.clone()).await;
 
-        let response = manager.list_jobs(Some("mock"), ListJobsParams::new()).await.unwrap();
+        let response = manager
+            .list_jobs(Some("mock"), ListJobsParams::new())
+            .await
+            .unwrap();
 
         assert_eq!(response.object, "list");
         assert_eq!(provider.list_count.load(Ordering::SeqCst), 1);
@@ -450,8 +465,18 @@ mod tests {
     async fn test_list_all_jobs() {
         let manager = FineTuningManager::with_defaults();
 
-        manager.register_provider("provider1", Arc::new(MockFineTuningProvider::new("provider1"))).await;
-        manager.register_provider("provider2", Arc::new(MockFineTuningProvider::new("provider2"))).await;
+        manager
+            .register_provider(
+                "provider1",
+                Arc::new(MockFineTuningProvider::new("provider1")),
+            )
+            .await;
+        manager
+            .register_provider(
+                "provider2",
+                Arc::new(MockFineTuningProvider::new("provider2")),
+            )
+            .await;
 
         let results = manager.list_all_jobs(ListJobsParams::new()).await;
 

@@ -39,7 +39,10 @@ impl AlertManager {
         // Add webhook channels
         for webhook_config in &config.webhooks {
             if webhook_config.enabled {
-                info!("Initializing webhook alert channel: {}", webhook_config.name);
+                info!(
+                    "Initializing webhook alert channel: {}",
+                    webhook_config.name
+                );
                 let channel = WebhookChannel::new(webhook_config.clone())?;
                 channels.push(Box::new(channel));
             }
@@ -51,14 +54,9 @@ impl AlertManager {
             channels.push(Box::new(MemoryChannel::new()));
         }
 
-        let rate_limiter = Arc::new(Mutex::new(RateLimiter::new(
-            config.rate_limit_per_minute,
-        )));
+        let rate_limiter = Arc::new(Mutex::new(RateLimiter::new(config.rate_limit_per_minute)));
 
-        info!(
-            "Alert manager initialized with {} channels",
-            channels.len()
-        );
+        info!("Alert manager initialized with {} channels", channels.len());
 
         Ok(Self {
             config,
@@ -101,7 +99,10 @@ impl AlertManager {
 
         // Check if alert type is suppressed
         if self.config.is_suppressed(alert.alert_type.name()) {
-            debug!("Alert type {} is suppressed, skipping", alert.alert_type.name());
+            debug!(
+                "Alert type {} is suppressed, skipping",
+                alert.alert_type.name()
+            );
             return Ok(());
         }
 
@@ -325,9 +326,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_suppressed_types() {
-        let config = AlertConfig::new()
-            .enable()
-            .suppress_type("budget_warning");
+        let config = AlertConfig::new().enable().suppress_type("budget_warning");
 
         let manager = AlertManager::new(config).unwrap();
 
@@ -350,9 +349,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_cooldown() {
-        let config = AlertConfig::new()
-            .enable()
-            .with_cooldown(1); // 1 second cooldown
+        let config = AlertConfig::new().enable().with_cooldown(1); // 1 second cooldown
 
         let manager = AlertManager::new(config).unwrap();
 

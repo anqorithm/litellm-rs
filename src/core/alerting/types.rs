@@ -187,11 +187,7 @@ impl Alert {
     }
 
     /// Create a budget exceeded alert
-    pub fn budget_exceeded(
-        budget_name: impl Into<String>,
-        current: f64,
-        limit: f64,
-    ) -> Self {
+    pub fn budget_exceeded(budget_name: impl Into<String>, current: f64, limit: f64) -> Self {
         let budget_name = budget_name.into();
         Self::new(
             AlertLevel::Error,
@@ -220,7 +216,10 @@ impl Alert {
             format!("Budget Warning: {}", budget_name),
             format!(
                 "Budget '{}' is at {:.1}% of limit. Current: ${:.2}, Limit: ${:.2}",
-                budget_name, percentage * 100.0, current, limit
+                budget_name,
+                percentage * 100.0,
+                current,
+                limit
             ),
         )
         .with_type(AlertType::BudgetWarning)
@@ -231,18 +230,16 @@ impl Alert {
     }
 
     /// Create an error rate alert
-    pub fn error_rate_high(
-        service: impl Into<String>,
-        error_rate: f64,
-        threshold: f64,
-    ) -> Self {
+    pub fn error_rate_high(service: impl Into<String>, error_rate: f64, threshold: f64) -> Self {
         let service = service.into();
         Self::new(
             AlertLevel::Error,
             format!("High Error Rate: {}", service),
             format!(
                 "Service '{}' error rate is {:.1}%, exceeding threshold of {:.1}%",
-                service, error_rate * 100.0, threshold * 100.0
+                service,
+                error_rate * 100.0,
+                threshold * 100.0
             ),
         )
         .with_type(AlertType::ErrorRateHigh)
@@ -321,8 +318,14 @@ mod tests {
     #[test]
     fn test_alert_type_default_level() {
         assert_eq!(AlertType::BudgetExceeded.default_level(), AlertLevel::Error);
-        assert_eq!(AlertType::BudgetWarning.default_level(), AlertLevel::Warning);
-        assert_eq!(AlertType::SystemHealth.default_level(), AlertLevel::Critical);
+        assert_eq!(
+            AlertType::BudgetWarning.default_level(),
+            AlertLevel::Warning
+        );
+        assert_eq!(
+            AlertType::SystemHealth.default_level(),
+            AlertLevel::Critical
+        );
     }
 
     #[test]

@@ -124,11 +124,7 @@ mod tests {
             priority: 50,
         };
 
-        let mut guardrails: Vec<BoxedGuardrail> = vec![
-            Box::new(g1),
-            Box::new(g2),
-            Box::new(g3),
-        ];
+        let mut guardrails: Vec<BoxedGuardrail> = vec![Box::new(g1), Box::new(g2), Box::new(g3)];
 
         guardrails.sort_by_priority();
 

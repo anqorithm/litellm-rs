@@ -582,9 +582,7 @@ mod tests {
 
     #[test]
     fn test_list_jobs_params_builder() {
-        let params = ListJobsParams::new()
-            .after("ftjob-abc")
-            .limit(10);
+        let params = ListJobsParams::new().after("ftjob-abc").limit(10);
 
         assert_eq!(params.after, Some("ftjob-abc".to_string()));
         assert_eq!(params.limit, Some(10));
@@ -592,8 +590,7 @@ mod tests {
 
     #[test]
     fn test_serialization() {
-        let request = CreateJobRequest::new("gpt-3.5-turbo", "file-abc123")
-            .suffix("test");
+        let request = CreateJobRequest::new("gpt-3.5-turbo", "file-abc123").suffix("test");
 
         let json = serde_json::to_string(&request).unwrap();
         assert!(json.contains("gpt-3.5-turbo"));

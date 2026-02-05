@@ -49,11 +49,9 @@ pub mod types;
 mod tests;
 
 // Re-export main types
-pub use config::{
-    GuardrailConfig, OpenAIModerationConfig, PIIConfig, PromptInjectionConfig,
-};
+pub use config::{GuardrailConfig, OpenAIModerationConfig, PIIConfig, PromptInjectionConfig};
 pub use engine::GuardrailEngine;
-pub use middleware::{GuardrailMiddleware, GuardrailMiddlewareService, GuardrailCheckContext};
+pub use middleware::{GuardrailCheckContext, GuardrailMiddleware, GuardrailMiddlewareService};
 pub use openai_moderation::OpenAIModerationGuardrail;
 pub use pii::PIIGuardrail;
 pub use prompt_injection::PromptInjectionGuardrail;

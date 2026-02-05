@@ -13,6 +13,7 @@ use crate::core::traits::integration::{
     CacheHitEvent, EmbeddingEndEvent, EmbeddingStartEvent, Integration, IntegrationError,
     IntegrationResult, LlmEndEvent, LlmErrorEvent, LlmStartEvent, LlmStreamEvent,
 };
+use crate::utils::net::http::create_custom_client;
 
 /// OpenTelemetry integration configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -299,7 +300,8 @@ impl Span {
 
     /// Get duration in milliseconds
     pub fn duration_ms(&self) -> Option<u64> {
-        self.end_time_ns.map(|end| (end - self.start_time_ns) / 1_000_000)
+        self.end_time_ns
+            .map(|end| (end - self.start_time_ns) / 1_000_000)
     }
 }
 
@@ -310,7 +312,9 @@ fn generate_trace_id() -> String {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_nanos();
-    let random: u64 = (now as u64).wrapping_mul(6364136223846793005).wrapping_add(1);
+    let random: u64 = (now as u64)
+        .wrapping_mul(6364136223846793005)
+        .wrapping_add(1);
     format!("{:016x}{:016x}", now as u64, random)
 }
 
@@ -321,7 +325,9 @@ fn generate_span_id() -> String {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_nanos();
-    let random: u64 = (now as u64).wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+    let random: u64 = (now as u64)
+        .wrapping_mul(6364136223846793005)
+        .wrapping_add(1442695040888963407);
     format!("{:016x}", random)
 }
 
@@ -381,10 +387,8 @@ pub struct OpenTelemetryIntegration {
 impl OpenTelemetryIntegration {
     /// Create a new OpenTelemetry integration
     pub fn new(config: OpenTelemetryConfig) -> Self {
-        let http_client = reqwest::Client::builder()
-            .timeout(Duration::from_millis(config.timeout_ms))
-            .build()
-            .unwrap_or_default();
+        let http_client =
+            create_custom_client(Duration::from_millis(config.timeout_ms)).unwrap_or_default();
 
         Self {
             config,
@@ -436,7 +440,9 @@ impl OpenTelemetryIntegration {
             let service_name = self.config.service_name.clone();
 
             tokio::spawn(async move {
-                if let Err(e) = export_spans(&client, &endpoint, &headers, &service_name, spans).await {
+                if let Err(e) =
+                    export_spans(&client, &endpoint, &headers, &service_name, spans).await
+                {
                     warn!("Failed to export spans to OTLP: {}", e);
                 }
             });
@@ -484,7 +490,10 @@ async fn export_spans(
         .map_err(|e| format!("HTTP error: {}", e))?;
 
     if !response.status().is_success() {
-        return Err(format!("OTLP export failed with status: {}", response.status()));
+        return Err(format!(
+            "OTLP export failed with status: {}",
+            response.status()
+        ));
     }
 
     debug!("Exported {} spans to OTLP", spans.len());
@@ -596,7 +605,9 @@ impl Integration for OpenTelemetryIntegration {
             request: event.clone(),
         };
 
-        self.active_spans.write().insert(event.request_id.clone(), active);
+        self.active_spans
+            .write()
+            .insert(event.request_id.clone(), active);
 
         Ok(())
     }
@@ -608,7 +619,8 @@ impl Integration for OpenTelemetryIntegration {
             return Ok(());
         };
 
-        let mut span = active.span
+        let mut span = active
+            .span
             .attribute("llm.latency_ms", event.latency_ms as i64)
             .end_ok();
 
@@ -640,7 +652,8 @@ impl Integration for OpenTelemetryIntegration {
             return Ok(());
         };
 
-        let mut span = active.span
+        let mut span = active
+            .span
             .attribute("error.message", event.error_message.clone())
             .end_error(&event.error_message);
 
@@ -690,7 +703,9 @@ impl Integration for OpenTelemetryIntegration {
             request: LlmStartEvent::new(&event.request_id, &event.model),
         };
 
-        self.active_spans.write().insert(event.request_id.clone(), active);
+        self.active_spans
+            .write()
+            .insert(event.request_id.clone(), active);
 
         Ok(())
     }
@@ -702,7 +717,8 @@ impl Integration for OpenTelemetryIntegration {
             return Ok(());
         };
 
-        let mut span = active.span
+        let mut span = active
+            .span
             .attribute("llm.latency_ms", event.latency_ms as i64)
             .end_ok();
 
@@ -811,7 +827,10 @@ mod tests {
         let span = Span::new("test-span").end_error("Something went wrong");
 
         assert_eq!(span.status, SpanStatus::Error);
-        assert_eq!(span.status_message, Some("Something went wrong".to_string()));
+        assert_eq!(
+            span.status_message,
+            Some("Something went wrong".to_string())
+        );
         assert!(span.end_time_ns.is_some());
     }
 
@@ -907,11 +926,7 @@ mod tests {
 
     #[test]
     fn test_build_otlp_payload() {
-        let spans = vec![
-            Span::new("test-span")
-                .attribute("key", "value")
-                .end_ok(),
-        ];
+        let spans = vec![Span::new("test-span").attribute("key", "value").end_ok()];
 
         let payload = build_otlp_payload("test-service", &spans);
 

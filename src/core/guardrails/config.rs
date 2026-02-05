@@ -233,7 +233,10 @@ impl OpenAIModerationConfig {
     }
 
     /// Set categories to check
-    pub fn with_categories(mut self, categories: impl IntoIterator<Item = ModerationCategory>) -> Self {
+    pub fn with_categories(
+        mut self,
+        categories: impl IntoIterator<Item = ModerationCategory>,
+    ) -> Self {
         self.categories = categories.into_iter().collect();
         self
     }
@@ -549,7 +552,10 @@ mod tests {
     #[test]
     fn test_pii_config_effective_types() {
         let empty_config = PIIConfig::default();
-        assert_eq!(empty_config.effective_types().len(), PIIType::standard().len());
+        assert_eq!(
+            empty_config.effective_types().len(),
+            PIIType::standard().len()
+        );
 
         let specific_config = PIIConfig::new().with_types([PIIType::Email]);
         assert_eq!(specific_config.effective_types().len(), 1);
@@ -587,8 +593,8 @@ mod tests {
         let valid_config = GuardrailConfig::default();
         assert!(valid_config.validate().is_ok());
 
-        let invalid_config = GuardrailConfig::new()
-            .with_openai_moderation(OpenAIModerationConfig {
+        let invalid_config =
+            GuardrailConfig::new().with_openai_moderation(OpenAIModerationConfig {
                 enabled: true,
                 api_key: None,
                 ..Default::default()
@@ -598,9 +604,7 @@ mod tests {
 
     #[test]
     fn test_config_serialization() {
-        let config = GuardrailConfig::new()
-            .enable()
-            .with_pii(PIIConfig::new());
+        let config = GuardrailConfig::new().enable().with_pii(PIIConfig::new());
 
         let json = serde_json::to_string(&config).unwrap();
         let deserialized: GuardrailConfig = serde_json::from_str(&json).unwrap();

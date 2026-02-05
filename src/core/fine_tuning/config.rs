@@ -66,7 +66,11 @@ impl FineTuningConfig {
         self
     }
 
-    pub fn add_provider(mut self, name: impl Into<String>, config: ProviderFineTuningConfig) -> Self {
+    pub fn add_provider(
+        mut self,
+        name: impl Into<String>,
+        config: ProviderFineTuningConfig,
+    ) -> Self {
         self.providers.insert(name.into(), config);
         self
     }
@@ -206,7 +210,10 @@ mod tests {
             .header("X-Custom", "value");
 
         assert_eq!(config.api_key, Some("sk-test".to_string()));
-        assert_eq!(config.api_base, Some("https://api.openai.com/v1".to_string()));
+        assert_eq!(
+            config.api_base,
+            Some("https://api.openai.com/v1".to_string())
+        );
         assert_eq!(config.organization_id, Some("org-123".to_string()));
         assert_eq!(config.supported_models.len(), 2);
         assert_eq!(config.timeout_seconds, 600);
@@ -215,8 +222,7 @@ mod tests {
 
     #[test]
     fn test_serialization() {
-        let config = FineTuningConfig::new()
-            .default_provider("openai");
+        let config = FineTuningConfig::new().default_provider("openai");
 
         let json = serde_json::to_string(&config).unwrap();
         let parsed: FineTuningConfig = serde_json::from_str(&json).unwrap();

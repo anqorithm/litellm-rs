@@ -14,6 +14,7 @@ use tracing::{debug, error, info};
 use crate::auth::oauth::config::{OAuthConfig, OAuthProvider};
 use crate::auth::oauth::types::{OAuthState, TokenResponse, UserInfo};
 use crate::utils::error::error::{GatewayError, Result};
+use crate::utils::net::http::create_custom_client;
 
 /// OIDC Discovery document
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -90,9 +91,7 @@ impl OidcDiscovery {
 
         debug!("Fetching OIDC discovery from: {}", discovery_url);
 
-        let client = Client::builder()
-            .timeout(Duration::from_secs(30))
-            .build()
+        let client = create_custom_client(Duration::from_secs(30))
             .map_err(|e| GatewayError::Network(format!("Failed to create HTTP client: {}", e)))?;
 
         let response = client
@@ -100,9 +99,7 @@ impl OidcDiscovery {
             .header("Accept", "application/json")
             .send()
             .await
-            .map_err(|e| {
-                GatewayError::Network(format!("Failed to fetch OIDC discovery: {}", e))
-            })?;
+            .map_err(|e| GatewayError::Network(format!("Failed to fetch OIDC discovery: {}", e)))?;
 
         if !response.status().is_success() {
             return Err(GatewayError::Network(format!(
@@ -111,18 +108,25 @@ impl OidcDiscovery {
             )));
         }
 
-        let discovery: OidcDiscovery = response.json().await.map_err(|e| {
-            GatewayError::Parsing(format!("Failed to parse OIDC discovery: {}", e))
-        })?;
+        let discovery: OidcDiscovery = response
+            .json()
+            .await
+            .map_err(|e| GatewayError::Parsing(format!("Failed to parse OIDC discovery: {}", e)))?;
 
-        info!("Successfully fetched OIDC discovery for issuer: {}", discovery.issuer);
+        info!(
+            "Successfully fetched OIDC discovery for issuer: {}",
+            discovery.issuer
+        );
         Ok(discovery)
     }
 
     /// Check if PKCE is supported
     pub fn supports_pkce(&self) -> bool {
-        self.code_challenge_methods_supported.contains(&"S256".to_string())
-            || self.code_challenge_methods_supported.contains(&"plain".to_string())
+        self.code_challenge_methods_supported
+            .contains(&"S256".to_string())
+            || self
+                .code_challenge_methods_supported
+                .contains(&"plain".to_string())
     }
 
     /// Check if a specific scope is supported
@@ -255,9 +259,7 @@ impl OidcProvider {
     pub async fn new(config: OidcProviderConfig) -> Result<Self> {
         let discovery = OidcDiscovery::fetch(&config.issuer_url).await?;
 
-        let http_client = Client::builder()
-            .timeout(Duration::from_millis(config.timeout_ms))
-            .build()
+        let http_client = create_custom_client(Duration::from_millis(config.timeout_ms))
             .map_err(|e| GatewayError::Network(format!("Failed to create HTTP client: {}", e)))?;
 
         Ok(Self {
@@ -269,9 +271,7 @@ impl OidcProvider {
 
     /// Create from an existing discovery document
     pub fn from_discovery(config: OidcProviderConfig, discovery: OidcDiscovery) -> Result<Self> {
-        let http_client = Client::builder()
-            .timeout(Duration::from_millis(config.timeout_ms))
-            .build()
+        let http_client = create_custom_client(Duration::from_millis(config.timeout_ms))
             .map_err(|e| GatewayError::Network(format!("Failed to create HTTP client: {}", e)))?;
 
         Ok(Self {
@@ -324,8 +324,7 @@ impl OidcProvider {
             OAuthState::with_pkce(self.config.name.clone())
                 .with_redirect_uri(&self.config.redirect_uri)
         } else {
-            OAuthState::new(self.config.name.clone())
-                .with_redirect_uri(&self.config.redirect_uri)
+            OAuthState::new(self.config.name.clone()).with_redirect_uri(&self.config.redirect_uri)
         };
 
         let url = self.build_authorization_url(&state);
@@ -410,7 +409,10 @@ impl OidcProvider {
 
         if !status.is_success() {
             error!("Token exchange failed: {} - {}", status, body);
-            return Err(GatewayError::Auth(format!("Token exchange failed: {}", status)));
+            return Err(GatewayError::Auth(format!(
+                "Token exchange failed: {}",
+                status
+            )));
         }
 
         let token_response: TokenResponse = serde_json::from_str(&body)
@@ -422,11 +424,10 @@ impl OidcProvider {
 
     /// Get user info
     pub async fn get_user_info(&self, access_token: &str) -> Result<UserInfo> {
-        let userinfo_url = self
-            .discovery
-            .userinfo_endpoint
-            .as_ref()
-            .ok_or_else(|| GatewayError::Config("UserInfo endpoint not available".to_string()))?;
+        let userinfo_url =
+            self.discovery.userinfo_endpoint.as_ref().ok_or_else(|| {
+                GatewayError::Config("UserInfo endpoint not available".to_string())
+            })?;
 
         debug!("Fetching user info from: {}", userinfo_url);
 
@@ -447,7 +448,10 @@ impl OidcProvider {
 
         if !status.is_success() {
             error!("UserInfo request failed: {} - {}", status, body);
-            return Err(GatewayError::Auth(format!("UserInfo request failed: {}", status)));
+            return Err(GatewayError::Auth(format!(
+                "UserInfo request failed: {}",
+                status
+            )));
         }
 
         let json: serde_json::Value = serde_json::from_str(&body)
@@ -552,7 +556,10 @@ impl OidcProvider {
 
         if !status.is_success() {
             error!("Token refresh failed: {} - {}", status, body);
-            return Err(GatewayError::Auth(format!("Token refresh failed: {}", status)));
+            return Err(GatewayError::Auth(format!(
+                "Token refresh failed: {}",
+                status
+            )));
         }
 
         let token_response: TokenResponse = serde_json::from_str(&body)
@@ -592,7 +599,10 @@ mod tests {
         assert_eq!(config.client_id, "client123");
         assert_eq!(config.client_secret, Some("secret456".to_string()));
         assert!(config.use_pkce);
-        assert_eq!(config.extra_params.get("prompt"), Some(&"consent".to_string()));
+        assert_eq!(
+            config.extra_params.get("prompt"),
+            Some(&"consent".to_string())
+        );
     }
 
     #[test]

@@ -106,7 +106,11 @@ impl GuardrailEngine {
     }
 
     /// Run all guardrail checks
-    async fn run_checks(&self, content: &str, check_type: CheckType) -> GuardrailResult<CheckResult> {
+    async fn run_checks(
+        &self,
+        content: &str,
+        check_type: CheckType,
+    ) -> GuardrailResult<CheckResult> {
         let mut combined_result = CheckResult::pass();
 
         for guardrail in &self.guardrails {
@@ -437,7 +441,9 @@ mod tests {
         };
         let mut engine = GuardrailEngine::new(config).unwrap();
 
-        engine.add_guardrail(Box::new(TestGuardrail { should_block: false }));
+        engine.add_guardrail(Box::new(TestGuardrail {
+            should_block: false,
+        }));
 
         assert_eq!(engine.guardrail_count(), 1);
         assert!(engine.guardrail_names().contains(&"test_guardrail"));

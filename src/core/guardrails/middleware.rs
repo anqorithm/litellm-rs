@@ -6,7 +6,7 @@ use actix_web::body::MessageBody;
 use actix_web::dev::{Service, ServiceRequest, ServiceResponse, Transform, forward_ready};
 use actix_web::http::StatusCode;
 use actix_web::{Error, HttpResponse, body::BoxBody};
-use futures::future::{Ready, ready, LocalBoxFuture};
+use futures::future::{LocalBoxFuture, Ready, ready};
 use std::sync::Arc;
 use tracing::debug;
 
@@ -93,13 +93,16 @@ where
 fn create_blocked_response(message: &str) -> HttpResponse<BoxBody> {
     HttpResponse::build(StatusCode::BAD_REQUEST)
         .content_type("application/json")
-        .body(serde_json::json!({
-            "error": {
-                "message": message,
-                "type": "guardrail_violation",
-                "code": "content_blocked"
-            }
-        }).to_string())
+        .body(
+            serde_json::json!({
+                "error": {
+                    "message": message,
+                    "type": "guardrail_violation",
+                    "code": "content_blocked"
+                }
+            })
+            .to_string(),
+        )
 }
 
 /// Context stored in request extensions after guardrail check

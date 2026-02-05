@@ -1,9 +1,9 @@
 //! Integration tests for the Guardrails system
 
-use super::*;
 use self::config::{GuardrailConfig, OpenAIModerationConfig, PIIConfig, PromptInjectionConfig};
 use self::engine::GuardrailEngine;
 use self::types::{GuardrailAction, PIIType};
+use super::*;
 
 // ============================================================================
 // Integration Tests
@@ -79,10 +79,12 @@ async fn test_guardrail_priority_order() {
 
     // Should be blocked by injection (higher priority)
     assert!(result.is_blocked());
-    assert!(result
-        .violations
-        .iter()
-        .any(|v| matches!(v.violation_type, types::ViolationType::PromptInjection)));
+    assert!(
+        result
+            .violations
+            .iter()
+            .any(|v| matches!(v.violation_type, types::ViolationType::PromptInjection))
+    );
 }
 
 #[tokio::test]

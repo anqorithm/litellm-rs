@@ -15,6 +15,7 @@ use crate::core::traits::integration::{
     CacheHitEvent, EmbeddingEndEvent, EmbeddingStartEvent, Integration, IntegrationError,
     IntegrationResult, LlmEndEvent, LlmErrorEvent, LlmStartEvent, LlmStreamEvent,
 };
+use crate::utils::net::http::create_custom_client;
 
 /// Arize configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -143,7 +144,8 @@ impl ArizeConfig {
             space_key,
             model_id: std::env::var("ARIZE_MODEL_ID").unwrap_or_else(|_| default_model_id()),
             model_version: std::env::var("ARIZE_MODEL_VERSION").ok(),
-            environment: std::env::var("ARIZE_ENVIRONMENT").unwrap_or_else(|_| default_environment()),
+            environment: std::env::var("ARIZE_ENVIRONMENT")
+                .unwrap_or_else(|_| default_environment()),
             ..Default::default()
         })
     }
@@ -239,10 +241,9 @@ impl ArizeIntegration {
             ));
         }
 
-        let http_client = Client::builder()
-            .timeout(Duration::from_secs(30))
-            .build()
-            .map_err(|e| IntegrationError::connection(format!("Failed to create HTTP client: {}", e)))?;
+        let http_client = create_custom_client(Duration::from_secs(30)).map_err(|e| {
+            IntegrationError::connection(format!("Failed to create HTTP client: {}", e))
+        })?;
 
         info!(
             "Arize integration initialized for model: {}",
@@ -278,7 +279,10 @@ impl ArizeIntegration {
     fn build_features(&self, model: &str, provider: &str) -> HashMap<String, ArizeValue> {
         let mut features = HashMap::new();
         features.insert("model".to_string(), ArizeValue::String(model.to_string()));
-        features.insert("provider".to_string(), ArizeValue::String(provider.to_string()));
+        features.insert(
+            "provider".to_string(),
+            ArizeValue::String(provider.to_string()),
+        );
         features
     }
 
@@ -337,7 +341,10 @@ impl Integration for ArizeIntegration {
     async fn on_llm_start(&self, event: &LlmStartEvent) -> IntegrationResult<()> {
         debug!("Arize: LLM request started - {}", event.request_id);
 
-        let provider = event.provider.clone().unwrap_or_else(|| "unknown".to_string());
+        let provider = event
+            .provider
+            .clone()
+            .unwrap_or_else(|| "unknown".to_string());
         let features = self.build_features(&event.model, &provider);
 
         let pending = PendingRequest {
@@ -361,7 +368,10 @@ impl Integration for ArizeIntegration {
             pending_requests.remove(&event.request_id)
         };
 
-        let provider = event.provider.clone().unwrap_or_else(|| "unknown".to_string());
+        let provider = event
+            .provider
+            .clone()
+            .unwrap_or_else(|| "unknown".to_string());
         let (start_time, mut features) = match pending {
             Some(p) => (p.start_time, p.features),
             None => (
@@ -426,10 +436,16 @@ impl Integration for ArizeIntegration {
             pending_requests.remove(&event.request_id)
         };
 
-        let provider = event.provider.clone().unwrap_or_else(|| "unknown".to_string());
+        let provider = event
+            .provider
+            .clone()
+            .unwrap_or_else(|| "unknown".to_string());
         let (start_time, mut features) = match pending {
             Some(p) => (p.start_time, p.features),
-            None => (Self::current_timestamp_ms(), self.build_features(&event.model, &provider)),
+            None => (
+                Self::current_timestamp_ms(),
+                self.build_features(&event.model, &provider),
+            ),
         };
 
         features.insert(
@@ -478,9 +494,15 @@ impl Integration for ArizeIntegration {
             return Ok(());
         }
 
-        let provider = event.provider.clone().unwrap_or_else(|| "unknown".to_string());
+        let provider = event
+            .provider
+            .clone()
+            .unwrap_or_else(|| "unknown".to_string());
         let mut features = self.build_features(&event.model, &provider);
-        features.insert("type".to_string(), ArizeValue::String("embedding".to_string()));
+        features.insert(
+            "type".to_string(),
+            ArizeValue::String("embedding".to_string()),
+        );
 
         let pending = PendingRequest {
             model: event.model.clone(),
@@ -505,18 +527,27 @@ impl Integration for ArizeIntegration {
             pending_requests.remove(&event.request_id)
         };
 
-        let provider = event.provider.clone().unwrap_or_else(|| "unknown".to_string());
+        let provider = event
+            .provider
+            .clone()
+            .unwrap_or_else(|| "unknown".to_string());
         let (start_time, mut features) = match pending {
             Some(p) => (p.start_time, p.features),
             None => {
                 let mut f = self.build_features(&event.model, &provider);
-                f.insert("type".to_string(), ArizeValue::String("embedding".to_string()));
+                f.insert(
+                    "type".to_string(),
+                    ArizeValue::String("embedding".to_string()),
+                );
                 (Self::current_timestamp_ms() - event.latency_ms, f)
             }
         };
 
         if let Some(tokens) = event.total_tokens {
-            features.insert("total_tokens".to_string(), ArizeValue::Integer(tokens as i64));
+            features.insert(
+                "total_tokens".to_string(),
+                ArizeValue::Integer(tokens as i64),
+            );
         }
 
         if let Some(cost) = event.cost_usd {

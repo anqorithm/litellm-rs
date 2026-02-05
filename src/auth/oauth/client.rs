@@ -5,6 +5,7 @@ use super::types::{
     CallbackParams, OAuthError, OAuthState, PkceChallengeMethod, TokenResponse, UserInfo,
 };
 use crate::utils::error::error::{GatewayError, Result};
+use crate::utils::net::http::create_custom_client;
 use reqwest::Client;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -35,9 +36,7 @@ impl OAuthClient {
     pub fn new(config: OAuthConfig) -> Result<Self> {
         config.validate().map_err(GatewayError::Config)?;
 
-        let http_client = Client::builder()
-            .timeout(Duration::from_millis(config.timeout_ms))
-            .build()
+        let http_client = create_custom_client(Duration::from_millis(config.timeout_ms))
             .map_err(|e| GatewayError::Network(format!("Failed to create HTTP client: {}", e)))?;
 
         Ok(Self {

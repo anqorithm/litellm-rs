@@ -1,10 +1,10 @@
 //! Integration tests for the Alerting system
 
-use super::*;
 use self::channels::MemoryChannel;
 use self::config::{AlertConfig, SlackConfig, WebhookConfig};
 use self::manager::AlertManager;
 use self::types::{Alert, AlertLevel, AlertType};
+use super::*;
 use std::sync::Arc;
 
 // ============================================================================
@@ -17,10 +17,26 @@ async fn test_full_alert_pipeline() {
     let manager = AlertManager::new(config).unwrap();
 
     // Send various alerts
-    manager.send(Alert::new(AlertLevel::Warning, "Test Warning", "Warning message")).await.unwrap();
-    manager.send(Alert::budget_exceeded("monthly", 150.0, 100.0)).await.unwrap();
-    manager.send(Alert::error_rate_high("api", 0.15, 0.05)).await.unwrap();
-    manager.send(Alert::provider_failure("openai", "Timeout")).await.unwrap();
+    manager
+        .send(Alert::new(
+            AlertLevel::Warning,
+            "Test Warning",
+            "Warning message",
+        ))
+        .await
+        .unwrap();
+    manager
+        .send(Alert::budget_exceeded("monthly", 150.0, 100.0))
+        .await
+        .unwrap();
+    manager
+        .send(Alert::error_rate_high("api", 0.15, 0.05))
+        .await
+        .unwrap();
+    manager
+        .send(Alert::provider_failure("openai", "Timeout"))
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
@@ -42,9 +58,7 @@ async fn test_budget_alerts() {
 
 #[tokio::test]
 async fn test_error_rate_alerts() {
-    let config = AlertConfig::new()
-        .enable()
-        .with_error_rate_threshold(0.05);
+    let config = AlertConfig::new().enable().with_error_rate_threshold(0.05);
 
     let manager = AlertManager::new(config).unwrap();
 
@@ -61,13 +75,28 @@ async fn test_alert_level_filtering() {
     let manager = AlertManager::new(config).unwrap();
 
     // These should be filtered
-    manager.send(Alert::new(AlertLevel::Debug, "Debug", "msg")).await.unwrap();
-    manager.send(Alert::new(AlertLevel::Info, "Info", "msg")).await.unwrap();
-    manager.send(Alert::new(AlertLevel::Warning, "Warning", "msg")).await.unwrap();
+    manager
+        .send(Alert::new(AlertLevel::Debug, "Debug", "msg"))
+        .await
+        .unwrap();
+    manager
+        .send(Alert::new(AlertLevel::Info, "Info", "msg"))
+        .await
+        .unwrap();
+    manager
+        .send(Alert::new(AlertLevel::Warning, "Warning", "msg"))
+        .await
+        .unwrap();
 
     // These should pass
-    manager.send(Alert::new(AlertLevel::Error, "Error", "msg")).await.unwrap();
-    manager.send(Alert::new(AlertLevel::Critical, "Critical", "msg")).await.unwrap();
+    manager
+        .send(Alert::new(AlertLevel::Error, "Error", "msg"))
+        .await
+        .unwrap();
+    manager
+        .send(Alert::new(AlertLevel::Critical, "Critical", "msg"))
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
@@ -93,7 +122,10 @@ fn test_config_serialization_roundtrip() {
         .enable()
         .with_min_level(AlertLevel::Warning)
         .with_slack(SlackConfig::new("https://hooks.slack.com/test"))
-        .with_webhook(WebhookConfig::new("pagerduty", "https://events.pagerduty.com"))
+        .with_webhook(WebhookConfig::new(
+            "pagerduty",
+            "https://events.pagerduty.com",
+        ))
         .with_budget_warning_threshold(0.9)
         .with_error_rate_threshold(0.1)
         .with_cooldown(600);
@@ -162,10 +194,16 @@ async fn test_suppressed_alert_types() {
     let manager = AlertManager::new(config).unwrap();
 
     // These should be suppressed
-    manager.send(Alert::budget_warning("test", 80.0, 100.0, 0.8)).await.unwrap();
+    manager
+        .send(Alert::budget_warning("test", 80.0, 100.0, 0.8))
+        .await
+        .unwrap();
 
     // These should pass
-    manager.send(Alert::budget_exceeded("test", 150.0, 100.0)).await.unwrap();
+    manager
+        .send(Alert::budget_exceeded("test", 150.0, 100.0))
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
@@ -223,6 +261,12 @@ fn test_alert_type_names() {
 #[test]
 fn test_alert_type_default_levels() {
     assert_eq!(AlertType::BudgetExceeded.default_level(), AlertLevel::Error);
-    assert_eq!(AlertType::BudgetWarning.default_level(), AlertLevel::Warning);
-    assert_eq!(AlertType::SystemHealth.default_level(), AlertLevel::Critical);
+    assert_eq!(
+        AlertType::BudgetWarning.default_level(),
+        AlertLevel::Warning
+    );
+    assert_eq!(
+        AlertType::SystemHealth.default_level(),
+        AlertLevel::Critical
+    );
 }

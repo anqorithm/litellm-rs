@@ -7,8 +7,8 @@ use tokio::sync::RwLock;
 use tracing::{debug, error, warn};
 
 use crate::core::traits::integration::{
-    BoxedIntegration, CacheHitEvent, EmbeddingEndEvent, EmbeddingStartEvent,
-    IntegrationError, IntegrationResult, LlmEndEvent, LlmErrorEvent, LlmStartEvent, LlmStreamEvent,
+    BoxedIntegration, CacheHitEvent, EmbeddingEndEvent, EmbeddingStartEvent, IntegrationError,
+    IntegrationResult, LlmEndEvent, LlmErrorEvent, LlmStartEvent, LlmStreamEvent,
 };
 
 /// Configuration for the integration manager
@@ -90,10 +90,7 @@ impl IntegrationManager {
             let mut integrations = self.integrations.write().await;
             integrations.push(integration);
         } else {
-            debug!(
-                "Skipping disabled integration: {}",
-                integration.name()
-            );
+            debug!("Skipping disabled integration: {}", integration.name());
         }
     }
 
@@ -203,7 +200,11 @@ impl IntegrationManager {
             if integration.is_enabled() {
                 if let Err(e) = integration.on_embedding_start(event).await {
                     if self.config.log_errors {
-                        warn!("Integration {} embedding start error: {}", integration.name(), e);
+                        warn!(
+                            "Integration {} embedding start error: {}",
+                            integration.name(),
+                            e
+                        );
                     }
                     if self.config.fail_fast {
                         return Err(e);
@@ -221,7 +222,11 @@ impl IntegrationManager {
             if integration.is_enabled() {
                 if let Err(e) = integration.on_embedding_end(event).await {
                     if self.config.log_errors {
-                        warn!("Integration {} embedding end error: {}", integration.name(), e);
+                        warn!(
+                            "Integration {} embedding end error: {}",
+                            integration.name(),
+                            e
+                        );
                     }
                     if self.config.fail_fast {
                         return Err(e);

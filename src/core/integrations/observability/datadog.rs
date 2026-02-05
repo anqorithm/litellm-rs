@@ -15,6 +15,7 @@ use crate::core::traits::integration::{
     CacheHitEvent, EmbeddingEndEvent, EmbeddingStartEvent, Integration, IntegrationError,
     IntegrationResult, LlmEndEvent, LlmErrorEvent, LlmStartEvent, LlmStreamEvent,
 };
+use crate::utils::net::http::create_custom_client;
 
 /// DataDog configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -243,10 +244,9 @@ impl DataDogIntegration {
             ));
         }
 
-        let http_client = Client::builder()
-            .timeout(Duration::from_secs(30))
-            .build()
-            .map_err(|e| IntegrationError::connection(format!("Failed to create HTTP client: {}", e)))?;
+        let http_client = create_custom_client(Duration::from_secs(30)).map_err(|e| {
+            IntegrationError::connection(format!("Failed to create HTTP client: {}", e))
+        })?;
 
         info!(
             "DataDog integration initialized for service: {}",
@@ -445,7 +445,8 @@ impl Integration for DataDogIntegration {
         ];
 
         // Record request count metric
-        self.record_metric("llm.requests", 1.0, 1, &tags, None).await;
+        self.record_metric("llm.requests", 1.0, 1, &tags, None)
+            .await;
 
         // Log the request start
         self.record_log(
@@ -504,19 +505,14 @@ impl Integration for DataDogIntegration {
         }
 
         if let (Some(input), Some(output)) = (event.input_tokens, event.output_tokens) {
-            self.record_metric(
-                "llm.tokens.total",
-                (input + output) as f64,
-                1,
-                &tags,
-                None,
-            )
-            .await;
+            self.record_metric("llm.tokens.total", (input + output) as f64, 1, &tags, None)
+                .await;
         }
 
         // Record cost metric
         if let Some(cost) = event.cost_usd {
-            self.record_metric("llm.cost", cost, 1, &tags, Some("dollar")).await;
+            self.record_metric("llm.cost", cost, 1, &tags, Some("dollar"))
+                .await;
         }
 
         // Log completion
@@ -637,10 +633,8 @@ impl Integration for DataDogIntegration {
         }
 
         // Send metrics and logs in parallel
-        let (metrics_result, logs_result) = tokio::join!(
-            self.send_metrics(metrics),
-            self.send_logs(logs)
-        );
+        let (metrics_result, logs_result) =
+            tokio::join!(self.send_metrics(metrics), self.send_logs(logs));
 
         metrics_result?;
         logs_result?;

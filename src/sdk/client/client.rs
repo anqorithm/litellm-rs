@@ -2,6 +2,7 @@
 
 use super::types::{LoadBalancer, LoadBalancingStrategy, ProviderStats};
 use crate::sdk::{config::ClientConfig, errors::*};
+use crate::utils::net::http::create_custom_client;
 use reqwest;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -26,9 +27,7 @@ impl LLMClient {
         }
 
         // Build HTTP client
-        let http_client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(config.settings.timeout))
-            .build()
+        let http_client = create_custom_client(Duration::from_secs(config.settings.timeout))
             .map_err(|e| SDKError::ConfigError(format!("Failed to create HTTP client: {}", e)))?;
 
         let provider_stats = Arc::new(RwLock::new(HashMap::new()));
