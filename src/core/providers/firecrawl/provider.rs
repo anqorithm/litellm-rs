@@ -76,57 +76,60 @@ crate::define_pooled_http_provider_with_hooks!(
      -> ProviderError {
         ErrorMapper::map_http_error(&FirecrawlErrorMapper, status, &error_text)
     },
-    health_check: |provider: &FirecrawlProvider| async {
-        if provider
+    health_check: |provider: &FirecrawlProvider| {
+        let has_key = provider
             .config
             .base
             .get_effective_api_key(PROVIDER_NAME)
-            .is_some()
-        {
-            HealthStatus::Healthy
-        } else {
-            HealthStatus::Unhealthy
+            .is_some();
+        async move {
+            if has_key {
+                HealthStatus::Healthy
+            } else {
+                HealthStatus::Unhealthy
+            }
         }
     },
-    streaming: |provider: &FirecrawlProvider, request: ChatRequest, _context: RequestContext| async move {
+    streaming: |provider: &FirecrawlProvider, request: ChatRequest, _context: RequestContext| {
         let url = format!("{}/chat/completions", provider.config.get_api_base());
+        let api_key = provider.config.base.get_effective_api_key(PROVIDER_NAME);
 
         let mut body = FirecrawlClient::transform_chat_request(request);
         body["stream"] = serde_json::Value::Bool(true);
 
-        let api_key = provider
-            .config
-            .base
-            .get_effective_api_key(PROVIDER_NAME)
-            .ok_or_else(|| ProviderError::authentication(PROVIDER_NAME, "API key is required"))?;
+        async move {
+            let api_key = api_key.ok_or_else(|| {
+                ProviderError::authentication(PROVIDER_NAME, "API key is required")
+            })?;
 
-        let client = reqwest::Client::new();
-        let response = client
-            .post(&url)
-            .header("Authorization", format!("Bearer {}", api_key))
-            .header("Content-Type", "application/json")
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| ProviderError::network(PROVIDER_NAME, e.to_string()))?;
-
-        let status = response.status();
-        if !status.is_success() {
-            let error_text = response
-                .text()
+            let client = reqwest::Client::new();
+            let response = client
+                .post(&url)
+                .header("Authorization", format!("Bearer {}", api_key))
+                .header("Content-Type", "application/json")
+                .json(&body)
+                .send()
                 .await
-                .unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(ProviderError::api_error(
-                PROVIDER_NAME,
-                status.as_u16(),
-                error_text,
-            ));
-        }
+                .map_err(|e| ProviderError::network(PROVIDER_NAME, e.to_string()))?;
 
-        let stream = super::streaming::create_firecrawl_stream(response.bytes_stream());
-        let stream: Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>> =
-            Box::pin(stream);
-        Ok(stream)
+            let status = response.status();
+            if !status.is_success() {
+                let error_text = response
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "Unknown error".to_string());
+                return Err(ProviderError::api_error(
+                    PROVIDER_NAME,
+                    status.as_u16(),
+                    error_text,
+                ));
+            }
+
+            let stream = super::streaming::create_firecrawl_stream(response.bytes_stream());
+            let stream: Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>> =
+                Box::pin(stream);
+            Ok(stream)
+        }
     },
     calculate_cost: |_provider: &FirecrawlProvider,
                      model: &str,
@@ -154,6 +157,7 @@ impl FirecrawlProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 
     fn create_test_config() -> FirecrawlConfig {
         let mut config = FirecrawlConfig::new("firecrawl");
