@@ -74,6 +74,8 @@ config/dev.yaml
 # Cache directories
 .cache/
 cache/
+!src/core/cache/
+!src/core/cache/**
 
 # Logs
 *.log
