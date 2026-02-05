@@ -16,6 +16,7 @@ use super::error::{AzureError, azure_api_error, azure_config_error, azure_header
 use super::utils::{AzureEndpointType, AzureUtils};
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::provider::ProviderConfig;
+use crate::utils::net::http::create_custom_client;
 
 /// Azure OpenAI embedding handler
 #[derive(Debug, Clone)]
@@ -27,9 +28,7 @@ pub struct AzureEmbeddingHandler {
 impl AzureEmbeddingHandler {
     /// Create new embedding handler
     pub fn new(config: AzureConfig) -> Result<Self, AzureError> {
-        let client = reqwest::Client::builder()
-            .timeout(ProviderConfig::timeout(&config))
-            .build()
+        let client = create_custom_client(ProviderConfig::timeout(&config))
             .map_err(|e| azure_config_error(format!("Failed to create HTTP client: {}", e)))?;
 
         Ok(Self { config, client })

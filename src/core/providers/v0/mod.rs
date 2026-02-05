@@ -17,6 +17,7 @@ use crate::core::{
         responses::ChatResponse,
     },
 };
+use crate::utils::net::http::create_custom_client;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -155,15 +156,13 @@ impl V0Provider {
     pub fn new(
         config: V0Config,
     ) -> Result<Self, crate::core::providers::unified_provider::ProviderError> {
-        let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(config.timeout_seconds))
-            .build()
+        let client = create_custom_client(std::time::Duration::from_secs(config.timeout_seconds))
             .map_err(|e| {
-                crate::core::providers::unified_provider::ProviderError::Configuration {
-                    provider: "v0",
-                    message: format!("Failed to create HTTP client: {}", e),
-                }
-            })?;
+            crate::core::providers::unified_provider::ProviderError::Configuration {
+                provider: "v0",
+                message: format!("Failed to create HTTP client: {}", e),
+            }
+        })?;
 
         Ok(Self { config, client })
     }

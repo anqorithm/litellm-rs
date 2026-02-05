@@ -14,6 +14,7 @@ use tracing::{debug, error, warn};
 use super::LlamaProviderConfig;
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::common::HealthStatus;
+use crate::utils::net::http::create_custom_client;
 
 /// Provider name constant
 const PROVIDER_NAME: &str = "meta";
@@ -121,9 +122,7 @@ impl LlamaClient {
     pub fn new(config: LlamaConfig) -> Result<Self, ProviderError> {
         config.validate()?;
 
-        let http_client = Client::builder()
-            .timeout(Duration::from_secs(config.timeout_seconds))
-            .build()
+        let http_client = create_custom_client(Duration::from_secs(config.timeout_seconds))
             .map_err(|e| {
                 ProviderError::configuration(
                     PROVIDER_NAME,

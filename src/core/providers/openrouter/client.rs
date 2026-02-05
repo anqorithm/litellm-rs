@@ -17,6 +17,7 @@ use crate::core::types::{
     requests::{ChatRequest, EmbeddingRequest, ImageGenerationRequest},
     responses::{ChatChunk, ChatResponse, EmbeddingResponse, ImageGenerationResponse},
 };
+use crate::utils::net::http::create_custom_client_with_headers;
 
 use super::config::OpenRouterConfig;
 use super::error::OpenRouterError;
@@ -116,13 +117,13 @@ impl OpenRouterProvider {
         }
         */
 
-        let client = Client::builder()
-            .timeout(Duration::from_secs(config.timeout_seconds))
-            .default_headers(header_map)
-            .build()
-            .map_err(|e| {
-                ProviderError::network("openrouter", format!("Failed to create HTTP client: {}", e))
-            })?;
+        let client = create_custom_client_with_headers(
+            Duration::from_secs(config.timeout_seconds),
+            header_map,
+        )
+        .map_err(|e| {
+            ProviderError::network("openrouter", format!("Failed to create HTTP client: {}", e))
+        })?;
 
         let base_url = config.base_url.clone();
 

@@ -516,13 +516,13 @@ impl SearchOptions {
     }
 
     /// Add a single equality filter
-    pub fn with_filter_eq(mut self, field: impl Into<String>, value: impl Into<FilterValue>) -> Self {
+    pub fn with_filter_eq(
+        mut self,
+        field: impl Into<String>,
+        value: impl Into<FilterValue>,
+    ) -> Self {
         let filter = MetadataFilter::eq(field, value);
-        self.metadata_filters = Some(
-            self.metadata_filters
-                .unwrap_or_default()
-                .add(filter),
-        );
+        self.metadata_filters = Some(self.metadata_filters.unwrap_or_default().add(filter));
         self
     }
 }

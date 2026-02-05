@@ -12,6 +12,7 @@ use crate::core::types::{
     requests::EmbeddingRequest,
     responses::{EmbeddingData, EmbeddingResponse},
 };
+use crate::utils::net::http::create_custom_client_with_headers;
 
 /// Azure AI embedding handler following unified architecture
 #[derive(Debug, Clone)]
@@ -40,16 +41,9 @@ impl AzureAIEmbeddingHandler {
             headers.insert(header_name, header_value);
         }
 
-        let client = reqwest::Client::builder()
-            .timeout(config.timeout())
-            .default_headers(headers)
-            .build()
-            .map_err(|e| {
-                ProviderError::configuration(
-                    "azure_ai",
-                    format!("Failed to create HTTP client: {}", e),
-                )
-            })?;
+        let client = create_custom_client_with_headers(config.timeout(), headers).map_err(|e| {
+            ProviderError::configuration("azure_ai", format!("Failed to create HTTP client: {}", e))
+        })?;
 
         Ok(Self { config, client })
     }

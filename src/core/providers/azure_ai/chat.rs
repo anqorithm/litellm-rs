@@ -16,6 +16,7 @@ use crate::core::types::{
 
 use super::config::{AzureAIConfig, AzureAIEndpointType};
 use crate::core::providers::unified_provider::ProviderError;
+use crate::utils::net::http::create_custom_client_with_headers;
 
 /// Azure AI chat handler - complete implementation
 #[derive(Debug, Clone)]
@@ -44,16 +45,9 @@ impl AzureAIChatHandler {
             headers.insert(header_name, header_value);
         }
 
-        let client = reqwest::Client::builder()
-            .timeout(config.timeout())
-            .default_headers(headers)
-            .build()
-            .map_err(|e| {
-                ProviderError::configuration(
-                    "azure_ai",
-                    format!("Failed to create HTTP client: {}", e),
-                )
-            })?;
+        let client = create_custom_client_with_headers(config.timeout(), headers).map_err(|e| {
+            ProviderError::configuration("azure_ai", format!("Failed to create HTTP client: {}", e))
+        })?;
 
         Ok(Self { config, client })
     }

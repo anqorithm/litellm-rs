@@ -16,6 +16,7 @@ use crate::core::{
         responses::{ChatResponse, EmbeddingResponse, ImageGenerationResponse},
     },
 };
+use crate::utils::net::http::create_custom_client;
 use std::collections::HashMap;
 
 use super::{
@@ -112,9 +113,7 @@ impl VertexAIProvider {
     pub async fn new(config: VertexAIProviderConfig) -> Result<Self, VertexAIError> {
         let auth = Arc::new(VertexAuth::new(config.credentials.clone()));
 
-        let http_client = Client::builder()
-            .timeout(Duration::from_secs(config.timeout_seconds))
-            .build()
+        let http_client = create_custom_client(Duration::from_secs(config.timeout_seconds))
             .map_err(|e| ProviderError::configuration("vertex_ai", e.to_string()))?;
 
         // Cost calculation integrated in provider implementation
