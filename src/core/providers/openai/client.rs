@@ -194,6 +194,17 @@ impl OpenAIProvider {
         &self,
         request: ChatRequest,
     ) -> Result<Value, ProviderError> {
+        let to_number = |value: f32, field: &'static str| -> Result<Value, ProviderError> {
+            serde_json::Number::from_f64(value as f64)
+                .map(Value::Number)
+                .ok_or_else(|| {
+                    ProviderError::invalid_request(
+                        "openai",
+                        format!("{field} must be a finite number"),
+                    )
+                })
+        };
+
         let mut openai_request = serde_json::json!({
             "model": self.config.get_model_mapping(&request.model),
             "messages": request.messages
@@ -201,8 +212,7 @@ impl OpenAIProvider {
 
         // Add optional parameters
         if let Some(temp) = request.temperature {
-            openai_request["temperature"] =
-                Value::Number(serde_json::Number::from_f64(temp as f64).unwrap());
+            openai_request["temperature"] = to_number(temp, "temperature")?;
         }
 
         if let Some(max_tokens) = request.max_tokens {
@@ -215,8 +225,7 @@ impl OpenAIProvider {
         }
 
         if let Some(top_p) = request.top_p {
-            openai_request["top_p"] =
-                Value::Number(serde_json::Number::from_f64(top_p as f64).unwrap());
+            openai_request["top_p"] = to_number(top_p, "top_p")?;
         }
 
         if let Some(tools) = request.tools {

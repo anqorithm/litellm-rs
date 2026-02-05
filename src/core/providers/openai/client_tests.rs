@@ -4,6 +4,7 @@
 
 use super::*;
 use crate::core::providers::base::GlobalPoolManager;
+use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use crate::core::types::model::ProviderCapability;
 use crate::core::types::{chat::ChatMessage, chat::ChatRequest, message::MessageContent, message::MessageRole};
@@ -256,6 +257,25 @@ fn test_transform_chat_request_with_temperature() {
 }
 
 #[test]
+fn test_transform_chat_request_rejects_nan_temperature() {
+    let provider = create_test_provider();
+
+    let request = ChatRequest {
+        model: "gpt-4".to_string(),
+        messages: vec![ChatMessage {
+            role: MessageRole::User,
+            content: Some(MessageContent::Text("Hello".to_string())),
+            ..Default::default()
+        }],
+        temperature: Some(f32::NAN),
+        ..Default::default()
+    };
+
+    let result = provider.transform_chat_request(request);
+    assert!(matches!(result, Err(ProviderError::InvalidRequest { .. })));
+}
+
+#[test]
 fn test_transform_chat_request_with_max_tokens() {
     let provider = create_test_provider();
 
@@ -319,6 +339,25 @@ fn test_transform_chat_request_with_top_p() {
 
     let transformed = result.unwrap();
     assert!(transformed.get("top_p").is_some());
+}
+
+#[test]
+fn test_transform_chat_request_rejects_infinite_top_p() {
+    let provider = create_test_provider();
+
+    let request = ChatRequest {
+        model: "gpt-4".to_string(),
+        messages: vec![ChatMessage {
+            role: MessageRole::User,
+            content: Some(MessageContent::Text("Hello".to_string())),
+            ..Default::default()
+        }],
+        top_p: Some(f32::INFINITY),
+        ..Default::default()
+    };
+
+    let result = provider.transform_chat_request(request);
+    assert!(matches!(result, Err(ProviderError::InvalidRequest { .. })));
 }
 
 #[test]
