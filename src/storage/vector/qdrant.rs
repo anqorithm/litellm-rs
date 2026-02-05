@@ -150,7 +150,7 @@ impl QdrantStore {
 
         if let Some(threshold) = threshold {
             payload["score_threshold"] =
-                serde_json::Value::Number(serde_json::Number::from_f64(threshold as f64).unwrap());
+                serde_json::Value::Number(score_threshold_value(threshold)?);
         }
 
         let mut request = self.client.post(&url).json(&payload);
@@ -369,5 +369,28 @@ impl QdrantStore {
         } else {
             Ok(0)
         }
+    }
+}
+
+fn score_threshold_value(threshold: f32) -> Result<serde_json::Number> {
+    serde_json::Number::from_f64(threshold as f64).ok_or_else(|| {
+        GatewayError::Validation("score_threshold must be a finite number".to_string())
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_score_threshold_rejects_nan() {
+        let result = score_threshold_value(f32::NAN);
+        assert!(matches!(result, Err(GatewayError::Validation(_))));
+    }
+
+    #[test]
+    fn test_score_threshold_rejects_infinite() {
+        let result = score_threshold_value(f32::INFINITY);
+        assert!(matches!(result, Err(GatewayError::Validation(_))));
     }
 }
