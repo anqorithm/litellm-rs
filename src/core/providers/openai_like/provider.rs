@@ -195,67 +195,7 @@ impl OpenAILikeProvider {
 
     /// Transform ChatRequest to OpenAI API format
     fn transform_chat_request(&self, request: ChatRequest) -> Result<Value, OpenAILikeError> {
-        // Get effective model name (strip prefix if configured)
-        let model = self.config.get_effective_model(&request.model);
-
-        let mut openai_request = serde_json::json!({
-            "model": model,
-            "messages": request.messages
-        });
-
-        // Add optional parameters
-        if let Some(temp) = request.temperature {
-            openai_request["temperature"] =
-                Value::Number(serde_json::Number::from_f64(temp as f64).unwrap());
-        }
-
-        if let Some(max_tokens) = request.max_tokens {
-            openai_request["max_tokens"] = Value::Number(serde_json::Number::from(max_tokens));
-        }
-
-        if let Some(max_completion_tokens) = request.max_completion_tokens {
-            openai_request["max_completion_tokens"] =
-                Value::Number(serde_json::Number::from(max_completion_tokens));
-        }
-
-        if let Some(top_p) = request.top_p {
-            openai_request["top_p"] =
-                Value::Number(serde_json::Number::from_f64(top_p as f64).unwrap());
-        }
-
-        if let Some(tools) = request.tools {
-            openai_request["tools"] = serde_json::to_value(tools)
-                .map_err(|e| OpenAILikeError::serialization(PROVIDER_NAME, e.to_string()))?;
-        }
-
-        if let Some(tool_choice) = request.tool_choice {
-            openai_request["tool_choice"] = serde_json::to_value(tool_choice)
-                .map_err(|e| OpenAILikeError::serialization(PROVIDER_NAME, e.to_string()))?;
-        }
-
-        if let Some(response_format) = request.response_format {
-            openai_request["response_format"] = serde_json::to_value(response_format)
-                .map_err(|e| OpenAILikeError::serialization(PROVIDER_NAME, e.to_string()))?;
-        }
-
-        if let Some(stop) = request.stop {
-            openai_request["stop"] = serde_json::to_value(stop)
-                .map_err(|e| OpenAILikeError::serialization(PROVIDER_NAME, e.to_string()))?;
-        }
-
-        if let Some(user) = request.user {
-            openai_request["user"] = Value::String(user);
-        }
-
-        if let Some(seed) = request.seed {
-            openai_request["seed"] = Value::Number(serde_json::Number::from(seed));
-        }
-
-        if let Some(n) = request.n {
-            openai_request["n"] = Value::Number(serde_json::Number::from(n));
-        }
-
-        Ok(openai_request)
+        build_chat_request(&self.config, request)
     }
 
     /// Transform OpenAI response to standard format
@@ -512,6 +452,81 @@ impl LLMProvider for OpenAILikeProvider {
     }
 }
 
+fn build_chat_request(
+    config: &OpenAILikeConfig,
+    request: ChatRequest,
+) -> Result<Value, OpenAILikeError> {
+    let to_number = |value: f32, field: &'static str| -> Result<Value, OpenAILikeError> {
+        serde_json::Number::from_f64(value as f64)
+            .map(Value::Number)
+            .ok_or_else(|| {
+                OpenAILikeError::openai_like_invalid_request(format!(
+                    "{field} must be a finite number"
+                ))
+            })
+    };
+
+    // Get effective model name (strip prefix if configured)
+    let model = config.get_effective_model(&request.model);
+
+    let mut openai_request = serde_json::json!({
+        "model": model,
+        "messages": request.messages
+    });
+
+    // Add optional parameters
+    if let Some(temp) = request.temperature {
+        openai_request["temperature"] = to_number(temp, "temperature")?;
+    }
+
+    if let Some(max_tokens) = request.max_tokens {
+        openai_request["max_tokens"] = Value::Number(serde_json::Number::from(max_tokens));
+    }
+
+    if let Some(max_completion_tokens) = request.max_completion_tokens {
+        openai_request["max_completion_tokens"] =
+            Value::Number(serde_json::Number::from(max_completion_tokens));
+    }
+
+    if let Some(top_p) = request.top_p {
+        openai_request["top_p"] = to_number(top_p, "top_p")?;
+    }
+
+    if let Some(tools) = request.tools {
+        openai_request["tools"] = serde_json::to_value(tools)
+            .map_err(|e| OpenAILikeError::serialization(PROVIDER_NAME, e.to_string()))?;
+    }
+
+    if let Some(tool_choice) = request.tool_choice {
+        openai_request["tool_choice"] = serde_json::to_value(tool_choice)
+            .map_err(|e| OpenAILikeError::serialization(PROVIDER_NAME, e.to_string()))?;
+    }
+
+    if let Some(response_format) = request.response_format {
+        openai_request["response_format"] = serde_json::to_value(response_format)
+            .map_err(|e| OpenAILikeError::serialization(PROVIDER_NAME, e.to_string()))?;
+    }
+
+    if let Some(stop) = request.stop {
+        openai_request["stop"] = serde_json::to_value(stop)
+            .map_err(|e| OpenAILikeError::serialization(PROVIDER_NAME, e.to_string()))?;
+    }
+
+    if let Some(user) = request.user {
+        openai_request["user"] = Value::String(user);
+    }
+
+    if let Some(seed) = request.seed {
+        openai_request["seed"] = Value::Number(serde_json::Number::from(seed));
+    }
+
+    if let Some(n) = request.n {
+        openai_request["n"] = Value::Number(serde_json::Number::from(n));
+    }
+
+    Ok(openai_request)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -577,6 +592,36 @@ mod tests {
         assert_eq!(json["model"], "test-model");
         assert!((json["temperature"].as_f64().unwrap() - 0.7).abs() < 0.001);
         assert_eq!(json["max_tokens"], 100);
+    }
+
+    #[test]
+    fn test_request_transformation_rejects_nan_temperature() {
+        let config = OpenAILikeConfig::new("http://localhost:8000/v1").with_skip_api_key(true);
+
+        let request = ChatRequest {
+            model: "test-model".to_string(),
+            messages: vec![],
+            temperature: Some(f32::NAN),
+            ..Default::default()
+        };
+
+        let result = build_chat_request(&config, request);
+        assert!(matches!(result, Err(OpenAILikeError::InvalidRequest { .. })));
+    }
+
+    #[test]
+    fn test_request_transformation_rejects_infinite_top_p() {
+        let config = OpenAILikeConfig::new("http://localhost:8000/v1").with_skip_api_key(true);
+
+        let request = ChatRequest {
+            model: "test-model".to_string(),
+            messages: vec![],
+            top_p: Some(f32::INFINITY),
+            ..Default::default()
+        };
+
+        let result = build_chat_request(&config, request);
+        assert!(matches!(result, Err(OpenAILikeError::InvalidRequest { .. })));
     }
 
     #[tokio::test]
