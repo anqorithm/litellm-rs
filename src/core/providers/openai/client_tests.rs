@@ -4,6 +4,7 @@
 
 use super::*;
 use crate::core::providers::base::GlobalPoolManager;
+use crate::core::providers::openai::client::build_chat_request;
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use crate::core::types::model::ProviderCapability;
@@ -258,7 +259,7 @@ fn test_transform_chat_request_with_temperature() {
 
 #[test]
 fn test_transform_chat_request_rejects_nan_temperature() {
-    let provider = create_test_provider();
+    let config = create_test_config();
 
     let request = ChatRequest {
         model: "gpt-4".to_string(),
@@ -271,7 +272,7 @@ fn test_transform_chat_request_rejects_nan_temperature() {
         ..Default::default()
     };
 
-    let result = provider.transform_chat_request(request);
+    let result = build_chat_request(&config, request);
     assert!(matches!(result, Err(ProviderError::InvalidRequest { .. })));
 }
 
@@ -343,7 +344,7 @@ fn test_transform_chat_request_with_top_p() {
 
 #[test]
 fn test_transform_chat_request_rejects_infinite_top_p() {
-    let provider = create_test_provider();
+    let config = create_test_config();
 
     let request = ChatRequest {
         model: "gpt-4".to_string(),
@@ -356,7 +357,7 @@ fn test_transform_chat_request_rejects_infinite_top_p() {
         ..Default::default()
     };
 
-    let result = provider.transform_chat_request(request);
+    let result = build_chat_request(&config, request);
     assert!(matches!(result, Err(ProviderError::InvalidRequest { .. })));
 }
 

@@ -194,72 +194,7 @@ impl OpenAIProvider {
         &self,
         request: ChatRequest,
     ) -> Result<Value, ProviderError> {
-        let to_number = |value: f32, field: &'static str| -> Result<Value, ProviderError> {
-            serde_json::Number::from_f64(value as f64)
-                .map(Value::Number)
-                .ok_or_else(|| {
-                    ProviderError::invalid_request(
-                        "openai",
-                        format!("{field} must be a finite number"),
-                    )
-                })
-        };
-
-        let mut openai_request = serde_json::json!({
-            "model": self.config.get_model_mapping(&request.model),
-            "messages": request.messages
-        });
-
-        // Add optional parameters
-        if let Some(temp) = request.temperature {
-            openai_request["temperature"] = to_number(temp, "temperature")?;
-        }
-
-        if let Some(max_tokens) = request.max_tokens {
-            openai_request["max_tokens"] = Value::Number(serde_json::Number::from(max_tokens));
-        }
-
-        if let Some(max_completion_tokens) = request.max_completion_tokens {
-            openai_request["max_completion_tokens"] =
-                Value::Number(serde_json::Number::from(max_completion_tokens));
-        }
-
-        if let Some(top_p) = request.top_p {
-            openai_request["top_p"] = to_number(top_p, "top_p")?;
-        }
-
-        if let Some(tools) = request.tools {
-            openai_request["tools"] = serde_json::to_value(tools)?;
-        }
-
-        if let Some(tool_choice) = request.tool_choice {
-            openai_request["tool_choice"] = serde_json::to_value(tool_choice)?;
-        }
-
-        if let Some(response_format) = request.response_format {
-            openai_request["response_format"] = serde_json::to_value(response_format)?;
-        }
-
-        if let Some(stop) = request.stop {
-            openai_request["stop"] = serde_json::to_value(stop)?;
-        }
-
-        if let Some(user) = request.user {
-            openai_request["user"] = Value::String(user);
-        }
-
-        if let Some(seed) = request.seed {
-            openai_request["seed"] = Value::Number(serde_json::Number::from(seed));
-        }
-
-        if let Some(n) = request.n {
-            openai_request["n"] = Value::Number(serde_json::Number::from(n));
-        }
-
-        // Add extra parameters from config
-        // Skip extra_params as BaseConfig doesn't have it
-
-        Ok(openai_request)
+        build_chat_request(&self.config, request)
     }
 
     /// Transform OpenAI response to standard format
@@ -321,6 +256,78 @@ impl OpenAIProvider {
             .get_model_spec(model_id)
             .map(|spec| &spec.config)
     }
+}
+
+pub(crate) fn build_chat_request(
+    config: &OpenAIConfig,
+    request: ChatRequest,
+) -> Result<Value, ProviderError> {
+    let to_number = |value: f32, field: &'static str| -> Result<Value, ProviderError> {
+        serde_json::Number::from_f64(value as f64)
+            .map(Value::Number)
+            .ok_or_else(|| {
+                ProviderError::invalid_request(
+                    "openai",
+                    format!("{field} must be a finite number"),
+                )
+            })
+    };
+
+    let mut openai_request = serde_json::json!({
+        "model": config.get_model_mapping(&request.model),
+        "messages": request.messages
+    });
+
+    // Add optional parameters
+    if let Some(temp) = request.temperature {
+        openai_request["temperature"] = to_number(temp, "temperature")?;
+    }
+
+    if let Some(max_tokens) = request.max_tokens {
+        openai_request["max_tokens"] = Value::Number(serde_json::Number::from(max_tokens));
+    }
+
+    if let Some(max_completion_tokens) = request.max_completion_tokens {
+        openai_request["max_completion_tokens"] =
+            Value::Number(serde_json::Number::from(max_completion_tokens));
+    }
+
+    if let Some(top_p) = request.top_p {
+        openai_request["top_p"] = to_number(top_p, "top_p")?;
+    }
+
+    if let Some(tools) = request.tools {
+        openai_request["tools"] = serde_json::to_value(tools)?;
+    }
+
+    if let Some(tool_choice) = request.tool_choice {
+        openai_request["tool_choice"] = serde_json::to_value(tool_choice)?;
+    }
+
+    if let Some(response_format) = request.response_format {
+        openai_request["response_format"] = serde_json::to_value(response_format)?;
+    }
+
+    if let Some(stop) = request.stop {
+        openai_request["stop"] = serde_json::to_value(stop)?;
+    }
+
+    if let Some(user) = request.user {
+        openai_request["user"] = Value::String(user);
+    }
+
+    if let Some(seed) = request.seed {
+        openai_request["seed"] = Value::Number(serde_json::Number::from(seed));
+    }
+
+    if let Some(n) = request.n {
+        openai_request["n"] = Value::Number(serde_json::Number::from(n));
+    }
+
+    // Add extra parameters from config
+    // Skip extra_params as BaseConfig doesn't have it
+
+    Ok(openai_request)
 }
 
 #[async_trait]
