@@ -12,7 +12,7 @@ pub mod audit; // Audit logging system
 // pub mod base_provider;  // Removed: unused dead code
 pub mod batch;
 pub mod budget; // Budget management system
-pub mod cache; // DualCache system (InMemory + Redis)
+// pub mod cache; // DualCache system (InMemory + Redis) - TODO: implement
 pub mod cache_manager;
 pub mod completion; // Core completion API
 pub mod cost; // Unified cost calculation system
