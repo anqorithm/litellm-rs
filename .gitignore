@@ -89,9 +89,12 @@ logs/
 # Docker override files
 docker-compose.override.yml
 
+# Docker environment files
+deployment/docker/.env
+
 # Kubernetes secrets (keep examples)
-deploy/kubernetes/secret.yaml
-!deploy/kubernetes/secret.yaml.example
+deployment/kubernetes/secret.yaml
+!deployment/kubernetes/secret.yaml.example
 
 # Monitoring data
 prometheus_data/
