@@ -335,4 +335,9 @@ pub fn api_key(mut self, key: impl Into<String>) -> Self {
 - 新增 pooled 版 hook 宏（支持 streaming/自定义 cost）
 - 迁移具备相同模式的 provider
 
-**状态**: In Progress
+**状态**: Done
+
+**进展**:
+- 新增 `define_pooled_http_provider_with_hooks!`（支持 GlobalPoolManager + streaming hook）
+- 已迁移: `firecrawl`, `empower`
+- `cargo test firecrawl` (覆盖 provider tests)
