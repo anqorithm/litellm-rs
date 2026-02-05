@@ -170,7 +170,12 @@ opt-level = 0
 
 # Feature flags
 [features]
+# Default: full gateway with SQLite storage
 default = ["sqlite", "redis", "metrics", "tracing"]
+
+# Lite mode: API-only, no storage (use with --no-default-features)
+# Example: cargo build --no-default-features --features "metrics,tracing"
+lite = ["metrics", "tracing"]
 
 # Storage backends
 postgres = ["sea-orm/sqlx-postgres", "sea-orm/runtime-tokio-rustls"]
