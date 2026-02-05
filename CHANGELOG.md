@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **SSRF Validation**: DNS resolution failures no longer hard-fail SSRF checks while preserving IP safety.
 - **Observability**: Prometheus label handling now safely maps provider identifiers.
 - **Concurrency**: Event broker handles zero capacity; VersionedMap retry now guarantees progress under contention.
+- **Packaging**: Track core cache sources and add root README for crates.io.
 
 ## [0.1.3] - 2025-09-18
 
