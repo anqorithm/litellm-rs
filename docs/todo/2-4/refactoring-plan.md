@@ -374,6 +374,24 @@ pub fn api_key(mut self, key: impl Into<String>) -> Self {
 
 ---
 
+### Task 2 扩展: Pooled Hook Streaming Client 复用
+
+**目标**: 将 pooled hook provider 的 streaming 请求统一改为 `streaming_client()`，减少重复创建 client。
+
+**范围 (本轮)**:
+- `firecrawl`
+- `empower`
+- `ai21`
+- `amazon_nova`
+- `datarobot`
+
+**状态**: Done
+
+**进展**:
+- streaming 分支统一使用 `streaming_client()`
+
+---
+
 ### Task 0: AgentCoordinator Object-Safety 修复
 
 **目标**: 修复 `AgentCoordinator` trait object 测试失败，避免阻塞 provider 测试。
