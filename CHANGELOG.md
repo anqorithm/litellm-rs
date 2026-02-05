@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-02-05
+
+### Added
+- **Agent Coordinator**: New `core::agent` module for managing concurrent agent lifecycles with cancellation, timeouts, and stats.
+- **Utilities**: Added `utils::event` publish/subscribe broker and `utils::sync` concurrent containers.
+
+### Changed
+- **Providers**: Migrated `ai21`, `amazon_nova`, `datarobot`, and `deepseek` to pooled HTTP provider hooks.
+- **HTTP Client**: Standardized pooled client usage and shared client caching across core/providers.
+- **Routing**: Refined provider routing and OpenAI-compatible request/response handling.
+
+### Fixed
+- **Auth Context**: Corrected user/api-key context propagation in auth routes and middleware.
+- **SSRF Validation**: DNS resolution failures no longer hard-fail SSRF checks while preserving IP safety.
+- **Observability**: Prometheus label handling now safely maps provider identifiers.
+- **Concurrency**: Event broker handles zero capacity; VersionedMap retry now guarantees progress under contention.
+
 ## [0.1.3] - 2025-09-18
 
 ### Fixed
@@ -64,7 +81,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Vector DB**: Qdrant integration for embeddings
 - **Deployment**: Docker, Kubernetes, and systemd configurations
 
-[Unreleased]: https://github.com/majiayu000/litellm-rs/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/majiayu000/litellm-rs/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/majiayu000/litellm-rs/compare/v0.1.3...v0.3.0
 [0.1.3]: https://github.com/majiayu000/litellm-rs/compare/v0.1.1...v0.1.3
 [0.1.1]: https://github.com/majiayu000/litellm-rs/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/majiayu000/litellm-rs/releases/tag/v0.1.0
