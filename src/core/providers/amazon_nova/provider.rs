@@ -3,108 +3,201 @@
 //! Main provider implementation for Amazon Nova multimodal models
 //! Amazon Nova uses OpenAI-compatible API format
 
-use async_trait::async_trait;
-use futures::Stream;
 use serde_json::Value;
 use std::collections::HashMap;
-use std::pin::Pin;
-use std::sync::Arc;
 
-use crate::core::providers::base::{
-    GlobalPoolManager, HeaderPair, HttpMethod, get_pricing_db, header,
-};
+use crate::core::providers::base::{HeaderPair, HttpMethod, get_pricing_db, header};
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::traits::{ProviderConfig, provider::llm_provider::trait_definition::LLMProvider};
 use crate::core::types::{
     common::{HealthStatus, ModelInfo, ProviderCapability, RequestContext},
     requests::ChatRequest,
-    responses::{ChatChoice, ChatChunk, ChatResponse, Usage},
+    responses::{ChatChoice, ChatResponse, Usage},
 };
 
-use super::{AmazonNovaConfig, AmazonNovaErrorMapper, AmazonNovaModelRegistry};
+use super::{AmazonNovaConfig, AmazonNovaModelRegistry};
 
-/// Amazon Nova Provider for multimodal chat completions
-#[derive(Debug, Clone)]
-pub struct AmazonNovaProvider {
-    config: AmazonNovaConfig,
-    pool_manager: Arc<GlobalPoolManager>,
-    model_registry: AmazonNovaModelRegistry,
-    supported_models: Vec<ModelInfo>,
+const PROVIDER_NAME: &str = "amazon_nova";
+const CAPABILITIES: &[ProviderCapability] = &[
+    ProviderCapability::ChatCompletion,
+    ProviderCapability::ChatCompletionStream,
+    ProviderCapability::ToolCalling,
+];
+
+fn build_model_info() -> Vec<ModelInfo> {
+    let registry = AmazonNovaModelRegistry::new();
+    registry
+        .list_models()
+        .iter()
+        .map(|m| ModelInfo {
+            id: m.id.clone(),
+            name: m.name.clone(),
+            provider: PROVIDER_NAME.to_string(),
+            max_context_length: m.context_length,
+            max_output_length: Some(m.max_output_tokens),
+            supports_streaming: m.supports_streaming,
+            supports_tools: m.supports_tools,
+            supports_multimodal: m.supports_vision,
+            input_cost_per_1k_tokens: Some(m.input_cost_per_1k),
+            output_cost_per_1k_tokens: Some(m.output_cost_per_1k),
+            currency: "USD".to_string(),
+            capabilities: vec![
+                ProviderCapability::ChatCompletion,
+                ProviderCapability::ChatCompletionStream,
+            ],
+            created_at: None,
+            updated_at: None,
+            metadata: std::collections::HashMap::new(),
+        })
+        .collect()
 }
 
+crate::define_pooled_http_provider_with_hooks!(
+    provider: PROVIDER_NAME,
+    struct_name: AmazonNovaProvider,
+    config: super::AmazonNovaConfig,
+    error_mapper: super::AmazonNovaErrorMapper,
+    model_info: build_model_info,
+    capabilities: CAPABILITIES,
+    url_builder: |provider: &AmazonNovaProvider| -> String { provider.config.get_chat_endpoint() },
+    http_method: HttpMethod::POST,
+    supported_params: [
+        "max_tokens",
+        "max_completion_tokens",
+        "temperature",
+        "top_p",
+        "stop",
+        "stream",
+        "stream_options",
+        "tools",
+        "tool_choice",
+        "reasoning_effort",
+        "metadata",
+    ],
+    build_headers: |provider: &AmazonNovaProvider| -> Vec<HeaderPair> {
+        provider.get_request_headers()
+    },
+    with_api_key: |api_key: String| -> Result<AmazonNovaProvider, ProviderError> {
+        AmazonNovaProvider::new(AmazonNovaConfig::with_api_key(api_key))
+    },
+    map_openai_params: |_provider: &AmazonNovaProvider,
+                        params: HashMap<String, Value>,
+                        _model: &str|
+     -> Result<HashMap<String, Value>, ProviderError> { Ok(params) },
+    request_transform: |provider: &AmazonNovaProvider, request: ChatRequest|
+     -> Result<Value, ProviderError> { Ok(provider.transform_chat_request(request)) },
+    response_transform: |provider: &AmazonNovaProvider,
+                         raw_response: &[u8],
+                         model: &str,
+                         request_id: &str|
+     -> Result<ChatResponse, ProviderError> {
+        let response_data: Value = serde_json::from_slice(raw_response)
+            .map_err(|e| ProviderError::response_parsing(PROVIDER_NAME, e.to_string()))?;
+        provider.transform_chat_response(response_data, model, request_id)
+    },
+    error_map: |_provider: &AmazonNovaProvider,
+                status: u16,
+                error_text: String,
+                _request: &ChatRequest|
+     -> ProviderError { ProviderError::api_error(PROVIDER_NAME, status, error_text) },
+    health_check: |provider: &AmazonNovaProvider| {
+        let has_key = provider.config.get_api_key().is_some();
+        async move {
+            if has_key {
+                HealthStatus::Healthy
+            } else {
+                HealthStatus::Unhealthy
+            }
+        }
+    },
+    streaming: |provider: &AmazonNovaProvider, request: ChatRequest, _context: RequestContext| {
+        let url = provider.config.get_chat_endpoint();
+        let api_key = provider.config.get_api_key().map(|key| key.to_string());
+
+        let mut body = provider.transform_chat_request(request);
+        body["stream"] = serde_json::Value::Bool(true);
+
+        async move {
+            let api_key = api_key.ok_or_else(|| {
+                ProviderError::authentication(PROVIDER_NAME, "API key is required")
+            })?;
+
+            let client = reqwest::Client::new();
+            let response = client
+                .post(&url)
+                .header("Authorization", format!("Bearer {}", api_key))
+                .header("Content-Type", "application/json")
+                .json(&body)
+                .send()
+                .await
+                .map_err(|e| ProviderError::network(PROVIDER_NAME, e.to_string()))?;
+
+            let status = response.status();
+            if !status.is_success() {
+                let error_text = response
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "Unknown error".to_string());
+                return Err(ProviderError::api_error(
+                    PROVIDER_NAME,
+                    status.as_u16(),
+                    error_text,
+                ));
+            }
+
+            use crate::core::providers::base::sse::{
+                OpenAICompatibleTransformer, UnifiedSSEStream,
+            };
+            let stream = response.bytes_stream();
+            let transformer = OpenAICompatibleTransformer::new(PROVIDER_NAME);
+            let stream: std::pin::Pin<
+                Box<
+                    dyn futures::Stream<Item = Result<crate::core::types::responses::ChatChunk, ProviderError>>
+                        + Send,
+                >,
+            > = Box::pin(UnifiedSSEStream::new(stream, transformer));
+            Ok(stream)
+        }
+    },
+    calculate_cost: |provider: &AmazonNovaProvider,
+                     model: &str,
+                     input_tokens: u32,
+                     output_tokens: u32|
+     -> Result<f64, ProviderError> {
+        let normalized_model = provider.normalize_model_name(model);
+        if let Some(info) = provider
+            .supported_models
+            .iter()
+            .find(|m| m.id == normalized_model)
+        {
+            let input_cost = info
+                .input_cost_per_1k_tokens
+                .unwrap_or(0.0)
+                * input_tokens as f64
+                / 1000.0;
+            let output_cost = info
+                .output_cost_per_1k_tokens
+                .unwrap_or(0.0)
+                * output_tokens as f64
+                / 1000.0;
+            return Ok(input_cost + output_cost);
+        }
+
+        let usage = crate::core::providers::base::pricing::Usage {
+            prompt_tokens: input_tokens,
+            completion_tokens: output_tokens,
+            total_tokens: input_tokens + output_tokens,
+            reasoning_tokens: None,
+        };
+
+        Ok(get_pricing_db().calculate(model, &usage))
+    },
+);
+
 impl AmazonNovaProvider {
-    /// Create a new Amazon Nova provider with configuration
-    pub fn new(config: AmazonNovaConfig) -> Result<Self, ProviderError> {
-        config
-            .validate()
-            .map_err(|e| ProviderError::configuration("amazon_nova", e))?;
-
-        let pool_manager = Arc::new(
-            GlobalPoolManager::new()
-                .map_err(|e| ProviderError::configuration("amazon_nova", e.to_string()))?,
-        );
-
-        let model_registry = AmazonNovaModelRegistry::new();
-        let supported_models = Self::build_model_info(&model_registry);
-
-        Ok(Self {
-            config,
-            pool_manager,
-            model_registry,
-            supported_models,
-        })
-    }
-
     /// Create provider from environment variables
     pub fn from_env() -> Result<Self, ProviderError> {
         let config = AmazonNovaConfig::from_env();
         Self::new(config)
-    }
-
-    /// Create provider with API key
-    pub async fn with_api_key(api_key: impl Into<String>) -> Result<Self, ProviderError> {
-        let config = AmazonNovaConfig::with_api_key(api_key);
-        Self::new(config)
-    }
-
-    /// Build ModelInfo list from registry
-    fn build_model_info(registry: &AmazonNovaModelRegistry) -> Vec<ModelInfo> {
-        registry
-            .list_models()
-            .iter()
-            .map(|m| ModelInfo {
-                id: m.id.clone(),
-                name: m.name.clone(),
-                provider: "amazon_nova".to_string(),
-                max_context_length: m.context_length,
-                max_output_length: Some(m.max_output_tokens),
-                supports_streaming: m.supports_streaming,
-                supports_tools: m.supports_tools,
-                supports_multimodal: m.supports_vision,
-                input_cost_per_1k_tokens: Some(m.input_cost_per_1k),
-                output_cost_per_1k_tokens: Some(m.output_cost_per_1k),
-                currency: "USD".to_string(),
-                capabilities: vec![
-                    ProviderCapability::ChatCompletion,
-                    ProviderCapability::ChatCompletionStream,
-                ],
-                created_at: None,
-                updated_at: None,
-                metadata: std::collections::HashMap::new(),
-            })
-            .collect()
-    }
-
-    /// Generate request headers for Amazon Nova API
-    fn get_request_headers(&self) -> Vec<HeaderPair> {
-        let mut headers = Vec::with_capacity(2);
-
-        if let Some(api_key) = self.config.get_api_key() {
-            headers.push(header("Authorization", format!("Bearer {}", api_key)));
-        }
-
-        headers.push(header("Content-Type", "application/json".to_string()));
-        headers
     }
 
     /// Transform ChatRequest to Amazon Nova format (OpenAI compatible)
@@ -213,184 +306,24 @@ impl AmazonNovaProvider {
                 .map(String::from),
         })
     }
-}
 
-#[async_trait]
-impl LLMProvider for AmazonNovaProvider {
-    type Config = AmazonNovaConfig;
-    type Error = ProviderError;
-    type ErrorMapper = AmazonNovaErrorMapper;
+    /// Generate request headers for Amazon Nova API
+    fn get_request_headers(&self) -> Vec<HeaderPair> {
+        let mut headers = Vec::with_capacity(2);
 
-    fn name(&self) -> &'static str {
-        "amazon_nova"
-    }
-
-    fn capabilities(&self) -> &'static [ProviderCapability] {
-        &[
-            ProviderCapability::ChatCompletion,
-            ProviderCapability::ChatCompletionStream,
-            ProviderCapability::ToolCalling,
-        ]
-    }
-
-    fn models(&self) -> &[ModelInfo] {
-        &self.supported_models
-    }
-
-    fn get_supported_openai_params(&self, _model: &str) -> &'static [&'static str] {
-        super::models::SUPPORTED_OPENAI_PARAMS
-    }
-
-    async fn map_openai_params(
-        &self,
-        params: HashMap<String, Value>,
-        _model: &str,
-    ) -> Result<HashMap<String, Value>, Self::Error> {
-        // Amazon Nova is OpenAI compatible, pass through most params
-        Ok(params)
-    }
-
-    async fn transform_request(
-        &self,
-        request: ChatRequest,
-        _context: RequestContext,
-    ) -> Result<Value, Self::Error> {
-        Ok(self.transform_chat_request(request))
-    }
-
-    async fn transform_response(
-        &self,
-        raw_response: &[u8],
-        model: &str,
-        request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
-        let response_data: Value = serde_json::from_slice(raw_response)
-            .map_err(|e| ProviderError::response_parsing("amazon_nova", e.to_string()))?;
-
-        self.transform_chat_response(response_data, model, request_id)
-    }
-
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        AmazonNovaErrorMapper
-    }
-
-    async fn chat_completion(
-        &self,
-        request: ChatRequest,
-        context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
-        let url = self.config.get_chat_endpoint();
-        let body = self.transform_chat_request(request.clone());
-
-        let headers = self.get_request_headers();
-
-        let response = self
-            .pool_manager
-            .execute_request(&url, HttpMethod::POST, headers, Some(body))
-            .await?;
-
-        let status = response.status();
-        let response_bytes = response
-            .bytes()
-            .await
-            .map_err(|e| ProviderError::network("amazon_nova", e.to_string()))?;
-
-        if !status.is_success() {
-            let error_text = String::from_utf8_lossy(&response_bytes);
-            return Err(ProviderError::api_error(
-                "amazon_nova",
-                status.as_u16(),
-                error_text.to_string(),
-            ));
+        if let Some(api_key) = self.config.get_api_key() {
+            headers.push(header("Authorization", format!("Bearer {}", api_key)));
         }
 
-        self.transform_response(&response_bytes, &request.model, &context.request_id)
-            .await
-    }
-
-    async fn chat_completion_stream(
-        &self,
-        request: ChatRequest,
-        _context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
-    {
-        let url = self.config.get_chat_endpoint();
-
-        let mut body = self.transform_chat_request(request);
-        body["stream"] = serde_json::Value::Bool(true);
-
-        let api_key = self
-            .config
-            .get_api_key()
-            .ok_or_else(|| ProviderError::authentication("amazon_nova", "API key is required"))?;
-
-        let client = reqwest::Client::new();
-        let response = client
-            .post(&url)
-            .header("Authorization", format!("Bearer {}", api_key))
-            .header("Content-Type", "application/json")
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| ProviderError::network("amazon_nova", e.to_string()))?;
-
-        let status = response.status();
-        if !status.is_success() {
-            let error_text = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(ProviderError::api_error(
-                "amazon_nova",
-                status.as_u16(),
-                error_text,
-            ));
-        }
-
-        // Create stream using OpenAI-compatible SSE format
-        use crate::core::providers::base::sse::{OpenAICompatibleTransformer, UnifiedSSEStream};
-        let stream = response.bytes_stream();
-        let transformer = OpenAICompatibleTransformer::new("amazon_nova");
-        Ok(Box::pin(UnifiedSSEStream::new(stream, transformer)))
-    }
-
-    async fn health_check(&self) -> HealthStatus {
-        if self.config.get_api_key().is_some() {
-            HealthStatus::Healthy
-        } else {
-            HealthStatus::Unhealthy
-        }
-    }
-
-    async fn calculate_cost(
-        &self,
-        model: &str,
-        input_tokens: u32,
-        output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
-        // First try model registry
-        let cost = self
-            .model_registry
-            .calculate_cost(model, input_tokens, output_tokens);
-        if cost > 0.0 {
-            return Ok(cost);
-        }
-
-        // Fall back to pricing database
-        let usage = crate::core::providers::base::pricing::Usage {
-            prompt_tokens: input_tokens,
-            completion_tokens: output_tokens,
-            total_tokens: input_tokens + output_tokens,
-            reasoning_tokens: None,
-        };
-
-        Ok(get_pricing_db().calculate(model, &usage))
+        headers.push(header("Content-Type", "application/json".to_string()));
+        headers
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
     use crate::core::types::chat::ChatMessage;
     use crate::core::types::message::{MessageContent, MessageRole};
 
@@ -523,60 +456,8 @@ mod tests {
             }
         });
 
-        let result = provider.transform_chat_response(response_data, "nova-pro", "req-123");
-        assert!(result.is_ok());
-
-        let response = result.unwrap();
-        assert_eq!(response.id, "chatcmpl-123");
-        assert_eq!(response.choices.len(), 1);
-        assert!(response.usage.is_some());
-    }
-
-    #[test]
-    fn test_supported_openai_params() {
-        let config = AmazonNovaConfig::with_api_key("test-key");
-        let provider = AmazonNovaProvider::new(config).unwrap();
-        let params = provider.get_supported_openai_params("any-model");
-        assert!(params.contains(&"max_tokens"));
-        assert!(params.contains(&"temperature"));
-        assert!(params.contains(&"tools"));
-    }
-
-    #[tokio::test]
-    async fn test_calculate_cost() {
-        let config = AmazonNovaConfig::with_api_key("test-key");
-        let provider = AmazonNovaProvider::new(config).unwrap();
-
-        let cost = provider
-            .calculate_cost("amazon.nova-pro-v1:0", 1000, 500)
-            .await;
-        assert!(cost.is_ok());
-        assert!(cost.unwrap() > 0.0);
-    }
-
-    #[tokio::test]
-    async fn test_health_check_with_api_key() {
-        let config = AmazonNovaConfig::with_api_key("test-key");
-        let provider = AmazonNovaProvider::new(config).unwrap();
-
-        let status = provider.health_check().await;
-        assert_eq!(status, HealthStatus::Healthy);
-    }
-
-    #[tokio::test]
-    async fn test_map_openai_params() {
-        let config = AmazonNovaConfig::with_api_key("test-key");
-        let provider = AmazonNovaProvider::new(config).unwrap();
-
-        let mut params = HashMap::new();
-        params.insert("temperature".to_string(), serde_json::json!(0.7));
-        params.insert("max_tokens".to_string(), serde_json::json!(100));
-
-        let result = provider.map_openai_params(params.clone(), "nova-pro").await;
-        assert!(result.is_ok());
-
-        let mapped = result.unwrap();
-        assert_eq!(mapped.get("temperature"), params.get("temperature"));
-        assert_eq!(mapped.get("max_tokens"), params.get("max_tokens"));
+        let response = provider.transform_chat_response(response_data, "nova-pro", "req-123");
+        assert!(response.is_ok());
+        assert_eq!(response.unwrap().id, "chatcmpl-123");
     }
 }

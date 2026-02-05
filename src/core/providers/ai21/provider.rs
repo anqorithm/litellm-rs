@@ -2,235 +2,175 @@
 //!
 //! Main provider implementation using the unified base infrastructure
 
-use async_trait::async_trait;
 use futures::Stream;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::pin::Pin;
-use std::sync::Arc;
 
-use crate::core::providers::base::{
-    GlobalPoolManager, HeaderPair, HttpMethod, get_pricing_db, header, header_owned,
-};
+use crate::core::providers::base::{HeaderPair, HttpMethod, get_pricing_db, header, header_owned};
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::traits::{ProviderConfig, provider::llm_provider::trait_definition::LLMProvider};
 use crate::core::types::{
-    common::{HealthStatus, ModelInfo, ProviderCapability, RequestContext},
+    common::{HealthStatus, ProviderCapability, RequestContext},
     requests::ChatRequest,
     responses::{ChatChunk, ChatResponse},
 };
 
-use super::{AI21Client, AI21Config, AI21ErrorMapper};
+use super::{AI21Client, AI21Config};
 
-#[derive(Debug, Clone)]
-pub struct AI21Provider {
-    config: AI21Config,
-    pool_manager: Arc<GlobalPoolManager>,
-    supported_models: Vec<ModelInfo>,
-}
+const PROVIDER_NAME: &str = "ai21";
+const CAPABILITIES: &[ProviderCapability] = &[
+    ProviderCapability::ChatCompletion,
+    ProviderCapability::ChatCompletionStream,
+    ProviderCapability::ToolCalling,
+];
 
-impl AI21Provider {
-    /// Generate headers for AI21 API requests
-    fn get_request_headers(&self) -> Vec<HeaderPair> {
-        let mut headers = Vec::with_capacity(2);
-
-        if let Some(api_key) = &self.config.base.api_key {
-            headers.push(header("Authorization", format!("Bearer {}", api_key)));
-        }
-
-        // Add custom headers
-        for (key, value) in &self.config.base.headers {
-            headers.push(header_owned(key.clone(), value.clone()));
-        }
-
-        headers
-    }
-
-    pub fn new(config: AI21Config) -> Result<Self, ProviderError> {
-        config
-            .validate()
-            .map_err(|e| ProviderError::configuration("ai21", e))?;
-
-        let pool_manager = Arc::new(
-            GlobalPoolManager::new()
-                .map_err(|e| ProviderError::configuration("ai21", e.to_string()))?,
-        );
-        let supported_models = AI21Client::supported_models();
-
-        Ok(Self {
-            config,
-            pool_manager,
-            supported_models,
-        })
-    }
-
-    pub fn from_env() -> Result<Self, ProviderError> {
-        let config = AI21Config::from_env();
-        Self::new(config)
-    }
-
-    /// Create provider with API key
-    pub async fn with_api_key(api_key: impl Into<String>) -> Result<Self, ProviderError> {
-        let mut config = AI21Config::new("ai21");
-        config.base.api_key = Some(api_key.into());
-        Self::new(config)
-    }
-}
-
-#[async_trait]
-impl LLMProvider for AI21Provider {
-    type Config = AI21Config;
-    type Error = ProviderError;
-    type ErrorMapper = AI21ErrorMapper;
-
-    fn name(&self) -> &'static str {
-        "ai21"
-    }
-
-    fn capabilities(&self) -> &'static [ProviderCapability] {
-        &[
-            ProviderCapability::ChatCompletion,
-            ProviderCapability::ChatCompletionStream,
-            ProviderCapability::ToolCalling,
-        ]
-    }
-
-    fn models(&self) -> &[ModelInfo] {
-        &self.supported_models
-    }
-
-    fn get_supported_openai_params(&self, _model: &str) -> &'static [&'static str] {
-        AI21Client::supported_openai_params()
-    }
-
-    async fn map_openai_params(
-        &self,
-        mut params: HashMap<String, Value>,
-        _model: &str,
-    ) -> Result<HashMap<String, Value>, Self::Error> {
-        // Map max_completion_tokens to max_tokens for AI21
+crate::define_pooled_http_provider_with_hooks!(
+    provider: PROVIDER_NAME,
+    struct_name: AI21Provider,
+    config: super::AI21Config,
+    error_mapper: super::AI21ErrorMapper,
+    model_info: AI21Client::supported_models,
+    capabilities: CAPABILITIES,
+    url_builder: |provider: &AI21Provider| -> String {
+        format!(
+            "{}/chat/completions",
+            provider.config.base.get_effective_api_base(PROVIDER_NAME)
+        )
+    },
+    http_method: HttpMethod::POST,
+    supported_params: [
+        "temperature",
+        "max_tokens",
+        "top_p",
+        "stream",
+        "stop",
+        "tools",
+        "tool_choice",
+        "response_format",
+        "seed",
+        "n",
+        "max_completion_tokens",
+    ],
+    build_headers: |provider: &AI21Provider| -> Vec<HeaderPair> {
+        provider.get_request_headers()
+    },
+    with_api_key: |api_key: String| -> Result<AI21Provider, ProviderError> {
+        let mut config = AI21Config::new(PROVIDER_NAME);
+        config.base.api_key = Some(api_key);
+        AI21Provider::new(config)
+    },
+    map_openai_params: |_provider: &AI21Provider,
+                        mut params: HashMap<String, Value>,
+                        _model: &str|
+     -> Result<HashMap<String, Value>, ProviderError> {
         if let Some(max_completion_tokens) = params.remove("max_completion_tokens") {
             params.insert("max_tokens".to_string(), max_completion_tokens);
         }
         Ok(params)
-    }
-
-    async fn transform_request(
-        &self,
-        request: ChatRequest,
-        _context: RequestContext,
-    ) -> Result<Value, Self::Error> {
-        Ok(AI21Client::transform_chat_request(request))
-    }
-
-    async fn transform_response(
-        &self,
-        raw_response: &[u8],
-        _model: &str,
-        _request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
+    },
+    request_transform: |_provider: &AI21Provider, request: ChatRequest|
+     -> Result<Value, ProviderError> { Ok(AI21Client::transform_chat_request(request)) },
+    response_transform: |_provider: &AI21Provider,
+                         raw_response: &[u8],
+                         _model: &str,
+                         _request_id: &str|
+     -> Result<ChatResponse, ProviderError> {
         let response: Value = serde_json::from_slice(raw_response)
-            .map_err(|e| ProviderError::response_parsing("ai21", e.to_string()))?;
+            .map_err(|e| ProviderError::response_parsing(PROVIDER_NAME, e.to_string()))?;
         AI21Client::transform_chat_response(response)
-    }
+    },
+    error_map: |_provider: &AI21Provider,
+                status: u16,
+                error_text: String,
+                _request: &ChatRequest|
+     -> ProviderError {
+        if let Ok(value) = serde_json::from_str::<Value>(&error_text) {
+            if let Some(error) = value.get("error") {
+                let message = error
+                    .get("message")
+                    .and_then(|m| m.as_str())
+                    .unwrap_or("Unknown error from AI21 API");
 
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        AI21ErrorMapper
-    }
+                let code = error
+                    .get("code")
+                    .and_then(|c| c.as_str())
+                    .unwrap_or("unknown_error");
 
-    async fn chat_completion(
-        &self,
-        request: ChatRequest,
-        context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
-        let url = format!(
-            "{}/chat/completions",
-            self.config.base.get_effective_api_base("ai21")
-        );
-        let body = AI21Client::transform_chat_request(request.clone());
+                return match code {
+                    "authentication_error" | "invalid_request_error" => {
+                        ProviderError::authentication(PROVIDER_NAME, message)
+                    }
+                    "rate_limit_exceeded" => ProviderError::rate_limit(PROVIDER_NAME, None),
+                    _ => ProviderError::api_error(PROVIDER_NAME, status, message),
+                };
+            }
+        }
 
-        let headers = self.get_request_headers();
-        let body_data = Some(body);
-
-        let response = self
-            .pool_manager
-            .execute_request(&url, HttpMethod::POST, headers, body_data)
-            .await?;
-
-        let response_bytes = response
-            .bytes()
-            .await
-            .map_err(|e| ProviderError::network("ai21", e.to_string()))?;
-
-        self.transform_response(&response_bytes, &request.model, &context.request_id)
-            .await
-    }
-
-    async fn chat_completion_stream(
-        &self,
-        request: ChatRequest,
-        _context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
-    {
-        let url = format!(
-            "{}/chat/completions",
-            self.config.base.get_effective_api_base("ai21")
-        );
-
-        // Create streaming request
-        let mut body = AI21Client::transform_chat_request(request.clone());
-        body["stream"] = serde_json::Value::Bool(true);
-
-        // Get API key
-        let api_key = self
+        ProviderError::api_error(PROVIDER_NAME, status, error_text)
+    },
+    health_check: |provider: &AI21Provider| {
+        let has_key = provider
             .config
             .base
-            .get_effective_api_key("ai21")
-            .ok_or_else(|| ProviderError::authentication("ai21", "API key is required"))?;
+            .get_effective_api_key(PROVIDER_NAME)
+            .is_some();
+        async move {
+            if has_key {
+                HealthStatus::Healthy
+            } else {
+                HealthStatus::Unhealthy
+            }
+        }
+    },
+    streaming: |provider: &AI21Provider, request: ChatRequest, _context: RequestContext| {
+        let url = format!(
+            "{}/chat/completions",
+            provider.config.base.get_effective_api_base(PROVIDER_NAME)
+        );
+        let api_key = provider.config.base.get_effective_api_key(PROVIDER_NAME);
 
-        // Create request
-        let client = reqwest::Client::new();
-        let response = client
-            .post(&url)
-            .header("Authorization", format!("Bearer {}", api_key))
-            .header("Content-Type", "application/json")
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| ProviderError::network("ai21", e.to_string()))?;
+        let mut body = AI21Client::transform_chat_request(request);
+        body["stream"] = serde_json::Value::Bool(true);
 
-        let status = response.status();
-        if !status.is_success() {
-            let error_text = response
-                .text()
+        async move {
+            let api_key = api_key.ok_or_else(|| {
+                ProviderError::authentication(PROVIDER_NAME, "API key is required")
+            })?;
+
+            let client = reqwest::Client::new();
+            let response = client
+                .post(&url)
+                .header("Authorization", format!("Bearer {}", api_key))
+                .header("Content-Type", "application/json")
+                .json(&body)
+                .send()
                 .await
-                .unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(ProviderError::api_error(
-                "ai21",
-                status.as_u16(),
-                error_text,
-            ));
+                .map_err(|e| ProviderError::network(PROVIDER_NAME, e.to_string()))?;
+
+            let status = response.status();
+            if !status.is_success() {
+                let error_text = response
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "Unknown error".to_string());
+                return Err(ProviderError::api_error(
+                    PROVIDER_NAME,
+                    status.as_u16(),
+                    error_text,
+                ));
+            }
+
+            let stream = super::streaming::create_ai21_stream(response.bytes_stream());
+            let stream: Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>> =
+                Box::pin(stream);
+            Ok(stream)
         }
-
-        // Create AI21 stream using unified SSE parser
-        let stream = response.bytes_stream();
-        Ok(Box::pin(super::streaming::create_ai21_stream(stream)))
-    }
-
-    async fn health_check(&self) -> HealthStatus {
-        if self.config.base.get_effective_api_key("ai21").is_some() {
-            HealthStatus::Healthy
-        } else {
-            HealthStatus::Unhealthy
-        }
-    }
-
-    async fn calculate_cost(
-        &self,
-        model: &str,
-        input_tokens: u32,
-        output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
+    },
+    calculate_cost: |_provider: &AI21Provider,
+                     model: &str,
+                     input_tokens: u32,
+                     output_tokens: u32|
+     -> Result<f64, ProviderError> {
         let usage = crate::core::providers::base::pricing::Usage {
             prompt_tokens: input_tokens,
             completion_tokens: output_tokens,
@@ -239,12 +179,34 @@ impl LLMProvider for AI21Provider {
         };
 
         Ok(get_pricing_db().calculate(model, &usage))
+    },
+);
+
+impl AI21Provider {
+    pub fn from_env() -> Result<Self, ProviderError> {
+        let config = AI21Config::from_env();
+        Self::new(config)
+    }
+
+    fn get_request_headers(&self) -> Vec<HeaderPair> {
+        let mut headers = Vec::with_capacity(2);
+
+        if let Some(api_key) = &self.config.base.api_key {
+            headers.push(header("Authorization", format!("Bearer {}", api_key)));
+        }
+
+        for (key, value) in &self.config.base.headers {
+            headers.push(header_owned(key.clone(), value.clone()));
+        }
+
+        headers
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 
     #[test]
     fn test_provider_creation() {

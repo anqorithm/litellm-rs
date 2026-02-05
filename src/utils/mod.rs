@@ -24,9 +24,11 @@ pub mod business;
 pub mod config; // Configuration management
 pub mod data; // Data processing utilities
 pub mod error; // Error handling
+pub mod event; // Event publish-subscribe system
 pub mod logging; // Logging & monitoring
 pub mod net; // Network & client utilities
 pub mod perf; // Performance optimization
+pub mod sync; // Concurrent-safe containers
 pub mod sys; // System utilities // Business logic
 
 // Re-export commonly used types from each module for convenience
@@ -37,9 +39,13 @@ pub use auth::AuthUtils;
 pub use config::{ConfigDefaults, ConfigManager, ConfigUtils};
 pub use data::DataUtils;
 pub use error::{ErrorCategory, ErrorContext, ErrorUtils};
+pub use event::{Event, EventBroker, EventType, Subscriber, SubscriptionHandle};
 pub use logging::{LogEntry, LogLevel, Logger, LoggingUtils};
 pub use net::client::types::{HttpClientConfig, RequestMetrics, RetryConfig};
 pub use net::client::utils::ClientUtils;
+pub use sync::{
+    AtomicValue, ConcurrentMap, ConcurrentVec, VersionError, VersionedEntry, VersionedMap,
+};
 
 // Re-export string pool for performance benchmarks
 pub mod string_pool {

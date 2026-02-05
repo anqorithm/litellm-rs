@@ -341,3 +341,47 @@ pub fn api_key(mut self, key: impl Into<String>) -> Self {
 - 新增 `define_pooled_http_provider_with_hooks!`（支持 GlobalPoolManager + streaming hook）
 - 已迁移: `firecrawl`, `empower`
 - `cargo test firecrawl` (覆盖 provider tests)
+
+---
+
+### Task 2 扩展: Pooled Hook Provider 迁移 (Batch 2)
+
+**目标**: 继续迁移使用 `GlobalPoolManager` 的 provider 到 pooled hook 宏。
+
+**范围 (本轮)**:
+- `ai21`
+
+**状态**: Done
+
+**进展**:
+- 已迁移: `ai21`, `amazon_nova`
+- `AgentCoordinator` object-safety 已修复，相关测试通过
+
+---
+
+### Task 2 扩展: Pooled Hook Provider 迁移 (Batch 3)
+
+**目标**: 继续迁移使用 `GlobalPoolManager` 的 provider 到 pooled hook 宏。
+
+**范围 (本轮)**:
+- `datarobot`
+- `deepseek`
+
+**状态**: Done
+
+**进展**:
+- 已迁移: `datarobot`, `deepseek`
+
+---
+
+### Task 0: AgentCoordinator Object-Safety 修复
+
+**目标**: 修复 `AgentCoordinator` trait object 测试失败，避免阻塞 provider 测试。
+
+**范围 (本轮)**:
+- `src/core/agent/coordinator.rs`
+
+**状态**: Done
+
+**进展**:
+- `AgentCoordinator` trait object-safety 已修复
