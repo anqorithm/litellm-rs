@@ -58,7 +58,7 @@ impl Default for HttpClientPoolConfig {
 /// Shared HTTP client instance with optimized settings
 static SHARED_HTTP_CLIENT: OnceLock<Client> = OnceLock::new();
 
-/// Timeout-specific client cache
+/// Timeout-specific client cache (keyed by milliseconds)
 static TIMEOUT_CLIENT_CACHE: OnceLock<DashMap<u64, Arc<Client>>> = OnceLock::new();
 
 /// Get the shared HTTP client instance
@@ -74,19 +74,35 @@ pub fn get_shared_client() -> &'static Client {
 
 /// Get or create a client with a specific timeout
 ///
-/// Clients are cached by timeout duration (in seconds) to avoid creating
+/// Clients are cached by timeout duration (in milliseconds) to avoid creating
 /// multiple clients with the same configuration.
 pub fn get_client_with_timeout(timeout: Duration) -> Arc<Client> {
     let cache = TIMEOUT_CLIENT_CACHE.get_or_init(DashMap::new);
-    let timeout_secs = timeout.as_secs();
+    let timeout_millis = timeout.as_millis().min(u64::MAX as u128) as u64;
 
     cache
-        .entry(timeout_secs)
+        .entry(timeout_millis)
         .or_insert_with(|| {
-            debug!(timeout_secs, "Creating cached HTTP client for timeout");
+            debug!(timeout_millis, "Creating cached HTTP client for timeout");
             Arc::new(create_optimized_client(timeout))
         })
         .clone()
+}
+
+/// Get or create a client with a specific timeout, returning errors on failure
+///
+/// This is useful when caller error semantics must be preserved.
+pub fn get_client_with_timeout_fallible(timeout: Duration) -> Result<Arc<Client>, reqwest::Error> {
+    let cache = TIMEOUT_CLIENT_CACHE.get_or_init(DashMap::new);
+    let timeout_millis = timeout.as_millis().min(u64::MAX as u128) as u64;
+
+    if let Some(existing) = cache.get(&timeout_millis) {
+        return Ok(existing.clone());
+    }
+
+    let client = Arc::new(create_custom_client(timeout)?);
+    cache.insert(timeout_millis, client.clone());
+    Ok(client)
 }
 
 /// Create an optimized HTTP client with the given timeout
@@ -134,6 +150,25 @@ pub fn create_custom_client(timeout: Duration) -> Result<Client, reqwest::Error>
         .build()
 }
 
+/// Create a custom HTTP client with specific timeout and default headers
+pub fn create_custom_client_with_headers(
+    timeout: Duration,
+    default_headers: reqwest::header::HeaderMap,
+) -> Result<Client, reqwest::Error> {
+    let config = HttpClientPoolConfig::default();
+
+    ClientBuilder::new()
+        .pool_max_idle_per_host(config.pool_max_idle_per_host)
+        .pool_idle_timeout(config.pool_idle_timeout)
+        .timeout(timeout)
+        .connect_timeout(config.connect_timeout)
+        .tcp_keepalive(config.tcp_keepalive)
+        .tcp_nodelay(true)
+        .user_agent(config.user_agent)
+        .default_headers(default_headers)
+        .build()
+}
+
 /// Get statistics about the client cache
 pub fn get_cache_stats() -> HttpClientCacheStats {
     let cache = TIMEOUT_CLIENT_CACHE.get_or_init(DashMap::new);
@@ -148,7 +183,7 @@ pub fn get_cache_stats() -> HttpClientCacheStats {
 pub struct HttpClientCacheStats {
     /// Number of cached clients
     pub cached_clients: usize,
-    /// List of cached timeout configurations (in seconds)
+    /// List of cached timeout configurations (in milliseconds)
     pub timeout_configs: Vec<u64>,
 }
 
@@ -183,6 +218,14 @@ mod tests {
     }
 
     #[test]
+    fn test_client_with_timeout_fallible_caching() {
+        let client1 = get_client_with_timeout_fallible(Duration::from_millis(1500)).unwrap();
+        let client2 = get_client_with_timeout_fallible(Duration::from_millis(1500)).unwrap();
+
+        assert!(Arc::ptr_eq(&client1, &client2));
+    }
+
+    #[test]
     fn test_cache_stats() {
         // Ensure some clients are cached
         let _ = get_client_with_timeout(Duration::from_secs(30));
@@ -190,8 +233,8 @@ mod tests {
 
         let stats = get_cache_stats();
         assert!(stats.cached_clients >= 2);
-        assert!(stats.timeout_configs.contains(&30));
-        assert!(stats.timeout_configs.contains(&45));
+        assert!(stats.timeout_configs.contains(&30_000));
+        assert!(stats.timeout_configs.contains(&45_000));
     }
 
     #[test]
