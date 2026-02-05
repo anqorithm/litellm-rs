@@ -339,9 +339,7 @@ mod tests {
 
     #[test]
     fn test_read_secret_options() {
-        let options = ReadSecretOptions::new()
-            .version("v3")
-            .with_metadata();
+        let options = ReadSecretOptions::new().version("v3").with_metadata();
 
         assert_eq!(options.version, Some("v3".to_string()));
         assert!(options.include_metadata);
@@ -354,7 +352,10 @@ mod tests {
             .tag("service", "stripe")
             .overwrite(true);
 
-        assert_eq!(options.description, Some("API key for external service".to_string()));
+        assert_eq!(
+            options.description,
+            Some("API key for external service".to_string())
+        );
         assert_eq!(options.tags.get("service"), Some(&"stripe".to_string()));
         assert!(options.overwrite);
     }

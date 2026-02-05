@@ -214,7 +214,10 @@ impl RealtimeConfig {
             output_audio_format: Some(self.output_audio_format),
             input_audio_transcription: if self.transcribe_input {
                 Some(InputAudioTranscription {
-                    model: self.transcription_model.clone().unwrap_or_else(|| "whisper-1".to_string()),
+                    model: self
+                        .transcription_model
+                        .clone()
+                        .unwrap_or_else(|| "whisper-1".to_string()),
                 })
             } else {
                 None
@@ -223,7 +226,9 @@ impl RealtimeConfig {
             tools: None,
             tool_choice: None,
             temperature: self.temperature,
-            max_response_output_tokens: self.max_output_tokens.map(super::events::MaxTokens::Number),
+            max_response_output_tokens: self
+                .max_output_tokens
+                .map(super::events::MaxTokens::Number),
         }
     }
 
@@ -258,7 +263,10 @@ mod tests {
         assert_eq!(config.model, "gpt-4o-realtime-preview");
         assert_eq!(config.api_key, Some("sk-test".to_string()));
         assert_eq!(config.voice, Voice::Nova);
-        assert_eq!(config.instructions, Some("You are a helpful assistant".to_string()));
+        assert_eq!(
+            config.instructions,
+            Some("You are a helpful assistant".to_string())
+        );
         assert_eq!(config.temperature, Some(0.7));
         assert_eq!(config.max_output_tokens, Some(1000));
         assert!(config.transcribe_input);
@@ -286,12 +294,11 @@ mod tests {
 
     #[test]
     fn test_turn_detection() {
-        let config = RealtimeConfig::default()
-            .turn_detection(TurnDetection::ServerVad {
-                threshold: Some(0.5),
-                prefix_padding_ms: Some(300),
-                silence_duration_ms: Some(500),
-            });
+        let config = RealtimeConfig::default().turn_detection(TurnDetection::ServerVad {
+            threshold: Some(0.5),
+            prefix_padding_ms: Some(300),
+            silence_duration_ms: Some(500),
+        });
 
         assert!(config.turn_detection.is_some());
 

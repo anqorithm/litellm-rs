@@ -203,10 +203,19 @@ pub struct Tool {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentPart {
-    InputText { text: String },
-    InputAudio { audio: String },
-    Text { text: String },
-    Audio { audio: String, transcript: Option<String> },
+    InputText {
+        text: String,
+    },
+    InputAudio {
+        audio: String,
+    },
+    Text {
+        text: String,
+    },
+    Audio {
+        audio: String,
+        transcript: Option<String>,
+    },
 }
 
 /// Response status
@@ -578,15 +587,44 @@ pub struct RateLimit {
 /// Simplified realtime event for easier handling
 #[derive(Debug, Clone)]
 pub enum RealtimeEvent {
-    SessionCreated { session_id: String, model: String },
-    SessionUpdated { session_id: String },
-    ResponseStarted { response_id: String },
-    ResponseText { response_id: String, item_id: String, text: String, is_done: bool },
-    ResponseAudio { response_id: String, item_id: String, audio: Vec<u8>, is_done: bool },
-    ResponseDone { response_id: String, status: ResponseStatus },
-    FunctionCall { call_id: String, name: String, arguments: String },
-    Error { code: String, message: String },
-    RateLimitUpdated { limits: Vec<RateLimit> },
+    SessionCreated {
+        session_id: String,
+        model: String,
+    },
+    SessionUpdated {
+        session_id: String,
+    },
+    ResponseStarted {
+        response_id: String,
+    },
+    ResponseText {
+        response_id: String,
+        item_id: String,
+        text: String,
+        is_done: bool,
+    },
+    ResponseAudio {
+        response_id: String,
+        item_id: String,
+        audio: Vec<u8>,
+        is_done: bool,
+    },
+    ResponseDone {
+        response_id: String,
+        status: ResponseStatus,
+    },
+    FunctionCall {
+        call_id: String,
+        name: String,
+        arguments: String,
+    },
+    Error {
+        code: String,
+        message: String,
+    },
+    RateLimitUpdated {
+        limits: Vec<RateLimit>,
+    },
     Raw(Box<ServerEvent>),
 }
 
@@ -603,22 +641,28 @@ impl From<ServerEvent> for RealtimeEvent {
             ServerEvent::ResponseCreated { response, .. } => RealtimeEvent::ResponseStarted {
                 response_id: response.id,
             },
-            ServerEvent::ResponseTextDelta { response_id, item_id, delta, .. } => {
-                RealtimeEvent::ResponseText {
-                    response_id,
-                    item_id,
-                    text: delta,
-                    is_done: false,
-                }
-            }
-            ServerEvent::ResponseTextDone { response_id, item_id, text, .. } => {
-                RealtimeEvent::ResponseText {
-                    response_id,
-                    item_id,
-                    text,
-                    is_done: true,
-                }
-            }
+            ServerEvent::ResponseTextDelta {
+                response_id,
+                item_id,
+                delta,
+                ..
+            } => RealtimeEvent::ResponseText {
+                response_id,
+                item_id,
+                text: delta,
+                is_done: false,
+            },
+            ServerEvent::ResponseTextDone {
+                response_id,
+                item_id,
+                text,
+                ..
+            } => RealtimeEvent::ResponseText {
+                response_id,
+                item_id,
+                text,
+                is_done: true,
+            },
             ServerEvent::ResponseDone { response, .. } => RealtimeEvent::ResponseDone {
                 response_id: response.id,
                 status: response.status,
@@ -627,9 +671,9 @@ impl From<ServerEvent> for RealtimeEvent {
                 code: error.code.unwrap_or_default(),
                 message: error.message,
             },
-            ServerEvent::RateLimitsUpdated { rate_limits, .. } => {
-                RealtimeEvent::RateLimitUpdated { limits: rate_limits }
-            }
+            ServerEvent::RateLimitsUpdated { rate_limits, .. } => RealtimeEvent::RateLimitUpdated {
+                limits: rate_limits,
+            },
             other => RealtimeEvent::Raw(Box::new(other)),
         }
     }

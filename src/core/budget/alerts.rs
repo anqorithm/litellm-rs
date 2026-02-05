@@ -12,6 +12,7 @@ use std::time::Duration;
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
+use crate::utils::net::http::create_custom_client;
 /// Budget alert manager for handling notifications
 #[derive(Clone)]
 pub struct BudgetAlertManager {
@@ -149,10 +150,7 @@ impl BudgetAlertManager {
         Self {
             alerts: Arc::new(RwLock::new(AlertStorage::new(config.max_history_size))),
             webhooks: Arc::new(RwLock::new(Vec::new())),
-            client: Client::builder()
-                .timeout(Duration::from_secs(30))
-                .build()
-                .unwrap_or_else(|_| Client::new()),
+            client: create_custom_client(Duration::from_secs(30)).unwrap_or_else(|_| Client::new()),
             config: Arc::new(RwLock::new(config)),
         }
     }
@@ -162,10 +160,7 @@ impl BudgetAlertManager {
         Self {
             alerts: Arc::new(RwLock::new(AlertStorage::new(config.max_history_size))),
             webhooks: Arc::new(RwLock::new(Vec::new())),
-            client: Client::builder()
-                .timeout(Duration::from_secs(30))
-                .build()
-                .unwrap_or_else(|_| Client::new()),
+            client: create_custom_client(Duration::from_secs(30)).unwrap_or_else(|_| Client::new()),
             config: Arc::new(RwLock::new(config)),
         }
     }

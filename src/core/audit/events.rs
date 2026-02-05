@@ -121,9 +121,12 @@ impl AuditEvent {
     /// Create a request failed event
     pub fn request_failed(request_id: impl Into<String>, error: impl Into<String>) -> Self {
         let request_id = request_id.into();
-        Self::new(EventType::RequestFailed, format!("Request failed: {}", error.into()))
-            .with_request_id(&request_id)
-            .with_level(LogLevel::Error)
+        Self::new(
+            EventType::RequestFailed,
+            format!("Request failed: {}", error.into()),
+        )
+        .with_request_id(&request_id)
+        .with_level(LogLevel::Error)
     }
 
     /// Create a user action event
@@ -246,8 +249,14 @@ mod tests {
     fn test_request_completed() {
         let event = AuditEvent::request_completed("req-123", 200, 150);
         assert_eq!(event.event_type, EventType::RequestCompleted);
-        assert_eq!(event.metadata.get("status_code"), Some(&serde_json::json!(200)));
-        assert_eq!(event.metadata.get("duration_ms"), Some(&serde_json::json!(150)));
+        assert_eq!(
+            event.metadata.get("status_code"),
+            Some(&serde_json::json!(200))
+        );
+        assert_eq!(
+            event.metadata.get("duration_ms"),
+            Some(&serde_json::json!(150))
+        );
     }
 
     #[test]
@@ -307,8 +316,8 @@ mod tests {
     #[test]
     fn test_event_with_request_log() {
         let request = RequestLog::new("req-123", "POST", "/v1/chat/completions");
-        let event = AuditEvent::request_started("req-123", "/v1/chat/completions")
-            .with_request(request);
+        let event =
+            AuditEvent::request_started("req-123", "/v1/chat/completions").with_request(request);
 
         assert!(event.request.is_some());
         assert_eq!(event.request.unwrap().method, "POST");
@@ -317,8 +326,7 @@ mod tests {
     #[test]
     fn test_event_with_response_log() {
         let response = ResponseLog::new("req-123", 200, 100);
-        let event = AuditEvent::request_completed("req-123", 200, 100)
-            .with_response(response);
+        let event = AuditEvent::request_completed("req-123", 200, 100).with_response(response);
 
         assert!(event.response.is_some());
         assert_eq!(event.response.unwrap().status_code, 200);

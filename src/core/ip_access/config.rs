@@ -354,8 +354,7 @@ mod tests {
 
     #[test]
     fn test_ip_rule_config() {
-        let rule = IpRuleConfig::new("192.168.1.0/24")
-            .with_description("Office network");
+        let rule = IpRuleConfig::new("192.168.1.0/24").with_description("Office network");
 
         assert_eq!(rule.value, "192.168.1.0/24");
         assert_eq!(rule.description, Some("Office network".to_string()));

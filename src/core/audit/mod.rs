@@ -49,6 +49,4 @@ pub use events::{AuditEvent, EventType};
 pub use logger::AuditLogger;
 pub use middleware::{AuditMiddleware, AuditMiddlewareService};
 pub use outputs::{AuditOutput, FileOutput, MemoryOutput};
-pub use types::{
-    AuditError, AuditResult, LogLevel, RequestLog, ResponseLog, UserAction,
-};
+pub use types::{AuditError, AuditResult, LogLevel, RequestLog, ResponseLog, UserAction};

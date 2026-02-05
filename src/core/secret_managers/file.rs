@@ -196,13 +196,15 @@ impl SecretManager for FileSecretManager {
             });
         }
 
-        let mut entries = fs::read_dir(&self.base_path).await.map_err(|e| {
-            SecretError::other(format!("Failed to read secrets directory: {}", e))
-        })?;
+        let mut entries = fs::read_dir(&self.base_path)
+            .await
+            .map_err(|e| SecretError::other(format!("Failed to read secrets directory: {}", e)))?;
 
-        while let Some(entry) = entries.next_entry().await.map_err(|e| {
-            SecretError::other(format!("Failed to read directory entry: {}", e))
-        })? {
+        while let Some(entry) = entries
+            .next_entry()
+            .await
+            .map_err(|e| SecretError::other(format!("Failed to read directory entry: {}", e)))?
+        {
             let path = entry.path();
 
             // Skip directories
@@ -290,7 +292,10 @@ mod tests {
     async fn test_write_and_read_secret() {
         let (_temp_dir, manager) = setup().await;
 
-        manager.write_secret("test-key", "test-value").await.unwrap();
+        manager
+            .write_secret("test-key", "test-value")
+            .await
+            .unwrap();
         let result = manager.read_secret("test-key").await.unwrap();
 
         assert_eq!(result, Some("test-value".to_string()));
@@ -328,7 +333,10 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let manager = FileSecretManager::with_extension(temp_dir.path(), ".secret");
 
-        manager.write_secret("api-key", "secret-value").await.unwrap();
+        manager
+            .write_secret("api-key", "secret-value")
+            .await
+            .unwrap();
 
         // Verify file has extension
         let path = temp_dir.path().join("api-key.secret");

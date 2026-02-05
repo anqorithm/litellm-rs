@@ -90,8 +90,8 @@ impl IpRule {
         }
 
         // Try parsing as single IP
-        let ip = IpAddr::from_str(value)
-            .map_err(|_| IpAccessError::InvalidIp(value.to_string()))?;
+        let ip =
+            IpAddr::from_str(value).map_err(|_| IpAccessError::InvalidIp(value.to_string()))?;
 
         Ok((Some(ip), None))
     }
@@ -213,12 +213,13 @@ impl FromStr for CidrRange {
             )));
         }
 
-        let network = IpAddr::from_str(parts[0])
-            .map_err(|_| IpAccessError::InvalidCidr(format!("Invalid network address: {}", parts[0])))?;
+        let network = IpAddr::from_str(parts[0]).map_err(|_| {
+            IpAccessError::InvalidCidr(format!("Invalid network address: {}", parts[0]))
+        })?;
 
-        let prefix_len: u8 = parts[1]
-            .parse()
-            .map_err(|_| IpAccessError::InvalidCidr(format!("Invalid prefix length: {}", parts[1])))?;
+        let prefix_len: u8 = parts[1].parse().map_err(|_| {
+            IpAccessError::InvalidCidr(format!("Invalid prefix length: {}", parts[1]))
+        })?;
 
         Self::new(network, prefix_len)
     }

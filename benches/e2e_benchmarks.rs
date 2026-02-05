@@ -3,7 +3,7 @@
 //! These benchmarks measure the full request processing pipeline,
 //! simulating real-world usage patterns.
 
-use criterion::{criterion_group, criterion_main, Criterion, Throughput};
+use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use std::hint::black_box;
 use std::time::Instant;
 
@@ -58,21 +58,15 @@ fn bench_request_parsing(c: &mut Criterion) {
     group.throughput(Throughput::Elements(1));
 
     group.bench_function("simple_request", |b| {
-        b.iter(|| {
-            black_box(serde_json::from_str::<serde_json::Value>(simple_request).unwrap())
-        });
+        b.iter(|| black_box(serde_json::from_str::<serde_json::Value>(simple_request).unwrap()));
     });
 
     group.bench_function("complex_request_with_tools", |b| {
-        b.iter(|| {
-            black_box(serde_json::from_str::<serde_json::Value>(complex_request).unwrap())
-        });
+        b.iter(|| black_box(serde_json::from_str::<serde_json::Value>(complex_request).unwrap()));
     });
 
     group.bench_function("large_context_10kb", |b| {
-        b.iter(|| {
-            black_box(serde_json::from_str::<serde_json::Value>(&large_context).unwrap())
-        });
+        b.iter(|| black_box(serde_json::from_str::<serde_json::Value>(&large_context).unwrap()));
     });
 
     group.finish();
@@ -257,8 +251,8 @@ fn bench_token_counting(c: &mut Criterion) {
 
 /// Benchmark concurrent request handling simulation
 fn bench_concurrent_requests(c: &mut Criterion) {
-    use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicU64, Ordering};
 
     let mut group = c.benchmark_group("concurrent_requests");
 

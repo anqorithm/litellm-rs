@@ -8,6 +8,7 @@ use super::types::{
 };
 use crate::core::models::RequestContext;
 use crate::utils::error::{GatewayError, Result};
+use crate::utils::net::http::create_custom_client;
 use reqwest::Client;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -27,9 +28,7 @@ pub struct WebhookManager {
 impl WebhookManager {
     /// Create a new webhook manager
     pub fn new() -> Result<Self> {
-        let client = Client::builder()
-            .timeout(Duration::from_secs(30))
-            .build()
+        let client = create_custom_client(Duration::from_secs(30))
             .map_err(|e| GatewayError::Network(format!("Failed to create HTTP client: {}", e)))?;
 
         Ok(Self {

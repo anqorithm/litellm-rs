@@ -98,7 +98,11 @@ pub struct RequestLog {
 
 impl RequestLog {
     /// Create a new request log
-    pub fn new(request_id: impl Into<String>, method: impl Into<String>, path: impl Into<String>) -> Self {
+    pub fn new(
+        request_id: impl Into<String>,
+        method: impl Into<String>,
+        path: impl Into<String>,
+    ) -> Self {
         Self {
             request_id: request_id.into(),
             method: method.into(),

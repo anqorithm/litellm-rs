@@ -207,7 +207,9 @@ impl AuditConfig {
     /// Check if a header should be excluded
     pub fn is_header_excluded(&self, header: &str) -> bool {
         let header_lower = header.to_lowercase();
-        self.exclude_headers.iter().any(|h| h.to_lowercase() == header_lower)
+        self.exclude_headers
+            .iter()
+            .any(|h| h.to_lowercase() == header_lower)
     }
 
     /// Validate the configuration

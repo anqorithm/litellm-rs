@@ -300,7 +300,11 @@ pub struct LlmStreamEvent {
 }
 
 impl LlmStreamEvent {
-    pub fn new(request_id: impl Into<String>, chunk_index: u32, content: impl Into<String>) -> Self {
+    pub fn new(
+        request_id: impl Into<String>,
+        chunk_index: u32,
+        content: impl Into<String>,
+    ) -> Self {
         Self {
             request_id: request_id.into(),
             chunk_index,

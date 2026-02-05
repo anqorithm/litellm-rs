@@ -6,7 +6,7 @@ use actix_web::body::MessageBody;
 use actix_web::dev::{Service, ServiceRequest, ServiceResponse, Transform, forward_ready};
 use actix_web::http::StatusCode;
 use actix_web::{Error, HttpResponse, body::BoxBody};
-use futures::future::{Ready, ready, LocalBoxFuture};
+use futures::future::{LocalBoxFuture, Ready, ready};
 use std::sync::Arc;
 use tracing::{debug, warn};
 
@@ -97,10 +97,7 @@ where
             .and_then(|v| v.to_str().ok())
             .map(|s| s.to_string());
 
-        let client_ip = controller.extract_client_ip(
-            &remote_addr,
-            forwarded_for.as_deref(),
-        );
+        let client_ip = controller.extract_client_ip(&remote_addr, forwarded_for.as_deref());
 
         let config = controller.config().clone();
         let fut = self.service.call(req);
@@ -112,20 +109,24 @@ where
                     warn!("IP access denied for: {}", client_ip);
                 }
 
-                let response = HttpResponse::build(StatusCode::from_u16(config.blocked_status).unwrap_or(StatusCode::FORBIDDEN))
-                    .content_type("application/json")
-                    .body(serde_json::json!({
+                let response = HttpResponse::build(
+                    StatusCode::from_u16(config.blocked_status).unwrap_or(StatusCode::FORBIDDEN),
+                )
+                .content_type("application/json")
+                .body(
+                    serde_json::json!({
                         "error": {
                             "message": config.blocked_message,
                             "type": "ip_access_denied",
                             "code": "forbidden"
                         }
-                    }).to_string());
+                    })
+                    .to_string(),
+                );
 
-                return Ok(ServiceResponse::new(
-                    fut.await?.into_parts().0,
-                    response,
-                ).map_into_boxed_body());
+                return Ok(
+                    ServiceResponse::new(fut.await?.into_parts().0, response).map_into_boxed_body()
+                );
             }
 
             debug!("IP access granted for: {}", client_ip);

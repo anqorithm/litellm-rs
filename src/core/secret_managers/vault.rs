@@ -103,9 +103,10 @@ mod implementation {
     impl VaultSecretManager {
         /// Create a new Vault secret manager
         pub fn new(config: VaultConfig) -> SecretResult<Self> {
-            let token = config.token.clone().ok_or_else(|| {
-                SecretError::auth("Vault token is required")
-            })?;
+            let token = config
+                .token
+                .clone()
+                .ok_or_else(|| SecretError::auth("Vault token is required"))?;
 
             let mut settings_builder = VaultClientSettingsBuilder::default();
             settings_builder.address(&config.address);
@@ -250,10 +251,8 @@ mod implementation {
 
             match kv2::list(&self.client, &self.config.mount, &path).await {
                 Ok(keys) => {
-                    let mut secrets: Vec<SecretMetadata> = keys
-                        .into_iter()
-                        .map(SecretMetadata::new)
-                        .collect();
+                    let mut secrets: Vec<SecretMetadata> =
+                        keys.into_iter().map(SecretMetadata::new).collect();
 
                     // Apply max_results limit
                     if let Some(max) = options.max_results {

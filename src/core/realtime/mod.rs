@@ -41,7 +41,7 @@ pub mod session;
 
 pub use config::RealtimeConfig;
 pub use events::{
-    ClientEvent, RealtimeError, RealtimeEvent, RealtimeResult, ServerEvent,
-    ContentPart, ResponseStatus, SessionConfig, TurnDetection, Voice,
+    ClientEvent, ContentPart, RealtimeError, RealtimeEvent, RealtimeResult, ResponseStatus,
+    ServerEvent, SessionConfig, TurnDetection, Voice,
 };
 pub use session::{RealtimeSession, SessionState};

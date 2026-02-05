@@ -55,8 +55,7 @@ mod implementation {
     impl AwsSecretManager {
         /// Create a new AWS Secrets Manager client
         pub async fn new(config: AwsSecretsConfig) -> SecretResult<Self> {
-            let mut aws_config_builder =
-                aws_config::defaults(BehaviorVersion::latest());
+            let mut aws_config_builder = aws_config::defaults(BehaviorVersion::latest());
 
             if let Some(ref region) = config.region {
                 aws_config_builder =
@@ -65,8 +64,7 @@ mod implementation {
 
             let aws_config = aws_config_builder.load().await;
 
-            let mut client_config =
-                aws_sdk_secretsmanager::config::Builder::from(&aws_config);
+            let mut client_config = aws_sdk_secretsmanager::config::Builder::from(&aws_config);
 
             if let Some(ref endpoint) = config.endpoint_url {
                 client_config = client_config.endpoint_url(endpoint);
@@ -344,6 +342,9 @@ mod tests {
 
         assert_eq!(config.region, Some("us-east-1".to_string()));
         assert_eq!(config.prefix, Some("prod/".to_string()));
-        assert_eq!(config.endpoint_url, Some("http://localhost:4566".to_string()));
+        assert_eq!(
+            config.endpoint_url,
+            Some("http://localhost:4566".to_string())
+        );
     }
 }

@@ -6,8 +6,8 @@
 mod implementation {
     use async_trait::async_trait;
     use azure_identity::AzureCliCredential;
-    use azure_security_keyvault_secrets::models::SetSecretParameters;
     use azure_security_keyvault_secrets::SecretClient;
+    use azure_security_keyvault_secrets::models::SetSecretParameters;
     use tracing::{debug, error, warn};
 
     use crate::core::traits::secret_manager::{
@@ -58,8 +58,9 @@ mod implementation {
     impl AzureSecretManager {
         /// Create a new Azure Key Vault client using Azure CLI credentials
         pub fn new(config: AzureSecretsConfig) -> SecretResult<Self> {
-            let credential = AzureCliCredential::new(None)
-                .map_err(|e| SecretError::auth(format!("Failed to create Azure credential: {}", e)))?;
+            let credential = AzureCliCredential::new(None).map_err(|e| {
+                SecretError::auth(format!("Failed to create Azure credential: {}", e))
+            })?;
 
             let client = SecretClient::new(&config.vault_url, credential, None).map_err(|e| {
                 SecretError::connection(format!("Failed to create Azure Key Vault client: {}", e))
@@ -70,8 +71,9 @@ mod implementation {
 
         /// Create from environment variables
         pub fn from_env() -> SecretResult<Self> {
-            let config = AzureSecretsConfig::from_env()
-                .ok_or_else(|| SecretError::config("Azure Key Vault URL not found in environment"))?;
+            let config = AzureSecretsConfig::from_env().ok_or_else(|| {
+                SecretError::config("Azure Key Vault URL not found in environment")
+            })?;
             Self::new(config)
         }
 
@@ -142,7 +144,11 @@ mod implementation {
                 SecretError::invalid_format(format!("Failed to create request: {}", e))
             })?;
 
-            match self.client.set_secret(&secret_name, request_content, None).await {
+            match self
+                .client
+                .set_secret(&secret_name, request_content, None)
+                .await
+            {
                 Ok(_) => {
                     debug!(secret_name = %secret_name, "Secret written successfully");
                     Ok(())
@@ -266,8 +272,7 @@ mod tests {
 
     #[test]
     fn test_config_builder() {
-        let config =
-            AzureSecretsConfig::new("https://my-vault.vault.azure.net").prefix("prod/");
+        let config = AzureSecretsConfig::new("https://my-vault.vault.azure.net").prefix("prod/");
 
         assert_eq!(config.vault_url, "https://my-vault.vault.azure.net");
         assert_eq!(config.prefix, Some("prod/".to_string()));

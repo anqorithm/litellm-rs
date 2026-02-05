@@ -105,11 +105,15 @@ impl SecretManagerRegistry {
     }
 
     /// Read a secret from a specific manager
-    pub async fn read_secret(&self, manager_name: &str, secret_name: &str) -> SecretResult<Option<String>> {
+    pub async fn read_secret(
+        &self,
+        manager_name: &str,
+        secret_name: &str,
+    ) -> SecretResult<Option<String>> {
         let managers = self.managers.read().await;
-        let manager = managers
-            .get(manager_name)
-            .ok_or_else(|| SecretError::config(format!("Unknown secret manager: {}", manager_name)))?;
+        let manager = managers.get(manager_name).ok_or_else(|| {
+            SecretError::config(format!("Unknown secret manager: {}", manager_name))
+        })?;
 
         manager.read_secret(secret_name).await
     }
@@ -134,9 +138,9 @@ impl SecretManagerRegistry {
         value: &str,
     ) -> SecretResult<()> {
         let managers = self.managers.read().await;
-        let manager = managers
-            .get(manager_name)
-            .ok_or_else(|| SecretError::config(format!("Unknown secret manager: {}", manager_name)))?;
+        let manager = managers.get(manager_name).ok_or_else(|| {
+            SecretError::config(format!("Unknown secret manager: {}", manager_name))
+        })?;
 
         manager.write_secret(secret_name, value).await
     }
@@ -144,9 +148,9 @@ impl SecretManagerRegistry {
     /// Delete a secret from a specific manager
     pub async fn delete_secret(&self, manager_name: &str, secret_name: &str) -> SecretResult<()> {
         let managers = self.managers.read().await;
-        let manager = managers
-            .get(manager_name)
-            .ok_or_else(|| SecretError::config(format!("Unknown secret manager: {}", manager_name)))?;
+        let manager = managers.get(manager_name).ok_or_else(|| {
+            SecretError::config(format!("Unknown secret manager: {}", manager_name))
+        })?;
 
         manager.delete_secret(secret_name).await
     }
@@ -331,10 +335,7 @@ mod tests {
     async fn test_resolve_non_reference() {
         let registry = SecretManagerRegistry::new();
 
-        let result = registry
-            .resolve_reference("plain_string")
-            .await
-            .unwrap();
+        let result = registry.resolve_reference("plain_string").await.unwrap();
         assert_eq!(result, Some("plain_string".to_string()));
     }
 

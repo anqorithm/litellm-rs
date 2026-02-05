@@ -1,9 +1,9 @@
 //! Integration tests for the IP Access Control system
 
-use super::*;
 use self::config::IpAccessConfig;
 use self::control::IpAccessControl;
 use self::types::{IpAccessMode, IpRule};
+use super::*;
 use std::sync::Arc;
 
 // ============================================================================

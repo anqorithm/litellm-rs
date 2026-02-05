@@ -62,10 +62,7 @@ impl AuditLogger {
             Self::background_writer(receiver, writer_outputs, flush_interval, min_level).await;
         });
 
-        info!(
-            "Audit logger initialized with {} outputs",
-            outputs.len()
-        );
+        info!("Audit logger initialized with {} outputs", outputs.len());
 
         Ok(Self {
             config,
@@ -259,8 +256,12 @@ impl AuditLoggerBuilder {
         let mut logger = AuditLogger::new(self.config).await?;
 
         // Add custom outputs
-        let mut outputs = Arc::try_unwrap(logger.outputs)
-            .unwrap_or_else(|arc| (*arc).iter().map(|_| Box::new(NullOutput) as BoxedAuditOutput).collect());
+        let mut outputs = Arc::try_unwrap(logger.outputs).unwrap_or_else(|arc| {
+            (*arc)
+                .iter()
+                .map(|_| Box::new(NullOutput) as BoxedAuditOutput)
+                .collect()
+        });
 
         for output in self.custom_outputs {
             outputs.push(output);
@@ -324,9 +325,7 @@ mod tests {
         let logger = AuditLogger::disabled();
 
         // Create logger with patterns
-        let patterns: Vec<Regex> = vec![
-            Regex::new(r"sk-[a-zA-Z0-9]{20,}").unwrap(),
-        ];
+        let patterns: Vec<Regex> = vec![Regex::new(r"sk-[a-zA-Z0-9]{20,}").unwrap()];
 
         let logger = AuditLogger {
             config,
@@ -350,9 +349,7 @@ mod tests {
         // Clean up if exists
         let _ = tokio::fs::remove_file(&path).await;
 
-        let config = AuditConfig::new()
-            .enable()
-            .with_file_output(&path);
+        let config = AuditConfig::new().enable().with_file_output(&path);
 
         let logger = AuditLogger::new(config).await.unwrap();
 

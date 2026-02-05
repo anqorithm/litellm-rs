@@ -1,11 +1,11 @@
 //! Integration tests for the Audit Logging system
 
-use super::*;
 use self::config::AuditConfig;
 use self::events::{AuditEvent, EventType};
 use self::logger::AuditLogger;
 use self::outputs::MemoryOutput;
 use self::types::{LogLevel, RequestLog, ResponseLog, UserAction};
+use super::*;
 use std::sync::Arc;
 use tokio::time::Duration;
 
@@ -19,10 +19,21 @@ async fn test_full_audit_pipeline() {
     let logger = AuditLogger::new(config).await.unwrap();
 
     // Log various events
-    logger.log(AuditEvent::request_started("req-1", r"/v1/chat/completions")).await;
-    logger.log(AuditEvent::request_completed("req-1", 200, 150)).await;
-    logger.log(AuditEvent::user_action("user-1", UserAction::Login)).await;
-    logger.log(AuditEvent::security("Suspicious activity")).await;
+    logger
+        .log(AuditEvent::request_started(
+            "req-1",
+            r"/v1/chat/completions",
+        ))
+        .await;
+    logger
+        .log(AuditEvent::request_completed("req-1", 200, 150))
+        .await;
+    logger
+        .log(AuditEvent::user_action("user-1", UserAction::Login))
+        .await;
+    logger
+        .log(AuditEvent::security("Suspicious activity"))
+        .await;
 
     // Flush
     logger.flush().await.unwrap();
@@ -43,17 +54,14 @@ async fn test_request_response_logging() {
         .with_user_agent(r"test-client/1.0")
         .with_body(r#"{"model": "gpt-4"}"#, 18);
 
-    let event = AuditEvent::request_started("req-1", r"/v1/chat/completions")
-        .with_request(request);
+    let event = AuditEvent::request_started("req-1", r"/v1/chat/completions").with_request(request);
 
     logger.log(event).await;
 
     // Create response log
-    let response = ResponseLog::new("req-1", 200, 150)
-        .with_body(r#"{"choices": []}"#, 15);
+    let response = ResponseLog::new("req-1", 200, 150).with_body(r#"{"choices": []}"#, 15);
 
-    let event = AuditEvent::request_completed("req-1", 200, 150)
-        .with_response(response);
+    let event = AuditEvent::request_completed("req-1", 200, 150).with_response(response);
 
     logger.log(event).await;
 
@@ -84,28 +92,32 @@ async fn test_user_action_logging() {
 
 #[tokio::test]
 async fn test_log_level_filtering() {
-    let config = AuditConfig::new()
-        .enable()
-        .with_min_level(LogLevel::Warn);
+    let config = AuditConfig::new().enable().with_min_level(LogLevel::Warn);
 
     let logger = AuditLogger::new(config).await.unwrap();
 
     // Debug and Info should be filtered
-    logger.log(AuditEvent::new(EventType::System, "Debug").with_level(LogLevel::Debug)).await;
-    logger.log(AuditEvent::new(EventType::System, "Info").with_level(LogLevel::Info)).await;
+    logger
+        .log(AuditEvent::new(EventType::System, "Debug").with_level(LogLevel::Debug))
+        .await;
+    logger
+        .log(AuditEvent::new(EventType::System, "Info").with_level(LogLevel::Info))
+        .await;
 
     // Warn and above should pass
-    logger.log(AuditEvent::new(EventType::System, "Warn").with_level(LogLevel::Warn)).await;
-    logger.log(AuditEvent::new(EventType::System, "Error").with_level(LogLevel::Error)).await;
+    logger
+        .log(AuditEvent::new(EventType::System, "Warn").with_level(LogLevel::Warn))
+        .await;
+    logger
+        .log(AuditEvent::new(EventType::System, "Error").with_level(LogLevel::Error))
+        .await;
 
     logger.flush().await.unwrap();
 }
 
 #[tokio::test]
 async fn test_path_exclusion() {
-    let config = AuditConfig::new()
-        .enable()
-        .exclude_path(r"/internal");
+    let config = AuditConfig::new().enable().exclude_path(r"/internal");
 
     let logger = AuditLogger::new(config).await.unwrap();
 
@@ -240,8 +252,7 @@ fn test_event_serialization() {
         .with_client_ip("127.0.0.1")
         .with_body("{}", 2);
 
-    let response = ResponseLog::new("req-1", 200, 100)
-        .with_body(r#"{"ok": true}"#, 12);
+    let response = ResponseLog::new("req-1", 200, 100).with_body(r#"{"ok": true}"#, 12);
 
     let event = AuditEvent::request_completed("req-1", 200, 100)
         .with_request(request)

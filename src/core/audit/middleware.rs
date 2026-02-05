@@ -2,10 +2,10 @@
 //!
 //! This module provides middleware for automatic request/response logging.
 
+use actix_web::Error;
 use actix_web::body::MessageBody;
 use actix_web::dev::{Service, ServiceRequest, ServiceResponse, Transform, forward_ready};
-use actix_web::Error;
-use futures::future::{Ready, ready, LocalBoxFuture};
+use futures::future::{LocalBoxFuture, Ready, ready};
 use std::sync::Arc;
 use std::time::Instant;
 use tracing::debug;
@@ -105,8 +105,7 @@ where
         }
 
         // Log request started
-        let start_event = AuditEvent::request_started(&request_id, &path)
-            .with_request(request_log);
+        let start_event = AuditEvent::request_started(&request_id, &path).with_request(request_log);
 
         logger.log_sync(start_event);
 
@@ -120,7 +119,8 @@ where
             match &result {
                 Ok(response) => {
                     let status_code = response.status().as_u16();
-                    let event = AuditEvent::request_completed(&request_id, status_code, duration_ms);
+                    let event =
+                        AuditEvent::request_completed(&request_id, status_code, duration_ms);
                     logger.log(event).await;
                     debug!(
                         "Request {} completed: status={}, duration={}ms",

@@ -219,9 +219,8 @@ impl ConfigValidator {
 
     /// Validate email format
     pub fn validate_email(email: &str) -> Result<()> {
-        static EMAIL_REGEX: Lazy<Regex> = Lazy::new(|| {
-            Regex::new(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$").unwrap()
-        });
+        static EMAIL_REGEX: Lazy<Regex> =
+            Lazy::new(|| Regex::new(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$").unwrap());
 
         if !EMAIL_REGEX.is_match(email) {
             return Err(GatewayError::Validation("Invalid email format".to_string()));
@@ -324,8 +323,7 @@ impl ConfigValidator {
 
     /// Validate duration string (e.g., "30s", "5m", "1h")
     pub fn validate_duration_string(value: &str) -> Result<std::time::Duration> {
-        static DURATION_REGEX: Lazy<Regex> =
-            Lazy::new(|| Regex::new(r"^(\d+)(s|m|h|d)$").unwrap());
+        static DURATION_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"^(\d+)(s|m|h|d)$").unwrap());
 
         if let Some(captures) = DURATION_REGEX.captures(value) {
             let number: u64 = captures[1]

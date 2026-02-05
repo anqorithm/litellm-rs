@@ -58,10 +58,9 @@ mod implementation {
     impl GcpSecretManager {
         /// Create a new GCP Secret Manager client
         pub async fn new(config: GcpSecretsConfig) -> SecretResult<Self> {
-            let client = SecretManagerService::builder()
-                .build()
-                .await
-                .map_err(|e| SecretError::connection(format!("Failed to create GCP client: {}", e)))?;
+            let client = SecretManagerService::builder().build().await.map_err(|e| {
+                SecretError::connection(format!("Failed to create GCP client: {}", e))
+            })?;
 
             Ok(Self { client, config })
         }
@@ -116,7 +115,9 @@ mod implementation {
             let version_path = self.build_version_path(name, "latest");
             debug!(path = %version_path, "Reading secret from GCP Secret Manager");
 
-            match self.client.access_secret_version()
+            match self
+                .client
+                .access_secret_version()
                 .set_name(&version_path)
                 .send()
                 .await
@@ -153,13 +154,17 @@ mod implementation {
         }
 
         async fn write_secret(&self, name: &str, value: &str) -> SecretResult<()> {
-            use google_cloud_secretmanager_v1::model::{Secret, SecretPayload, Replication, replication};
+            use google_cloud_secretmanager_v1::model::{
+                Replication, Secret, SecretPayload, replication,
+            };
 
             let secret_path = self.build_secret_path(name);
             debug!(path = %secret_path, "Writing secret to GCP Secret Manager");
 
             // First, try to add a new version to existing secret
-            match self.client.add_secret_version()
+            match self
+                .client
+                .add_secret_version()
                 .set_parent(&secret_path)
                 .set_payload(SecretPayload::new().set_data(value.as_bytes().to_vec()))
                 .send()
@@ -179,16 +184,13 @@ mod implementation {
                         let secret_id = self.get_secret_name(name);
 
                         // Create the secret
-                        self.client.create_secret()
+                        self.client
+                            .create_secret()
                             .set_parent(&parent)
                             .set_secret_id(&secret_id)
-                            .set_secret(
-                                Secret::new()
-                                    .set_replication(
-                                        Replication::new()
-                                            .set_automatic(replication::Automatic::new())
-                                    )
-                            )
+                            .set_secret(Secret::new().set_replication(
+                                Replication::new().set_automatic(replication::Automatic::new()),
+                            ))
                             .send()
                             .await
                             .map_err(|e| {
@@ -196,7 +198,8 @@ mod implementation {
                             })?;
 
                         // Now add the version
-                        self.client.add_secret_version()
+                        self.client
+                            .add_secret_version()
                             .set_parent(&secret_path)
                             .set_payload(SecretPayload::new().set_data(value.as_bytes().to_vec()))
                             .send()
@@ -225,7 +228,9 @@ mod implementation {
             let secret_path = self.build_secret_path(name);
             debug!(path = %secret_path, "Deleting secret from GCP Secret Manager");
 
-            match self.client.delete_secret()
+            match self
+                .client
+                .delete_secret()
                 .set_name(&secret_path)
                 .send()
                 .await
@@ -258,8 +263,7 @@ mod implementation {
             let parent = self.build_parent_path();
             debug!(parent = %parent, "Listing secrets from GCP Secret Manager");
 
-            let mut request = self.client.list_secrets()
-                .set_parent(&parent);
+            let mut request = self.client.list_secrets().set_parent(&parent);
 
             if let Some(max) = options.max_results {
                 request = request.set_page_size(max as i32);
@@ -373,8 +377,7 @@ mod tests {
 
     #[test]
     fn test_config_builder() {
-        let config = GcpSecretsConfig::new("my-project-123")
-            .prefix("prod/");
+        let config = GcpSecretsConfig::new("my-project-123").prefix("prod/");
 
         assert_eq!(config.project_id, "my-project-123");
         assert_eq!(config.prefix, Some("prod/".to_string()));

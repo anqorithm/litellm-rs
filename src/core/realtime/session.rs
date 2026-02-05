@@ -10,8 +10,8 @@ use tracing::{debug, error, info};
 
 use super::config::RealtimeConfig;
 use super::events::{
-    ClientEvent, ContentPart, Item, ItemRole, ItemType, RealtimeError,
-    RealtimeResult, ResponseConfig, ServerEvent, SessionConfig,
+    ClientEvent, ContentPart, Item, ItemRole, ItemType, RealtimeError, RealtimeResult,
+    ResponseConfig, ServerEvent, SessionConfig,
 };
 
 /// Session state
@@ -85,10 +85,7 @@ impl RealtimeSession {
 
     /// Check if connected
     pub fn is_connected(&self) -> bool {
-        matches!(
-            self.state(),
-            SessionState::Connected | SessionState::Active
-        )
+        matches!(self.state(), SessionState::Connected | SessionState::Active)
     }
 
     /// Generate a unique event ID
@@ -106,11 +103,10 @@ impl RealtimeSession {
     pub async fn send(&self, event: ClientEvent) -> RealtimeResult<()> {
         let tx = self.tx.read().clone();
         match tx {
-            Some(tx) => {
-                tx.send(event).await.map_err(|_| {
-                    RealtimeError::connection("Channel closed")
-                })
-            }
+            Some(tx) => tx
+                .send(event)
+                .await
+                .map_err(|_| RealtimeError::connection("Channel closed")),
             None => Err(RealtimeError::connection("Not connected")),
         }
     }
