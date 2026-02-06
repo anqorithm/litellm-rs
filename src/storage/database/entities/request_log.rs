@@ -2,14 +2,14 @@ use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 
 /// Request log database model
-#[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Deserialize)]
 #[sea_orm(table_name = "request_logs")]
 pub struct Model {
     /// Log ID
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
     /// Request ID
-    #[sea_orm(column_type = "String(Some(100))", unique)]
+    #[sea_orm(unique)]
     pub request_id: String,
     /// Associated user ID
     pub user_id: Option<Uuid>,
@@ -18,16 +18,12 @@ pub struct Model {
     /// Associated API key ID
     pub api_key_id: Option<Uuid>,
     /// Model used
-    #[sea_orm(column_type = "String(Some(100))")]
     pub model: String,
     /// Provider used
-    #[sea_orm(column_type = "String(Some(50))")]
     pub provider: String,
     /// Request type
-    #[sea_orm(column_type = "String(Some(50))")]
     pub request_type: String,
     /// Status
-    #[sea_orm(column_type = "String(Some(20))")]
     pub status: String,
     /// HTTP status code
     pub status_code: i32,
@@ -52,7 +48,7 @@ pub struct Model {
     /// Cache hit indicator
     pub cache_hit: bool,
     /// Error message
-    #[sea_orm(column_type = "Text", nullable)]
+    #[sea_orm(nullable)]
     pub error_message: Option<String>,
     /// Created timestamp
     pub created_at: DateTimeWithTimeZone,

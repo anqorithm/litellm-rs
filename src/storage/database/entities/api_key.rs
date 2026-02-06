@@ -3,20 +3,18 @@ use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 
 /// API key database model
-#[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Deserialize)]
 #[sea_orm(table_name = "api_keys")]
 pub struct Model {
     /// API key ID
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
     /// Key name/description
-    #[sea_orm(column_type = "String(Some(100))")]
     pub name: String,
     /// Hashed key value
-    #[sea_orm(column_type = "String(Some(255))", unique)]
+    #[sea_orm(unique)]
     pub key_hash: String,
     /// Key prefix
-    #[sea_orm(column_type = "String(Some(20))")]
     pub key_prefix: String,
     /// Associated user ID
     pub user_id: Option<Uuid>,

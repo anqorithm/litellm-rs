@@ -112,7 +112,7 @@ mod tests {
         let db = Database::new(&config)
             .await
             .expect("Failed to create database");
-        let stats = db.stats();
+        let stats = db.stats().await;
 
         // Just verify we can get stats (size is always >= 0 as usize)
         let _ = stats.size;
