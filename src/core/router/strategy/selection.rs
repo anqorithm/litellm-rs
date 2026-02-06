@@ -219,12 +219,71 @@ impl SelectionMethods {
     /// Custom strategy selection
     pub fn select_custom(
         providers: &[String],
-        _logic: &str,
-        _context: &RequestContext,
+        logic: &str,
+        context: &RequestContext,
         counter: &AtomicUsize,
     ) -> Result<String> {
-        // TODO: Implement custom strategy logic
-        // For now, fallback to round-robin
+        if providers.is_empty() {
+            return Err(GatewayError::Validation(
+                "No providers available for custom selection".to_string(),
+            ));
+        }
+
+        let logic = logic.trim();
+        if logic.is_empty() {
+            return Self::select_round_robin(providers, counter);
+        }
+
+        // Simple form: direct provider name
+        if !logic.contains("->") {
+            if let Some(selected) = select_named_provider(providers, logic) {
+                debug!("Custom selected provider by name: {}", selected);
+                return Ok(selected);
+            }
+            return Self::select_round_robin(providers, counter);
+        }
+
+        // Rule-based form: "key=value->provider; ...; default->provider"
+        let mut default_provider: Option<String> = None;
+        for rule in logic.split(';') {
+            let rule = rule.trim();
+            if rule.is_empty() {
+                continue;
+            }
+
+            let Some((condition, target)) = rule.split_once("->") else {
+                continue;
+            };
+            let condition = condition.trim();
+            let target = target.trim();
+            if target.is_empty() {
+                continue;
+            }
+
+            if condition.eq_ignore_ascii_case("default") {
+                default_provider = select_named_provider(providers, target);
+                continue;
+            }
+
+            let Some((key, value)) = condition.split_once('=') else {
+                continue;
+            };
+            if matches_custom_condition(key.trim(), value.trim(), context) {
+                if let Some(selected) = select_named_provider(providers, target) {
+                    debug!(
+                        "Custom selected provider: {} (rule: {} -> {})",
+                        selected, condition, target
+                    );
+                    return Ok(selected);
+                }
+            }
+        }
+
+        if let Some(selected) = default_provider {
+            debug!("Custom selected provider via default rule: {}", selected);
+            return Ok(selected);
+        }
+
         Self::select_round_robin(providers, counter)
     }
 
@@ -297,6 +356,43 @@ impl SelectionMethods {
             best_provider, least_active
         );
         Ok(best_provider.clone())
+    }
+}
+
+fn select_named_provider(providers: &[String], name: &str) -> Option<String> {
+    providers.iter().find(|p| p.as_str() == name).cloned()
+}
+
+fn matches_custom_condition(key: &str, value: &str, context: &RequestContext) -> bool {
+    if let Some(header_key) = key.strip_prefix("header:") {
+        return context
+            .headers
+            .iter()
+            .find(|(k, _)| k.eq_ignore_ascii_case(header_key))
+            .map(|(_, v)| v == value)
+            .unwrap_or(false);
+    }
+
+    if let Some(meta_key) = key.strip_prefix("meta:") {
+        return context
+            .metadata
+            .get(meta_key)
+            .map(|v| match v {
+                serde_json::Value::String(s) => s == value,
+                serde_json::Value::Number(n) => n.to_string() == value,
+                serde_json::Value::Bool(b) => b.to_string() == value,
+                _ => false,
+            })
+            .unwrap_or(false);
+    }
+
+    match key {
+        "user_id" => context.user_id.as_deref() == Some(value),
+        "client_ip" => context.client_ip.as_deref() == Some(value),
+        "request_id" => context.request_id == value,
+        "trace_id" => context.trace_id.as_deref() == Some(value),
+        "span_id" => context.span_id.as_deref() == Some(value),
+        _ => false,
     }
 }
 
@@ -651,16 +747,51 @@ mod tests {
     // ==================== Custom Strategy Tests ====================
 
     #[test]
-    fn test_custom_falls_back_to_round_robin() {
+    fn test_custom_selects_named_provider() {
         let providers = create_providers();
         let counter = AtomicUsize::new(0);
         let context = RequestContext::default();
 
-        let r1 = SelectionMethods::select_custom(&providers, "custom_logic", &context, &counter);
+        let r1 = SelectionMethods::select_custom(&providers, "azure", &context, &counter);
+        assert!(r1.is_ok());
+        assert_eq!(r1.unwrap(), "azure");
+    }
+
+    #[test]
+    fn test_custom_rule_match_user_id() {
+        let providers = create_providers();
+        let counter = AtomicUsize::new(0);
+        let context = RequestContext::default().with_user_id("user-123");
+
+        let logic = "user_id=user-123->anthropic;default->openai";
+        let selected = SelectionMethods::select_custom(&providers, logic, &context, &counter)
+            .expect("expected provider");
+        assert_eq!(selected, "anthropic");
+    }
+
+    #[test]
+    fn test_custom_default_rule() {
+        let providers = create_providers();
+        let counter = AtomicUsize::new(0);
+        let context = RequestContext::default();
+
+        let logic = "user_id=user-123->anthropic;default->openai";
+        let selected = SelectionMethods::select_custom(&providers, logic, &context, &counter)
+            .expect("expected provider");
+        assert_eq!(selected, "openai");
+    }
+
+    #[test]
+    fn test_custom_invalid_rules_fall_back() {
+        let providers = create_providers();
+        let counter = AtomicUsize::new(0);
+        let context = RequestContext::default();
+
+        let r1 = SelectionMethods::select_custom(&providers, "invalid_rule", &context, &counter);
         assert!(r1.is_ok());
         assert_eq!(r1.unwrap(), "openai");
 
-        let r2 = SelectionMethods::select_custom(&providers, "custom_logic", &context, &counter);
+        let r2 = SelectionMethods::select_custom(&providers, "invalid_rule", &context, &counter);
         assert_eq!(r2.unwrap(), "anthropic");
     }
 
