@@ -1,0 +1,222 @@
+use sea_orm_migration::prelude::*;
+
+#[derive(DeriveMigrationName)]
+pub struct Migration;
+
+#[async_trait::async_trait]
+impl MigrationTrait for Migration {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .create_table(
+                Table::create()
+                    .table(RequestLogs::Table)
+                    .if_not_exists()
+                    .col(ColumnDef::new(RequestLogs::Id).uuid().not_null().primary_key())
+                    .col(
+                        ColumnDef::new(RequestLogs::RequestId)
+                            .string_len(100)
+                            .not_null()
+                            .unique_key(),
+                    )
+                    .col(ColumnDef::new(RequestLogs::UserId).uuid().null())
+                    .col(ColumnDef::new(RequestLogs::TeamId).uuid().null())
+                    .col(ColumnDef::new(RequestLogs::ApiKeyId).uuid().null())
+                    .col(ColumnDef::new(RequestLogs::Model).string_len(100).not_null())
+                    .col(ColumnDef::new(RequestLogs::Provider).string_len(50).not_null())
+                    .col(ColumnDef::new(RequestLogs::RequestType).string_len(50).not_null())
+                    .col(ColumnDef::new(RequestLogs::Status).string_len(20).not_null())
+                    .col(ColumnDef::new(RequestLogs::StatusCode).integer().not_null())
+                    .col(
+                        ColumnDef::new(RequestLogs::InputTokens)
+                            .integer()
+                            .not_null()
+                            .default(0),
+                    )
+                    .col(
+                        ColumnDef::new(RequestLogs::OutputTokens)
+                            .integer()
+                            .not_null()
+                            .default(0),
+                    )
+                    .col(
+                        ColumnDef::new(RequestLogs::TotalTokens)
+                            .integer()
+                            .not_null()
+                            .default(0),
+                    )
+                    .col(
+                        ColumnDef::new(RequestLogs::InputCost)
+                            .double()
+                            .not_null()
+                            .default(0.0),
+                    )
+                    .col(
+                        ColumnDef::new(RequestLogs::OutputCost)
+                            .double()
+                            .not_null()
+                            .default(0.0),
+                    )
+                    .col(
+                        ColumnDef::new(RequestLogs::TotalCost)
+                            .double()
+                            .not_null()
+                            .default(0.0),
+                    )
+                    .col(
+                        ColumnDef::new(RequestLogs::ResponseTimeMs)
+                            .big_integer()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(RequestLogs::QueueTimeMs)
+                            .big_integer()
+                            .not_null()
+                            .default(0),
+                    )
+                    .col(
+                        ColumnDef::new(RequestLogs::ProviderTimeMs)
+                            .big_integer()
+                            .not_null()
+                            .default(0),
+                    )
+                    .col(
+                        ColumnDef::new(RequestLogs::CacheHit)
+                            .boolean()
+                            .not_null()
+                            .default(false),
+                    )
+                    .col(ColumnDef::new(RequestLogs::ErrorMessage).text().null())
+                    .col(
+                        ColumnDef::new(RequestLogs::CreatedAt)
+                            .timestamp_with_time_zone()
+                            .not_null()
+                            .default(Expr::current_timestamp()),
+                    )
+                    .to_owned(),
+            )
+            .await?;
+
+        manager
+            .create_index(
+                Index::create()
+                    .if_not_exists()
+                    .name("idx_request_logs_request_id")
+                    .table(RequestLogs::Table)
+                    .col(RequestLogs::RequestId)
+                    .to_owned(),
+            )
+            .await?;
+
+        manager
+            .create_index(
+                Index::create()
+                    .if_not_exists()
+                    .name("idx_request_logs_user_id")
+                    .table(RequestLogs::Table)
+                    .col(RequestLogs::UserId)
+                    .to_owned(),
+            )
+            .await?;
+
+        manager
+            .create_index(
+                Index::create()
+                    .if_not_exists()
+                    .name("idx_request_logs_team_id")
+                    .table(RequestLogs::Table)
+                    .col(RequestLogs::TeamId)
+                    .to_owned(),
+            )
+            .await?;
+
+        manager
+            .create_index(
+                Index::create()
+                    .if_not_exists()
+                    .name("idx_request_logs_api_key_id")
+                    .table(RequestLogs::Table)
+                    .col(RequestLogs::ApiKeyId)
+                    .to_owned(),
+            )
+            .await?;
+
+        manager
+            .create_index(
+                Index::create()
+                    .if_not_exists()
+                    .name("idx_request_logs_model")
+                    .table(RequestLogs::Table)
+                    .col(RequestLogs::Model)
+                    .to_owned(),
+            )
+            .await?;
+
+        manager
+            .create_index(
+                Index::create()
+                    .if_not_exists()
+                    .name("idx_request_logs_provider")
+                    .table(RequestLogs::Table)
+                    .col(RequestLogs::Provider)
+                    .to_owned(),
+            )
+            .await?;
+
+        manager
+            .create_index(
+                Index::create()
+                    .if_not_exists()
+                    .name("idx_request_logs_status")
+                    .table(RequestLogs::Table)
+                    .col(RequestLogs::Status)
+                    .to_owned(),
+            )
+            .await?;
+
+        manager
+            .create_index(
+                Index::create()
+                    .if_not_exists()
+                    .name("idx_request_logs_created_at")
+                    .table(RequestLogs::Table)
+                    .col(RequestLogs::CreatedAt)
+                    .to_owned(),
+            )
+            .await?;
+
+        Ok(())
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_table(Table::drop().table(RequestLogs::Table).to_owned())
+            .await
+    }
+}
+
+#[derive(DeriveIden)]
+enum RequestLogs {
+    Table,
+    Id,
+    RequestId,
+    UserId,
+    TeamId,
+    ApiKeyId,
+    Model,
+    Provider,
+    RequestType,
+    Status,
+    StatusCode,
+    InputTokens,
+    OutputTokens,
+    TotalTokens,
+    InputCost,
+    OutputCost,
+    TotalCost,
+    ResponseTimeMs,
+    QueueTimeMs,
+    ProviderTimeMs,
+    CacheHit,
+    ErrorMessage,
+    CreatedAt,
+}

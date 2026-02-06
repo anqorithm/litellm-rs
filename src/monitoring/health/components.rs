@@ -48,7 +48,7 @@ impl HealthChecker {
 
         match self.storage.db().health_check().await {
             Ok(()) => {
-                let stats = self.storage.db().stats();
+                let stats = self.storage.db().stats().await;
                 let mut metadata = HashMap::new();
                 metadata.insert(
                     "pool_size".to_string(),
