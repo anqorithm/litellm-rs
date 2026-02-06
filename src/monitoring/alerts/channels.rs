@@ -2,7 +2,9 @@
 
 use crate::monitoring::types::{Alert, AlertSeverity};
 use crate::utils::error::error::{GatewayError, Result};
-use tracing::warn;
+use lettre::message::Mailbox;
+use lettre::transport::smtp::authentication::Credentials;
+use lettre::{AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
 
 /// Notification channel trait
 #[async_trait::async_trait]
@@ -152,9 +154,33 @@ impl EmailChannel {
 #[async_trait::async_trait]
 impl NotificationChannel for EmailChannel {
     async fn send(&self, _alert: &Alert) -> Result<()> {
-        // TODO: Implement email sending
-        // This would use an SMTP library to send emails
-        warn!("Email notifications not implemented yet");
+        let alert = _alert;
+
+        if self.recipients.is_empty() {
+            return Err(GatewayError::Alert(
+                "No email recipients configured".to_string(),
+            ));
+        }
+
+        let email = self.build_message(alert)?;
+        let credentials = Credentials::new(
+            self.smtp_config.username.clone(),
+            self.smtp_config.password.clone(),
+        );
+
+        let mailer = AsyncSmtpTransport::<Tokio1Executor>::relay(&self.smtp_config.server)
+            .map_err(|e| {
+                GatewayError::Alert(format!("Failed to configure SMTP transport: {}", e))
+            })?
+            .port(self.smtp_config.port)
+            .credentials(credentials)
+            .build();
+
+        mailer
+            .send(email)
+            .await
+            .map_err(|e| GatewayError::Alert(format!("Failed to send email: {}", e)))?;
+
         Ok(())
     }
 
@@ -164,6 +190,41 @@ impl NotificationChannel for EmailChannel {
 
     fn supports_severity(&self, severity: AlertSeverity) -> bool {
         severity as u8 >= self.min_severity as u8
+    }
+}
+
+impl EmailChannel {
+    fn build_message(&self, alert: &Alert) -> Result<Message> {
+        let from: Mailbox = self
+            .smtp_config
+            .from_address
+            .parse()
+            .map_err(|e| GatewayError::Alert(format!("Invalid from address: {}", e)))?;
+
+        let mut builder = Message::builder().from(from);
+        for recipient in &self.recipients {
+            let mailbox: Mailbox = recipient
+                .parse()
+                .map_err(|e| GatewayError::Alert(format!("Invalid recipient address: {}", e)))?;
+            builder = builder.to(mailbox);
+        }
+
+        let subject = format!("[{:?}] {}", alert.severity, alert.title);
+        let metadata = serde_json::to_string_pretty(&alert.metadata).unwrap_or_default();
+        let body = format!(
+            "Alert: {title}\nSeverity: {severity:?}\nSource: {source}\nTime: {time}\n\n{description}\n\nMetadata:\n{metadata}\n",
+            title = alert.title,
+            severity = alert.severity,
+            source = alert.source,
+            time = alert.timestamp.format("%Y-%m-%d %H:%M:%S UTC"),
+            description = alert.description,
+            metadata = metadata
+        );
+
+        builder
+            .subject(subject)
+            .body(body)
+            .map_err(|e| GatewayError::Alert(format!("Failed to build email: {}", e)))
     }
 }
 
@@ -424,8 +485,8 @@ mod tests {
         assert_eq!(channel.recipients.len(), 10);
     }
 
-    #[tokio::test]
-    async fn test_email_channel_send() {
+    #[test]
+    fn test_email_channel_build_message() {
         let smtp_config = SmtpConfig {
             server: "smtp.test.com".to_string(),
             port: 587,
@@ -442,9 +503,8 @@ mod tests {
 
         let alert = create_test_alert(AlertSeverity::Warning);
 
-        // Email send is not implemented, but should not panic
-        let result = channel.send(&alert).await;
-        assert!(result.is_ok());
+        let message = channel.build_message(&alert);
+        assert!(message.is_ok());
     }
 
     // ==================== Alert Creation Tests ====================
