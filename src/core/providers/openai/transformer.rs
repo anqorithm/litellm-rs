@@ -5,9 +5,12 @@
 use crate::core::traits::Transform;
 use crate::core::types::thinking::ThinkingContent;
 use crate::core::types::{
-    ChatChoice, ChatChunk, ChatDelta, ChatMessage, ChatRequest, ChatResponse, ChatStreamChoice,
-    ContentPart, FinishReason, FunctionCall, ImageUrl, LogProbs, MessageContent, MessageRole,
-    ResponseFormat, TokenLogProb, Tool, ToolCall, ToolChoice, TopLogProb, Usage,
+    ChatMessage, ChatRequest, ContentPart, FunctionCall, ImageUrl, MessageContent, MessageRole,
+    ResponseFormat, Tool, ToolCall, ToolChoice,
+};
+use crate::core::types::responses::{
+    ChatChoice, ChatChunk, ChatDelta, ChatResponse, ChatStreamChoice, FinishReason, LogProbs,
+    TokenLogProb, TopLogProb, Usage,
 };
 use serde_json;
 
@@ -434,7 +437,7 @@ impl OpenAIResponseTransformer {
             total_tokens: usage.total_tokens,
             thinking_usage: None,
             prompt_tokens_details: usage.prompt_tokens_details.map(|details| {
-                crate::core::types::PromptTokensDetails {
+                crate::core::types::responses::PromptTokensDetails {
                     cached_tokens: details.cached_tokens,
                     audio_tokens: details.audio_tokens,
                 }

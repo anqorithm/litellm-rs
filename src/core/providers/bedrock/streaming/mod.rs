@@ -221,7 +221,7 @@ impl BedrockStream {
                         tool_calls: None,
                         function_call: None,
                     },
-                    finish_reason: Some(crate::core::types::FinishReason::Stop),
+                    finish_reason: Some(crate::core::types::responses::FinishReason::Stop),
                     logprobs: None,
                 }],
                 usage: None,
@@ -286,7 +286,7 @@ impl BedrockStream {
                         function_call: None,
                     },
                     finish_reason: if value.get("completionReason").is_some() {
-                        Some(crate::core::types::FinishReason::Stop)
+                        Some(crate::core::types::responses::FinishReason::Stop)
                     } else {
                         None
                     },

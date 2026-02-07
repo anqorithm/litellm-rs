@@ -1,7 +1,7 @@
 //! Completion streaming types
 
 use crate::core::streaming::types::ChatCompletionChunk;
-use crate::core::types::FinishReason;
+use crate::core::types::responses::FinishReason;
 use futures::stream::BoxStream;
 
 /// Streaming completion response

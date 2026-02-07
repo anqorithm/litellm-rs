@@ -570,10 +570,10 @@ impl AnthropicClient {
                 .get("stop_reason")
                 .and_then(|r| r.as_str())
                 .map(|reason| match reason {
-                    "end_turn" => crate::core::types::FinishReason::Stop,
-                    "max_tokens" => crate::core::types::FinishReason::Length,
-                    "tool_use" => crate::core::types::FinishReason::ToolCalls,
-                    _ => crate::core::types::FinishReason::Stop,
+                    "end_turn" => crate::core::types::responses::FinishReason::Stop,
+                    "max_tokens" => crate::core::types::responses::FinishReason::Length,
+                    "tool_use" => crate::core::types::responses::FinishReason::ToolCalls,
+                    _ => crate::core::types::responses::FinishReason::Stop,
                 }),
             logprobs: None,
         };
@@ -1046,7 +1046,7 @@ mod tests {
         let result = client.transform_chat_response(response).unwrap();
         assert!(matches!(
             result.choices[0].finish_reason,
-            Some(crate::core::types::FinishReason::Stop)
+            Some(crate::core::types::responses::FinishReason::Stop)
         ));
 
         // max_tokens -> Length
@@ -1059,7 +1059,7 @@ mod tests {
         let result = client.transform_chat_response(response).unwrap();
         assert!(matches!(
             result.choices[0].finish_reason,
-            Some(crate::core::types::FinishReason::Length)
+            Some(crate::core::types::responses::FinishReason::Length)
         ));
 
         // tool_use -> ToolCalls
@@ -1072,7 +1072,7 @@ mod tests {
         let result = client.transform_chat_response(response).unwrap();
         assert!(matches!(
             result.choices[0].finish_reason,
-            Some(crate::core::types::FinishReason::ToolCalls)
+            Some(crate::core::types::responses::FinishReason::ToolCalls)
         ));
     }
 }

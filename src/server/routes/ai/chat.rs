@@ -313,7 +313,7 @@ fn convert_openai_message_to_core(message: ChatMessage) -> types::ChatMessage {
     }
 }
 
-fn convert_core_chat_response(response: types::ChatResponse) -> ChatCompletionResponse {
+fn convert_core_chat_response(response: types::responses::ChatResponse) -> ChatCompletionResponse {
     ChatCompletionResponse {
         id: response.id,
         object: response.object,
@@ -444,7 +444,7 @@ fn convert_tool_choice(choice: ToolChoice) -> types::ToolChoice {
     }
 }
 
-fn convert_logprobs(logprobs: types::LogProbs) -> Logprobs {
+fn convert_logprobs(logprobs: types::responses::LogProbs) -> Logprobs {
     let content = if logprobs.content.is_empty() {
         None
     } else {
@@ -473,18 +473,18 @@ fn convert_logprobs(logprobs: types::LogProbs) -> Logprobs {
     Logprobs { content }
 }
 
-fn convert_finish_reason(reason: types::FinishReason) -> String {
+fn convert_finish_reason(reason: types::responses::FinishReason) -> String {
     match reason {
-        types::FinishReason::Stop => "stop",
-        types::FinishReason::Length => "length",
-        types::FinishReason::ToolCalls => "tool_calls",
-        types::FinishReason::ContentFilter => "content_filter",
-        types::FinishReason::FunctionCall => "function_call",
+        types::responses::FinishReason::Stop => "stop",
+        types::responses::FinishReason::Length => "length",
+        types::responses::FinishReason::ToolCalls => "tool_calls",
+        types::responses::FinishReason::ContentFilter => "content_filter",
+        types::responses::FinishReason::FunctionCall => "function_call",
     }
     .to_string()
 }
 
-fn convert_usage(usage: types::Usage) -> Usage {
+fn convert_usage(usage: types::responses::Usage) -> Usage {
     Usage {
         prompt_tokens: usage.prompt_tokens,
         completion_tokens: usage.completion_tokens,
@@ -504,7 +504,7 @@ fn convert_usage(usage: types::Usage) -> Usage {
     }
 }
 
-fn convert_core_chunk_to_streaming(chunk: types::ChatChunk) -> ChatCompletionChunk {
+fn convert_core_chunk_to_streaming(chunk: types::responses::ChatChunk) -> ChatCompletionChunk {
     ChatCompletionChunk {
         id: chunk.id,
         object: chunk.object,
@@ -535,7 +535,7 @@ fn convert_core_chunk_to_streaming(chunk: types::ChatChunk) -> ChatCompletionChu
 }
 
 fn convert_tool_call_delta(
-    delta: types::ToolCallDelta,
+    delta: types::responses::ToolCallDelta,
 ) -> crate::core::streaming::types::ToolCallDelta {
     crate::core::streaming::types::ToolCallDelta {
         index: delta.index,
@@ -556,10 +556,10 @@ mod tests {
 
     #[test]
     fn test_convert_finish_reason() {
-        assert_eq!(convert_finish_reason(types::FinishReason::Stop), "stop");
-        assert_eq!(convert_finish_reason(types::FinishReason::Length), "length");
+        assert_eq!(convert_finish_reason(types::responses::FinishReason::Stop), "stop");
+        assert_eq!(convert_finish_reason(types::responses::FinishReason::Length), "length");
         assert_eq!(
-            convert_finish_reason(types::FinishReason::ToolCalls),
+            convert_finish_reason(types::responses::FinishReason::ToolCalls),
             "tool_calls"
         );
     }

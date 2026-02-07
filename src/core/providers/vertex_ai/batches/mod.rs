@@ -4,7 +4,7 @@ use crate::ProviderError;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::core::types::FinishReason;
+use crate::core::types::responses::FinishReason;
 use crate::core::types::{
     ChatRequest, MessageContent, MessageRole,
     responses::ChatResponse,

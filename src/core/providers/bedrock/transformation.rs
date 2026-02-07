@@ -8,8 +8,8 @@ use serde_json::Value;
 use super::error::BedrockError;
 use super::model_config::{BedrockModelFamily, get_model_config};
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::types::responses::{ChatChoice, ChatResponse, Usage};
-use crate::core::types::{ChatMessage, FinishReason, MessageContent, MessageRole};
+use crate::core::types::responses::{ChatChoice, ChatResponse, FinishReason, Usage};
+use crate::core::types::{ChatMessage, MessageContent, MessageRole};
 
 /// Safely convert an f32 to a serde_json::Number, defaulting to 0 for NaN/Inf values
 fn safe_f64_to_number(value: f32) -> serde_json::Number {

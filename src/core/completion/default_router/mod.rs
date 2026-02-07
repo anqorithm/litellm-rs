@@ -284,7 +284,7 @@ pub async fn completion_stream(
 
 /// Convert ChatChunk (from provider) to CompletionChunk (for streaming API)
 fn convert_chat_chunk_to_completion_chunk(
-    chunk: crate::core::types::ChatChunk,
+    chunk: crate::core::types::responses::ChatChunk,
 ) -> stream::CompletionChunk {
     stream::CompletionChunk {
         id: chunk.id,

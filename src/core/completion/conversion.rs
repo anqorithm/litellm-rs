@@ -1,7 +1,8 @@
 //! Type conversion functions
 
 use super::types::{Choice, CompletionOptions, CompletionResponse};
-use crate::core::types::{ChatMessage, ChatRequest, ChatResponse, Usage};
+use crate::core::types::{ChatMessage, ChatRequest};
+use crate::core::types::responses::{ChatResponse, Usage};
 use crate::utils::error::Result;
 
 /// Convert to chat completion request
@@ -61,7 +62,7 @@ pub fn convert_from_chat_completion_response(response: ChatResponse) -> Result<C
 }
 
 /// Convert from usage response
-pub fn convert_usage(usage: &crate::core::types::Usage) -> Usage {
+pub fn convert_usage(usage: &crate::core::types::responses::Usage) -> Usage {
     Usage {
         prompt_tokens: usage.prompt_tokens,
         completion_tokens: usage.completion_tokens,
@@ -75,9 +76,8 @@ pub fn convert_usage(usage: &crate::core::types::Usage) -> Usage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::{
-        ChatChoice, FinishReason, MessageContent, MessageRole, ThinkingUsage,
-    };
+    use crate::core::types::{MessageContent, MessageRole, ThinkingUsage};
+    use crate::core::types::responses::{ChatChoice, FinishReason};
     use std::collections::HashMap;
 
     // ==================== Helper Functions ====================
@@ -90,8 +90,8 @@ mod tests {
         }
     }
 
-    fn create_test_usage() -> crate::core::types::Usage {
-        crate::core::types::Usage {
+    fn create_test_usage() -> crate::core::types::responses::Usage {
+        crate::core::types::responses::Usage {
             prompt_tokens: 100,
             completion_tokens: 50,
             total_tokens: 150,
@@ -493,7 +493,7 @@ mod tests {
 
     #[test]
     fn test_convert_usage_zero_tokens() {
-        let usage = crate::core::types::Usage {
+        let usage = crate::core::types::responses::Usage {
             prompt_tokens: 0,
             completion_tokens: 0,
             total_tokens: 0,
@@ -511,7 +511,7 @@ mod tests {
 
     #[test]
     fn test_convert_usage_large_values() {
-        let usage = crate::core::types::Usage {
+        let usage = crate::core::types::responses::Usage {
             prompt_tokens: 100000,
             completion_tokens: 50000,
             total_tokens: 150000,

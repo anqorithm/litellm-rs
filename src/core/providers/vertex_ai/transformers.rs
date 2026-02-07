@@ -1,7 +1,7 @@
 //! Request/Response transformers for Vertex AI models
 
 use crate::ProviderError;
-use crate::core::types::FinishReason;
+use crate::core::types::responses::FinishReason;
 use crate::core::types::{
     ChatMessage, ChatRequest, MessageContent, MessageRole,
     responses::{ChatChoice, ChatResponse, Usage},
