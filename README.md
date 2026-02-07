@@ -113,6 +113,12 @@ use litellm_rs::{completion, user_message};
 let openai = completion("gpt-4", vec![user_message("Hi")], None).await?;
 let anthropic = completion("anthropic/claude-3-opus", vec![user_message("Hi")], None).await?;
 let google = completion("gemini/gemini-pro", vec![user_message("Hi")], None).await?;
+let bedrock = completion(
+    "bedrock/us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+    vec![user_message("Hi")],
+    None,
+)
+.await?;
 ```
 
 ### Embeddings
