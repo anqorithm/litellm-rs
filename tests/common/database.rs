@@ -1,3 +1,4 @@
+#![cfg(feature = "storage")]
 //! Test database utilities
 //!
 //! Provides in-memory SQLite database for testing without external dependencies.

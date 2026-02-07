@@ -48,8 +48,7 @@ impl SeaOrmDatabase {
             .acquire_timeout(Duration::from_secs(30))
             .idle_timeout(Duration::from_secs(600))
             .max_lifetime(Duration::from_secs(3600))
-            .sqlx_logging(true)
-            .sqlx_logging_level(log::LevelFilter::Debug);
+            .sqlx_logging(false);
 
         Database::connect(opt).await.map_err(GatewayError::Database)
     }
@@ -74,8 +73,7 @@ impl SeaOrmDatabase {
             .acquire_timeout(Duration::from_secs(30))
             .idle_timeout(Duration::from_secs(600))
             .max_lifetime(Duration::from_secs(3600))
-            .sqlx_logging(true)
-            .sqlx_logging_level(log::LevelFilter::Debug);
+            .sqlx_logging(false);
 
         let db = Database::connect(opt)
             .await

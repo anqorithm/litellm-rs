@@ -20,11 +20,13 @@
 //! ```
 
 pub mod assertions;
+#[cfg(feature = "storage")]
 pub mod database;
 pub mod fixtures;
 pub mod providers;
 
 // Re-export commonly used items
+#[cfg(feature = "storage")]
 pub use database::TestDatabase;
 pub use fixtures::{ChatRequestFactory, UserFactory};
 

@@ -110,6 +110,20 @@ static MODEL_CONFIGS: LazyLock<HashMap<&'static str, ModelConfig>> = LazyLock::n
             output_cost_per_1k: 0.015,
         },
     );
+    configs.insert(
+        "anthropic.claude-3-5-sonnet-20241022-v2:0",
+        ModelConfig {
+            family: BedrockModelFamily::Claude,
+            api_type: BedrockApiType::Converse,
+            supports_streaming: true,
+            supports_function_calling: true,
+            supports_multimodal: true,
+            max_context_length: 200000,
+            max_output_length: Some(4096),
+            input_cost_per_1k: 0.003,
+            output_cost_per_1k: 0.015,
+        },
+    );
 
     configs.insert(
         "anthropic.claude-3-5-haiku-20241022",
@@ -668,6 +682,10 @@ mod tests {
         assert!(config.supports_streaming);
         assert!(config.supports_function_calling);
         assert!(config.supports_multimodal);
+
+        let sonnet_v2 = get_model_config("anthropic.claude-3-5-sonnet-20241022-v2:0").unwrap();
+        assert_eq!(sonnet_v2.family, BedrockModelFamily::Claude);
+        assert_eq!(sonnet_v2.api_type, BedrockApiType::Converse);
     }
 
     #[test]

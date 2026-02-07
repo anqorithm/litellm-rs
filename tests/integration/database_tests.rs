@@ -1,3 +1,4 @@
+#![cfg(feature = "storage")]
 //! Database integration tests
 //!
 //! Tests database operations using real in-memory SQLite database.

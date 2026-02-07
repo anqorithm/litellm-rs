@@ -52,6 +52,14 @@ static MODEL_PRICING: LazyLock<HashMap<&'static str, ModelPricing>> = LazyLock::
         },
     );
     pricing.insert(
+        "anthropic.claude-3-5-sonnet-20241022-v2:0",
+        ModelPricing {
+            input_cost_per_1k: 0.003,
+            output_cost_per_1k: 0.015,
+            currency: "USD",
+        },
+    );
+    pricing.insert(
         "anthropic.claude-3-5-haiku-20241022",
         ModelPricing {
             input_cost_per_1k: 0.001,

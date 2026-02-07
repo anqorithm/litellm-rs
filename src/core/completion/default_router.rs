@@ -164,6 +164,31 @@ impl DefaultRouter {
             }
         }
 
+        // Add Bedrock provider if AWS credentials are available
+        if let (Ok(access_key), Ok(secret_key)) = (
+            std::env::var("AWS_ACCESS_KEY_ID"),
+            std::env::var("AWS_SECRET_ACCESS_KEY"),
+        ) {
+            use crate::core::providers::bedrock::{BedrockConfig, BedrockProvider};
+
+            let region = std::env::var("AWS_REGION")
+                .or_else(|_| std::env::var("AWS_DEFAULT_REGION"))
+                .unwrap_or_else(|_| "us-east-1".to_string());
+
+            let config = BedrockConfig {
+                aws_access_key_id: access_key,
+                aws_secret_access_key: secret_key,
+                aws_session_token: std::env::var("AWS_SESSION_TOKEN").ok(),
+                aws_region: region,
+                timeout_seconds: 30,
+                max_retries: 3,
+            };
+
+            if let Ok(bedrock_provider) = BedrockProvider::new(config).await {
+                provider_registry.register(Provider::Bedrock(bedrock_provider));
+            }
+        }
+
         Ok(Self {
             provider_registry: Arc::new(provider_registry),
         })

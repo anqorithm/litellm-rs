@@ -39,7 +39,7 @@ pub use provider::BedrockProvider;
 pub use sigv4::SigV4Signer;
 pub use utils::{
     AWS_REGIONS, AwsAuth, AwsCredentials, CostCalculator, ModelPricing,
-    is_model_available_in_region, validate_region,
+    is_model_available_in_region, normalize_bedrock_model_id, validate_region,
 };
 
 // Re-export feature modules

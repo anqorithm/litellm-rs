@@ -139,6 +139,15 @@ impl Router for DefaultRouter {
             )
         })
         .or_else(|| {
+            Self::select_provider_by_name(&providers, "bedrock", model, "bedrock/", &chat_request)
+                .map(|(provider, mut request)| {
+                    request.model = crate::core::providers::bedrock::normalize_bedrock_model_id(
+                        &request.model,
+                    );
+                    (provider, request)
+                })
+        })
+        .or_else(|| {
             Self::select_provider_by_name(&providers, "azure_ai", model, "azure_ai/", &chat_request)
         })
         .or_else(|| {
@@ -215,6 +224,15 @@ impl Router for DefaultRouter {
                 "anthropic/",
                 &chat_request,
             )
+        })
+        .or_else(|| {
+            Self::select_provider_by_name(&providers, "bedrock", model, "bedrock/", &chat_request)
+                .map(|(provider, mut request)| {
+                    request.model = crate::core::providers::bedrock::normalize_bedrock_model_id(
+                        &request.model,
+                    );
+                    (provider, request)
+                })
         })
         .or_else(|| {
             Self::select_provider_by_name(&providers, "azure_ai", model, "azure_ai/", &chat_request)
