@@ -22,7 +22,6 @@ fn main() {
 
     // Set rerun conditions
     println!("cargo:rerun-if-changed=.git/HEAD");
-    println!("cargo:rerun-if-changed=.git/refs/heads/");
     println!("cargo:rerun-if-changed=Cargo.toml");
 }
 
