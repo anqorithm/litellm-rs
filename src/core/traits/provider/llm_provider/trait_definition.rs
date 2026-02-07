@@ -12,8 +12,8 @@ use std::pin::Pin;
 use crate::core::traits::error_mapper::trait_def::ErrorMapper;
 use crate::core::types::errors::ProviderErrorTrait;
 use crate::core::types::{
-    common::{HealthStatus, ModelInfo, ProviderCapability, RequestContext},
-    requests::{ChatRequest, EmbeddingRequest, ImageGenerationRequest},
+    HealthStatus, ModelInfo, ProviderCapability, RequestContext,
+    ChatRequest, EmbeddingRequest, ImageGenerationRequest,
     responses::{ChatChunk, ChatResponse, EmbeddingResponse, ImageGenerationResponse},
 };
 

@@ -8,7 +8,7 @@ use crate::core::providers::unified_provider::ProviderError;
 /// Provider name constant for error messages
 const PROVIDER_NAME: &str = "v0";
 use crate::core::types::{
-    requests::{ChatMessage, ChatRequest, MessageRole},
+    ChatMessage, ChatRequest, MessageRole,
     responses::{ChatChoice, ChatResponse, FinishReason, Usage},
 };
 use serde::{Deserialize, Serialize};

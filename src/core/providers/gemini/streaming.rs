@@ -12,7 +12,7 @@ use serde_json::Value;
 
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::{
-    requests::MessageRole,
+    MessageRole,
     responses::{ChatChunk, ChatDelta, ChatStreamChoice, Usage},
 };
 

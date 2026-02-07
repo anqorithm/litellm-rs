@@ -16,7 +16,7 @@ use tracing::{debug, warn};
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::{
     ChatMessage, FinishReason, MessageContent, MessageRole,
-    requests::{ChatRequest, FunctionCall, ToolCall as RequestToolCall},
+    ChatRequest, FunctionCall, ToolCall as RequestToolCall,
     responses::{ChatChoice, ChatResponse, Usage},
 };
 

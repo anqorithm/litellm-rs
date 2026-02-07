@@ -6,8 +6,8 @@ use reqwest::header::HeaderMap;
 use serde_json::{Value, json};
 
 use crate::core::types::{
-    common::RequestContext,
-    requests::EmbeddingRequest,
+    RequestContext,
+    EmbeddingRequest,
     responses::{EmbeddingData, EmbeddingResponse},
 };
 

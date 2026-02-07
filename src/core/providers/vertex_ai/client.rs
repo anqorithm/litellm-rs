@@ -11,8 +11,8 @@ use tracing::debug;
 use crate::core::{
     traits::{error_mapper::trait_def::ErrorMapper, provider::LLMProvider},
     types::{
-        common::{HealthStatus, ModelInfo, ProviderCapability, RequestContext},
-        requests::{ChatRequest, EmbeddingRequest, ImageGenerationRequest},
+        HealthStatus, ModelInfo, ProviderCapability, RequestContext,
+        ChatRequest, EmbeddingRequest, ImageGenerationRequest,
         responses::{ChatResponse, EmbeddingResponse, ImageGenerationResponse},
     },
 };

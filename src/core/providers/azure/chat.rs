@@ -9,8 +9,8 @@ use std::pin::Pin;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::core::types::{
-    common::RequestContext,
-    requests::{ChatMessage, ChatRequest, MessageContent, MessageRole},
+    RequestContext,
+    ChatMessage, ChatRequest, MessageContent, MessageRole,
     responses::{
         ChatChoice, ChatChunk, ChatDelta, ChatResponse, ChatStreamChoice, FinishReason, Usage,
     },

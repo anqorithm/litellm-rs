@@ -12,8 +12,8 @@ use crate::core::providers::base::{
 };
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::{
-    common::{HealthStatus, ProviderCapability, RequestContext},
-    requests::ChatRequest,
+    HealthStatus, ProviderCapability, RequestContext,
+    ChatRequest,
     responses::{ChatChunk, ChatResponse},
 };
 

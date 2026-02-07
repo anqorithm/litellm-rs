@@ -7,7 +7,7 @@ use crate::core::providers::moonshot::MoonshotError;
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::{
     ChatMessage, FinishReason, MessageContent, MessageRole,
-    requests::{ChatRequest, FunctionCall, ToolCall},
+    ChatRequest, FunctionCall, ToolCall,
     responses::{ChatChoice, ChatResponse, Usage},
 };
 

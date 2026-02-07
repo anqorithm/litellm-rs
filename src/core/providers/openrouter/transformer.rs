@@ -7,7 +7,7 @@ use crate::ProviderError;
 use crate::core::providers::openai::models as openai_models;
 use crate::core::providers::openai::transformer::OpenAIRequestTransformer;
 use crate::core::types::{
-    requests::ChatRequest,
+    ChatRequest,
     responses::{ChatChunk, ChatResponse},
 };
 use serde::{Deserialize, Serialize};

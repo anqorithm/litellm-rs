@@ -3,8 +3,8 @@
 //! Provides a type-erased wrapper for LLMProvider instances used by the router
 
 use crate::core::types::{
-    common::{HealthStatus, RequestContext},
-    requests::ChatRequest,
+    HealthStatus, RequestContext,
+    ChatRequest,
     responses::ChatResponse,
 };
 

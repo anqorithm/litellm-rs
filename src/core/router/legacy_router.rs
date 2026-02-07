@@ -11,8 +11,8 @@ use crate::core::router::load_balancer::LoadBalancer;
 use crate::core::router::metrics::{RouterMetrics, RouterMetricsSnapshot};
 use crate::core::router::strategy::types::RoutingStrategy;
 use crate::core::types::{
-    common::{ModelInfo, RequestContext},
-    requests::{ChatRequest, CompletionRequest, EmbeddingRequest, ImageGenerationRequest},
+    ModelInfo, RequestContext,
+    ChatRequest, CompletionRequest, EmbeddingRequest, ImageGenerationRequest,
     responses::{
         ChatChunk, ChatResponse, CompletionResponse, EmbeddingResponse, ImageGenerationResponse,
     },

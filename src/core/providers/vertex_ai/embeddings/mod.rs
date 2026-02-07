@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::core::types::{
-    requests::{EmbeddingInput, EmbeddingRequest},
+    EmbeddingInput, EmbeddingRequest,
     responses::{EmbeddingData, EmbeddingResponse},
 };
 

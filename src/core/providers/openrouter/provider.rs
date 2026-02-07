@@ -7,8 +7,8 @@ use std::collections::HashMap;
 
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::{
-    common::{HealthStatus, ModelInfo, ProviderCapability},
-    requests::ChatRequest,
+    HealthStatus, ModelInfo, ProviderCapability,
+    ChatRequest,
     responses::ChatResponse,
     thinking::ThinkingContent,
 };

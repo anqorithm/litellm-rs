@@ -6,7 +6,7 @@ use serde_json::Value;
 
 use crate::core::types::FinishReason;
 use crate::core::types::{
-    requests::{ChatRequest, MessageContent, MessageRole},
+    ChatRequest, MessageContent, MessageRole,
     responses::ChatResponse,
 };
 
