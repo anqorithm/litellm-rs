@@ -300,7 +300,15 @@ pub async fn oauth_callback(
     }
 
     // Exchange code for tokens
-    let code = query.code.as_ref().unwrap(); // Safe because we validated above
+    let code = match query.code.as_ref() {
+        Some(code) => code,
+        None => {
+            return Ok(HttpResponse::BadRequest().json(ErrorResponse::new(
+                "missing_code",
+                "Authorization code is required",
+            )));
+        }
+    };
     let token_response = match client.exchange_code(code, &stored_state).await {
         Ok(t) => t,
         Err(e) => {

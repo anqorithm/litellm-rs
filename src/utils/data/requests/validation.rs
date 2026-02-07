@@ -102,7 +102,12 @@ impl RequestUtils {
                     });
                 }
 
-                let tool_obj = tool.as_object().unwrap();
+                let Some(tool_obj) = tool.as_object() else {
+                    return Err(ProviderError::InvalidRequest {
+                        provider: "unknown",
+                        message: format!("Tool at index {} must be an object", i),
+                    });
+                };
 
                 if !tool_obj.contains_key("type") {
                     return Err(ProviderError::InvalidRequest {
@@ -118,7 +123,12 @@ impl RequestUtils {
                     });
                 }
 
-                let function = tool_obj.get("function").unwrap();
+                let Some(function) = tool_obj.get("function") else {
+                    return Err(ProviderError::InvalidRequest {
+                        provider: "unknown",
+                        message: format!("Tool at index {} missing required 'function' field", i),
+                    });
+                };
                 if !function.is_object() {
                     return Err(ProviderError::InvalidRequest {
                         provider: "unknown",
@@ -126,7 +136,12 @@ impl RequestUtils {
                     });
                 }
 
-                let func_obj = function.as_object().unwrap();
+                let Some(func_obj) = function.as_object() else {
+                    return Err(ProviderError::InvalidRequest {
+                        provider: "unknown",
+                        message: format!("Tool function at index {} must be an object", i),
+                    });
+                };
                 if !func_obj.contains_key("name") {
                     return Err(ProviderError::InvalidRequest {
                         provider: "unknown",
@@ -147,7 +162,14 @@ impl RequestUtils {
         tools: &Option<Vec<Value>>,
     ) -> Result<(), ProviderError> {
         if let Some(choice) = tool_choice {
-            if tools.is_none() || tools.as_ref().unwrap().is_empty() {
+            let Some(tools_vec) = tools.as_ref() else {
+                return Err(ProviderError::InvalidRequest {
+                    provider: "unknown",
+                    message: "tool_choice requires tools to be provided".to_string(),
+                });
+            };
+
+            if tools_vec.is_empty() {
                 return Err(ProviderError::InvalidRequest {
                     provider: "unknown",
                     message: "tool_choice requires tools to be provided".to_string(),
@@ -157,7 +179,7 @@ impl RequestUtils {
             match choice.as_str() {
                 "none" | "auto" => {}
                 _ => {
-                    if !Self::is_valid_tool_name(choice, tools.as_ref().unwrap()) {
+                    if !Self::is_valid_tool_name(choice, tools_vec) {
                         return Err(ProviderError::InvalidRequest {
                             provider: "unknown",
                             message: format!(

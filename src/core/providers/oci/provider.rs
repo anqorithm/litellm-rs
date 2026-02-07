@@ -157,7 +157,12 @@ impl OciProvider {
         });
 
         // Add optional parameters
-        let chat_request = payload.get_mut("chatRequest").unwrap();
+        let chat_request = payload.get_mut("chatRequest").ok_or_else(|| {
+            ProviderError::serialization(
+                "oci",
+                "Failed to build OCI payload: missing chatRequest field",
+            )
+        })?;
 
         if let Some(temp) = request.temperature {
             chat_request["temperature"] = serde_json::Value::Number(

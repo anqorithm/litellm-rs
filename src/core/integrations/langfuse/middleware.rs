@@ -183,7 +183,10 @@ where
             return Box::pin(fut);
         }
 
-        let client = self.client.clone().unwrap();
+        let Some(client) = self.client.clone() else {
+            let fut = self.service.call(req);
+            return Box::pin(fut);
+        };
         let start_time = Utc::now();
         let start_instant = std::time::Instant::now();
 
