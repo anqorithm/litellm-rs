@@ -242,7 +242,7 @@ impl PartialEq<String> for SmartString {
 }
 
 /// Global string pool instance
-static STRING_POOL: once_cell::sync::Lazy<StringPool> = once_cell::sync::Lazy::new(StringPool::new);
+static STRING_POOL: std::sync::LazyLock<StringPool> = std::sync::LazyLock::new(StringPool::new);
 
 /// Intern a string using the global string pool
 pub fn intern_string(s: &str) -> Arc<str> {

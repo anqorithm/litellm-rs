@@ -6,7 +6,7 @@
 #![allow(dead_code)] // Tool module - functions may be used in the future
 
 use crate::utils::error::{GatewayError, Result};
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -294,8 +294,8 @@ impl Default for OptimizedConfigManager {
 }
 
 /// Global configuration manager instance
-pub static GLOBAL_CONFIG_MANAGER: Lazy<OptimizedConfigManager> =
-    Lazy::new(OptimizedConfigManager::new);
+pub static GLOBAL_CONFIG_MANAGER: LazyLock<OptimizedConfigManager> =
+    LazyLock::new(OptimizedConfigManager::new);
 
 /// Convenience function to load configuration
 pub async fn load_config<T>(file_path: &str) -> Result<Arc<T>>

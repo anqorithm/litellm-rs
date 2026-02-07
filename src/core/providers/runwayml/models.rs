@@ -3,7 +3,7 @@
 //! Model registry and information for Runway ML video and image generation.
 
 use crate::core::types::{ModelInfo, ProviderCapability};
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use std::collections::HashMap;
 
 /// Runway ML model types
@@ -232,7 +232,7 @@ impl Default for RunwayMLModelRegistry {
 }
 
 /// Global model registry instance
-pub static RUNWAYML_REGISTRY: Lazy<RunwayMLModelRegistry> = Lazy::new(RunwayMLModelRegistry::new);
+pub static RUNWAYML_REGISTRY: LazyLock<RunwayMLModelRegistry> = LazyLock::new(RunwayMLModelRegistry::new);
 
 /// Get the global Runway ML model registry
 pub fn get_runwayml_registry() -> &'static RunwayMLModelRegistry {

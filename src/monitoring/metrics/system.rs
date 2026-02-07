@@ -3,7 +3,7 @@
 //! These functions provide real system monitoring when the metrics feature is enabled
 
 #[cfg(feature = "metrics")]
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 #[cfg(feature = "metrics")]
 use sysinfo::{Disks, Networks, System};
 
@@ -11,16 +11,16 @@ use sysinfo::{Disks, Networks, System};
 // These functions provide real system monitoring when the metrics feature is enabled
 
 #[cfg(feature = "metrics")]
-static SYSTEM: Lazy<parking_lot::Mutex<System>> =
-    Lazy::new(|| parking_lot::Mutex::new(System::new_all()));
+static SYSTEM: LazyLock<parking_lot::Mutex<System>> =
+    LazyLock::new(|| parking_lot::Mutex::new(System::new_all()));
 
 #[cfg(feature = "metrics")]
-static NETWORKS: Lazy<parking_lot::Mutex<Networks>> =
-    Lazy::new(|| parking_lot::Mutex::new(Networks::new_with_refreshed_list()));
+static NETWORKS: LazyLock<parking_lot::Mutex<Networks>> =
+    LazyLock::new(|| parking_lot::Mutex::new(Networks::new_with_refreshed_list()));
 
 #[cfg(feature = "metrics")]
-static DISKS: Lazy<parking_lot::Mutex<Disks>> =
-    Lazy::new(|| parking_lot::Mutex::new(Disks::new_with_refreshed_list()));
+static DISKS: LazyLock<parking_lot::Mutex<Disks>> =
+    LazyLock::new(|| parking_lot::Mutex::new(Disks::new_with_refreshed_list()));
 
 #[cfg(feature = "metrics")]
 pub(super) fn get_cpu_usage() -> f64 {

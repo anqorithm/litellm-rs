@@ -3,7 +3,7 @@
 //! Model registry and information for Stability AI.
 
 use crate::core::types::{ModelInfo, ProviderCapability};
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use std::collections::HashMap;
 
 /// Stability AI model endpoints
@@ -217,8 +217,8 @@ impl Default for StabilityModelRegistry {
 }
 
 /// Global model registry instance
-pub static STABILITY_REGISTRY: Lazy<StabilityModelRegistry> =
-    Lazy::new(StabilityModelRegistry::new);
+pub static STABILITY_REGISTRY: LazyLock<StabilityModelRegistry> =
+    LazyLock::new(StabilityModelRegistry::new);
 
 /// Get the global Stability model registry
 pub fn get_stability_registry() -> &'static StabilityModelRegistry {

@@ -5,7 +5,7 @@
 
 #![allow(dead_code)] // Tool module - functions may be used in the future
 
-use once_cell::sync::OnceCell;
+use std::sync::OnceLock;
 use parking_lot::RwLock;
 use std::sync::Arc;
 
@@ -111,14 +111,14 @@ impl<T> Clone for SharedMut<T> {
 
 /// A global shared resource that can be initialized once
 pub struct GlobalShared<T> {
-    cell: OnceCell<Shared<T>>,
+    cell: OnceLock<Shared<T>>,
 }
 
 impl<T> GlobalShared<T> {
     /// Create a new global shared resource
     pub const fn new() -> Self {
         Self {
-            cell: OnceCell::new(),
+            cell: OnceLock::new(),
         }
     }
 

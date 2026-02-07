@@ -3,7 +3,7 @@
 //! Model registry and information for Databricks Foundation Models.
 
 use crate::core::types::{ModelInfo, ProviderCapability};
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use std::collections::HashMap;
 
 /// Databricks model registry
@@ -326,8 +326,8 @@ impl Default for DatabricksModelRegistry {
 }
 
 /// Global model registry instance
-pub static DATABRICKS_REGISTRY: Lazy<DatabricksModelRegistry> =
-    Lazy::new(DatabricksModelRegistry::new);
+pub static DATABRICKS_REGISTRY: LazyLock<DatabricksModelRegistry> =
+    LazyLock::new(DatabricksModelRegistry::new);
 
 /// Get the global Databricks model registry
 pub fn get_databricks_registry() -> &'static DatabricksModelRegistry {

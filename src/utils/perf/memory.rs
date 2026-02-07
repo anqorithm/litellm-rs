@@ -342,13 +342,13 @@ impl std::fmt::Display for PooledString {
 }
 
 /// Global instances for common use cases
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 
 /// Global buffer pool
-pub static BUFFER_POOL: Lazy<BufferPool> = Lazy::new(|| BufferPool::new(1024, 50));
+pub static BUFFER_POOL: LazyLock<BufferPool> = LazyLock::new(|| BufferPool::new(1024, 50));
 
 /// Global string pool
-pub static STRING_POOL: Lazy<OptimizedStringPool> = Lazy::new(OptimizedStringPool::new);
+pub static STRING_POOL: LazyLock<OptimizedStringPool> = LazyLock::new(OptimizedStringPool::new);
 
 /// Convenience functions
 ///

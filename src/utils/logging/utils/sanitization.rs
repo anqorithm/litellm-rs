@@ -1,7 +1,7 @@
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use regex::Regex;
 
-static SENSITIVE_PATTERNS: Lazy<Vec<Regex>> = Lazy::new(|| {
+static SENSITIVE_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
     vec![
         Regex::new(r"(?i)api[_-]?key[=:\s]*['\x22]?([a-zA-Z0-9\-_]+)['\x22]?").unwrap(),
         Regex::new(r"(?i)token[=:\s]*['\x22]?([a-zA-Z0-9\-_.]+)['\x22]?").unwrap(),
@@ -24,7 +24,7 @@ impl Sanitization {
     }
 
     pub fn mask_sensitive_data(input: &str) -> String {
-        static MASK_PATTERNS: Lazy<Vec<Regex>> = Lazy::new(|| {
+        static MASK_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
             let sensitive_keys = [
                 "api_key",
                 "token",

@@ -2,7 +2,7 @@
 //!
 //! Pre-compiled regex patterns for detecting personally identifiable information.
 
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use regex::Regex;
 
 // Pre-compiled regex patterns for PII detection
@@ -11,7 +11,7 @@ use regex::Regex;
 // If a pattern fails, it indicates a code error that should be caught in tests
 
 /// SSN pattern: XXX-XX-XXXX
-pub static SSN_PATTERN: Lazy<Regex> = Lazy::new(|| {
+pub static SSN_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"\b\d{3}-\d{2}-\d{4}\b").unwrap_or_else(|e| {
         tracing::error!("Failed to compile SSN regex: {}", e);
         // Return a pattern that never matches as fallback
@@ -21,7 +21,7 @@ pub static SSN_PATTERN: Lazy<Regex> = Lazy::new(|| {
 });
 
 /// Email pattern: local@domain.tld
-pub static EMAIL_PATTERN: Lazy<Regex> = Lazy::new(|| {
+pub static EMAIL_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b").unwrap_or_else(|e| {
         tracing::error!("Failed to compile email regex: {}", e);
         Regex::new(r"[^\s\S]").unwrap()
@@ -29,7 +29,7 @@ pub static EMAIL_PATTERN: Lazy<Regex> = Lazy::new(|| {
 });
 
 /// Phone pattern: XXX-XXX-XXXX
-pub static PHONE_PATTERN: Lazy<Regex> = Lazy::new(|| {
+pub static PHONE_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"\b\d{3}-\d{3}-\d{4}\b").unwrap_or_else(|e| {
         tracing::error!("Failed to compile phone regex: {}", e);
         Regex::new(r"[^\s\S]").unwrap()
@@ -37,7 +37,7 @@ pub static PHONE_PATTERN: Lazy<Regex> = Lazy::new(|| {
 });
 
 /// Credit card pattern: XXXX-XXXX-XXXX-XXXX or XXXXXXXXXXXXXXXX
-pub static CREDIT_CARD_PATTERN: Lazy<Regex> = Lazy::new(|| {
+pub static CREDIT_CARD_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b").unwrap_or_else(|e| {
         tracing::error!("Failed to compile credit card regex: {}", e);
         Regex::new(r"[^\s\S]").unwrap()

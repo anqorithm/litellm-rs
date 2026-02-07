@@ -409,8 +409,8 @@ impl LLMProvider for VertexAIProvider {
     }
 
     fn models(&self) -> &[ModelInfo] {
-        use once_cell::sync::Lazy;
-        static MODELS: Lazy<Vec<ModelInfo>> = Lazy::new(|| {
+        use std::sync::LazyLock;
+        static MODELS: LazyLock<Vec<ModelInfo>> = LazyLock::new(|| {
             vec![
                 ModelInfo {
                     id: "gemini-1.5-pro".to_string(),

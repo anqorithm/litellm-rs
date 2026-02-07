@@ -117,10 +117,10 @@ pub fn format_duration(duration_ms: u64) -> String {
 /// Sanitize string for logging (remove sensitive information)
 #[allow(dead_code)]
 pub fn sanitize_for_logging(input: &str) -> String {
-    use once_cell::sync::Lazy;
+    use std::sync::LazyLock;
     use regex::Regex;
 
-    static SANITIZE_PATTERNS: Lazy<Vec<(Regex, &'static str)>> = Lazy::new(|| {
+    static SANITIZE_PATTERNS: LazyLock<Vec<(Regex, &'static str)>> = LazyLock::new(|| {
         vec![
             (
                 Regex::new(r#"(?i)api[_-]?key["']?\s*[:=]\s*["']?([a-zA-Z0-9\-_]{20,})"#).unwrap(),

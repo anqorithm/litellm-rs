@@ -249,9 +249,9 @@ pub trait WithDependencies {
 // Note: Macros removed for simplicity - use direct method calls instead
 
 /// Global service container for application-wide services
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 
-static GLOBAL_CONTAINER: Lazy<ServiceContainer> = Lazy::new(ServiceContainer::new);
+static GLOBAL_CONTAINER: LazyLock<ServiceContainer> = LazyLock::new(ServiceContainer::new);
 
 /// Get the global service container
 pub fn global_container() -> &'static ServiceContainer {

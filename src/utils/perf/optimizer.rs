@@ -279,9 +279,9 @@ macro_rules! time_function {
 }
 
 /// Global performance metrics instance
-use once_cell::sync::Lazy;
-pub static GLOBAL_METRICS: Lazy<Arc<PerformanceMetrics>> =
-    Lazy::new(|| Arc::new(PerformanceMetrics::new()));
+use std::sync::LazyLock;
+pub static GLOBAL_METRICS: LazyLock<Arc<PerformanceMetrics>> =
+    LazyLock::new(|| Arc::new(PerformanceMetrics::new()));
 
 /// Convenience function to get global metrics
 pub fn global_metrics() -> Arc<PerformanceMetrics> {

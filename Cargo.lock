@@ -3299,7 +3299,6 @@ dependencies = [
  "lru",
  "mockall",
  "object_store",
- "once_cell",
  "opentelemetry",
  "opentelemetry-jaeger",
  "parking_lot",

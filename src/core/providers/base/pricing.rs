@@ -2,7 +2,7 @@
 //!
 //! Shares model_prices_and_context_window.json data with Python version
 
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -364,7 +364,7 @@ impl Default for PricingDatabase {
 }
 
 // Global pricing database (lazy loading)
-pub static GLOBAL_PRICING_DB: Lazy<PricingDatabase> = Lazy::new(|| {
+pub static GLOBAL_PRICING_DB: LazyLock<PricingDatabase> = LazyLock::new(|| {
     PricingDatabase::from_python_json().unwrap_or_else(|e| {
         warn!(
             error = %e,

@@ -3,7 +3,7 @@
 //! Configuration for Baseten API access including authentication and model settings.
 
 use crate::core::traits::ProviderConfig;
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
@@ -11,8 +11,8 @@ use serde::{Deserialize, Serialize};
 pub const BASETEN_API_BASE: &str = "https://inference.baseten.co/v1";
 
 /// Regex for matching dedicated deployment model IDs
-static DEDICATED_DEPLOYMENT_REGEX: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"^[a-zA-Z0-9]{8}$").unwrap());
+static DEDICATED_DEPLOYMENT_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[a-zA-Z0-9]{8}$").unwrap());
 
 /// Baseten provider configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
