@@ -14,5 +14,7 @@ pub mod state;
 pub mod types;
 mod utils;
 
+pub use server::HttpServer;
+
 #[cfg(test)]
 mod tests;

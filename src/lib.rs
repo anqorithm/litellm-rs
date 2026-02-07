@@ -130,7 +130,7 @@ use tracing::info;
 #[cfg(feature = "storage")]
 pub struct Gateway {
     config: Config,
-    server: server::server::HttpServer,
+    server: server::HttpServer,
 }
 
 #[cfg(feature = "storage")]
@@ -140,7 +140,7 @@ impl Gateway {
         info!("Creating new gateway instance");
 
         // Create HTTP server
-        let server = server::server::HttpServer::new(&config).await?;
+        let server = server::HttpServer::new(&config).await?;
 
         Ok(Self { config, server })
     }

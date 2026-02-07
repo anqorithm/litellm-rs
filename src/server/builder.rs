@@ -4,7 +4,7 @@
 //! and the run_server function for automatic configuration loading.
 
 use crate::config::Config;
-use crate::server::server::HttpServer;
+use crate::server::HttpServer;
 use crate::utils::error::{GatewayError, Result};
 use tracing::info;
 

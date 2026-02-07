@@ -5,7 +5,7 @@
 #[cfg(test)]
 mod tests {
     use crate::server::builder::ServerBuilder;
-    use crate::server::server::HttpServer;
+    use crate::server::HttpServer;
     use crate::server::types::RequestMetrics;
 
     #[test]
