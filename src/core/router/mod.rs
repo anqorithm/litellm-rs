@@ -34,8 +34,6 @@ pub mod strategy_impl;
 
 // Legacy modules (kept for backwards compatibility)
 pub mod health;
-#[cfg(feature = "storage")]
-pub mod legacy_router;
 pub mod load_balancer;
 pub mod metrics;
 pub mod strategy;
