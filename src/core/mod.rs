@@ -2,7 +2,6 @@
 //!
 //! This module contains the core business logic and data structures.
 
-#![allow(dead_code)]
 
 pub mod a2a; // A2A (Agent-to-Agent) Protocol Gateway
 pub mod agent; // Agent Coordinator for managing agent lifecycles
