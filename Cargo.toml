@@ -124,9 +124,6 @@ parking_lot = "0.12"
 arc-swap = "1.6"
 dashmap = "5.5"
 
-# WebSocket support
-tungstenite = { version = "0.21", optional = true }
-
 # Development dependencies
 [dev-dependencies]
 tokio-test = "0.4.4"
@@ -180,7 +177,7 @@ tracing = ["dep:opentelemetry", "dep:opentelemetry-jaeger"]
 
 # Advanced features
 vector-db = ["dep:qdrant-client"]
-websockets = ["dep:tungstenite"]
+websockets = []
 analytics = ["metrics"]
 enterprise = ["analytics", "vector-db"]
 
