@@ -21,6 +21,7 @@
 //! ```
 
 mod conversion;
+mod default_router;
 mod helpers;
 mod router_trait;
 mod stream;
@@ -37,6 +38,7 @@ pub use helpers::{
 pub use router_trait::{Message, Router};
 pub use stream::{CompletionChunk, CompletionStream, StreamChoice, StreamDelta};
 pub use types::{Choice, CompletionOptions, CompletionResponse, FunctionCall, ToolCall};
+pub use default_router::{DefaultRouter, ErrorRouter, acompletion, completion, completion_stream};
 
 // Re-export types with proper paths
 pub use crate::core::types::{ContentPart, MessageContent, MessageRole};
@@ -49,7 +51,3 @@ pub type Usage = crate::core::types::responses::Usage;
 
 /// Finish reason enumeration (re-export from core types)
 pub type FinishReason = crate::core::types::responses::FinishReason;
-
-// Include the DefaultRouter implementation inline since it's tightly coupled
-// with provider initialization logic and would be difficult to split further
-include!("default_router.rs");

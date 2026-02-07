@@ -1,6 +1,6 @@
-// Router trait implementation for DefaultRouter
-//
-// This file is included via include!() in default_router.rs
+// Router trait implementation for DefaultRouter.
+
+use super::*;
 
 #[async_trait]
 impl Router for DefaultRouter {

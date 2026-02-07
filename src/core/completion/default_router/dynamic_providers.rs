@@ -1,11 +1,11 @@
-// Dynamic provider creation methods for DefaultRouter
-//
-// This file is included via include!() in default_router.rs
+// Dynamic provider creation methods for DefaultRouter.
+
+use super::*;
 
 impl DefaultRouter {
     /// Dynamic provider creation (Python LiteLLM style)
     /// Creates providers on-demand based on model name and provided options
-    async fn try_dynamic_provider_creation(
+    pub(super) async fn try_dynamic_provider_creation(
         &self,
         chat_request: &ChatRequest,
         context: RequestContext,

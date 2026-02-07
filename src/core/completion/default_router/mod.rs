@@ -1,8 +1,10 @@
-// Default router implementation
-//
-// This file is included via include!() in mod.rs to keep the DefaultRouter
-// implementation together while respecting the module structure.
-// Note: Types are imported via mod.rs's pub use statements before this include.
+// Default router implementation.
+
+use super::{
+    CompletionOptions, CompletionResponse, CompletionStream, Message, Router,
+    convert_from_chat_completion_response, convert_messages_to_chat_messages,
+    convert_to_chat_completion_request, stream,
+};
 
 use crate::core::providers::{Provider, ProviderRegistry, ProviderType};
 use crate::core::types::{ChatRequest, RequestContext};
@@ -12,6 +14,9 @@ use futures::stream::StreamExt;
 use std::sync::Arc;
 use tokio::sync::OnceCell;
 use tracing::debug;
+
+mod dynamic_providers;
+mod router_impl;
 
 /// Default router implementation using the provider registry
 pub struct DefaultRouter {
@@ -194,12 +199,6 @@ impl DefaultRouter {
         })
     }
 }
-
-// Dynamic provider creation methods in a separate file
-include!("dynamic_providers.rs");
-
-// Router trait implementation in a separate file
-include!("router_impl.rs");
 
 /// Fallback router for when initialization fails
 pub struct ErrorRouter {
