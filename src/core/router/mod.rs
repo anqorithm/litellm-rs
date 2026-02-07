@@ -43,12 +43,6 @@ mod tests;
 // Re-exports from deployment module
 pub use deployment::{Deployment, DeploymentConfig, DeploymentId, DeploymentState, HealthStatus};
 
-// Re-exports from legacy modules
-pub use health::HealthChecker;
-pub use load_balancer::LoadBalancer;
-pub use metrics::RouterMetrics;
-pub use strategy::types::RoutingStrategy;
-
 // Re-exports from new modular router (UnifiedRouter)
 pub use budget_routing::{BudgetAwareRouter, BudgetAwareRouting, RequestBudgetCheck};
 pub use config::{RouterConfig, RoutingStrategy as UnifiedRoutingStrategy};
