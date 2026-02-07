@@ -48,8 +48,6 @@ pub use deployment::{Deployment, DeploymentConfig, DeploymentId, DeploymentState
 
 // Re-exports from legacy modules
 pub use health::HealthChecker;
-#[cfg(feature = "storage")]
-pub use legacy_router::Router;
 pub use load_balancer::LoadBalancer;
 pub use metrics::RouterMetrics;
 pub use strategy::types::RoutingStrategy;
