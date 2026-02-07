@@ -193,6 +193,7 @@ pub fn get_model_category(model: &str) -> &'static str {
 
     if model_lower.contains("gpt-5.2")
         || model_lower.contains("gpt-5.1")
+        || model_lower.contains("gpt-5-codex")
         || model_lower.contains("o3-pro")
         || model_lower.contains("gpt-4o")
         || model_lower.contains("claude-opus-4-6")

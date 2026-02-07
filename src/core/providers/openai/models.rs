@@ -178,6 +178,10 @@ impl OpenAIModelRegistry {
 
     /// Load models from pricing database and add static definitions
     fn load_models(&mut self) {
+        // Always load built-in static models first so we keep a comprehensive
+        // fallback catalog even when pricing DB is partially populated.
+        self.add_static_models();
+
         let pricing_db = get_pricing_db();
         let model_ids = pricing_db.get_provider_models("openai");
 
@@ -205,11 +209,6 @@ impl OpenAIModelRegistry {
                     },
                 );
             }
-        }
-
-        // Add static model definitions as fallback
-        if self.models.is_empty() {
-            self.add_static_models();
         }
     }
 
@@ -239,8 +238,7 @@ impl OpenAIModelRegistry {
         }
 
         // O-series reasoning models
-        if model_id.starts_with("o1") || model_id.starts_with("o3") || model_id.starts_with("o4")
-        {
+        if model_id.starts_with("o1") || model_id.starts_with("o3") || model_id.starts_with("o4") {
             features.push(OpenAIModelFeature::ReasoningMode);
         }
 
@@ -251,7 +249,10 @@ impl OpenAIModelRegistry {
         }
 
         // DALL-E and GPT image models
-        if model_id.starts_with("dall-e") || model_id.starts_with("gpt-image-1") {
+        if model_id.starts_with("dall-e")
+            || model_id.starts_with("gpt-image-")
+            || model_id.starts_with("chatgpt-image-")
+        {
             features.push(OpenAIModelFeature::ImageGeneration);
             if model_id.contains("dall-e-3") {
                 features.push(OpenAIModelFeature::ImageEditing);
@@ -326,7 +327,7 @@ impl OpenAIModelRegistry {
         // GPT-5 series (check specific variants first, most specific first)
         else if model_id.starts_with("gpt-5.2-pro") {
             OpenAIModelFamily::GPT52Pro
-        } else if model_id.starts_with("gpt-5.2-codex") {
+        } else if model_id.starts_with("gpt-5.2-codex") || model_id.starts_with("gpt-5-codex") {
             OpenAIModelFamily::GPT52Codex
         } else if model_id.starts_with("gpt-5.2") || model_id.contains("gpt-5.2") {
             OpenAIModelFamily::GPT52
@@ -358,7 +359,7 @@ impl OpenAIModelRegistry {
             OpenAIModelFamily::O1Pro
         } else if model_id.starts_with("o1") {
             OpenAIModelFamily::O1
-        } else if model_id.starts_with("gpt-image-1") {
+        } else if model_id.starts_with("gpt-image-") || model_id.starts_with("chatgpt-image-") {
             OpenAIModelFamily::GPTImage
         } else if model_id.starts_with("dall-e-2") {
             OpenAIModelFamily::DALLE2
@@ -762,6 +763,15 @@ impl OpenAIModelRegistry {
                 0.014,   // $14/1M output
             ),
             (
+                "gpt-5-codex",
+                "GPT-5 Codex",
+                OpenAIModelFamily::GPT52Codex,
+                400000,
+                Some(128000),
+                0.00125, // $1.25/1M input
+                0.010,   // $10/1M output
+            ),
+            (
                 "codex-mini-latest",
                 "Codex Mini Latest",
                 OpenAIModelFamily::GPT52Codex,
@@ -829,6 +839,33 @@ impl OpenAIModelRegistry {
             (
                 "gpt-image-1",
                 "GPT Image 1",
+                OpenAIModelFamily::GPTImage,
+                128000,
+                Some(16384),
+                0.005,
+                0.020,
+            ),
+            (
+                "gpt-image-1-mini",
+                "GPT Image 1 Mini",
+                OpenAIModelFamily::GPTImage,
+                128000,
+                Some(16384),
+                0.0025,
+                0.010,
+            ),
+            (
+                "gpt-image-1.5",
+                "GPT Image 1.5",
+                OpenAIModelFamily::GPTImage,
+                128000,
+                Some(16384),
+                0.005,
+                0.020,
+            ),
+            (
+                "chatgpt-image-latest",
+                "ChatGPT Image Latest",
                 OpenAIModelFamily::GPTImage,
                 128000,
                 Some(16384),
@@ -1096,7 +1133,7 @@ impl OpenAIModelRegistry {
             OpenAIUseCase::CodeGeneration => Some("gpt-5.2-codex".to_string()),
             OpenAIUseCase::Reasoning => Some("o3-pro".to_string()),
             OpenAIUseCase::Vision => Some("gpt-5.2".to_string()),
-            OpenAIUseCase::ImageGeneration => Some("gpt-image-1".to_string()),
+            OpenAIUseCase::ImageGeneration => Some("gpt-image-1.5".to_string()),
             OpenAIUseCase::AudioTranscription => Some("whisper-1".to_string()),
             OpenAIUseCase::TextToSpeech => Some("tts-1-hd".to_string()),
             OpenAIUseCase::Embeddings => Some("text-embedding-3-large".to_string()),

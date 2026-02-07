@@ -250,6 +250,14 @@ fn get_openai_pricing(model: &str) -> Result<ModelPricing, CostError> {
             updated_at: Utc::now(),
             ..Default::default()
         },
+        m if m.contains("gpt-5-codex") => ModelPricing {
+            model: model.to_string(),
+            input_cost_per_1k_tokens: 0.00125,
+            output_cost_per_1k_tokens: 0.010,
+            currency: "USD".to_string(),
+            updated_at: Utc::now(),
+            ..Default::default()
+        },
         m if m.contains("gpt-5.2") => ModelPricing {
             model: model.to_string(),
             input_cost_per_1k_tokens: 0.00175,
@@ -286,6 +294,30 @@ fn get_openai_pricing(model: &str) -> Result<ModelPricing, CostError> {
             model: model.to_string(),
             input_cost_per_1k_tokens: 0.00005,
             output_cost_per_1k_tokens: 0.0004,
+            currency: "USD".to_string(),
+            updated_at: Utc::now(),
+            ..Default::default()
+        },
+        m if m.contains("gpt-image-1-mini") => ModelPricing {
+            model: model.to_string(),
+            input_cost_per_1k_tokens: 0.0025,
+            output_cost_per_1k_tokens: 0.010,
+            currency: "USD".to_string(),
+            updated_at: Utc::now(),
+            ..Default::default()
+        },
+        m if m.contains("gpt-image-1.5") || m.contains("chatgpt-image-latest") => ModelPricing {
+            model: model.to_string(),
+            input_cost_per_1k_tokens: 0.005,
+            output_cost_per_1k_tokens: 0.020,
+            currency: "USD".to_string(),
+            updated_at: Utc::now(),
+            ..Default::default()
+        },
+        m if m.contains("gpt-image-1") => ModelPricing {
+            model: model.to_string(),
+            input_cost_per_1k_tokens: 0.005,
+            output_cost_per_1k_tokens: 0.020,
             currency: "USD".to_string(),
             updated_at: Utc::now(),
             ..Default::default()

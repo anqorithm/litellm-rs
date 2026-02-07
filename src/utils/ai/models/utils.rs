@@ -22,6 +22,21 @@ impl ModelUtils {
                 max_tokens: Some(128000),
                 context_window: Some(400000),
             }
+        } else if model_lower.starts_with("gpt-image-") || model_lower.starts_with("chatgpt-image-")
+        {
+            ModelCapabilities {
+                supports_function_calling: false,
+                supports_parallel_function_calling: false,
+                supports_tool_choice: false,
+                supports_response_schema: false,
+                supports_system_messages: false,
+                supports_web_search: false,
+                supports_url_context: false,
+                supports_vision: true,
+                supports_streaming: false,
+                max_tokens: Some(16384),
+                context_window: Some(128000),
+            }
         } else if model_lower.starts_with("gpt-4.1") {
             ModelCapabilities {
                 supports_function_calling: true,
@@ -197,7 +212,10 @@ impl ModelUtils {
     pub fn get_provider_from_model(model: &str) -> Option<String> {
         let model_lower = model.to_lowercase();
 
-        if model_lower.starts_with("gpt-") || model_lower.contains("openai") {
+        if model_lower.starts_with("gpt-")
+            || model_lower.starts_with("chatgpt-image-")
+            || model_lower.contains("openai")
+        {
             Some("openai".to_string())
         } else if model_lower.starts_with("claude-") || model_lower.contains("anthropic") {
             Some("anthropic".to_string())
@@ -223,11 +241,24 @@ impl ModelUtils {
             } else if model_lower.contains("mini") {
                 "gpt-5-mini".to_string()
             } else if model_lower.contains("codex") {
-                "gpt-5.2-codex".to_string()
+                if model_lower.contains("5.2") {
+                    "gpt-5.2-codex".to_string()
+                } else {
+                    "gpt-5-codex".to_string()
+                }
             } else if model_lower.contains("chat") {
                 "gpt-5.2-chat".to_string()
             } else {
                 "gpt-5.2".to_string()
+            }
+        } else if model_lower.starts_with("gpt-image-") || model_lower.starts_with("chatgpt-image-")
+        {
+            if model_lower.contains("1-mini") {
+                "gpt-image-1-mini".to_string()
+            } else if model_lower.contains("1.5") || model_lower.starts_with("chatgpt-image-") {
+                "gpt-image-1.5".to_string()
+            } else {
+                "gpt-image-1".to_string()
             }
         } else if model_lower.starts_with("gpt-4.1") {
             if model_lower.contains("nano") {
@@ -290,8 +321,10 @@ impl ModelUtils {
 
         let known_models = [
             "gpt-5.2",
+            "gpt-5-codex",
             "gpt-5-mini",
             "gpt-5-nano",
+            "gpt-image-1",
             "gpt-4.1",
             "gpt-4",
             "gpt-3.5-turbo",
@@ -376,10 +409,15 @@ impl ModelUtils {
                 "gpt-5.2".to_string(),
                 "gpt-5.2-chat".to_string(),
                 "gpt-5.2-codex".to_string(),
+                "gpt-5-codex".to_string(),
                 "gpt-5.1".to_string(),
                 "gpt-5.1-thinking".to_string(),
                 "gpt-5-mini".to_string(),
                 "gpt-5-nano".to_string(),
+                "gpt-image-1".to_string(),
+                "gpt-image-1-mini".to_string(),
+                "gpt-image-1.5".to_string(),
+                "chatgpt-image-latest".to_string(),
                 "o3-pro".to_string(),
                 "o3-mini".to_string(),
                 "o4-mini".to_string(),

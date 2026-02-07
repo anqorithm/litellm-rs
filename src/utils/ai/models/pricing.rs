@@ -7,11 +7,16 @@ impl ModelUtils {
         match model_lower.as_str() {
             m if m.starts_with("gpt-5.2-pro") => Some((0.021, 0.168)),
             m if m.starts_with("gpt-5.2-codex") => Some((0.00175, 0.014)),
+            m if m.starts_with("gpt-5-codex") => Some((0.00125, 0.010)),
             m if m.starts_with("gpt-5.2") => Some((0.00175, 0.014)),
             m if m.starts_with("gpt-5.1-thinking") => Some((0.0025, 0.020)),
             m if m.starts_with("gpt-5.1") => Some((0.00125, 0.010)),
             m if m.starts_with("gpt-5-mini") => Some((0.00025, 0.002)),
             m if m.starts_with("gpt-5-nano") => Some((0.00005, 0.0004)),
+            m if m.starts_with("gpt-image-1-mini") => Some((0.0025, 0.010)),
+            m if m.starts_with("gpt-image-1.5") => Some((0.005, 0.020)),
+            m if m.starts_with("chatgpt-image-latest") => Some((0.005, 0.020)),
+            m if m.starts_with("gpt-image-1") => Some((0.005, 0.020)),
             m if m.starts_with("o3-pro") => Some((0.020, 0.080)),
             m if m.starts_with("o3-mini") || m.starts_with("o4-mini") => Some((0.0011, 0.0044)),
             m if m.starts_with("gpt-4.1") => Some((0.002, 0.008)),
@@ -40,6 +45,7 @@ impl ModelUtils {
                     "openai/gpt-5.2".to_string(),
                     "gpt-5.2-chat".to_string(),
                     "gpt-5.2-codex".to_string(),
+                    "gpt-5-codex".to_string(),
                 ]);
             }
             "claude-opus-4-6" => {
