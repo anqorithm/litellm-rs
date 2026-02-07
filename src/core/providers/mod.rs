@@ -654,33 +654,6 @@ impl Provider {
         }
     }
 
-    /// Alias for chat_completion (for backward compatibility)
-    pub async fn completion(
-        &self,
-        request: ChatRequest,
-        context: RequestContext,
-    ) -> Result<ChatResponse, UnifiedProviderError> {
-        self.chat_completion(request, context).await
-    }
-
-    /// Alias for create_embeddings (for backward compatibility)
-    pub async fn embedding(
-        &self,
-        request: EmbeddingRequest,
-        context: RequestContext,
-    ) -> Result<EmbeddingResponse, UnifiedProviderError> {
-        self.create_embeddings(request, context).await
-    }
-
-    /// Alias for create_images (for backward compatibility)
-    pub async fn image_generation(
-        &self,
-        request: ImageGenerationRequest,
-        context: RequestContext,
-    ) -> Result<ImageGenerationResponse, UnifiedProviderError> {
-        self.create_images(request, context).await
-    }
-
     /// Get model information by ID
     pub async fn get_model(
         &self,
@@ -737,20 +710,6 @@ pub async fn create_provider(
 
 // Provider factory functions
 impl Provider {
-    /// Create provider from configuration (sync version - deprecated)
-    ///
-    /// Use `from_config_async` for async initialization
-    #[deprecated(note = "Use from_config_async instead")]
-    pub fn from_config(
-        _provider_type: ProviderType,
-        _config: serde_json::Value,
-    ) -> Result<Self, ProviderError> {
-        Err(ProviderError::not_implemented(
-            "sync",
-            "Use from_config_async for provider creation",
-        ))
-    }
-
     /// Create provider from configuration asynchronously
     ///
     /// This is the preferred method for creating providers from configuration.

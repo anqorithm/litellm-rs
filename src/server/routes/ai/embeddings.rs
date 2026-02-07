@@ -77,7 +77,7 @@ pub async fn handle_embedding_via_pool(
 
     let core_response = selection
         .provider
-        .embedding(core_request, core_context)
+        .create_embeddings(core_request, core_context)
         .await
         .map_err(|e| GatewayError::internal(format!("Embedding error: {}", e)))?;
 

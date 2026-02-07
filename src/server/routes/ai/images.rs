@@ -64,7 +64,7 @@ pub async fn handle_image_generation_via_pool(
 
     let core_response = selection
         .0
-        .image_generation(core_request, core_context)
+        .create_images(core_request, core_context)
         .await
         .map_err(|e| GatewayError::internal(format!("Image generation error: {}", e)))?;
 
