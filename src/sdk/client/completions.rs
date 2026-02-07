@@ -195,7 +195,7 @@ impl LLMClient {
         request: ChatRequest,
     ) -> Result<ChatResponse> {
         let body = serde_json::json!({
-            "model": provider.models.first().unwrap_or(&"gpt-3.5-turbo".to_string()),
+            "model": provider.models.first().unwrap_or(&"gpt-5.2-chat".to_string()),
             "messages": request.messages,
             "max_tokens": request.options.max_tokens.unwrap_or(1000),
             "temperature": request.options.temperature.unwrap_or(0.7),

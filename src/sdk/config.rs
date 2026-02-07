@@ -147,7 +147,11 @@ impl ConfigBuilder {
             name: "OpenAI".to_string(),
             api_key: api_key.to_string(),
             base_url: None,
-            models: vec!["gpt-4".to_string(), "gpt-3.5-turbo".to_string()],
+            models: vec![
+                "gpt-5.2-chat".to_string(),
+                "gpt-5.2".to_string(),
+                "gpt-5-nano".to_string(),
+            ],
             enabled: true,
             weight: 1.0,
             rate_limit_rpm: Some(3000),

@@ -191,12 +191,18 @@ pub fn validate_usage(usage: &UsageTokens) -> Result<(), CostError> {
 pub fn get_model_category(model: &str) -> &'static str {
     let model_lower = model.to_lowercase();
 
-    if model_lower.contains("gpt-4o")
+    if model_lower.contains("gpt-5.2")
+        || model_lower.contains("gpt-5.1")
+        || model_lower.contains("o3-pro")
+        || model_lower.contains("gpt-4o")
         || model_lower.contains("claude-opus-4-6")
         || model_lower.contains("claude-opus-4-5")
     {
         "flagship"
-    } else if model_lower.contains("gpt-4")
+    } else if model_lower.contains("gpt-4.1")
+        || model_lower.contains("o3-mini")
+        || model_lower.contains("o4-mini")
+        || model_lower.contains("gpt-4")
         || model_lower.contains("claude-sonnet-4-5")
         || model_lower.contains("claude-sonnet-4")
         || model_lower.contains("claude-3-5-sonnet")
@@ -227,12 +233,12 @@ pub fn suggest_optimizations(
     match (category, usage_pattern) {
         ("flagship", "occasional") => {
             suggestions.push(
-                "Consider using GPT-4 Turbo or Claude-3-Sonnet for occasional use".to_string(),
+                "Consider using GPT-5 Mini, GPT-4.1 Mini, or Claude Sonnet variants for occasional use".to_string(),
             );
         }
         ("flagship", "batch") => {
             suggestions.push(
-                "For batch processing, consider using efficient models like GPT-3.5 Turbo"
+                "For batch processing, consider efficient models like GPT-5 Nano or GPT-4.1 Nano"
                     .to_string(),
             );
         }

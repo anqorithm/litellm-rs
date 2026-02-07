@@ -20,6 +20,19 @@ pub struct TokenUtils;
 
 impl TokenUtils {
     const OPENAI_MODELS: &'static [&'static str] = &[
+        "gpt-5.2",
+        "gpt-5.2-chat",
+        "gpt-5.2-codex",
+        "gpt-5.1",
+        "gpt-5.1-thinking",
+        "gpt-5-mini",
+        "gpt-5-nano",
+        "o3-pro",
+        "o3-mini",
+        "o4-mini",
+        "gpt-4.1",
+        "gpt-4.1-mini",
+        "gpt-4.1-nano",
         "gpt-4",
         "gpt-4-32k",
         "gpt-4-turbo",
@@ -227,6 +240,11 @@ impl TokenUtils {
 
     pub fn get_max_tokens_for_model(model: &str) -> Option<usize> {
         match model.to_lowercase().as_str() {
+            m if m.contains("gpt-5.2") => Some(400000),
+            m if m.contains("gpt-5.1-thinking") => Some(400000),
+            m if m.contains("gpt-5") => Some(272000),
+            m if m.contains("o3") || m.contains("o4") => Some(200000),
+            m if m.contains("gpt-4.1") => Some(128000),
             m if m.contains("gpt-4-32k") => Some(32768),
             m if m.contains("gpt-4") => Some(8192),
             m if m.contains("gpt-3.5-turbo-16k") => Some(16384),
@@ -247,6 +265,16 @@ impl TokenUtils {
         output_tokens: usize,
     ) -> Result<f64, ProviderError> {
         let (input_price, output_price) = match model.to_lowercase().as_str() {
+            m if m.contains("gpt-5.2-pro") => (0.021, 0.168),
+            m if m.contains("gpt-5.2-codex") => (0.00175, 0.014),
+            m if m.contains("gpt-5.2") => (0.00175, 0.014),
+            m if m.contains("gpt-5.1-thinking") => (0.0025, 0.020),
+            m if m.contains("gpt-5.1") => (0.00125, 0.010),
+            m if m.contains("gpt-5-mini") => (0.00025, 0.002),
+            m if m.contains("gpt-5-nano") => (0.00005, 0.0004),
+            m if m.contains("o3-pro") => (0.020, 0.080),
+            m if m.contains("o3-mini") || m.contains("o4-mini") => (0.0011, 0.0044),
+            m if m.contains("gpt-4.1") => (0.002, 0.008),
             m if m.contains("gpt-4") => (0.03, 0.06),
             m if m.contains("gpt-3.5-turbo") => (0.0015, 0.002),
             m if m.contains("claude-opus-4-6") => (0.005, 0.025),
@@ -272,6 +300,9 @@ impl TokenUtils {
 
     pub fn supports_function_calling(model: &str) -> bool {
         match model.to_lowercase().as_str() {
+            m if m.contains("gpt-5") => true,
+            m if m.contains("o3") || m.contains("o4") => true,
+            m if m.contains("gpt-4.1") => true,
             m if m.contains("gpt-4") => true,
             m if m.contains("gpt-3.5-turbo") => true,
             m if m.contains("claude-opus-4") => true,

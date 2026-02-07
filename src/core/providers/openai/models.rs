@@ -94,6 +94,9 @@ pub enum OpenAIModelFamily {
     GPT4Turbo,
     GPT4O,
     GPT4OMini,
+    GPT41,
+    GPT41Mini,
+    GPT41Nano,
     GPT35,
     GPT5,          // GPT-5 models (2025)
     GPT5Mini,      // GPT-5 Mini models (2025)
@@ -106,6 +109,7 @@ pub enum OpenAIModelFamily {
     O1,            // O1 reasoning models
     O1Pro,         // O1 Pro reasoning models
     O3,            // O3 reasoning models (2025)
+    O3Pro,         // O3 Pro reasoning models
     O3Mini,        // O3 Mini reasoning models
     O4Mini,        // O4 Mini reasoning models (2025)
     DALLE2,
@@ -116,6 +120,7 @@ pub enum OpenAIModelFamily {
     Moderation,
     GPT4OAudio, // GPT-4O with audio capabilities
     GPTAudio,   // GPT Audio models (2025)
+    GPTImage,   // GPT image generation models
     Realtime,   // Realtime API models
 }
 
@@ -234,7 +239,8 @@ impl OpenAIModelRegistry {
         }
 
         // O-series reasoning models
-        if model_id.starts_with("o1-") {
+        if model_id.starts_with("o1") || model_id.starts_with("o3") || model_id.starts_with("o4")
+        {
             features.push(OpenAIModelFeature::ReasoningMode);
         }
 
@@ -244,8 +250,8 @@ impl OpenAIModelRegistry {
             features.push(OpenAIModelFeature::AudioOutput);
         }
 
-        // DALL-E models
-        if model_id.starts_with("dall-e") {
+        // DALL-E and GPT image models
+        if model_id.starts_with("dall-e") || model_id.starts_with("gpt-image-1") {
             features.push(OpenAIModelFeature::ImageGeneration);
             if model_id.contains("dall-e-3") {
                 features.push(OpenAIModelFeature::ImageEditing);
@@ -295,6 +301,12 @@ impl OpenAIModelRegistry {
         // Check most specific patterns first
         if model_id.starts_with("gpt-4o-mini") {
             OpenAIModelFamily::GPT4OMini
+        } else if model_id.starts_with("gpt-4.1-nano") {
+            OpenAIModelFamily::GPT41Nano
+        } else if model_id.starts_with("gpt-4.1-mini") {
+            OpenAIModelFamily::GPT41Mini
+        } else if model_id.starts_with("gpt-4.1") {
+            OpenAIModelFamily::GPT41
         } else if model_id.starts_with("gpt-4o-audio") || model_id.contains("audio-preview") {
             OpenAIModelFamily::GPT4OAudio
         } else if model_id.starts_with("gpt-4o-realtime") {
@@ -336,6 +348,8 @@ impl OpenAIModelRegistry {
         // O-series reasoning models
         else if model_id.starts_with("o4-mini") {
             OpenAIModelFamily::O4Mini
+        } else if model_id.starts_with("o3-pro") {
+            OpenAIModelFamily::O3Pro
         } else if model_id.starts_with("o3-mini") {
             OpenAIModelFamily::O3Mini
         } else if model_id.starts_with("o3") {
@@ -344,6 +358,8 @@ impl OpenAIModelRegistry {
             OpenAIModelFamily::O1Pro
         } else if model_id.starts_with("o1") {
             OpenAIModelFamily::O1
+        } else if model_id.starts_with("gpt-image-1") {
+            OpenAIModelFamily::GPTImage
         } else if model_id.starts_with("dall-e-2") {
             OpenAIModelFamily::DALLE2
         } else if model_id.starts_with("dall-e-3") {
@@ -366,6 +382,10 @@ impl OpenAIModelRegistry {
 
         // Set rate limits based on model
         match model_id.as_str() {
+            m if m.starts_with("gpt-5") => {
+                config.max_rpm = Some(6000);
+                config.max_tpm = Some(400000);
+            }
             m if m.starts_with("gpt-4") => {
                 config.max_rpm = Some(10000);
                 config.max_tpm = Some(300000);
@@ -374,10 +394,10 @@ impl OpenAIModelRegistry {
                 config.max_rpm = Some(10000);
                 config.max_tpm = Some(1000000);
             }
-            m if m.starts_with("o1-") => {
+            m if m.starts_with("o1") || m.starts_with("o3") || m.starts_with("o4") => {
                 config.max_rpm = Some(5000);
                 config.max_tpm = Some(100000);
-                config.default_temperature = Some(1.0); // O1 models use temperature=1
+                config.default_temperature = Some(1.0);
             }
             _ => {
                 config.max_rpm = Some(5000);
@@ -433,6 +453,33 @@ impl OpenAIModelRegistry {
                 Some(16384),
                 0.0025,
                 0.010,
+            ),
+            (
+                "gpt-4.1",
+                "GPT-4.1",
+                OpenAIModelFamily::GPT41,
+                128000,
+                Some(32768),
+                0.002, // $2.00/1M input
+                0.008, // $8.00/1M output
+            ),
+            (
+                "gpt-4.1-mini",
+                "GPT-4.1 Mini",
+                OpenAIModelFamily::GPT41Mini,
+                128000,
+                Some(32768),
+                0.0004,
+                0.0016,
+            ),
+            (
+                "gpt-4.1-nano",
+                "GPT-4.1 Nano",
+                OpenAIModelFamily::GPT41Nano,
+                128000,
+                Some(16384),
+                0.0001,
+                0.0004,
             ),
             // GPT-4O Mini
             (
@@ -567,6 +614,15 @@ impl OpenAIModelRegistry {
                 0.0011,
                 0.0044,
             ),
+            (
+                "o3-pro",
+                "O3 Pro",
+                OpenAIModelFamily::O3Pro,
+                200000,
+                Some(100000),
+                0.020, // Premium reasoning tier
+                0.080,
+            ),
             // O4 Mini (2025)
             (
                 "o4-mini",
@@ -655,6 +711,15 @@ impl OpenAIModelRegistry {
                 0.00250, // $2.50/1M input (thinking mode)
                 0.020,   // $20/1M output (thinking mode)
             ),
+            (
+                "gpt-5.1-thinking-mini",
+                "GPT-5.1 Thinking Mini",
+                OpenAIModelFamily::GPT51Thinking,
+                400000,
+                Some(128000),
+                0.00125,
+                0.010,
+            ),
             // ==================== GPT-5.2 Series (2025 - Latest) ====================
             // GPT-5.2 Pro (Flagship)
             (
@@ -695,6 +760,15 @@ impl OpenAIModelRegistry {
                 Some(128000),
                 0.00175, // $1.75/1M input
                 0.014,   // $14/1M output
+            ),
+            (
+                "codex-mini-latest",
+                "Codex Mini Latest",
+                OpenAIModelFamily::GPT52Codex,
+                400000,
+                Some(64000),
+                0.0009,
+                0.0072,
             ),
             // GPT-5.1 Codex variants
             (
@@ -751,6 +825,15 @@ impl OpenAIModelRegistry {
                 Some(16384),
                 0.0006, // $0.60/1M input
                 0.0024, // $2.40/1M output
+            ),
+            (
+                "gpt-image-1",
+                "GPT Image 1",
+                OpenAIModelFamily::GPTImage,
+                128000,
+                Some(16384),
+                0.005,
+                0.020,
             ),
             // ==================== GPT-4 Legacy Models ====================
             (
@@ -1009,15 +1092,15 @@ impl OpenAIModelRegistry {
     /// Get the best model for a specific use case
     pub fn get_recommended_model(&self, use_case: OpenAIUseCase) -> Option<String> {
         match use_case {
-            OpenAIUseCase::GeneralChat => Some("gpt-4o".to_string()),
-            OpenAIUseCase::CodeGeneration => Some("gpt-4o".to_string()),
-            OpenAIUseCase::Reasoning => Some("o3-mini".to_string()), // Updated to O3 Mini
-            OpenAIUseCase::Vision => Some("gpt-4o".to_string()),
-            OpenAIUseCase::ImageGeneration => Some("dall-e-3".to_string()),
+            OpenAIUseCase::GeneralChat => Some("gpt-5.2-chat".to_string()),
+            OpenAIUseCase::CodeGeneration => Some("gpt-5.2-codex".to_string()),
+            OpenAIUseCase::Reasoning => Some("o3-pro".to_string()),
+            OpenAIUseCase::Vision => Some("gpt-5.2".to_string()),
+            OpenAIUseCase::ImageGeneration => Some("gpt-image-1".to_string()),
             OpenAIUseCase::AudioTranscription => Some("whisper-1".to_string()),
             OpenAIUseCase::TextToSpeech => Some("tts-1-hd".to_string()),
             OpenAIUseCase::Embeddings => Some("text-embedding-3-large".to_string()),
-            OpenAIUseCase::CostOptimized => Some("gpt-4o-mini".to_string()), // Updated to GPT-4O Mini
+            OpenAIUseCase::CostOptimized => Some("gpt-5-nano".to_string()),
         }
     }
 }
@@ -1092,15 +1175,15 @@ mod tests {
 
         assert_eq!(
             registry.get_recommended_model(OpenAIUseCase::GeneralChat),
-            Some("gpt-4o".to_string())
+            Some("gpt-5.2-chat".to_string())
         );
         assert_eq!(
             registry.get_recommended_model(OpenAIUseCase::Reasoning),
-            Some("o3-mini".to_string())
+            Some("o3-pro".to_string())
         );
         assert_eq!(
             registry.get_recommended_model(OpenAIUseCase::CostOptimized),
-            Some("gpt-4o-mini".to_string())
+            Some("gpt-5-nano".to_string())
         );
     }
 }

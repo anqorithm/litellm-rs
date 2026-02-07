@@ -344,17 +344,17 @@ mod tests {
 
         assert_eq!(
             provider.get_best_model_for_task(OpenAITask::GeneralChat),
-            Some("gpt-4o".to_string())
+            Some("gpt-5.2-chat".to_string())
         );
 
         assert_eq!(
             provider.get_best_model_for_task(OpenAITask::ComplexReasoning),
-            Some("o3-mini".to_string()) // Updated to latest reasoning model
+            Some("o3-pro".to_string())
         );
 
         assert_eq!(
             provider.get_best_model_for_task(OpenAITask::CostSensitive),
-            Some("gpt-4o-mini".to_string()) // Updated to GPT-4O Mini
+            Some("gpt-5-nano".to_string())
         );
     }
 

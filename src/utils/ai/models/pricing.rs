@@ -5,6 +5,16 @@ impl ModelUtils {
         let model_lower = model.to_lowercase();
 
         match model_lower.as_str() {
+            m if m.starts_with("gpt-5.2-pro") => Some((0.021, 0.168)),
+            m if m.starts_with("gpt-5.2-codex") => Some((0.00175, 0.014)),
+            m if m.starts_with("gpt-5.2") => Some((0.00175, 0.014)),
+            m if m.starts_with("gpt-5.1-thinking") => Some((0.0025, 0.020)),
+            m if m.starts_with("gpt-5.1") => Some((0.00125, 0.010)),
+            m if m.starts_with("gpt-5-mini") => Some((0.00025, 0.002)),
+            m if m.starts_with("gpt-5-nano") => Some((0.00005, 0.0004)),
+            m if m.starts_with("o3-pro") => Some((0.020, 0.080)),
+            m if m.starts_with("o3-mini") || m.starts_with("o4-mini") => Some((0.0011, 0.0044)),
+            m if m.starts_with("gpt-4.1") => Some((0.002, 0.008)),
             m if m.starts_with("gpt-4-turbo") => Some((0.01, 0.03)),
             m if m.starts_with("gpt-4") => Some((0.03, 0.06)),
             m if m.starts_with("gpt-3.5-turbo") => Some((0.0015, 0.002)),
@@ -25,6 +35,13 @@ impl ModelUtils {
         let mut aliases = vec![];
 
         match model_lower.as_str() {
+            "gpt-5.2" => {
+                aliases.extend_from_slice(&[
+                    "openai/gpt-5.2".to_string(),
+                    "gpt-5.2-chat".to_string(),
+                    "gpt-5.2-codex".to_string(),
+                ]);
+            }
             "claude-opus-4-6" => {
                 aliases.extend_from_slice(&[
                     "anthropic/claude-opus-4.6".to_string(),
@@ -105,6 +122,15 @@ mod tests {
     use super::*;
 
     // ==================== get_model_pricing Tests ====================
+
+    #[test]
+    fn test_get_model_pricing_gpt52() {
+        let pricing = ModelUtils::get_model_pricing("gpt-5.2");
+        assert!(pricing.is_some());
+        let (input, output) = pricing.unwrap();
+        assert!((input - 0.00175).abs() < f64::EPSILON);
+        assert!((output - 0.014).abs() < f64::EPSILON);
+    }
 
     #[test]
     fn test_get_model_pricing_gpt4_turbo() {

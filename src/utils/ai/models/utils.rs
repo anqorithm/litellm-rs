@@ -8,7 +8,49 @@ impl ModelUtils {
     pub fn get_model_capabilities(model: &str) -> ModelCapabilities {
         let model_lower = model.to_lowercase();
 
-        if model_lower.starts_with("gpt-4") {
+        if model_lower.starts_with("gpt-5") {
+            ModelCapabilities {
+                supports_function_calling: true,
+                supports_parallel_function_calling: true,
+                supports_tool_choice: true,
+                supports_response_schema: true,
+                supports_system_messages: true,
+                supports_web_search: false,
+                supports_url_context: true,
+                supports_vision: true,
+                supports_streaming: true,
+                max_tokens: Some(128000),
+                context_window: Some(400000),
+            }
+        } else if model_lower.starts_with("gpt-4.1") {
+            ModelCapabilities {
+                supports_function_calling: true,
+                supports_parallel_function_calling: true,
+                supports_tool_choice: true,
+                supports_response_schema: true,
+                supports_system_messages: true,
+                supports_web_search: false,
+                supports_url_context: true,
+                supports_vision: true,
+                supports_streaming: true,
+                max_tokens: Some(32768),
+                context_window: Some(128000),
+            }
+        } else if model_lower.starts_with("o3") || model_lower.starts_with("o4") {
+            ModelCapabilities {
+                supports_function_calling: true,
+                supports_parallel_function_calling: false,
+                supports_tool_choice: true,
+                supports_response_schema: true,
+                supports_system_messages: true,
+                supports_web_search: false,
+                supports_url_context: true,
+                supports_vision: false,
+                supports_streaming: true,
+                max_tokens: Some(100000),
+                context_window: Some(200000),
+            }
+        } else if model_lower.starts_with("gpt-4") {
             ModelCapabilities {
                 supports_function_calling: true,
                 supports_parallel_function_calling: true,
@@ -175,7 +217,29 @@ impl ModelUtils {
     pub fn get_base_model(model: &str) -> String {
         let model_lower = model.to_lowercase();
 
-        if model_lower.starts_with("gpt-4") {
+        if model_lower.starts_with("gpt-5") {
+            if model_lower.contains("nano") {
+                "gpt-5-nano".to_string()
+            } else if model_lower.contains("mini") {
+                "gpt-5-mini".to_string()
+            } else if model_lower.contains("codex") {
+                "gpt-5.2-codex".to_string()
+            } else if model_lower.contains("chat") {
+                "gpt-5.2-chat".to_string()
+            } else {
+                "gpt-5.2".to_string()
+            }
+        } else if model_lower.starts_with("gpt-4.1") {
+            if model_lower.contains("nano") {
+                "gpt-4.1-nano".to_string()
+            } else if model_lower.contains("mini") {
+                "gpt-4.1-mini".to_string()
+            } else {
+                "gpt-4.1".to_string()
+            }
+        } else if model_lower.starts_with("o3-pro") {
+            "o3-pro".to_string()
+        } else if model_lower.starts_with("gpt-4") {
             if model_lower.contains("32k") {
                 "gpt-4-32k".to_string()
             } else if model_lower.contains("turbo") {
@@ -225,8 +289,15 @@ impl ModelUtils {
         ];
 
         let known_models = [
+            "gpt-5.2",
+            "gpt-5-mini",
+            "gpt-5-nano",
+            "gpt-4.1",
             "gpt-4",
             "gpt-3.5-turbo",
+            "o3-pro",
+            "o3-mini",
+            "o4-mini",
             "claude-opus-4",
             "claude-sonnet-4",
             "claude-3",
@@ -302,6 +373,19 @@ impl ModelUtils {
     pub fn get_compatible_models_for_provider(provider: &str) -> Vec<String> {
         match provider.to_lowercase().as_str() {
             "openai" => vec![
+                "gpt-5.2".to_string(),
+                "gpt-5.2-chat".to_string(),
+                "gpt-5.2-codex".to_string(),
+                "gpt-5.1".to_string(),
+                "gpt-5.1-thinking".to_string(),
+                "gpt-5-mini".to_string(),
+                "gpt-5-nano".to_string(),
+                "o3-pro".to_string(),
+                "o3-mini".to_string(),
+                "o4-mini".to_string(),
+                "gpt-4.1".to_string(),
+                "gpt-4.1-mini".to_string(),
+                "gpt-4.1-nano".to_string(),
                 "gpt-4".to_string(),
                 "gpt-4-turbo".to_string(),
                 "gpt-4-32k".to_string(),

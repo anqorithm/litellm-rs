@@ -234,6 +234,86 @@ fn get_openai_pricing(model: &str) -> Result<ModelPricing, CostError> {
     use chrono::Utc;
 
     let pricing = match model.to_lowercase().as_str() {
+        m if m.contains("gpt-5.2-pro") => ModelPricing {
+            model: model.to_string(),
+            input_cost_per_1k_tokens: 0.021,
+            output_cost_per_1k_tokens: 0.168,
+            currency: "USD".to_string(),
+            updated_at: Utc::now(),
+            ..Default::default()
+        },
+        m if m.contains("gpt-5.2-codex") => ModelPricing {
+            model: model.to_string(),
+            input_cost_per_1k_tokens: 0.00175,
+            output_cost_per_1k_tokens: 0.014,
+            currency: "USD".to_string(),
+            updated_at: Utc::now(),
+            ..Default::default()
+        },
+        m if m.contains("gpt-5.2") => ModelPricing {
+            model: model.to_string(),
+            input_cost_per_1k_tokens: 0.00175,
+            output_cost_per_1k_tokens: 0.014,
+            currency: "USD".to_string(),
+            updated_at: Utc::now(),
+            ..Default::default()
+        },
+        m if m.contains("gpt-5.1-thinking") => ModelPricing {
+            model: model.to_string(),
+            input_cost_per_1k_tokens: 0.0025,
+            output_cost_per_1k_tokens: 0.020,
+            currency: "USD".to_string(),
+            updated_at: Utc::now(),
+            ..Default::default()
+        },
+        m if m.contains("gpt-5.1") => ModelPricing {
+            model: model.to_string(),
+            input_cost_per_1k_tokens: 0.00125,
+            output_cost_per_1k_tokens: 0.010,
+            currency: "USD".to_string(),
+            updated_at: Utc::now(),
+            ..Default::default()
+        },
+        m if m.contains("gpt-5-mini") => ModelPricing {
+            model: model.to_string(),
+            input_cost_per_1k_tokens: 0.00025,
+            output_cost_per_1k_tokens: 0.002,
+            currency: "USD".to_string(),
+            updated_at: Utc::now(),
+            ..Default::default()
+        },
+        m if m.contains("gpt-5-nano") => ModelPricing {
+            model: model.to_string(),
+            input_cost_per_1k_tokens: 0.00005,
+            output_cost_per_1k_tokens: 0.0004,
+            currency: "USD".to_string(),
+            updated_at: Utc::now(),
+            ..Default::default()
+        },
+        m if m.contains("o3-pro") => ModelPricing {
+            model: model.to_string(),
+            input_cost_per_1k_tokens: 0.020,
+            output_cost_per_1k_tokens: 0.080,
+            currency: "USD".to_string(),
+            updated_at: Utc::now(),
+            ..Default::default()
+        },
+        m if m.contains("o3-mini") || m.contains("o4-mini") => ModelPricing {
+            model: model.to_string(),
+            input_cost_per_1k_tokens: 0.0011,
+            output_cost_per_1k_tokens: 0.0044,
+            currency: "USD".to_string(),
+            updated_at: Utc::now(),
+            ..Default::default()
+        },
+        m if m.contains("gpt-4.1") => ModelPricing {
+            model: model.to_string(),
+            input_cost_per_1k_tokens: 0.002,
+            output_cost_per_1k_tokens: 0.008,
+            currency: "USD".to_string(),
+            updated_at: Utc::now(),
+            ..Default::default()
+        },
         m if m.contains("gpt-4o-mini") => ModelPricing {
             model: model.to_string(),
             input_cost_per_1k_tokens: 0.00015,
