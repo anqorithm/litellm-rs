@@ -6,7 +6,7 @@
 use super::config::RoutingStrategy;
 use super::deployment::{Deployment, DeploymentId};
 use super::error::RouterError;
-use super::router::Router;
+use super::unified::Router;
 use super::strategy_impl;
 use std::sync::atomic::Ordering::Relaxed;
 

@@ -9,12 +9,12 @@ pub mod routes;
 // New modular server components
 pub mod builder;
 mod handlers;
-pub mod server;
+pub mod http;
 pub mod state;
 pub mod types;
 mod utils;
 
-pub use server::HttpServer;
+pub use http::HttpServer;
 
 #[cfg(test)]
 mod tests;

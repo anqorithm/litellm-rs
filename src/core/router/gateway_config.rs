@@ -6,7 +6,7 @@
 use super::config::RouterConfig;
 use super::deployment::{Deployment, DeploymentConfig};
 use super::error::RouterError;
-use super::router::Router;
+use super::unified::Router;
 use crate::config::ProviderConfig;
 use crate::core::providers::{Provider, ProviderType};
 

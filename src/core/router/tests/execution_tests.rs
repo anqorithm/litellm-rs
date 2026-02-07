@@ -6,7 +6,7 @@ use crate::core::router::config::RouterConfig;
 use crate::core::router::error::RouterError;
 use crate::core::router::execution::is_retryable_error;
 use crate::core::router::fallback::{ExecutionResult, FallbackConfig};
-use crate::core::router::router::Router;
+use crate::core::router::unified::Router;
 use std::sync::atomic::Ordering;
 
 #[test]

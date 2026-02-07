@@ -11,7 +11,7 @@
 //! - `error` - Error types and cooldown reasons
 //! - `fallback` - Fallback configuration and execution results
 //! - `deployment` - Deployment management and health tracking
-//! - `router` - Core Router struct and deployment management
+//! - `unified` - Core Router struct and deployment management
 //! - `selection` - Deployment selection logic
 //! - `strategy_impl` - Routing strategy implementations
 //! - `execution` - Execution helpers and error conversion
@@ -28,7 +28,7 @@ pub mod execute_impl;
 pub mod execution;
 pub mod fallback;
 pub mod gateway_config;
-pub mod router;
+pub mod unified;
 pub mod selection;
 pub mod strategy_impl;
 
@@ -55,4 +55,4 @@ pub use budget_routing::{BudgetAwareRouter, BudgetAwareRouting, RequestBudgetChe
 pub use config::{RouterConfig, RoutingStrategy as UnifiedRoutingStrategy};
 pub use error::{CooldownReason, RouterError};
 pub use fallback::{ExecutionResult, FallbackConfig, FallbackType};
-pub use router::Router as UnifiedRouter;
+pub use unified::Router as UnifiedRouter;
