@@ -3291,7 +3291,6 @@ dependencies = [
  "dashmap",
  "dotenvy",
  "futures",
- "futures-util",
  "google-cloud-auth",
  "google-cloud-secretmanager-v1",
  "hex",

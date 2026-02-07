@@ -7,7 +7,7 @@
 
 use actix_web::Error;
 use actix_web::dev::{Service, ServiceRequest, ServiceResponse, Transform, forward_ready};
-use futures_util::future::LocalBoxFuture;
+use futures::future::LocalBoxFuture;
 use std::future::{Ready, ready};
 use std::rc::Rc;
 use tracing::{info, warn};
