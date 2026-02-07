@@ -115,7 +115,6 @@ clap = { version = "4.4", features = ["derive", "env"] }
 dotenvy = "0.15"
 
 # Error handling
-anyhow = "1.0"
 thiserror = "1.0"
 
 # Time handling

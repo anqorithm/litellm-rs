@@ -6,11 +6,11 @@
 //! - Application Default Credentials (ADC)
 //! - Access Token
 
-use anyhow::{Context, Result};
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use thiserror::Error;
 use tokio::sync::RwLock;
 
 /// Vertex AI Authentication credentials
@@ -89,6 +89,38 @@ pub struct AccessToken {
     pub token_type: String,
 }
 
+#[derive(Debug, Error)]
+pub enum VertexAuthError {
+    #[error(transparent)]
+    Json(#[from] serde_json::Error),
+    #[error(transparent)]
+    Http(#[from] reqwest::Error),
+    #[error(transparent)]
+    Jwt(#[from] jsonwebtoken::errors::Error),
+    #[error("Failed to read credentials file: {0}")]
+    ReadCredentialsFile(std::io::Error),
+    #[error("Failed to read subject token file: {0}")]
+    ReadSubjectTokenFile(std::io::Error),
+    #[error("Failed to fetch subject token: {0}")]
+    FetchSubjectToken(reqwest::Error),
+    #[error("Failed to get project ID from metadata: {0}")]
+    GetProjectIdFromMetadata(reqwest::Error),
+    #[error("Unknown credential type")]
+    UnknownCredentialType,
+    #[error("Unsupported environment ID: {0}")]
+    UnsupportedEnvironmentId(String),
+    #[error("No credential source specified")]
+    MissingCredentialSource,
+    #[error("AWS token retrieval not yet implemented")]
+    AwsTokenNotImplemented,
+    #[error("Unable to get ADC token. Please run 'gcloud auth application-default login'")]
+    AdcTokenUnavailable,
+    #[error("No project ID in workload identity config")]
+    MissingProjectId,
+}
+
+type Result<T> = std::result::Result<T, VertexAuthError>;
+
 impl AccessToken {
     /// Check if token is expired
     pub fn is_expired(&self) -> bool {
@@ -136,7 +168,7 @@ impl VertexAuth {
     pub async fn load_credentials_from_file(path: &str) -> Result<VertexCredentials> {
         let contents = tokio::fs::read_to_string(path)
             .await
-            .context("Failed to read credentials file")?;
+            .map_err(VertexAuthError::ReadCredentialsFile)?;
         Self::parse_credentials(&contents)
     }
 
@@ -157,7 +189,7 @@ impl VertexAuth {
                 let creds: AuthorizedUserCredentials = serde_json::from_value(json_obj)?;
                 Ok(VertexCredentials::AuthorizedUser(creds))
             }
-            _ => Err(anyhow::anyhow!("Unknown credential type")),
+            _ => Err(VertexAuthError::UnknownCredentialType),
         }
     }
 
@@ -303,7 +335,7 @@ impl VertexAuth {
             // Read token from file
             tokio::fs::read_to_string(file_path)
                 .await
-                .context("Failed to read subject token from file")
+                .map_err(VertexAuthError::ReadSubjectTokenFile)
         } else if let Some(ref url) = source.url {
             // Fetch token from URL
             let mut request = self.http_client.get(url);
@@ -318,23 +350,23 @@ impl VertexAuth {
             response
                 .text()
                 .await
-                .context("Failed to fetch subject token")
+                .map_err(VertexAuthError::FetchSubjectToken)
         } else if let Some(ref env_id) = source.environment_id {
             // AWS environment
             if env_id.contains("aws") {
                 self.get_aws_token(source).await
             } else {
-                Err(anyhow::anyhow!("Unsupported environment ID: {}", env_id))
+                Err(VertexAuthError::UnsupportedEnvironmentId(env_id.clone()))
             }
         } else {
-            Err(anyhow::anyhow!("No credential source specified"))
+            Err(VertexAuthError::MissingCredentialSource)
         }
     }
 
     /// Get token from AWS metadata service
     async fn get_aws_token(&self, _source: &CredentialSource) -> Result<String> {
         // TODO: Implement AWS metadata service token retrieval
-        Err(anyhow::anyhow!("AWS token retrieval not yet implemented"))
+        Err(VertexAuthError::AwsTokenNotImplemented)
     }
 
     /// Get token using Application Default Credentials
@@ -367,9 +399,7 @@ impl VertexAuth {
         }
 
         // Fall back to gcloud auth
-        Err(anyhow::anyhow!(
-            "Unable to get ADC token. Please run 'gcloud auth application-default login'"
-        ))
+        Err(VertexAuthError::AdcTokenUnavailable)
     }
 
     /// Get token for authorized user
@@ -415,7 +445,7 @@ impl VertexAuth {
             VertexCredentials::WorkloadIdentity(config) => config
                 .quota_project_id
                 .clone()
-                .ok_or_else(|| anyhow::anyhow!("No project ID in workload identity config")),
+                .ok_or(VertexAuthError::MissingProjectId),
             _ => {
                 // Try to get from metadata service
                 let url = "http://metadata.google.internal/computeMetadata/v1/project/project-id";
@@ -429,7 +459,7 @@ impl VertexAuth {
                 response
                     .text()
                     .await
-                    .context("Failed to get project ID from metadata")
+                    .map_err(VertexAuthError::GetProjectIdFromMetadata)
             }
         }
     }
