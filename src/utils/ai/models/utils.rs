@@ -52,7 +52,24 @@ impl ModelUtils {
                     4096
                 }),
             }
-        } else if model_lower.starts_with("claude-3") {
+        } else if model_lower.starts_with("claude-opus-4-6") {
+            ModelCapabilities {
+                supports_function_calling: true,
+                supports_parallel_function_calling: false,
+                supports_tool_choice: true,
+                supports_response_schema: false,
+                supports_system_messages: true,
+                supports_web_search: false,
+                supports_url_context: true,
+                supports_vision: true,
+                supports_streaming: true,
+                max_tokens: Some(1_000_000),
+                context_window: Some(1_000_000),
+            }
+        } else if model_lower.starts_with("claude-opus-4")
+            || model_lower.starts_with("claude-sonnet-4")
+            || model_lower.starts_with("claude-3")
+        {
             ModelCapabilities {
                 supports_function_calling: true,
                 supports_parallel_function_calling: false,
@@ -172,6 +189,14 @@ impl ModelUtils {
             } else {
                 "gpt-3.5-turbo".to_string()
             }
+        } else if model_lower.starts_with("claude-opus-4-6") {
+            "claude-opus-4-6".to_string()
+        } else if model_lower.starts_with("claude-opus-4-5") {
+            "claude-opus-4-5".to_string()
+        } else if model_lower.starts_with("claude-sonnet-4-5") {
+            "claude-sonnet-4-5".to_string()
+        } else if model_lower.starts_with("claude-sonnet-4") {
+            "claude-sonnet-4".to_string()
         } else if model_lower.starts_with("claude-3") {
             if model_lower.contains("opus") {
                 "claude-3-opus".to_string()
@@ -202,6 +227,8 @@ impl ModelUtils {
         let known_models = [
             "gpt-4",
             "gpt-3.5-turbo",
+            "claude-opus-4",
+            "claude-sonnet-4",
             "claude-3",
             "claude-2",
             "gemini",
@@ -282,6 +309,10 @@ impl ModelUtils {
                 "gpt-3.5-turbo-16k".to_string(),
             ],
             "anthropic" => vec![
+                "claude-opus-4-6".to_string(),
+                "claude-opus-4-5".to_string(),
+                "claude-sonnet-4-5".to_string(),
+                "claude-sonnet-4".to_string(),
                 "claude-3-opus".to_string(),
                 "claude-3-sonnet".to_string(),
                 "claude-3-haiku".to_string(),
@@ -361,6 +392,15 @@ mod tests {
         assert!(caps.supports_vision);
         assert!(caps.supports_url_context);
         assert_eq!(caps.max_tokens, Some(200000));
+    }
+
+    #[test]
+    fn test_get_model_capabilities_claude_opus_46() {
+        let caps = ModelUtils::get_model_capabilities("claude-opus-4-6");
+        assert!(caps.supports_function_calling);
+        assert!(caps.supports_vision);
+        assert_eq!(caps.max_tokens, Some(1_000_000));
+        assert_eq!(caps.context_window, Some(1_000_000));
     }
 
     #[test]
@@ -554,6 +594,18 @@ mod tests {
         assert_eq!(
             ModelUtils::get_base_model("claude-3-haiku-20240307"),
             "claude-3-haiku"
+        );
+    }
+
+    #[test]
+    fn test_get_base_model_claude4() {
+        assert_eq!(
+            ModelUtils::get_base_model("claude-opus-4-6-20260114"),
+            "claude-opus-4-6"
+        );
+        assert_eq!(
+            ModelUtils::get_base_model("claude-sonnet-4-5-20250929"),
+            "claude-sonnet-4-5"
         );
     }
 

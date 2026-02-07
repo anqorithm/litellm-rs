@@ -281,6 +281,38 @@ fn get_anthropic_pricing(model: &str) -> Result<ModelPricing, CostError> {
     use chrono::Utc;
 
     let pricing = match model.to_lowercase().as_str() {
+        m if m.contains("claude-opus-4-6") => ModelPricing {
+            model: model.to_string(),
+            input_cost_per_1k_tokens: 0.005,
+            output_cost_per_1k_tokens: 0.025,
+            currency: "USD".to_string(),
+            updated_at: Utc::now(),
+            ..Default::default()
+        },
+        m if m.contains("claude-opus-4-5") => ModelPricing {
+            model: model.to_string(),
+            input_cost_per_1k_tokens: 0.005,
+            output_cost_per_1k_tokens: 0.025,
+            currency: "USD".to_string(),
+            updated_at: Utc::now(),
+            ..Default::default()
+        },
+        m if m.contains("claude-sonnet-4-5") => ModelPricing {
+            model: model.to_string(),
+            input_cost_per_1k_tokens: 0.003,
+            output_cost_per_1k_tokens: 0.015,
+            currency: "USD".to_string(),
+            updated_at: Utc::now(),
+            ..Default::default()
+        },
+        m if m.contains("claude-sonnet-4") => ModelPricing {
+            model: model.to_string(),
+            input_cost_per_1k_tokens: 0.003,
+            output_cost_per_1k_tokens: 0.015,
+            currency: "USD".to_string(),
+            updated_at: Utc::now(),
+            ..Default::default()
+        },
         m if m.contains("claude-3-5-sonnet") => ModelPricing {
             model: model.to_string(),
             input_cost_per_1k_tokens: 0.003,
@@ -297,10 +329,42 @@ fn get_anthropic_pricing(model: &str) -> Result<ModelPricing, CostError> {
             updated_at: Utc::now(),
             ..Default::default()
         },
+        m if m.contains("claude-3-opus") => ModelPricing {
+            model: model.to_string(),
+            input_cost_per_1k_tokens: 0.015,
+            output_cost_per_1k_tokens: 0.075,
+            currency: "USD".to_string(),
+            updated_at: Utc::now(),
+            ..Default::default()
+        },
+        m if m.contains("claude-3-sonnet") => ModelPricing {
+            model: model.to_string(),
+            input_cost_per_1k_tokens: 0.003,
+            output_cost_per_1k_tokens: 0.015,
+            currency: "USD".to_string(),
+            updated_at: Utc::now(),
+            ..Default::default()
+        },
         m if m.contains("claude-3-haiku") => ModelPricing {
             model: model.to_string(),
             input_cost_per_1k_tokens: 0.00025,
             output_cost_per_1k_tokens: 0.00125,
+            currency: "USD".to_string(),
+            updated_at: Utc::now(),
+            ..Default::default()
+        },
+        m if m.contains("claude-2.1") => ModelPricing {
+            model: model.to_string(),
+            input_cost_per_1k_tokens: 0.008,
+            output_cost_per_1k_tokens: 0.024,
+            currency: "USD".to_string(),
+            updated_at: Utc::now(),
+            ..Default::default()
+        },
+        m if m.contains("claude-instant") => ModelPricing {
+            model: model.to_string(),
+            input_cost_per_1k_tokens: 0.0008,
+            output_cost_per_1k_tokens: 0.0024,
             currency: "USD".to_string(),
             updated_at: Utc::now(),
             ..Default::default()
@@ -543,6 +607,24 @@ mod tests {
     #[test]
     fn test_get_anthropic_pricing_claude35_sonnet() {
         let pricing = get_model_pricing("claude-3-5-sonnet", "anthropic");
+        assert!(pricing.is_ok());
+        let pricing = pricing.unwrap();
+        assert_eq!(pricing.input_cost_per_1k_tokens, 0.003);
+        assert_eq!(pricing.output_cost_per_1k_tokens, 0.015);
+    }
+
+    #[test]
+    fn test_get_anthropic_pricing_claude_opus_46() {
+        let pricing = get_model_pricing("claude-opus-4-6", "anthropic");
+        assert!(pricing.is_ok());
+        let pricing = pricing.unwrap();
+        assert_eq!(pricing.input_cost_per_1k_tokens, 0.005);
+        assert_eq!(pricing.output_cost_per_1k_tokens, 0.025);
+    }
+
+    #[test]
+    fn test_get_anthropic_pricing_claude_sonnet_45() {
+        let pricing = get_model_pricing("claude-sonnet-4-5", "anthropic");
         assert!(pricing.is_ok());
         let pricing = pricing.unwrap();
         assert_eq!(pricing.input_cost_per_1k_tokens, 0.003);

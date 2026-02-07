@@ -8,6 +8,10 @@ impl ModelUtils {
             m if m.starts_with("gpt-4-turbo") => Some((0.01, 0.03)),
             m if m.starts_with("gpt-4") => Some((0.03, 0.06)),
             m if m.starts_with("gpt-3.5-turbo") => Some((0.0015, 0.002)),
+            m if m.contains("claude-opus-4-6") => Some((0.005, 0.025)),
+            m if m.contains("claude-opus-4-5") => Some((0.005, 0.025)),
+            m if m.contains("claude-sonnet-4-5") => Some((0.003, 0.015)),
+            m if m.contains("claude-sonnet-4") => Some((0.003, 0.015)),
             m if m.contains("claude-3-opus") => Some((0.015, 0.075)),
             m if m.contains("claude-3-sonnet") => Some((0.003, 0.015)),
             m if m.contains("claude-3-haiku") => Some((0.00025, 0.00125)),
@@ -21,6 +25,18 @@ impl ModelUtils {
         let mut aliases = vec![];
 
         match model_lower.as_str() {
+            "claude-opus-4-6" => {
+                aliases.extend_from_slice(&[
+                    "anthropic/claude-opus-4.6".to_string(),
+                    "claude-opus-4-6-20260114".to_string(),
+                ]);
+            }
+            "claude-sonnet-4-5" => {
+                aliases.extend_from_slice(&[
+                    "anthropic/claude-sonnet-4.5".to_string(),
+                    "claude-sonnet-4-5-20250929".to_string(),
+                ]);
+            }
             "gpt-4" => {
                 aliases.extend_from_slice(&[
                     "openai/gpt-4".to_string(),
@@ -123,6 +139,15 @@ mod tests {
     }
 
     #[test]
+    fn test_get_model_pricing_claude_opus_46() {
+        let pricing = ModelUtils::get_model_pricing("claude-opus-4-6");
+        assert!(pricing.is_some());
+        let (input, output) = pricing.unwrap();
+        assert!((input - 0.005).abs() < f64::EPSILON);
+        assert!((output - 0.025).abs() < f64::EPSILON);
+    }
+
+    #[test]
     fn test_get_model_pricing_claude_sonnet() {
         let pricing = ModelUtils::get_model_pricing("claude-3-sonnet");
         assert!(pricing.is_some());
@@ -166,6 +191,13 @@ mod tests {
         let aliases = ModelUtils::get_model_aliases("claude-3-opus");
         assert!(!aliases.is_empty());
         assert!(aliases.iter().any(|a| a.contains("anthropic")));
+    }
+
+    #[test]
+    fn test_get_model_aliases_claude_opus_46() {
+        let aliases = ModelUtils::get_model_aliases("claude-opus-4-6");
+        assert!(!aliases.is_empty());
+        assert!(aliases.iter().any(|a| a.contains("4.6")));
     }
 
     #[test]

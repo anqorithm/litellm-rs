@@ -34,6 +34,10 @@ impl TokenUtils {
     ];
 
     const CLAUDE_MODELS: &'static [&'static str] = &[
+        "claude-opus-4-6",
+        "claude-opus-4-5",
+        "claude-sonnet-4-5",
+        "claude-sonnet-4",
         "claude-3-opus",
         "claude-3-sonnet",
         "claude-3-haiku",
@@ -227,6 +231,9 @@ impl TokenUtils {
             m if m.contains("gpt-4") => Some(8192),
             m if m.contains("gpt-3.5-turbo-16k") => Some(16384),
             m if m.contains("gpt-3.5-turbo") => Some(4096),
+            m if m.contains("claude-opus-4-6") => Some(1_000_000),
+            m if m.contains("claude-opus-4") => Some(200000),
+            m if m.contains("claude-sonnet-4") => Some(200000),
             m if m.contains("claude-3") => Some(200000),
             m if m.contains("claude-2") => Some(100000),
             m if m.contains("claude-instant") => Some(100000),
@@ -242,6 +249,10 @@ impl TokenUtils {
         let (input_price, output_price) = match model.to_lowercase().as_str() {
             m if m.contains("gpt-4") => (0.03, 0.06),
             m if m.contains("gpt-3.5-turbo") => (0.0015, 0.002),
+            m if m.contains("claude-opus-4-6") => (0.005, 0.025),
+            m if m.contains("claude-opus-4-5") => (0.005, 0.025),
+            m if m.contains("claude-sonnet-4-5") => (0.003, 0.015),
+            m if m.contains("claude-sonnet-4") => (0.003, 0.015),
             m if m.contains("claude-3-opus") => (0.015, 0.075),
             m if m.contains("claude-3-sonnet") => (0.003, 0.015),
             m if m.contains("claude-3-haiku") => (0.00025, 0.00125),
@@ -263,6 +274,8 @@ impl TokenUtils {
         match model.to_lowercase().as_str() {
             m if m.contains("gpt-4") => true,
             m if m.contains("gpt-3.5-turbo") => true,
+            m if m.contains("claude-opus-4") => true,
+            m if m.contains("claude-sonnet-4") => true,
             m if m.contains("claude-3") => true,
             _ => false,
         }
@@ -349,6 +362,10 @@ mod tests {
         assert_eq!(
             TokenUtils::get_max_tokens_for_model("gpt-4-32k"),
             Some(32768)
+        );
+        assert_eq!(
+            TokenUtils::get_max_tokens_for_model("claude-opus-4-6"),
+            Some(1_000_000)
         );
         assert_eq!(
             TokenUtils::get_max_tokens_for_model("claude-3"),

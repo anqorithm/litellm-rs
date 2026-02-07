@@ -165,8 +165,9 @@ impl ConfigBuilder {
             api_key: api_key.to_string(),
             base_url: None,
             models: vec![
-                "claude-3-opus-20240229".to_string(),
-                "claude-3-sonnet-20240229".to_string(),
+                "claude-opus-4-6".to_string(),
+                "claude-sonnet-4-5".to_string(),
+                "claude-3-5-haiku-20241022".to_string(),
             ],
             enabled: true,
             weight: 1.0,

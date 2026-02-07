@@ -191,11 +191,22 @@ pub fn validate_usage(usage: &UsageTokens) -> Result<(), CostError> {
 pub fn get_model_category(model: &str) -> &'static str {
     let model_lower = model.to_lowercase();
 
-    if model_lower.contains("gpt-4o") || model_lower.contains("claude-3-5-sonnet") {
+    if model_lower.contains("gpt-4o")
+        || model_lower.contains("claude-opus-4-6")
+        || model_lower.contains("claude-opus-4-5")
+    {
         "flagship"
-    } else if model_lower.contains("gpt-4") || model_lower.contains("claude-3-sonnet") {
+    } else if model_lower.contains("gpt-4")
+        || model_lower.contains("claude-sonnet-4-5")
+        || model_lower.contains("claude-sonnet-4")
+        || model_lower.contains("claude-3-5-sonnet")
+        || model_lower.contains("claude-3-sonnet")
+    {
         "advanced"
-    } else if model_lower.contains("gpt-3.5") || model_lower.contains("claude-3-haiku") {
+    } else if model_lower.contains("gpt-3.5")
+        || model_lower.contains("claude-3-5-haiku")
+        || model_lower.contains("claude-3-haiku")
+    {
         "efficient"
     } else if model_lower.contains("mini") || model_lower.contains("nano") {
         "lightweight"

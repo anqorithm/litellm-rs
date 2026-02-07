@@ -627,6 +627,22 @@ mod tests {
     #[test]
     fn test_vertex_ai_model_claude_ids() {
         assert_eq!(
+            VertexAIModel::ClaudeOpus46.model_id(),
+            "claude-opus-4-6@20260114"
+        );
+        assert_eq!(
+            VertexAIModel::ClaudeOpus45.model_id(),
+            "claude-opus-4-5@20251110"
+        );
+        assert_eq!(
+            VertexAIModel::ClaudeSonnet45.model_id(),
+            "claude-sonnet-4-5@20250929"
+        );
+        assert_eq!(
+            VertexAIModel::ClaudeSonnet4.model_id(),
+            "claude-sonnet-4@20250514"
+        );
+        assert_eq!(
             VertexAIModel::Claude3Opus.model_id(),
             "claude-3-opus@20240229"
         );
@@ -680,6 +696,8 @@ mod tests {
 
     #[test]
     fn test_vertex_ai_model_is_partner_model() {
+        assert!(VertexAIModel::ClaudeOpus46.is_partner_model());
+        assert!(VertexAIModel::ClaudeSonnet45.is_partner_model());
         assert!(VertexAIModel::Claude3Opus.is_partner_model());
         assert!(VertexAIModel::Claude35Sonnet.is_partner_model());
         assert!(VertexAIModel::Llama3_70B.is_partner_model());
@@ -700,7 +718,8 @@ mod tests {
         assert!(VertexAIModel::Llama32_90B.supports_vision());
         assert!(VertexAIModel::Llama4Scout.supports_vision());
 
-        assert!(!VertexAIModel::Claude3Opus.supports_vision());
+        assert!(VertexAIModel::ClaudeOpus46.supports_vision());
+        assert!(VertexAIModel::Claude3Opus.supports_vision());
         assert!(!VertexAIModel::Llama3_70B.supports_vision());
     }
 
@@ -750,6 +769,8 @@ mod tests {
 
         // Gemini 1.5 Pro has largest
         assert_eq!(VertexAIModel::GeminiPro.max_context_tokens(), 2_097_152);
+
+        assert_eq!(VertexAIModel::ClaudeOpus46.max_context_tokens(), 1_000_000);
 
         // Claude
         assert_eq!(VertexAIModel::Claude3Opus.max_context_tokens(), 200_000);
@@ -831,6 +852,22 @@ mod tests {
 
     #[test]
     fn test_parse_vertex_model_claude() {
+        assert!(matches!(
+            parse_vertex_model("claude-opus-4-6"),
+            VertexAIModel::ClaudeOpus46
+        ));
+        assert!(matches!(
+            parse_vertex_model("claude-opus-4.6"),
+            VertexAIModel::ClaudeOpus46
+        ));
+        assert!(matches!(
+            parse_vertex_model("claude-sonnet-4-5"),
+            VertexAIModel::ClaudeSonnet45
+        ));
+        assert!(matches!(
+            parse_vertex_model("claude-sonnet-4"),
+            VertexAIModel::ClaudeSonnet4
+        ));
         assert!(matches!(
             parse_vertex_model("claude-3-opus"),
             VertexAIModel::Claude3Opus

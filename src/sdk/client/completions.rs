@@ -124,7 +124,7 @@ impl LLMClient {
 
         // Build request body
         let mut body = serde_json::json!({
-            "model": provider.models.first().unwrap_or(&"claude-3-sonnet-20240229".to_string()),
+            "model": provider.models.first().unwrap_or(&"claude-sonnet-4-5".to_string()),
             "messages": anthropic_messages,
             "max_tokens": request.options.max_tokens.unwrap_or(1000)
         });
@@ -184,7 +184,7 @@ impl LLMClient {
             provider
                 .models
                 .first()
-                .unwrap_or(&"claude-3-sonnet-20240229".to_string()),
+                .unwrap_or(&"claude-sonnet-4-5".to_string()),
         )
     }
 
