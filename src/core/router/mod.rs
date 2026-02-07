@@ -17,7 +17,6 @@
 //! - `execution` - Execution helpers and error conversion
 //! - `execute_impl` - Execute methods with retry and fallback support
 //! - `gateway_config` - Gateway configuration integration
-//! - `legacy_router` - Legacy Router implementation
 
 // New modular router components
 pub mod budget_routing;
