@@ -4,8 +4,8 @@ use super::*;
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::ProviderConfig;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
-use crate::core::types::common::ProviderCapability;
-use crate::core::types::requests::{ChatMessage, ChatRequest, MessageContent, MessageRole};
+use crate::core::types::ProviderCapability;
+use crate::core::types::{ChatMessage, ChatRequest, MessageContent, MessageRole};
 
 #[test]
 fn test_llamafile_provider_name() {

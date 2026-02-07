@@ -1,6 +1,6 @@
 //! DeepL Model Information
 
-use crate::core::types::common::{ModelInfo, ProviderCapability};
+use crate::core::types::{ModelInfo, ProviderCapability};
 
 pub fn get_supported_models() -> Vec<ModelInfo> {
     vec![ModelInfo {

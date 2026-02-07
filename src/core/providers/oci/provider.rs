@@ -468,8 +468,8 @@ fn transform_oci_response(response: serde_json::Value) -> Result<ChatResponse, P
         choices: vec![crate::core::types::responses::ChatChoice {
             index: 0,
             message: crate::core::types::ChatMessage {
-                role: crate::core::types::requests::MessageRole::Assistant,
-                content: Some(crate::core::types::requests::MessageContent::Text(text)),
+                role: crate::core::types::MessageRole::Assistant,
+                content: Some(crate::core::types::MessageContent::Text(text)),
                 thinking: None,
                 name: None,
                 tool_calls: None,

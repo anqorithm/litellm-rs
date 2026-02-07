@@ -5,8 +5,8 @@
 use self::config::{CohereApiVersion, CohereConfig};
 use super::*;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
-use crate::core::types::common::ProviderCapability;
-use crate::core::types::requests::{
+use crate::core::types::ProviderCapability;
+use crate::core::types::{
     ChatMessage, ChatRequest, EmbeddingInput, EmbeddingRequest, MessageContent, MessageRole,
 };
 use rerank::{RerankDocument, RerankRequest};
@@ -305,7 +305,7 @@ async fn test_transform_request_basic() {
         ..Default::default()
     };
 
-    let context = crate::core::types::common::RequestContext::default();
+    let context = crate::core::types::RequestContext::default();
     let result = provider.transform_request(request, context).await;
 
     assert!(result.is_ok());
@@ -331,7 +331,7 @@ async fn test_transform_request_with_params() {
         ..Default::default()
     };
 
-    let context = crate::core::types::common::RequestContext::default();
+    let context = crate::core::types::RequestContext::default();
     let body = provider.transform_request(request, context).await.unwrap();
 
     assert!((body["temperature"].as_f64().unwrap() - 0.7).abs() < 0.001);

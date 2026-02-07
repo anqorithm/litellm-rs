@@ -245,13 +245,13 @@ impl DatabricksProvider {
                         .get("role")
                         .and_then(|v| v.as_str())
                         .map(|r| match r {
-                            "assistant" => crate::core::types::requests::MessageRole::Assistant,
-                            "user" => crate::core::types::requests::MessageRole::User,
-                            "system" => crate::core::types::requests::MessageRole::System,
-                            "tool" => crate::core::types::requests::MessageRole::Tool,
-                            _ => crate::core::types::requests::MessageRole::Assistant,
+                            "assistant" => crate::core::types::MessageRole::Assistant,
+                            "user" => crate::core::types::MessageRole::User,
+                            "system" => crate::core::types::MessageRole::System,
+                            "tool" => crate::core::types::MessageRole::Tool,
+                            _ => crate::core::types::MessageRole::Assistant,
                         })
-                        .unwrap_or(crate::core::types::requests::MessageRole::Assistant);
+                        .unwrap_or(crate::core::types::MessageRole::Assistant);
 
                     let content = msg
                         .get("content")
@@ -271,7 +271,7 @@ impl DatabricksProvider {
                     }
                 } else {
                     ChatMessage {
-                        role: crate::core::types::requests::MessageRole::Assistant,
+                        role: crate::core::types::MessageRole::Assistant,
                         content: None,
                         thinking: None,
                         name: None,
@@ -646,7 +646,7 @@ mod tests {
         let provider = DatabricksProvider::new(config).unwrap();
 
         let messages = vec![ChatMessage {
-            role: crate::core::types::requests::MessageRole::User,
+            role: crate::core::types::MessageRole::User,
             content: Some(MessageContent::Text("Hello".to_string())),
             thinking: None,
             name: None,
@@ -670,7 +670,7 @@ mod tests {
         let request = ChatRequest {
             model: "dbrx-instruct".to_string(),
             messages: vec![ChatMessage {
-                role: crate::core::types::requests::MessageRole::User,
+                role: crate::core::types::MessageRole::User,
                 content: Some(MessageContent::Text("Test".to_string())),
                 thinking: None,
                 name: None,

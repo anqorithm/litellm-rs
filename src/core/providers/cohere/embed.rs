@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 
 use super::config::CohereConfig;
 use super::error::CohereError;
-use crate::core::types::requests::{EmbeddingInput, EmbeddingRequest};
+use crate::core::types::{EmbeddingInput, EmbeddingRequest};
 use crate::core::types::responses::{EmbeddingData, EmbeddingResponse, Usage};
 
 /// Text and image inputs for Cohere embeddings

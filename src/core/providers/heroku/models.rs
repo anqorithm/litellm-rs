@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::sync::OnceLock;
 
 use crate::core::providers::base::get_pricing_db;
-use crate::core::types::common::ModelInfo;
+use crate::core::types::ModelInfo;
 
 use super::config::PROVIDER_NAME;
 

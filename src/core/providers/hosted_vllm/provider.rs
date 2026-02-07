@@ -249,7 +249,7 @@ impl HostedVLLMProvider {
     pub async fn batch_completions(
         &self,
         model: &str,
-        messages_batch: Vec<Vec<crate::core::types::requests::ChatMessage>>,
+        messages_batch: Vec<Vec<crate::core::types::ChatMessage>>,
         optional_params: Option<BatchParams>,
     ) -> Result<Vec<ChatResponse>, ProviderError> {
         let params = optional_params.unwrap_or_default();

@@ -1,7 +1,7 @@
 //! Provider selection methods for different routing strategies
 
 use super::types::RoutingData;
-use crate::core::types::common::RequestContext;
+use crate::core::types::RequestContext;
 use crate::utils::error::{GatewayError, Result};
 use parking_lot::RwLock;
 use std::sync::atomic::{AtomicUsize, Ordering};

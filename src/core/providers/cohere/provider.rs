@@ -572,8 +572,8 @@ impl LLMProvider for CohereProvider {
 
         // Get input count for usage estimation
         let input_count = match &request.input {
-            crate::core::types::requests::EmbeddingInput::Text(_) => 1,
-            crate::core::types::requests::EmbeddingInput::Array(arr) => arr.len(),
+            crate::core::types::EmbeddingInput::Text(_) => 1,
+            crate::core::types::EmbeddingInput::Array(arr) => arr.len(),
         };
 
         CohereEmbeddingHandler::transform_response(response_json, &request.model, input_count)
@@ -629,7 +629,7 @@ impl LLMProvider for CohereProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::requests::{ChatMessage, MessageContent, MessageRole};
+    use crate::core::types::{ChatMessage, MessageContent, MessageRole};
 
     fn create_test_config() -> CohereConfig {
         CohereConfig::new("test_api_key")

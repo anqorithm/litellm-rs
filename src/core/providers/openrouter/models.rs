@@ -2,7 +2,7 @@
 //!
 //! Model specifications and registry for OpenRouter API
 
-use crate::core::types::common::ModelInfo;
+use crate::core::types::ModelInfo;
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
@@ -37,7 +37,7 @@ pub struct OpenRouterModelRegistry {
 
 impl OpenRouterModelRegistry {
     /// Expected number of OpenRouter models for capacity hint
-    const EXPECTED_MODEL_COUNT: usize = 12;
+    const EXPECTED_MODEL_COUNT: usize = 16;
 
     /// Create a new model registry
     pub fn new() -> Self {
@@ -88,17 +88,17 @@ impl OpenRouterModelRegistry {
                 currency: "USD".to_string(),
                 capabilities: {
                     let mut caps =
-                        vec![crate::core::types::common::ProviderCapability::ChatCompletion];
+                        vec![crate::core::types::ProviderCapability::ChatCompletion];
                     if spec.features.contains(&OpenRouterModelFeature::Streaming) {
                         caps.push(
-                            crate::core::types::common::ProviderCapability::ChatCompletionStream,
+                            crate::core::types::ProviderCapability::ChatCompletionStream,
                         );
                     }
                     if spec
                         .features
                         .contains(&OpenRouterModelFeature::FunctionCalling)
                     {
-                        caps.push(crate::core::types::common::ProviderCapability::FunctionCalling);
+                        caps.push(crate::core::types::ProviderCapability::FunctionCalling);
                     }
                     caps
                 },
@@ -160,6 +160,70 @@ impl OpenRouterModelRegistry {
         });
 
         // Anthropic models via OpenRouter
+        self.register_model(OpenRouterModelSpec {
+            id: "anthropic/claude-opus-4.6".to_string(),
+            name: "Claude Opus 4.6".to_string(),
+            context_length: 1_000_000,
+            max_output_tokens: Some(32_000),
+            features: vec![
+                OpenRouterModelFeature::ChatCompletion,
+                OpenRouterModelFeature::Streaming,
+                OpenRouterModelFeature::FunctionCalling,
+                OpenRouterModelFeature::Vision,
+            ],
+            prompt_cost: Some(5.0),
+            completion_cost: Some(25.0),
+            provider: "anthropic".to_string(),
+        });
+
+        self.register_model(OpenRouterModelSpec {
+            id: "anthropic/claude-opus-4.5".to_string(),
+            name: "Claude Opus 4.5".to_string(),
+            context_length: 200000,
+            max_output_tokens: Some(32_000),
+            features: vec![
+                OpenRouterModelFeature::ChatCompletion,
+                OpenRouterModelFeature::Streaming,
+                OpenRouterModelFeature::FunctionCalling,
+                OpenRouterModelFeature::Vision,
+            ],
+            prompt_cost: Some(5.0),
+            completion_cost: Some(25.0),
+            provider: "anthropic".to_string(),
+        });
+
+        self.register_model(OpenRouterModelSpec {
+            id: "anthropic/claude-sonnet-4.5".to_string(),
+            name: "Claude Sonnet 4.5".to_string(),
+            context_length: 200000,
+            max_output_tokens: Some(16_000),
+            features: vec![
+                OpenRouterModelFeature::ChatCompletion,
+                OpenRouterModelFeature::Streaming,
+                OpenRouterModelFeature::FunctionCalling,
+                OpenRouterModelFeature::Vision,
+            ],
+            prompt_cost: Some(3.0),
+            completion_cost: Some(15.0),
+            provider: "anthropic".to_string(),
+        });
+
+        self.register_model(OpenRouterModelSpec {
+            id: "anthropic/claude-sonnet-4".to_string(),
+            name: "Claude Sonnet 4".to_string(),
+            context_length: 200000,
+            max_output_tokens: Some(16_000),
+            features: vec![
+                OpenRouterModelFeature::ChatCompletion,
+                OpenRouterModelFeature::Streaming,
+                OpenRouterModelFeature::FunctionCalling,
+                OpenRouterModelFeature::Vision,
+            ],
+            prompt_cost: Some(3.0),
+            completion_cost: Some(15.0),
+            provider: "anthropic".to_string(),
+        });
+
         self.register_model(OpenRouterModelSpec {
             id: "anthropic/claude-3-opus".to_string(),
             name: "Claude 3 Opus".to_string(),
@@ -353,6 +417,12 @@ mod tests {
     #[test]
     fn test_anthropic_models() {
         let registry = OpenRouterModelRegistry::new();
+
+        let claude_opus_46 = registry.get_model_spec("anthropic/claude-opus-4.6");
+        assert!(claude_opus_46.is_some());
+
+        let claude_sonnet_45 = registry.get_model_spec("anthropic/claude-sonnet-4.5");
+        assert!(claude_sonnet_45.is_some());
 
         let claude_opus = registry.get_model_spec("anthropic/claude-3-opus");
         assert!(claude_opus.is_some());

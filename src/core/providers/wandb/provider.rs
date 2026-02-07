@@ -410,7 +410,7 @@ impl LLMProvider for WandbProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::requests::{EmbeddingInput, EmbeddingRequest};
+    use crate::core::types::{EmbeddingInput, EmbeddingRequest};
 
     fn create_test_config() -> WandbConfig {
         WandbConfig::new("test-api-key")

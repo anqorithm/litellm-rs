@@ -164,8 +164,8 @@ impl V0ChatHandler {
             .map(|msg| V0Message {
                 role: msg.role.to_string(),
                 content: match msg.content {
-                    Some(crate::core::types::requests::MessageContent::Text(text)) => text,
-                    Some(crate::core::types::requests::MessageContent::Parts(_)) => {
+                    Some(crate::core::types::MessageContent::Text(text)) => text,
+                    Some(crate::core::types::MessageContent::Parts(_)) => {
                         // V0 doesn't support multimodal content, extract text only
                         String::new()
                     }
@@ -262,7 +262,7 @@ impl V0ChatHandler {
                         "function" => MessageRole::Function,
                         _ => MessageRole::Assistant, // default fallback
                     },
-                    content: Some(crate::core::types::requests::MessageContent::Text(
+                    content: Some(crate::core::types::MessageContent::Text(
                         choice.message.content,
                     )),
                     thinking: None,
@@ -337,7 +337,7 @@ impl V0ChatHandler {
             }
 
             match &message.content {
-                Some(crate::core::types::requests::MessageContent::Text(text)) => {
+                Some(crate::core::types::MessageContent::Text(text)) => {
                     if text.is_empty() {
                         return Err(ProviderError::invalid_request(
                             PROVIDER_NAME,
@@ -345,7 +345,7 @@ impl V0ChatHandler {
                         ));
                     }
                 }
-                Some(crate::core::types::requests::MessageContent::Parts(array)) => {
+                Some(crate::core::types::MessageContent::Parts(array)) => {
                     if array.is_empty() {
                         return Err(ProviderError::invalid_request(
                             PROVIDER_NAME,
@@ -372,7 +372,7 @@ impl V0ChatHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::requests::{ChatMessage, MessageContent, MessageRole};
+    use crate::core::types::{ChatMessage, MessageContent, MessageRole};
 
     #[test]
     fn test_transform_request() {

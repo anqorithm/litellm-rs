@@ -426,7 +426,7 @@ impl BatchEmbeddingHandler {
         for chunk in inputs.chunks(self.batch_size) {
             let request = EmbeddingRequest {
                 model: self.model.model_id(),
-                input: crate::core::types::requests::EmbeddingInput::Array(chunk.to_vec()),
+                input: crate::core::types::EmbeddingInput::Array(chunk.to_vec()),
                 encoding_format: None,
                 dimensions: None,
                 user: None,

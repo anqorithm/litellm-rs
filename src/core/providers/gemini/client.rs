@@ -478,7 +478,7 @@ impl GeminiClient {
 
             choices.push(ChatChoice {
                 index: index as u32,
-                message: crate::core::types::requests::ChatMessage {
+                message: crate::core::types::ChatMessage {
                     role: MessageRole::Assistant,
                     content: Some(MessageContent::Text(message_content)),
                     thinking: None,
@@ -595,7 +595,7 @@ mod tests {
                     text: "What's in this image?".to_string(),
                 },
                 ContentPart::Image {
-                    source: crate::core::types::requests::ImageSource {
+                    source: crate::core::types::ImageSource {
                         data: "test".to_string(),
                         media_type: "image/png".to_string(),
                     },

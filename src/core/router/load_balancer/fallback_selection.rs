@@ -3,7 +3,7 @@
 use super::core::LoadBalancer;
 use crate::core::providers::Provider;
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::types::common::RequestContext;
+use crate::core::types::RequestContext;
 use tracing::{debug, info, warn};
 
 impl LoadBalancer {

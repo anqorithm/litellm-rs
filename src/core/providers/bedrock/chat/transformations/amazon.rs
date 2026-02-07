@@ -2,7 +2,7 @@
 
 use crate::core::providers::bedrock::model_config::ModelConfig;
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::types::requests::ChatRequest;
+use crate::core::types::ChatRequest;
 use serde_json::{Value, json};
 
 #[cfg(test)]
@@ -58,7 +58,7 @@ pub fn transform_nova_request(
                         MessageContent::Parts(parts) => parts
                             .iter()
                             .filter_map(|part| {
-                                if let crate::core::types::requests::ContentPart::Text { text } =
+                                if let crate::core::types::ContentPart::Text { text } =
                                     part
                                 {
                                     Some(text.clone())
@@ -85,30 +85,30 @@ pub fn transform_nova_request(
                         Some(MessageContent::Parts(parts)) => {
                             parts.iter().filter_map(|part| {
                                 match part {
-                                    crate::core::types::requests::ContentPart::Text { text } => {
+                                    crate::core::types::ContentPart::Text { text } => {
                                         Some(json!({"text": text}))
                                     }
-                                    crate::core::types::requests::ContentPart::Image { .. } => {
+                                    crate::core::types::ContentPart::Image { .. } => {
                                         // TODO: Handle image content for Nova Canvas
                                         None
                                     }
-                                    crate::core::types::requests::ContentPart::ImageUrl { .. } => {
+                                    crate::core::types::ContentPart::ImageUrl { .. } => {
                                         // TODO: Handle image URL content
                                         None
                                     }
-                                    crate::core::types::requests::ContentPart::Audio { .. } => {
+                                    crate::core::types::ContentPart::Audio { .. } => {
                                         // TODO: Handle audio content
                                         None
                                     }
-                                    crate::core::types::requests::ContentPart::Document { .. } => {
+                                    crate::core::types::ContentPart::Document { .. } => {
                                         // TODO: Handle document content
                                         None
                                     }
-                                    crate::core::types::requests::ContentPart::ToolResult { .. } => {
+                                    crate::core::types::ContentPart::ToolResult { .. } => {
                                         // TODO: Handle tool result content
                                         None
                                     }
-                                    crate::core::types::requests::ContentPart::ToolUse { .. } => {
+                                    crate::core::types::ContentPart::ToolUse { .. } => {
                                         // TODO: Handle tool use content
                                         None
                                     }

@@ -11,7 +11,7 @@ pub mod mistral;
 
 use crate::core::providers::bedrock::model_config::{BedrockModelFamily, ModelConfig};
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::types::requests::ChatRequest;
+use crate::core::types::ChatRequest;
 use serde_json::Value;
 
 /// Transform request based on model family
@@ -55,7 +55,7 @@ pub fn messages_to_prompt(messages: &[crate::core::types::ChatMessage]) -> Strin
                 parts
                     .iter()
                     .filter_map(|part| {
-                        if let crate::core::types::requests::ContentPart::Text { text } = part {
+                        if let crate::core::types::ContentPart::Text { text } = part {
                             Some(text.clone())
                         } else {
                             None

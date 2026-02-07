@@ -4,7 +4,7 @@
 
 use super::transformations;
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::types::requests::ChatRequest;
+use crate::core::types::ChatRequest;
 use serde_json::Value;
 
 /// Execute an invoke API request

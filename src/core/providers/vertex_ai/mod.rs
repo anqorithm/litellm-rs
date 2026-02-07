@@ -136,6 +136,10 @@ pub enum VertexAIModel {
     GeminiUltra, // gemini-ultra (deprecated)
 
     // Partner models - Claude
+    ClaudeOpus46, // claude-opus-4-6@20260114
+    ClaudeOpus45, // claude-opus-4-5@20251110
+    ClaudeSonnet45, // claude-sonnet-4-5@20250929
+    ClaudeSonnet4, // claude-sonnet-4@20250514
     Claude3Opus,
     Claude3Sonnet,
     Claude3Haiku,
@@ -189,6 +193,10 @@ impl VertexAIModel {
             Self::GeminiUltra => "gemini-ultra".to_string(),
 
             // Claude models
+            Self::ClaudeOpus46 => "claude-opus-4-6@20260114".to_string(),
+            Self::ClaudeOpus45 => "claude-opus-4-5@20251110".to_string(),
+            Self::ClaudeSonnet45 => "claude-sonnet-4-5@20250929".to_string(),
+            Self::ClaudeSonnet4 => "claude-sonnet-4@20250514".to_string(),
             Self::Claude3Opus => "claude-3-opus@20240229".to_string(),
             Self::Claude3Sonnet => "claude-3-sonnet@20240229".to_string(),
             Self::Claude3Haiku => "claude-3-haiku@20240307".to_string(),
@@ -240,7 +248,11 @@ impl VertexAIModel {
     pub fn is_partner_model(&self) -> bool {
         matches!(
             self,
-            Self::Claude3Opus
+            Self::ClaudeOpus46
+                | Self::ClaudeOpus45
+                | Self::ClaudeSonnet45
+                | Self::ClaudeSonnet4
+                | Self::Claude3Opus
                 | Self::Claude3Sonnet
                 | Self::Claude3Haiku
                 | Self::Claude35Sonnet
@@ -275,6 +287,14 @@ impl VertexAIModel {
                 | Self::GeminiProVision
                 | Self::GeminiFlash
                 | Self::GeminiFlash8B
+                | Self::ClaudeOpus46
+                | Self::ClaudeOpus45
+                | Self::ClaudeSonnet45
+                | Self::ClaudeSonnet4
+                | Self::Claude3Opus
+                | Self::Claude3Sonnet
+                | Self::Claude3Haiku
+                | Self::Claude35Sonnet
                 | Self::Llama32_90B
                 | Self::Llama4Scout
                 | Self::Llama4Maverick
@@ -296,7 +316,11 @@ impl VertexAIModel {
         self.is_gemini()
             || matches!(
                 self,
-                Self::Claude3Opus
+                Self::ClaudeOpus46
+                    | Self::ClaudeOpus45
+                    | Self::ClaudeSonnet45
+                    | Self::ClaudeSonnet4
+                    | Self::Claude3Opus
                     | Self::Claude3Sonnet
                     | Self::Claude3Haiku
                     | Self::Claude35Sonnet
@@ -336,6 +360,10 @@ impl VertexAIModel {
             Self::GeminiUltra => 1_048_576,
 
             // Claude models
+            Self::ClaudeOpus46 => 1_000_000,
+            Self::ClaudeOpus45 => 200_000,
+            Self::ClaudeSonnet45 => 200_000,
+            Self::ClaudeSonnet4 => 200_000,
             Self::Claude3Opus => 200_000,
             Self::Claude3Sonnet => 200_000,
             Self::Claude3Haiku => 200_000,
@@ -414,6 +442,18 @@ pub fn parse_vertex_model(model: &str) -> VertexAIModel {
     }
 
     // Claude models (check more specific first)
+    if model_lower.contains("claude-opus-4-6") || model_lower.contains("claude-opus-4.6") {
+        return VertexAIModel::ClaudeOpus46;
+    }
+    if model_lower.contains("claude-opus-4-5") || model_lower.contains("claude-opus-4.5") {
+        return VertexAIModel::ClaudeOpus45;
+    }
+    if model_lower.contains("claude-sonnet-4-5") || model_lower.contains("claude-sonnet-4.5") {
+        return VertexAIModel::ClaudeSonnet45;
+    }
+    if model_lower.contains("claude-sonnet-4") && !model_lower.contains("claude-sonnet-4-5") {
+        return VertexAIModel::ClaudeSonnet4;
+    }
     if model_lower.contains("claude-3-5-sonnet") || model_lower.contains("claude-3.5-sonnet") {
         return VertexAIModel::Claude35Sonnet;
     }

@@ -27,7 +27,7 @@ impl MoonshotChatHandler {
     /// Transform a standard chat request to Moonshot format
     pub fn transform_request(
         &self,
-        request: crate::core::types::requests::ChatRequest,
+        request: crate::core::types::ChatRequest,
     ) -> Result<Value, MoonshotError> {
         debug!("Transforming chat request for Moonshot");
 

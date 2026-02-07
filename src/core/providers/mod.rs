@@ -140,8 +140,8 @@ mod unified_provider_tests;
 
 // Export main types
 pub use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
-use crate::core::types::common::{ProviderCapability, RequestContext};
-use crate::core::types::requests::{ChatRequest, EmbeddingRequest, ImageGenerationRequest};
+use crate::core::types::{ProviderCapability, RequestContext};
+use crate::core::types::{ChatRequest, EmbeddingRequest, ImageGenerationRequest};
 use crate::core::types::responses::{
     ChatChunk, ChatResponse, EmbeddingResponse, ImageGenerationResponse,
 };
@@ -539,13 +539,13 @@ impl Provider {
     }
 
     /// Execute health check
-    pub async fn health_check(&self) -> crate::core::types::common::HealthStatus {
+    pub async fn health_check(&self) -> crate::core::types::HealthStatus {
         use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
         dispatch_provider_async_direct!(self, health_check)
     }
 
     /// List available models
-    pub fn list_models(&self) -> &[crate::core::types::common::ModelInfo] {
+    pub fn list_models(&self) -> &[crate::core::types::ModelInfo] {
         use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
         dispatch_provider_value!(self, models)
     }
@@ -658,7 +658,7 @@ impl Provider {
     pub async fn get_model(
         &self,
         model_id: &str,
-    ) -> Result<Option<crate::core::types::common::ModelInfo>, UnifiedProviderError> {
+    ) -> Result<Option<crate::core::types::ModelInfo>, UnifiedProviderError> {
         // Look through available models for this provider
         let models = self.list_models();
         for model in models {
@@ -676,7 +676,7 @@ impl Provider {
 ///
 /// This is the main factory function for creating providers
 pub async fn create_provider(
-    config: crate::core::types::common::ProviderConfig,
+    config: crate::core::types::ProviderConfig,
 ) -> Result<Provider, ProviderError> {
     // Determine provider type from config
     let provider_type = match config.name.as_str() {

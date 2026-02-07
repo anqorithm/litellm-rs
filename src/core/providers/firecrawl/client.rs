@@ -1,7 +1,7 @@
 //! Firecrawl Client
 
-use crate::core::types::common::ModelInfo;
-use crate::core::types::requests::ChatRequest;
+use crate::core::types::ModelInfo;
+use crate::core::types::ChatRequest;
 use serde_json::Value;
 
 pub struct FirecrawlClient;

@@ -5,7 +5,7 @@
 
 #[cfg(test)]
 mod tests {
-    use litellm_rs::core::types::requests::{
+    use litellm_rs::core::types::{
         ChatMessage, ChatRequest, MessageContent, MessageRole,
     };
 
@@ -215,7 +215,7 @@ mod tests {
     async fn test_groq_provider_chat_completion() {
         use litellm_rs::core::providers::groq::GroqProvider;
         use litellm_rs::core::traits::provider::llm_provider::trait_definition::LLMProvider;
-        use litellm_rs::core::types::common::RequestContext;
+        use litellm_rs::core::types::RequestContext;
 
         let api_key =
             std::env::var("GROQ_API_KEY").expect("GROQ_API_KEY environment variable not set");

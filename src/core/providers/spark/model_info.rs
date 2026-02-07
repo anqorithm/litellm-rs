@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
-use crate::core::types::common::ModelInfo;
+use crate::core::types::ModelInfo;
 
 /// Model features
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -88,8 +88,8 @@ impl SparkModelRegistry {
                     output_cost_per_1k_tokens: Some(0.006),
                     currency: "USD".to_string(),
                     capabilities: vec![
-                        crate::core::types::common::ProviderCapability::ChatCompletion,
-                        crate::core::types::common::ProviderCapability::ChatCompletionStream,
+                        crate::core::types::ProviderCapability::ChatCompletion,
+                        crate::core::types::ProviderCapability::ChatCompletionStream,
                     ],
                     ..Default::default()
                 },
@@ -128,8 +128,8 @@ impl SparkModelRegistry {
                     output_cost_per_1k_tokens: Some(0.005),
                     currency: "USD".to_string(),
                     capabilities: vec![
-                        crate::core::types::common::ProviderCapability::ChatCompletion,
-                        crate::core::types::common::ProviderCapability::ChatCompletionStream,
+                        crate::core::types::ProviderCapability::ChatCompletion,
+                        crate::core::types::ProviderCapability::ChatCompletionStream,
                     ],
                     ..Default::default()
                 },
@@ -168,8 +168,8 @@ impl SparkModelRegistry {
                     output_cost_per_1k_tokens: Some(0.004),
                     currency: "USD".to_string(),
                     capabilities: vec![
-                        crate::core::types::common::ProviderCapability::ChatCompletion,
-                        crate::core::types::common::ProviderCapability::ChatCompletionStream,
+                        crate::core::types::ProviderCapability::ChatCompletion,
+                        crate::core::types::ProviderCapability::ChatCompletionStream,
                     ],
                     ..Default::default()
                 },
@@ -207,8 +207,8 @@ impl SparkModelRegistry {
                     output_cost_per_1k_tokens: Some(0.003),
                     currency: "USD".to_string(),
                     capabilities: vec![
-                        crate::core::types::common::ProviderCapability::ChatCompletion,
-                        crate::core::types::common::ProviderCapability::ChatCompletionStream,
+                        crate::core::types::ProviderCapability::ChatCompletion,
+                        crate::core::types::ProviderCapability::ChatCompletionStream,
                     ],
                     ..Default::default()
                 },

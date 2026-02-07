@@ -466,7 +466,7 @@ impl LLMProvider for MoonshotProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::requests::{ChatMessage, MessageContent, MessageRole};
+    use crate::core::types::{ChatMessage, MessageContent, MessageRole};
 
     fn create_test_config() -> MoonshotConfig {
         MoonshotConfig {
@@ -782,7 +782,7 @@ mod tests {
     async fn test_embeddings_not_supported() {
         let provider = MoonshotProvider::new(create_test_config()).await.unwrap();
 
-        let request = crate::core::types::requests::EmbeddingRequest {
+        let request = crate::core::types::EmbeddingRequest {
             model: "moonshot-v1-8k".to_string(),
             input: crate::core::types::embedding::EmbeddingInput::Text("test".to_string()),
             encoding_format: None,

@@ -3,7 +3,7 @@
 //! Handles Stability AI and Amazon Nova Canvas image generation
 
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::types::requests::ImageGenerationRequest;
+use crate::core::types::ImageGenerationRequest;
 use crate::core::types::responses::{ImageData, ImageGenerationResponse};
 use serde::{Deserialize, Serialize};
 

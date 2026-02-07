@@ -3,7 +3,7 @@
 use super::core::LoadBalancer;
 use super::deployment_info::DeploymentInfo;
 use crate::core::providers::Provider;
-use crate::core::types::common::RequestContext;
+use crate::core::types::RequestContext;
 use crate::utils::error::{GatewayError, Result};
 use std::collections::HashMap;
 use std::sync::Arc;

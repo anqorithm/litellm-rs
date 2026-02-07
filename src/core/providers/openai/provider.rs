@@ -244,7 +244,7 @@ impl OpenAIProvider {
                 // Rough estimation: 1 token per 4 characters
                 if let Some(content) = &msg.content {
                     match content {
-                        crate::core::types::requests::MessageContent::Text(text) => text.len() / 4,
+                        crate::core::types::MessageContent::Text(text) => text.len() / 4,
                         _ => 100, // Default for non-text content
                     }
                 } else {

@@ -13,7 +13,7 @@
 use serde_json::Value;
 
 use crate::core::providers::base::HttpMethod;
-use crate::core::types::requests::EmbeddingRequest;
+use crate::core::types::EmbeddingRequest;
 use crate::core::types::responses::EmbeddingResponse;
 
 use super::advanced_chat::{AdvancedChatRequest, AdvancedChatUtils};

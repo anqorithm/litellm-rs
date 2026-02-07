@@ -7,8 +7,8 @@
 mod tests {
     use litellm_rs::core::providers::deepseek::DeepSeekProvider;
     use litellm_rs::core::traits::provider::llm_provider::trait_definition::LLMProvider;
-    use litellm_rs::core::types::common::RequestContext;
-    use litellm_rs::core::types::requests::{
+    use litellm_rs::core::types::RequestContext;
+    use litellm_rs::core::types::{
         ChatMessage, ChatRequest, MessageContent, MessageRole,
     };
 

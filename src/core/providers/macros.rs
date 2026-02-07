@@ -570,7 +570,7 @@ macro_rules! define_openai_compatible_provider {
         pub struct $struct_name {
             config: $config_type,
             http_client: std::sync::Arc<reqwest::Client>,
-            supported_models: Vec<$crate::core::types::common::ModelInfo>,
+            supported_models: Vec<$crate::core::types::ModelInfo>,
         }
 
         impl $struct_name {
@@ -627,14 +627,14 @@ macro_rules! define_openai_compatible_provider {
                 $provider_name
             }
 
-            fn capabilities(&self) -> &'static [$crate::core::types::common::ProviderCapability] {
+            fn capabilities(&self) -> &'static [$crate::core::types::ProviderCapability] {
                 &[
-                    $crate::core::types::common::ProviderCapability::ChatCompletion,
-                    $crate::core::types::common::ProviderCapability::ChatCompletionStream,
+                    $crate::core::types::ProviderCapability::ChatCompletion,
+                    $crate::core::types::ProviderCapability::ChatCompletionStream,
                 ]
             }
 
-            fn models(&self) -> &[$crate::core::types::common::ModelInfo] {
+            fn models(&self) -> &[$crate::core::types::ModelInfo] {
                 &self.supported_models
             }
 
@@ -652,8 +652,8 @@ macro_rules! define_openai_compatible_provider {
 
             async fn transform_request(
                 &self,
-                request: $crate::core::types::requests::ChatRequest,
-                _context: $crate::core::types::common::RequestContext,
+                request: $crate::core::types::ChatRequest,
+                _context: $crate::core::types::RequestContext,
             ) -> Result<serde_json::Value, Self::Error> {
                 let mut req = serde_json::json!({
                     "model": request.model,
@@ -744,8 +744,8 @@ macro_rules! define_openai_compatible_provider {
 
             async fn chat_completion(
                 &self,
-                request: $crate::core::types::requests::ChatRequest,
-                context: $crate::core::types::common::RequestContext,
+                request: $crate::core::types::ChatRequest,
+                context: $crate::core::types::RequestContext,
             ) -> Result<$crate::core::types::responses::ChatResponse, Self::Error> {
                 let base_url = self
                     .config
@@ -816,8 +816,8 @@ macro_rules! define_openai_compatible_provider {
 
             async fn chat_completion_stream(
                 &self,
-                _request: $crate::core::types::requests::ChatRequest,
-                _context: $crate::core::types::common::RequestContext,
+                _request: $crate::core::types::ChatRequest,
+                _context: $crate::core::types::RequestContext,
             ) -> Result<
                 std::pin::Pin<
                     Box<
@@ -834,8 +834,8 @@ macro_rules! define_openai_compatible_provider {
                 ))
             }
 
-            async fn health_check(&self) -> $crate::core::types::common::HealthStatus {
-                $crate::core::types::common::HealthStatus::Healthy
+            async fn health_check(&self) -> $crate::core::types::HealthStatus {
+                $crate::core::types::HealthStatus::Healthy
             }
 
             async fn calculate_cost(
@@ -1004,7 +1004,7 @@ macro_rules! define_http_provider_with_hooks {
         pub struct $struct_name {
             config: $config_type,
             http_client: std::sync::Arc<reqwest::Client>,
-            supported_models: Vec<$crate::core::types::common::ModelInfo>,
+            supported_models: Vec<$crate::core::types::ModelInfo>,
         }
 
         impl $struct_name {
@@ -1052,11 +1052,11 @@ macro_rules! define_http_provider_with_hooks {
                 $provider_name
             }
 
-            fn capabilities(&self) -> &'static [$crate::core::types::common::ProviderCapability] {
+            fn capabilities(&self) -> &'static [$crate::core::types::ProviderCapability] {
                 $capabilities
             }
 
-            fn models(&self) -> &[$crate::core::types::common::ModelInfo] {
+            fn models(&self) -> &[$crate::core::types::ModelInfo] {
                 &self.supported_models
             }
 
@@ -1074,8 +1074,8 @@ macro_rules! define_http_provider_with_hooks {
 
             async fn transform_request(
                 &self,
-                request: $crate::core::types::requests::ChatRequest,
-                _context: $crate::core::types::common::RequestContext,
+                request: $crate::core::types::ChatRequest,
+                _context: $crate::core::types::RequestContext,
             ) -> Result<serde_json::Value, Self::Error> {
                 ($request_transform)(self, request)
             }
@@ -1095,8 +1095,8 @@ macro_rules! define_http_provider_with_hooks {
 
             async fn chat_completion(
                 &self,
-                request: $crate::core::types::requests::ChatRequest,
-                context: $crate::core::types::common::RequestContext,
+                request: $crate::core::types::ChatRequest,
+                context: $crate::core::types::RequestContext,
             ) -> Result<$crate::core::types::responses::ChatResponse, Self::Error> {
                 let url = ($url_builder)(self);
 
@@ -1141,8 +1141,8 @@ macro_rules! define_http_provider_with_hooks {
 
             async fn chat_completion_stream(
                 &self,
-                _request: $crate::core::types::requests::ChatRequest,
-                _context: $crate::core::types::common::RequestContext,
+                _request: $crate::core::types::ChatRequest,
+                _context: $crate::core::types::RequestContext,
             ) -> Result<
                 std::pin::Pin<
                     Box<
@@ -1159,7 +1159,7 @@ macro_rules! define_http_provider_with_hooks {
                 ))
             }
 
-            async fn health_check(&self) -> $crate::core::types::common::HealthStatus {
+            async fn health_check(&self) -> $crate::core::types::HealthStatus {
                 ($health_check)(self).await
             }
 
@@ -1207,7 +1207,7 @@ macro_rules! define_pooled_http_provider_with_hooks {
         pub struct $struct_name {
             config: $config_type,
             pool_manager: std::sync::Arc<$crate::core::providers::base::GlobalPoolManager>,
-            supported_models: Vec<$crate::core::types::common::ModelInfo>,
+            supported_models: Vec<$crate::core::types::ModelInfo>,
         }
 
         impl $struct_name {
@@ -1259,11 +1259,11 @@ macro_rules! define_pooled_http_provider_with_hooks {
                 $provider_name
             }
 
-            fn capabilities(&self) -> &'static [$crate::core::types::common::ProviderCapability] {
+            fn capabilities(&self) -> &'static [$crate::core::types::ProviderCapability] {
                 $capabilities
             }
 
-            fn models(&self) -> &[$crate::core::types::common::ModelInfo] {
+            fn models(&self) -> &[$crate::core::types::ModelInfo] {
                 &self.supported_models
             }
 
@@ -1281,8 +1281,8 @@ macro_rules! define_pooled_http_provider_with_hooks {
 
             async fn transform_request(
                 &self,
-                request: $crate::core::types::requests::ChatRequest,
-                _context: $crate::core::types::common::RequestContext,
+                request: $crate::core::types::ChatRequest,
+                _context: $crate::core::types::RequestContext,
             ) -> Result<serde_json::Value, Self::Error> {
                 ($request_transform)(self, request)
             }
@@ -1302,8 +1302,8 @@ macro_rules! define_pooled_http_provider_with_hooks {
 
             async fn chat_completion(
                 &self,
-                request: $crate::core::types::requests::ChatRequest,
-                context: $crate::core::types::common::RequestContext,
+                request: $crate::core::types::ChatRequest,
+                context: $crate::core::types::RequestContext,
             ) -> Result<$crate::core::types::responses::ChatResponse, Self::Error> {
                 let url = ($url_builder)(self);
                 let body = self.transform_request(request.clone(), context.clone()).await?;
@@ -1336,8 +1336,8 @@ macro_rules! define_pooled_http_provider_with_hooks {
 
             async fn chat_completion_stream(
                 &self,
-                request: $crate::core::types::requests::ChatRequest,
-                context: $crate::core::types::common::RequestContext,
+                request: $crate::core::types::ChatRequest,
+                context: $crate::core::types::RequestContext,
             ) -> Result<
                 std::pin::Pin<
                     Box<
@@ -1351,7 +1351,7 @@ macro_rules! define_pooled_http_provider_with_hooks {
                 ($streaming)(self, request, context).await
             }
 
-            async fn health_check(&self) -> $crate::core::types::common::HealthStatus {
+            async fn health_check(&self) -> $crate::core::types::HealthStatus {
                 ($health_check)(self).await
             }
 

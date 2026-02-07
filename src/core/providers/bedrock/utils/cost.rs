@@ -20,6 +20,79 @@ static MODEL_PRICING: LazyLock<HashMap<&'static str, ModelPricing>> = LazyLock::
 
     // Claude models
     pricing.insert(
+        "anthropic.claude-opus-4-6-v1:0",
+        ModelPricing {
+            input_cost_per_1k: 0.005,
+            output_cost_per_1k: 0.025,
+            currency: "USD",
+        },
+    );
+    pricing.insert(
+        "anthropic.claude-opus-4-6-v1",
+        ModelPricing {
+            input_cost_per_1k: 0.005,
+            output_cost_per_1k: 0.025,
+            currency: "USD",
+        },
+    );
+    pricing.insert(
+        "anthropic.claude-opus-4-6",
+        ModelPricing {
+            input_cost_per_1k: 0.005,
+            output_cost_per_1k: 0.025,
+            currency: "USD",
+        },
+    );
+    pricing.insert(
+        "anthropic.claude-opus-4-5-v1:0",
+        ModelPricing {
+            input_cost_per_1k: 0.005,
+            output_cost_per_1k: 0.025,
+            currency: "USD",
+        },
+    );
+    pricing.insert(
+        "anthropic.claude-opus-4-5",
+        ModelPricing {
+            input_cost_per_1k: 0.005,
+            output_cost_per_1k: 0.025,
+            currency: "USD",
+        },
+    );
+    pricing.insert(
+        "anthropic.claude-sonnet-4-5-v1:0",
+        ModelPricing {
+            input_cost_per_1k: 0.003,
+            output_cost_per_1k: 0.015,
+            currency: "USD",
+        },
+    );
+    pricing.insert(
+        "anthropic.claude-sonnet-4-5",
+        ModelPricing {
+            input_cost_per_1k: 0.003,
+            output_cost_per_1k: 0.015,
+            currency: "USD",
+        },
+    );
+    pricing.insert(
+        "anthropic.claude-sonnet-4-v1:0",
+        ModelPricing {
+            input_cost_per_1k: 0.003,
+            output_cost_per_1k: 0.015,
+            currency: "USD",
+        },
+    );
+    pricing.insert(
+        "anthropic.claude-sonnet-4",
+        ModelPricing {
+            input_cost_per_1k: 0.003,
+            output_cost_per_1k: 0.015,
+            currency: "USD",
+        },
+    );
+
+    pricing.insert(
         "anthropic.claude-3-opus-20240229",
         ModelPricing {
             input_cost_per_1k: 0.015,
@@ -413,6 +486,14 @@ mod tests {
 
         // Expected: (1000/1000 * 0.015) + (500/1000 * 0.075) = 0.015 + 0.0375 = 0.0525
         assert!((cost - 0.0525).abs() < 0.0001);
+    }
+
+    #[test]
+    fn test_cost_calculation_claude_opus_46() {
+        let cost =
+            CostCalculator::calculate_cost("anthropic.claude-opus-4-6-v1:0", 1000, 500).unwrap();
+        // Expected: (1 * 0.005) + (0.5 * 0.025) = 0.0175
+        assert!((cost - 0.0175).abs() < 0.0001);
     }
 
     #[test]

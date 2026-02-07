@@ -1,6 +1,6 @@
 //! Featherless Model Information
 
-use crate::core::types::common::ModelInfo;
+use crate::core::types::ModelInfo;
 use std::collections::HashMap;
 
 pub struct FeatherlessModelRegistry;
@@ -20,9 +20,9 @@ impl FeatherlessModelRegistry {
             output_cost_per_1k_tokens: Some(0.0002),
             currency: "USD".to_string(),
             capabilities: vec![
-                crate::core::types::common::ProviderCapability::ChatCompletion,
-                crate::core::types::common::ProviderCapability::ChatCompletionStream,
-                crate::core::types::common::ProviderCapability::ToolCalling,
+                crate::core::types::ProviderCapability::ChatCompletion,
+                crate::core::types::ProviderCapability::ChatCompletionStream,
+                crate::core::types::ProviderCapability::ToolCalling,
             ],
             created_at: None,
             updated_at: None,

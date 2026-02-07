@@ -3,7 +3,7 @@
 //! Handles text and multimodal embeddings for Titan and Cohere models
 
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::types::requests::EmbeddingRequest;
+use crate::core::types::EmbeddingRequest;
 use crate::core::types::responses::{EmbeddingData, EmbeddingResponse, Usage};
 use serde::{Deserialize, Serialize};
 
@@ -90,8 +90,8 @@ async fn execute_titan_embedding(
 ) -> Result<EmbeddingResponse, ProviderError> {
     // Titan only supports single text input
     let input_text = match &request.input {
-        crate::core::types::requests::EmbeddingInput::Text(text) => text.clone(),
-        crate::core::types::requests::EmbeddingInput::Array(texts) => {
+        crate::core::types::EmbeddingInput::Text(text) => text.clone(),
+        crate::core::types::EmbeddingInput::Array(texts) => {
             if texts.is_empty() {
                 return Err(ProviderError::invalid_request(
                     "bedrock",
@@ -143,8 +143,8 @@ async fn execute_titan_multimodal_embedding(
 ) -> Result<EmbeddingResponse, ProviderError> {
     // Extract text input
     let input_text = match &request.input {
-        crate::core::types::requests::EmbeddingInput::Text(text) => Some(text.clone()),
-        crate::core::types::requests::EmbeddingInput::Array(texts) => {
+        crate::core::types::EmbeddingInput::Text(text) => Some(text.clone()),
+        crate::core::types::EmbeddingInput::Array(texts) => {
             if !texts.is_empty() {
                 Some(texts[0].clone())
             } else {
@@ -200,8 +200,8 @@ async fn execute_cohere_embedding(
 ) -> Result<EmbeddingResponse, ProviderError> {
     // Convert input to text array
     let texts = match &request.input {
-        crate::core::types::requests::EmbeddingInput::Text(text) => vec![text.clone()],
-        crate::core::types::requests::EmbeddingInput::Array(texts) => texts.clone(),
+        crate::core::types::EmbeddingInput::Text(text) => vec![text.clone()],
+        crate::core::types::EmbeddingInput::Array(texts) => texts.clone(),
     };
 
     let cohere_request = CohereEmbeddingRequest {

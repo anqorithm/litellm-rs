@@ -1,6 +1,6 @@
 //! Poe Model Information
 
-use crate::core::types::common::{ModelInfo, ProviderCapability};
+use crate::core::types::{ModelInfo, ProviderCapability};
 use std::collections::HashMap;
 
 pub fn get_models() -> Vec<ModelInfo> {

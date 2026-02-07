@@ -52,6 +52,141 @@ static MODEL_CONFIGS: LazyLock<HashMap<&'static str, ModelConfig>> = LazyLock::n
 
     // Claude models
     configs.insert(
+        "anthropic.claude-opus-4-6-v1:0",
+        ModelConfig {
+            family: BedrockModelFamily::Claude,
+            api_type: BedrockApiType::Converse,
+            supports_streaming: true,
+            supports_function_calling: true,
+            supports_multimodal: true,
+            max_context_length: 200000,
+            max_output_length: Some(32000),
+            input_cost_per_1k: 0.005,
+            output_cost_per_1k: 0.025,
+        },
+    );
+
+    configs.insert(
+        "anthropic.claude-opus-4-6-v1",
+        ModelConfig {
+            family: BedrockModelFamily::Claude,
+            api_type: BedrockApiType::Converse,
+            supports_streaming: true,
+            supports_function_calling: true,
+            supports_multimodal: true,
+            max_context_length: 200000,
+            max_output_length: Some(32000),
+            input_cost_per_1k: 0.005,
+            output_cost_per_1k: 0.025,
+        },
+    );
+
+    configs.insert(
+        "anthropic.claude-opus-4-6",
+        ModelConfig {
+            family: BedrockModelFamily::Claude,
+            api_type: BedrockApiType::Converse,
+            supports_streaming: true,
+            supports_function_calling: true,
+            supports_multimodal: true,
+            max_context_length: 200000,
+            max_output_length: Some(32000),
+            input_cost_per_1k: 0.005,
+            output_cost_per_1k: 0.025,
+        },
+    );
+
+    configs.insert(
+        "anthropic.claude-opus-4-5-v1:0",
+        ModelConfig {
+            family: BedrockModelFamily::Claude,
+            api_type: BedrockApiType::Converse,
+            supports_streaming: true,
+            supports_function_calling: true,
+            supports_multimodal: true,
+            max_context_length: 200000,
+            max_output_length: Some(32000),
+            input_cost_per_1k: 0.005,
+            output_cost_per_1k: 0.025,
+        },
+    );
+
+    configs.insert(
+        "anthropic.claude-opus-4-5",
+        ModelConfig {
+            family: BedrockModelFamily::Claude,
+            api_type: BedrockApiType::Converse,
+            supports_streaming: true,
+            supports_function_calling: true,
+            supports_multimodal: true,
+            max_context_length: 200000,
+            max_output_length: Some(32000),
+            input_cost_per_1k: 0.005,
+            output_cost_per_1k: 0.025,
+        },
+    );
+
+    configs.insert(
+        "anthropic.claude-sonnet-4-5-v1:0",
+        ModelConfig {
+            family: BedrockModelFamily::Claude,
+            api_type: BedrockApiType::Converse,
+            supports_streaming: true,
+            supports_function_calling: true,
+            supports_multimodal: true,
+            max_context_length: 200000,
+            max_output_length: Some(16000),
+            input_cost_per_1k: 0.003,
+            output_cost_per_1k: 0.015,
+        },
+    );
+
+    configs.insert(
+        "anthropic.claude-sonnet-4-5",
+        ModelConfig {
+            family: BedrockModelFamily::Claude,
+            api_type: BedrockApiType::Converse,
+            supports_streaming: true,
+            supports_function_calling: true,
+            supports_multimodal: true,
+            max_context_length: 200000,
+            max_output_length: Some(16000),
+            input_cost_per_1k: 0.003,
+            output_cost_per_1k: 0.015,
+        },
+    );
+
+    configs.insert(
+        "anthropic.claude-sonnet-4-v1:0",
+        ModelConfig {
+            family: BedrockModelFamily::Claude,
+            api_type: BedrockApiType::Converse,
+            supports_streaming: true,
+            supports_function_calling: true,
+            supports_multimodal: true,
+            max_context_length: 200000,
+            max_output_length: Some(16000),
+            input_cost_per_1k: 0.003,
+            output_cost_per_1k: 0.015,
+        },
+    );
+
+    configs.insert(
+        "anthropic.claude-sonnet-4",
+        ModelConfig {
+            family: BedrockModelFamily::Claude,
+            api_type: BedrockApiType::Converse,
+            supports_streaming: true,
+            supports_function_calling: true,
+            supports_multimodal: true,
+            max_context_length: 200000,
+            max_output_length: Some(16000),
+            input_cost_per_1k: 0.003,
+            output_cost_per_1k: 0.015,
+        },
+    );
+
+    configs.insert(
         "anthropic.claude-3-opus-20240229",
         ModelConfig {
             family: BedrockModelFamily::Claude,
@@ -676,6 +811,10 @@ mod tests {
 
     #[test]
     fn test_model_config_lookup() {
+        let config = get_model_config("anthropic.claude-opus-4-6-v1:0").unwrap();
+        assert_eq!(config.family, BedrockModelFamily::Claude);
+        assert_eq!(config.api_type, BedrockApiType::Converse);
+
         let config = get_model_config("anthropic.claude-3-opus-20240229").unwrap();
         assert_eq!(config.family, BedrockModelFamily::Claude);
         assert_eq!(config.api_type, BedrockApiType::Converse);
@@ -690,6 +829,19 @@ mod tests {
 
     #[test]
     fn test_model_capabilities() {
+        assert!(model_supports_capability(
+            "anthropic.claude-opus-4-6-v1:0",
+            "streaming"
+        ));
+        assert!(model_supports_capability(
+            "anthropic.claude-opus-4-6-v1:0",
+            "function_calling"
+        ));
+        assert!(model_supports_capability(
+            "anthropic.claude-opus-4-6-v1:0",
+            "multimodal"
+        ));
+
         assert!(model_supports_capability(
             "anthropic.claude-3-opus-20240229",
             "streaming"

@@ -119,10 +119,10 @@ impl GeminiTransformer {
             MessageContent::Parts(parts) => {
                 parts.iter().map(|part| {
                     match part {
-                        crate::core::types::requests::ContentPart::Text { text } => {
+                        crate::core::types::ContentPart::Text { text } => {
                             Ok(Part::Text { text: text.clone() })
                         }
-                        crate::core::types::requests::ContentPart::Image { image_url, source: _source, detail: _detail } => {
+                        crate::core::types::ContentPart::Image { image_url, source: _source, detail: _detail } => {
                             // Parse image URL - could be base64 or URL
                             if let Some(url) = &image_url.as_ref().map(|u| &u.url) {
                                 if let Some(base64_data) = url.strip_prefix("data:") {
@@ -151,7 +151,7 @@ impl GeminiTransformer {
                                 Err(ProviderError::invalid_request("vertex_ai", "Missing image URL"))
                             }
                         }
-                        crate::core::types::requests::ContentPart::ImageUrl { image_url } => {
+                        crate::core::types::ContentPart::ImageUrl { image_url } => {
                             // Handle ImageUrl variant
                             if let Some(base64_data) = image_url.url.strip_prefix("data:") {
                                 let parts: Vec<&str> = base64_data.splitn(2, ',').collect();
@@ -170,18 +170,18 @@ impl GeminiTransformer {
                                 Err(ProviderError::invalid_request("vertex_ai", "Only base64 images supported"))
                             }
                         }
-                        crate::core::types::requests::ContentPart::Audio { audio: _audio } => {
+                        crate::core::types::ContentPart::Audio { audio: _audio } => {
                             // Vertex AI doesn't directly support audio in chat completions
                             // This would need to be handled via separate audio APIs
                             Err(ProviderError::invalid_request("vertex_ai", "Audio content not supported in chat completions"))
                         }
-                        crate::core::types::requests::ContentPart::Document { .. } => {
+                        crate::core::types::ContentPart::Document { .. } => {
                             Err(ProviderError::invalid_request("vertex_ai", "Document content not supported"))
                         }
-                        crate::core::types::requests::ContentPart::ToolResult { .. } => {
+                        crate::core::types::ContentPart::ToolResult { .. } => {
                             Err(ProviderError::invalid_request("vertex_ai", "ToolResult should be handled separately"))
                         }
-                        crate::core::types::requests::ContentPart::ToolUse { .. } => {
+                        crate::core::types::ContentPart::ToolUse { .. } => {
                             Err(ProviderError::invalid_request("vertex_ai", "ToolUse should be handled separately"))
                         }
                     }
@@ -539,7 +539,7 @@ impl PartnerModelTransformer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::requests::ContentPart;
+    use crate::core::types::ContentPart;
 
     fn create_test_message(role: MessageRole, content: &str) -> ChatMessage {
         ChatMessage {

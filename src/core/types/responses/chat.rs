@@ -163,7 +163,7 @@ impl Default for ChatResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::requests::MessageRole;
+    use crate::core::types::MessageRole;
 
     fn create_test_message(content: &str) -> ChatMessage {
         ChatMessage {

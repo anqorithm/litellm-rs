@@ -267,10 +267,10 @@ impl OpenAIProvider {
     pub fn get_model_info(
         &self,
         model_id: &str,
-    ) -> Result<crate::core::types::common::ModelInfo, ProviderError> {
+    ) -> Result<crate::core::types::ModelInfo, ProviderError> {
         // Return a default ModelInfo for any model
         // Like Python LiteLLM, we don't validate models locally
-        use crate::core::types::common::ModelInfo;
+        use crate::core::types::ModelInfo;
         Ok(ModelInfo {
             id: model_id.to_string(),
             name: model_id.to_string(),

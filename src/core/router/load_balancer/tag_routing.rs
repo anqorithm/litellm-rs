@@ -2,7 +2,7 @@
 
 use super::core::LoadBalancer;
 use crate::core::providers::Provider;
-use crate::core::types::common::RequestContext;
+use crate::core::types::RequestContext;
 use crate::utils::error::{GatewayError, Result};
 use tracing::debug;
 

@@ -5,8 +5,8 @@ use super::*;
 #[cfg(test)]
 mod provider_tests {
     use super::*;
-    use crate::core::types::common::{ProviderCapability, RequestContext};
-    use crate::core::types::requests::{ChatMessage, ChatRequest, MessageContent, MessageRole};
+    use crate::core::types::{ProviderCapability, RequestContext};
+    use crate::core::types::{ChatMessage, ChatRequest, MessageContent, MessageRole};
 
     async fn create_test_provider() -> FireworksProvider {
         let config = FireworksConfig {

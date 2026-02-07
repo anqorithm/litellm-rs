@@ -312,8 +312,8 @@ impl LLMProvider for InfinityProvider {
 
         // Convert input to Vec<String>
         let input: Vec<String> = match request.input {
-            crate::core::types::requests::EmbeddingInput::Text(s) => vec![s],
-            crate::core::types::requests::EmbeddingInput::Array(v) => v,
+            crate::core::types::EmbeddingInput::Text(s) => vec![s],
+            crate::core::types::EmbeddingInput::Array(v) => v,
         };
 
         // Build Infinity-specific request

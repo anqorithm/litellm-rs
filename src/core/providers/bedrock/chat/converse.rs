@@ -3,7 +3,7 @@
 //! Modern unified API for chat completions in Bedrock
 
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::types::requests::ChatRequest;
+use crate::core::types::ChatRequest;
 use crate::core::types::{MessageContent, MessageRole};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -220,7 +220,7 @@ fn transform_to_converse(request: &ChatRequest) -> Result<ConverseRequest, Provi
                             parts
                                 .iter()
                                 .filter_map(|part| {
-                                    if let crate::core::types::requests::ContentPart::Text {
+                                    if let crate::core::types::ContentPart::Text {
                                         text,
                                     } = part
                                     {
@@ -258,40 +258,40 @@ fn transform_to_converse(request: &ChatRequest) -> Result<ConverseRequest, Provi
                                 .iter()
                                 .filter_map(|part| {
                                     match part {
-                                        crate::core::types::requests::ContentPart::Text {
+                                        crate::core::types::ContentPart::Text {
                                             text,
                                         } => Some(ContentBlock::Text { text: text.clone() }),
-                                        crate::core::types::requests::ContentPart::Image {
+                                        crate::core::types::ContentPart::Image {
                                             ..
                                         } => {
                                             // TODO: Handle image content
                                             None
                                         }
-                                        crate::core::types::requests::ContentPart::ImageUrl {
+                                        crate::core::types::ContentPart::ImageUrl {
                                             ..
                                         } => {
                                             // TODO: Handle image URL content
                                             None
                                         }
-                                        crate::core::types::requests::ContentPart::Audio {
+                                        crate::core::types::ContentPart::Audio {
                                             ..
                                         } => {
                                             // TODO: Handle audio content
                                             None
                                         }
-                                        crate::core::types::requests::ContentPart::Document {
+                                        crate::core::types::ContentPart::Document {
                                             ..
                                         } => {
                                             // TODO: Handle document content
                                             None
                                         }
-                                        crate::core::types::requests::ContentPart::ToolResult {
+                                        crate::core::types::ContentPart::ToolResult {
                                             ..
                                         } => {
                                             // TODO: Handle tool result content
                                             None
                                         }
-                                        crate::core::types::requests::ContentPart::ToolUse {
+                                        crate::core::types::ContentPart::ToolUse {
                                             ..
                                         } => {
                                             // TODO: Handle tool use content

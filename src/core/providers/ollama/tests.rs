@@ -8,7 +8,7 @@ use crate::core::providers::ollama::model_info::{
     get_model_info, OllamaModelEntry, OllamaModelInfo, OllamaShowResponse, OllamaTagsResponse,
 };
 use crate::core::providers::ollama::streaming::{OllamaStreamChunk, OllamaToolCall};
-use crate::core::types::common::ProviderCapability;
+use crate::core::types::ProviderCapability;
 
 // ==================== Config Tests ====================
 

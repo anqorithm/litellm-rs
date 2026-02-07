@@ -114,8 +114,8 @@ impl AzureAIEmbeddingUtils {
     pub fn validate_request(request: &EmbeddingRequest) -> Result<(), ProviderError> {
         // Check if input is empty based on the enum variant
         let is_empty = match &request.input {
-            crate::core::types::requests::EmbeddingInput::Text(text) => text.is_empty(),
-            crate::core::types::requests::EmbeddingInput::Array(array) => array.is_empty(),
+            crate::core::types::EmbeddingInput::Text(text) => text.is_empty(),
+            crate::core::types::EmbeddingInput::Array(array) => array.is_empty(),
         };
 
         if is_empty {
@@ -320,7 +320,7 @@ mod tests {
 
     #[test]
     fn test_embedding_utils_validation() {
-        use crate::core::types::requests::EmbeddingInput;
+        use crate::core::types::EmbeddingInput;
 
         let mut request = EmbeddingRequest {
             model: "text-embedding-3-large".to_string(),
@@ -367,7 +367,7 @@ mod tests {
 
     #[test]
     fn test_request_transformation() {
-        use crate::core::types::requests::EmbeddingInput;
+        use crate::core::types::EmbeddingInput;
 
         let request = EmbeddingRequest {
             model: "text-embedding-3-large".to_string(),

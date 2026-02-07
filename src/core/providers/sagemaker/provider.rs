@@ -16,8 +16,8 @@ use crate::core::providers::base::GlobalPoolManager;
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::ProviderConfig as _;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
-use crate::core::types::common::{HealthStatus, ModelInfo, ProviderCapability, RequestContext};
-use crate::core::types::requests::{ChatRequest, EmbeddingRequest};
+use crate::core::types::{HealthStatus, ModelInfo, ProviderCapability, RequestContext};
+use crate::core::types::{ChatRequest, EmbeddingRequest};
 use crate::core::types::responses::{ChatChunk, ChatResponse, EmbeddingResponse};
 
 /// Static capabilities for Sagemaker provider
@@ -302,19 +302,19 @@ fn format_messages_for_tgi(request: &ChatRequest) -> String {
 
     for message in &request.messages {
         let role = match message.role {
-            crate::core::types::requests::MessageRole::System => "System",
-            crate::core::types::requests::MessageRole::User => "User",
-            crate::core::types::requests::MessageRole::Assistant => "Assistant",
+            crate::core::types::MessageRole::System => "System",
+            crate::core::types::MessageRole::User => "User",
+            crate::core::types::MessageRole::Assistant => "Assistant",
             _ => "User",
         };
 
         if let Some(content) = &message.content {
             let text = match content {
-                crate::core::types::requests::MessageContent::Text(t) => t.clone(),
-                crate::core::types::requests::MessageContent::Parts(parts) => parts
+                crate::core::types::MessageContent::Text(t) => t.clone(),
+                crate::core::types::MessageContent::Parts(parts) => parts
                     .iter()
                     .filter_map(|p| {
-                        if let crate::core::types::requests::ContentPart::Text { text } = p {
+                        if let crate::core::types::ContentPart::Text { text } = p {
                             Some(text.clone())
                         } else {
                             None
@@ -357,8 +357,8 @@ fn parse_tgi_response(response_bytes: &[u8], model: &str) -> Result<ChatResponse
         choices: vec![crate::core::types::responses::ChatChoice {
             index: 0,
             message: crate::core::types::ChatMessage {
-                role: crate::core::types::requests::MessageRole::Assistant,
-                content: Some(crate::core::types::requests::MessageContent::Text(
+                role: crate::core::types::MessageRole::Assistant,
+                content: Some(crate::core::types::MessageContent::Text(
                     generated_text.to_string(),
                 )),
                 thinking: None,
@@ -384,8 +384,8 @@ mod tests {
         let request = ChatRequest {
             model: "test".to_string(),
             messages: vec![crate::core::types::ChatMessage {
-                role: crate::core::types::requests::MessageRole::User,
-                content: Some(crate::core::types::requests::MessageContent::Text(
+                role: crate::core::types::MessageRole::User,
+                content: Some(crate::core::types::MessageContent::Text(
                     "Hello".to_string(),
                 )),
                 thinking: None,

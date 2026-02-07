@@ -93,7 +93,7 @@ pub fn validate_api_key(api_key: &str) -> Result<(), String> {
 
 /// Default
 pub fn default_model() -> &'static str {
-    "claude-3-5-sonnet-20241022"
+    "claude-opus-4-6"
 }
 
 /// Model
@@ -199,14 +199,14 @@ mod tests {
 
     #[test]
     fn test_model_support() {
-        assert!(is_model_supported("claude-3-5-sonnet-20241022"));
+        assert!(is_model_supported("claude-opus-4-6"));
         assert!(is_model_supported("claude-3-haiku-20240307"));
         assert!(!is_model_supported("gpt-4"));
     }
 
     #[test]
     fn test_model_features() {
-        let features = get_model_features("claude-3-5-sonnet-20241022");
+        let features = get_model_features("claude-opus-4-6");
         assert!(features.is_some());
 
         let features = features.unwrap();
@@ -218,7 +218,7 @@ mod tests {
     #[test]
     fn test_feature_support() {
         assert!(model_supports_feature(
-            "claude-3-5-sonnet-20241022",
+            "claude-opus-4-6",
             ModelFeature::ComputerUse
         ));
         assert!(!model_supports_feature(
@@ -233,7 +233,7 @@ mod tests {
 
     #[test]
     fn test_cost_estimation() {
-        let cost = estimate_cost("claude-3-5-sonnet-20241022", 1000, 500);
+        let cost = estimate_cost("claude-opus-4-6", 1000, 500);
         assert!(cost.is_some());
         assert!(cost.unwrap() > 0.0);
     }
@@ -242,13 +242,13 @@ mod tests {
     fn test_supported_models_list() {
         let models = supported_models();
         assert!(!models.is_empty());
-        assert!(models.contains(&"claude-3-5-sonnet-20241022".to_string()));
+        assert!(models.contains(&"claude-opus-4-6".to_string()));
         assert!(models.contains(&"claude-3-haiku-20240307".to_string()));
     }
 
     #[test]
     fn test_default_model() {
-        assert_eq!(default_model(), "claude-3-5-sonnet-20241022");
+        assert_eq!(default_model(), "claude-opus-4-6");
         assert!(is_model_supported(default_model()));
     }
 

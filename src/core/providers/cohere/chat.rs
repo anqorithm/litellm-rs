@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use super::config::{CohereApiVersion, CohereConfig};
 use super::error::CohereError;
 use crate::core::types::ChatMessage as ResponseMessage;
-use crate::core::types::requests::{ChatRequest, MessageContent, MessageRole};
+use crate::core::types::{ChatRequest, MessageContent, MessageRole};
 use crate::core::types::responses::{ChatChoice, ChatResponse, FinishReason, Usage};
 use crate::core::types::tools::ToolCall;
 

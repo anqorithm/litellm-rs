@@ -25,7 +25,7 @@ impl MistralEmbeddingHandler {
     /// Transform an embedding request to Mistral format
     pub fn transform_request(
         &self,
-        request: crate::core::types::requests::EmbeddingRequest,
+        request: crate::core::types::EmbeddingRequest,
     ) -> Result<Value, MistralError> {
         let transformed = json!({
             "model": "mistral-embed", // Always use mistral-embed for embeddings
@@ -108,8 +108,8 @@ impl MistralEmbeddingHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::requests::EmbeddingInput;
-    use crate::core::types::requests::EmbeddingRequest;
+    use crate::core::types::EmbeddingInput;
+    use crate::core::types::EmbeddingRequest;
 
     fn create_test_config() -> MistralConfig {
         MistralConfig {

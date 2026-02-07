@@ -188,11 +188,11 @@ impl GitHubCopilotProvider {
     /// Check if request contains vision content
     fn has_vision_content(&self, messages: &[ChatMessage]) -> bool {
         for message in messages {
-            if let Some(crate::core::types::requests::MessageContent::Parts(parts)) =
+            if let Some(crate::core::types::MessageContent::Parts(parts)) =
                 &message.content
             {
                 for part in parts {
-                    if let crate::core::types::requests::ContentPart::ImageUrl { .. } = part {
+                    if let crate::core::types::ContentPart::ImageUrl { .. } = part {
                         return true;
                     }
                 }

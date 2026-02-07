@@ -2,7 +2,7 @@
 //!
 //! Model definitions and registry for Perplexity AI models
 
-use crate::core::types::common::ModelInfo;
+use crate::core::types::ModelInfo;
 use std::collections::HashMap;
 use std::sync::LazyLock;
 

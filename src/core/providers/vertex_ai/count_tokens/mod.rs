@@ -4,7 +4,7 @@ use crate::ProviderError;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::core::types::requests::ChatMessage;
+use crate::core::types::ChatMessage;
 
 /// Count tokens request
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -146,7 +146,7 @@ impl TokenCountHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::requests::{MessageContent, MessageRole};
+    use crate::core::types::{MessageContent, MessageRole};
 
     #[test]
     fn test_estimate_tokens() {

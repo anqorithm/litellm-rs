@@ -1,6 +1,6 @@
 //! Docker Model Runner Model Information
 
-use crate::core::types::common::ModelInfo;
+use crate::core::types::ModelInfo;
 use std::collections::HashMap;
 
 pub struct DockerModelRunnerModelRegistry;
@@ -20,8 +20,8 @@ impl DockerModelRunnerModelRegistry {
             output_cost_per_1k_tokens: None,
             currency: "USD".to_string(),
             capabilities: vec![
-                crate::core::types::common::ProviderCapability::ChatCompletion,
-                crate::core::types::common::ProviderCapability::ChatCompletionStream,
+                crate::core::types::ProviderCapability::ChatCompletion,
+                crate::core::types::ProviderCapability::ChatCompletionStream,
             ],
             created_at: None,
             updated_at: None,

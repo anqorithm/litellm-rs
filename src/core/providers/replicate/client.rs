@@ -55,7 +55,7 @@ impl ReplicateClient {
 
         // Extract system prompt if present
         let system_prompt = request.messages.iter().find_map(|msg| {
-            if msg.role == crate::core::types::requests::MessageRole::System {
+            if msg.role == crate::core::types::MessageRole::System {
                 msg.content.as_ref().map(|c| c.to_string())
             } else {
                 None
@@ -307,7 +307,7 @@ impl ReplicateClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::requests::{ChatMessage, MessageContent, MessageRole};
+    use crate::core::types::{ChatMessage, MessageContent, MessageRole};
 
     fn create_test_chat_request() -> ChatRequest {
         ChatRequest {

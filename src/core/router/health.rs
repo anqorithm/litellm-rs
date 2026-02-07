@@ -225,7 +225,7 @@ impl HealthChecker {
             Ok(health_status) => {
                 if matches!(
                     health_status,
-                    crate::core::types::common::HealthStatus::Healthy
+                    crate::core::types::HealthStatus::Healthy
                 ) {
                     let response_time = start_time.elapsed();
                     let mut statuses = self.statuses.write().await;

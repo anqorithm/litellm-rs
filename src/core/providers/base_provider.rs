@@ -322,7 +322,7 @@ pub struct OpenAIRequestTransformer;
 
 impl OpenAIRequestTransformer {
     /// Transform standard chat request to OpenAI format
-    pub fn transform_chat_request(request: &crate::core::types::requests::ChatRequest) -> Value {
+    pub fn transform_chat_request(request: &crate::core::types::ChatRequest) -> Value {
         let mut body = serde_json::json!({
             "model": request.model,
             "messages": request.messages,

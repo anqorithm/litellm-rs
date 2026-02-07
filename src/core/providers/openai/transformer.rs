@@ -398,7 +398,7 @@ impl OpenAIResponseTransformer {
                 },
             }),
             OpenAIContentPart::InputAudio { input_audio } => Ok(ContentPart::Audio {
-                audio: crate::core::types::requests::AudioData {
+                audio: crate::core::types::AudioData {
                     data: input_audio.data,
                     format: Some(input_audio.format),
                 },

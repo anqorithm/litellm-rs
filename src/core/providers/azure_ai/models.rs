@@ -5,7 +5,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::core::types::common::{ModelInfo, ProviderCapability};
+use crate::core::types::{ModelInfo, ProviderCapability};
 
 /// Model
 #[derive(Debug, Clone, Serialize, Deserialize)]

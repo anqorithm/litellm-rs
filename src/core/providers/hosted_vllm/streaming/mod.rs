@@ -5,7 +5,7 @@
 
 use crate::core::providers::base::sse::{OpenAICompatibleTransformer, UnifiedSSEStream};
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::types::requests::{MessageContent, MessageRole};
+use crate::core::types::{MessageContent, MessageRole};
 use crate::core::types::responses::{ChatChunk, ChatDelta, ChatResponse, ChatStreamChoice};
 use bytes::Bytes;
 use futures::Stream;
@@ -169,7 +169,7 @@ mod tests {
     use crate::core::types::responses::{ChatChoice, FinishReason, Usage};
 
     fn create_test_response() -> ChatResponse {
-        use crate::core::types::requests::ChatMessage;
+        use crate::core::types::ChatMessage;
 
         ChatResponse {
             id: "test-id".to_string(),

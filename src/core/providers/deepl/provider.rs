@@ -36,7 +36,7 @@ crate::define_http_provider_with_hooks!(
     error_mapper: super::error_mapper::DeepLErrorMapper,
     model_info: super::model_info::get_supported_models,
     capabilities: &[
-        crate::core::types::common::ProviderCapability::AudioTranslation,
+        crate::core::types::ProviderCapability::AudioTranslation,
     ],
     url_builder: |provider: &DeepLProvider| -> String {
         let base_url = provider
@@ -66,7 +66,7 @@ crate::define_http_provider_with_hooks!(
         DeepLProvider::new(config)
     },
     request_transform: |provider: &DeepLProvider,
-                        request: crate::core::types::requests::ChatRequest|
+                        request: crate::core::types::ChatRequest|
      -> Result<serde_json::Value, crate::core::providers::unified_provider::ProviderError> {
         let (target_lang, source_lang, text) = provider.extract_translation_params(&request)?;
 
@@ -140,7 +140,7 @@ crate::define_http_provider_with_hooks!(
     error_map: |_provider: &DeepLProvider,
                 status: u16,
                 error_text: String,
-                _request: &crate::core::types::requests::ChatRequest|
+                _request: &crate::core::types::ChatRequest|
      -> crate::core::providers::unified_provider::ProviderError {
         match status {
             401 | 403 => crate::core::providers::unified_provider::ProviderError::authentication(
@@ -186,10 +186,10 @@ crate::define_http_provider_with_hooks!(
 
             match req_builder.send().await {
                 Ok(response) if response.status().is_success() => {
-                    crate::core::types::common::HealthStatus::Healthy
+                    crate::core::types::HealthStatus::Healthy
                 }
-                Ok(_) => crate::core::types::common::HealthStatus::Unhealthy,
-                Err(_) => crate::core::types::common::HealthStatus::Unhealthy,
+                Ok(_) => crate::core::types::HealthStatus::Unhealthy,
+                Err(_) => crate::core::types::HealthStatus::Unhealthy,
             }
         }
     },
@@ -202,7 +202,7 @@ impl DeepLProvider {
     /// Or with source language: "Translate from {source_lang} to {target_lang}: {text}"
     fn extract_translation_params(
         &self,
-        request: &crate::core::types::requests::ChatRequest,
+        request: &crate::core::types::ChatRequest,
     ) -> Result<
         (String, Option<String>, String),
         crate::core::providers::unified_provider::ProviderError,
@@ -340,7 +340,7 @@ mod tests {
     use super::super::config::DeepLConfig;
     use super::*;
     use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
-    use crate::core::types::common::ProviderCapability;
+    use crate::core::types::ProviderCapability;
 
     #[tokio::test]
     async fn test_provider_creation() {

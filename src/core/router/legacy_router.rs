@@ -169,9 +169,9 @@ impl Router {
         // Convert CompletionRequest to ChatRequest (the provider expects ChatRequest)
         let chat_request = ChatRequest {
             model: request.model.clone(),
-            messages: vec![crate::core::types::requests::ChatMessage {
-                role: crate::core::types::requests::MessageRole::User,
-                content: Some(crate::core::types::requests::MessageContent::Text(
+            messages: vec![crate::core::types::ChatMessage {
+                role: crate::core::types::MessageRole::User,
+                content: Some(crate::core::types::MessageContent::Text(
                     request.prompt,
                 )),
                 ..Default::default()
@@ -216,10 +216,10 @@ impl Router {
                 .into_iter()
                 .map(|choice| {
                     let text = match choice.message.content {
-                        Some(crate::core::types::requests::MessageContent::Text(content)) => {
+                        Some(crate::core::types::MessageContent::Text(content)) => {
                             content
                         }
-                        Some(crate::core::types::requests::MessageContent::Parts(_)) => {
+                        Some(crate::core::types::MessageContent::Parts(_)) => {
                             "".to_string()
                         }
                         None => "".to_string(),

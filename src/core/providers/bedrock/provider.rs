@@ -92,7 +92,7 @@ impl BedrockProvider {
     /// Generate images using Bedrock image models
     pub async fn generate_image(
         &self,
-        request: &crate::core::types::requests::ImageGenerationRequest,
+        request: &crate::core::types::ImageGenerationRequest,
     ) -> Result<crate::core::types::responses::ImageGenerationResponse, BedrockError> {
         super::images::execute_image_generation(&self.client, request).await
     }
@@ -143,7 +143,7 @@ impl BedrockProvider {
                     parts
                         .iter()
                         .filter_map(|part| {
-                            if let crate::core::types::requests::ContentPart::Text { text } = part {
+                            if let crate::core::types::ContentPart::Text { text } = part {
                                 Some(text.clone())
                             } else {
                                 None

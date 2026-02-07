@@ -3,7 +3,7 @@
 //! Maritalk specializes in Brazilian Portuguese language models.
 //! Sabiá models are designed specifically for Portuguese language understanding and generation.
 
-use crate::core::types::common::ModelInfo;
+use crate::core::types::ModelInfo;
 
 pub fn get_supported_models() -> Vec<ModelInfo> {
     vec![

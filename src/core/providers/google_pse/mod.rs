@@ -242,7 +242,7 @@ impl LLMProvider for GooglePSEProvider {
         debug!("Google PSE search request: model={}", request.model);
 
         let query = if let Some(last_message) = request.messages.last() {
-            if let Some(crate::core::types::requests::MessageContent::Text(text)) =
+            if let Some(crate::core::types::MessageContent::Text(text)) =
                 &last_message.content
             {
                 text.clone()
@@ -304,7 +304,7 @@ impl LLMProvider for GooglePSEProvider {
                 index: 0,
                 message: ChatMessage {
                     role: MessageRole::Assistant,
-                    content: Some(crate::core::types::requests::MessageContent::Text(content)),
+                    content: Some(crate::core::types::MessageContent::Text(content)),
                     thinking: None,
                     name: None,
                     tool_calls: None,

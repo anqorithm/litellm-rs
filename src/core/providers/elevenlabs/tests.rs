@@ -4,7 +4,7 @@
 
 use super::*;
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::types::common::ProviderCapability;
+use crate::core::types::ProviderCapability;
 
 // ==================== Config Tests ====================
 

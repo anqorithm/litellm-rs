@@ -602,7 +602,7 @@ impl LLMProvider for SambanovaProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::requests::{ChatMessage, MessageContent, MessageRole};
+    use crate::core::types::{ChatMessage, MessageContent, MessageRole};
 
     fn create_test_config() -> SambanovaConfig {
         SambanovaConfig {

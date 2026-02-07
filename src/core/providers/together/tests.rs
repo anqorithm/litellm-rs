@@ -5,7 +5,7 @@ mod tests {
     use super::super::*;
     use crate::core::traits::ProviderConfig;
     use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
-    use crate::core::types::common::ProviderCapability;
+    use crate::core::types::ProviderCapability;
 
     #[tokio::test]
     async fn test_provider_creation() {
@@ -108,7 +108,7 @@ mod tests {
 
     #[test]
     fn test_should_handle_response_format() {
-        use crate::core::types::requests::{ChatMessage, ChatRequest, MessageRole, ResponseFormat};
+        use crate::core::types::{ChatMessage, ChatRequest, MessageRole, ResponseFormat};
 
         tokio::runtime::Runtime::new().unwrap().block_on(async {
             let provider = TogetherProvider::with_api_key("test-key").await.unwrap();
@@ -118,7 +118,7 @@ mod tests {
                 model: "meta-llama/Llama-3.3-70B-Instruct-Turbo".to_string(),
                 messages: vec![ChatMessage {
                     role: MessageRole::User,
-                    content: Some(crate::core::types::requests::MessageContent::Text(
+                    content: Some(crate::core::types::MessageContent::Text(
                         "Hello".to_string(),
                     )),
                     ..Default::default()
@@ -137,7 +137,7 @@ mod tests {
                 model: "meta-llama/Llama-3.2-90B-Vision-Instruct-Turbo".to_string(),
                 messages: vec![ChatMessage {
                     role: MessageRole::User,
-                    content: Some(crate::core::types::requests::MessageContent::Text(
+                    content: Some(crate::core::types::MessageContent::Text(
                         "Hello".to_string(),
                     )),
                     ..Default::default()
@@ -156,7 +156,7 @@ mod tests {
                 model: "meta-llama/Llama-3.2-90B-Vision-Instruct-Turbo".to_string(),
                 messages: vec![ChatMessage {
                     role: MessageRole::User,
-                    content: Some(crate::core::types::requests::MessageContent::Text(
+                    content: Some(crate::core::types::MessageContent::Text(
                         "Hello".to_string(),
                     )),
                     ..Default::default()

@@ -1,6 +1,6 @@
 //! Bytez Model Information
 
-use crate::core::types::common::ModelInfo;
+use crate::core::types::ModelInfo;
 
 pub fn get_supported_models() -> Vec<ModelInfo> {
     vec![ModelInfo {

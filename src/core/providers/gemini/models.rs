@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
-use crate::core::types::common::ModelInfo;
+use crate::core::types::ModelInfo;
 
 /// Model features
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -160,9 +160,9 @@ impl GeminiModelRegistry {
                     output_cost_per_1k_tokens: Some(0.012),
                     currency: "USD".to_string(),
                     capabilities: vec![
-                        crate::core::types::common::ProviderCapability::ChatCompletion,
-                        crate::core::types::common::ProviderCapability::ChatCompletionStream,
-                        crate::core::types::common::ProviderCapability::ToolCalling,
+                        crate::core::types::ProviderCapability::ChatCompletion,
+                        crate::core::types::ProviderCapability::ChatCompletionStream,
+                        crate::core::types::ProviderCapability::ToolCalling,
                     ],
                     created_at: None,
                     updated_at: None,
@@ -220,9 +220,9 @@ impl GeminiModelRegistry {
                     output_cost_per_1k_tokens: Some(0.024),
                     currency: "USD".to_string(),
                     capabilities: vec![
-                        crate::core::types::common::ProviderCapability::ChatCompletion,
-                        crate::core::types::common::ProviderCapability::ChatCompletionStream,
-                        crate::core::types::common::ProviderCapability::ToolCalling,
+                        crate::core::types::ProviderCapability::ChatCompletion,
+                        crate::core::types::ProviderCapability::ChatCompletionStream,
+                        crate::core::types::ProviderCapability::ToolCalling,
                     ],
                     created_at: None,
                     updated_at: None,
@@ -279,9 +279,9 @@ impl GeminiModelRegistry {
                     output_cost_per_1k_tokens: Some(0.003),
                     currency: "USD".to_string(),
                     capabilities: vec![
-                        crate::core::types::common::ProviderCapability::ChatCompletion,
-                        crate::core::types::common::ProviderCapability::ChatCompletionStream,
-                        crate::core::types::common::ProviderCapability::ToolCalling,
+                        crate::core::types::ProviderCapability::ChatCompletion,
+                        crate::core::types::ProviderCapability::ChatCompletionStream,
+                        crate::core::types::ProviderCapability::ToolCalling,
                     ],
                     created_at: None,
                     updated_at: None,
@@ -339,9 +339,9 @@ impl GeminiModelRegistry {
                     output_cost_per_1k_tokens: Some(0.012),
                     currency: "USD".to_string(),
                     capabilities: vec![
-                        crate::core::types::common::ProviderCapability::ChatCompletion,
-                        crate::core::types::common::ProviderCapability::ChatCompletionStream,
-                        crate::core::types::common::ProviderCapability::ImageGeneration,
+                        crate::core::types::ProviderCapability::ChatCompletion,
+                        crate::core::types::ProviderCapability::ChatCompletionStream,
+                        crate::core::types::ProviderCapability::ImageGeneration,
                     ],
                     created_at: None,
                     updated_at: None,
@@ -393,9 +393,9 @@ impl GeminiModelRegistry {
                     output_cost_per_1k_tokens: Some(0.010),
                     currency: "USD".to_string(),
                     capabilities: vec![
-                        crate::core::types::common::ProviderCapability::ChatCompletion,
-                        crate::core::types::common::ProviderCapability::ChatCompletionStream,
-                        crate::core::types::common::ProviderCapability::ToolCalling,
+                        crate::core::types::ProviderCapability::ChatCompletion,
+                        crate::core::types::ProviderCapability::ChatCompletionStream,
+                        crate::core::types::ProviderCapability::ToolCalling,
                     ],
                     created_at: None,
                     updated_at: None,
@@ -453,9 +453,9 @@ impl GeminiModelRegistry {
                     output_cost_per_1k_tokens: Some(0.0025),
                     currency: "USD".to_string(),
                     capabilities: vec![
-                        crate::core::types::common::ProviderCapability::ChatCompletion,
-                        crate::core::types::common::ProviderCapability::ChatCompletionStream,
-                        crate::core::types::common::ProviderCapability::ToolCalling,
+                        crate::core::types::ProviderCapability::ChatCompletion,
+                        crate::core::types::ProviderCapability::ChatCompletionStream,
+                        crate::core::types::ProviderCapability::ToolCalling,
                     ],
                     created_at: None,
                     updated_at: None,
@@ -513,9 +513,9 @@ impl GeminiModelRegistry {
                     output_cost_per_1k_tokens: Some(0.0004),
                     currency: "USD".to_string(),
                     capabilities: vec![
-                        crate::core::types::common::ProviderCapability::ChatCompletion,
-                        crate::core::types::common::ProviderCapability::ChatCompletionStream,
-                        crate::core::types::common::ProviderCapability::ToolCalling,
+                        crate::core::types::ProviderCapability::ChatCompletion,
+                        crate::core::types::ProviderCapability::ChatCompletionStream,
+                        crate::core::types::ProviderCapability::ToolCalling,
                     ],
                     created_at: None,
                     updated_at: None,
@@ -573,9 +573,9 @@ impl GeminiModelRegistry {
                     output_cost_per_1k_tokens: Some(0.00004),
                     currency: "USD".to_string(),
                     capabilities: vec![
-                        crate::core::types::common::ProviderCapability::ChatCompletion,
-                        crate::core::types::common::ProviderCapability::ChatCompletionStream,
-                        crate::core::types::common::ProviderCapability::ToolCalling,
+                        crate::core::types::ProviderCapability::ChatCompletion,
+                        crate::core::types::ProviderCapability::ChatCompletionStream,
+                        crate::core::types::ProviderCapability::ToolCalling,
                     ],
                     created_at: None,
                     updated_at: None,
@@ -633,8 +633,8 @@ impl GeminiModelRegistry {
                     output_cost_per_1k_tokens: Some(0.00004),
                     currency: "USD".to_string(),
                     capabilities: vec![
-                        crate::core::types::common::ProviderCapability::ChatCompletion,
-                        crate::core::types::common::ProviderCapability::ChatCompletionStream,
+                        crate::core::types::ProviderCapability::ChatCompletion,
+                        crate::core::types::ProviderCapability::ChatCompletionStream,
                     ],
                     created_at: None,
                     updated_at: None,
@@ -683,9 +683,9 @@ impl GeminiModelRegistry {
                     output_cost_per_1k_tokens: Some(0.005),
                     currency: "USD".to_string(),
                     capabilities: vec![
-                        crate::core::types::common::ProviderCapability::ChatCompletion,
-                        crate::core::types::common::ProviderCapability::ChatCompletionStream,
-                        crate::core::types::common::ProviderCapability::ToolCalling,
+                        crate::core::types::ProviderCapability::ChatCompletion,
+                        crate::core::types::ProviderCapability::ChatCompletionStream,
+                        crate::core::types::ProviderCapability::ToolCalling,
                     ],
                     created_at: None,
                     updated_at: None,
@@ -743,9 +743,9 @@ impl GeminiModelRegistry {
                     output_cost_per_1k_tokens: Some(0.0003),
                     currency: "USD".to_string(),
                     capabilities: vec![
-                        crate::core::types::common::ProviderCapability::ChatCompletion,
-                        crate::core::types::common::ProviderCapability::ChatCompletionStream,
-                        crate::core::types::common::ProviderCapability::ToolCalling,
+                        crate::core::types::ProviderCapability::ChatCompletion,
+                        crate::core::types::ProviderCapability::ChatCompletionStream,
+                        crate::core::types::ProviderCapability::ToolCalling,
                     ],
                     created_at: None,
                     updated_at: None,
@@ -803,9 +803,9 @@ impl GeminiModelRegistry {
                     output_cost_per_1k_tokens: Some(0.00015),
                     currency: "USD".to_string(),
                     capabilities: vec![
-                        crate::core::types::common::ProviderCapability::ChatCompletion,
-                        crate::core::types::common::ProviderCapability::ChatCompletionStream,
-                        crate::core::types::common::ProviderCapability::ToolCalling,
+                        crate::core::types::ProviderCapability::ChatCompletion,
+                        crate::core::types::ProviderCapability::ChatCompletionStream,
+                        crate::core::types::ProviderCapability::ToolCalling,
                     ],
                     created_at: None,
                     updated_at: None,
@@ -861,9 +861,9 @@ impl GeminiModelRegistry {
                     output_cost_per_1k_tokens: Some(0.0015),
                     currency: "USD".to_string(),
                     capabilities: vec![
-                        crate::core::types::common::ProviderCapability::ChatCompletion,
-                        crate::core::types::common::ProviderCapability::ChatCompletionStream,
-                        crate::core::types::common::ProviderCapability::ToolCalling,
+                        crate::core::types::ProviderCapability::ChatCompletion,
+                        crate::core::types::ProviderCapability::ChatCompletionStream,
+                        crate::core::types::ProviderCapability::ToolCalling,
                     ],
                     created_at: None,
                     updated_at: None,

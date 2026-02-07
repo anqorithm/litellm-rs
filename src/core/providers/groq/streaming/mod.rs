@@ -5,7 +5,7 @@
 
 use super::error::GroqError;
 use crate::core::providers::base::sse::{OpenAICompatibleTransformer, UnifiedSSEStream};
-use crate::core::types::requests::{MessageContent, MessageRole};
+use crate::core::types::{MessageContent, MessageRole};
 use crate::core::types::responses::{ChatChunk, ChatDelta, ChatResponse, ChatStreamChoice};
 use bytes::Bytes;
 use futures::Stream;

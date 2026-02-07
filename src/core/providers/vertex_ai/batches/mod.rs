@@ -291,7 +291,7 @@ fn parse_default_batch_response(
     response: Value,
     model: &str,
 ) -> Result<ChatResponse, ProviderError> {
-    use crate::core::types::requests::ChatMessage;
+    use crate::core::types::ChatMessage;
     use crate::core::types::responses::ChatChoice;
 
     let content = response["content"]

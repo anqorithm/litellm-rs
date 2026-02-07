@@ -3,8 +3,8 @@
 //! Unit tests for OCI provider.
 
 use super::*;
-use crate::core::types::common::{HealthStatus, ProviderCapability, RequestContext};
-use crate::core::types::requests::EmbeddingRequest;
+use crate::core::types::{HealthStatus, ProviderCapability, RequestContext};
+use crate::core::types::EmbeddingRequest;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use super::streaming;
 
@@ -222,7 +222,7 @@ mod provider_tests {
             .embeddings(
                 EmbeddingRequest {
                     model: "test".to_string(),
-                    input: crate::core::types::requests::EmbeddingInput::Single(
+                    input: crate::core::types::EmbeddingInput::Single(
                         "test".to_string(),
                     ),
                     encoding_format: None,
@@ -239,7 +239,7 @@ mod provider_tests {
 mod streaming_tests {
     use super::*;
     use bytes::Bytes;
-    use crate::core::types::requests::MessageRole;
+    use crate::core::types::MessageRole;
     use futures::StreamExt;
 
     #[tokio::test]

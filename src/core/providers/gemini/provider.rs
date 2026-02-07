@@ -398,7 +398,7 @@ impl LLMProvider for GeminiProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::requests::{ChatMessage, MessageContent, MessageRole};
+    use crate::core::types::{ChatMessage, MessageContent, MessageRole};
 
     // Helper function to create a basic valid request
     fn create_valid_request(model: &str) -> ChatRequest {

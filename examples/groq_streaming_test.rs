@@ -2,7 +2,7 @@
 
 use futures::StreamExt;
 use litellm_rs::core::providers::groq::streaming::create_fake_stream;
-use litellm_rs::core::types::requests::{ChatMessage, MessageContent, MessageRole};
+use litellm_rs::core::types::{ChatMessage, MessageContent, MessageRole};
 use litellm_rs::core::types::responses::{ChatChoice, ChatResponse};
 
 #[tokio::main]

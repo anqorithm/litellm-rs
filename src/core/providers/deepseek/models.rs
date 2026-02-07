@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::sync::OnceLock;
 
 use crate::core::providers::base::get_pricing_db;
-use crate::core::types::common::ModelInfo;
+use crate::core::types::ModelInfo;
 
 /// Type alias for model definition tuple: (id, name, context_len, output_len, input_cost, output_cost, has_reasoning)
 type ModelDefinition<'a> = (&'a str, &'a str, u32, Option<u32>, f64, f64, bool);

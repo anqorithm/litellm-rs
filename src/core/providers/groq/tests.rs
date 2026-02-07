@@ -4,7 +4,7 @@
 mod tests {
     use super::super::*;
     use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
-    use crate::core::types::common::ProviderCapability;
+    use crate::core::types::ProviderCapability;
 
     #[tokio::test]
     async fn test_provider_creation() {
@@ -98,7 +98,7 @@ mod tests {
 
     #[test]
     fn test_should_fake_stream() {
-        use crate::core::types::requests::{ChatMessage, ChatRequest, MessageRole};
+        use crate::core::types::{ChatMessage, ChatRequest, MessageRole};
 
         tokio::runtime::Runtime::new().unwrap().block_on(async {
             let provider = GroqProvider::with_api_key("test-key").await.unwrap();
@@ -108,7 +108,7 @@ mod tests {
                 model: "llama-3.1-70b-versatile".to_string(),
                 messages: vec![ChatMessage {
                     role: MessageRole::User,
-                    content: Some(crate::core::types::requests::MessageContent::Text(
+                    content: Some(crate::core::types::MessageContent::Text(
                         "Hello".to_string(),
                     )),
                     ..Default::default()
@@ -121,7 +121,7 @@ mod tests {
             // Test with response_format and stream
             let mut request_with_format = request.clone();
             request_with_format.response_format =
-                Some(crate::core::types::requests::ResponseFormat {
+                Some(crate::core::types::ResponseFormat {
                     format_type: "json_object".to_string(),
                     json_schema: None,
                     response_type: None,

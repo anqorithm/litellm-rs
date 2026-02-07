@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
-use crate::core::types::common::ModelInfo;
+use crate::core::types::ModelInfo;
 
 /// Model
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -33,6 +33,8 @@ pub enum ModelFeature {
 /// Model
 #[derive(Debug, Clone, PartialEq)]
 pub enum AnthropicModelFamily {
+    /// Claude Opus 4.6 models (latest flagship)
+    ClaudeOpus46,
     /// Claude Opus 4.5 models (latest flagship)
     ClaudeOpus45,
     /// Claude Sonnet 4.5 models (latest balanced)
@@ -129,6 +131,60 @@ impl AnthropicModelRegistry {
 
     /// Initialize model registry
     fn initialize_models(&mut self) {
+        // Claude Opus 4.6 (Latest flagship model - January 2026)
+        self.register_model(
+            "claude-opus-4-6",
+            ModelSpec {
+                model_info: ModelInfo {
+                    id: "claude-opus-4-6".to_string(),
+                    name: "Claude Opus 4.6".to_string(),
+                    provider: "anthropic".to_string(),
+                    max_context_length: 200_000,
+                    max_output_length: Some(32_000),
+                    supports_streaming: true,
+                    supports_tools: true,
+                    supports_multimodal: true,
+                    input_cost_per_1k_tokens: Some(0.005), // $5/1M input
+                    output_cost_per_1k_tokens: Some(0.025), // $25/1M output
+                    currency: "USD".to_string(),
+                    capabilities: vec![
+                        crate::core::types::common::ProviderCapability::ChatCompletion,
+                        crate::core::types::common::ProviderCapability::ChatCompletionStream,
+                        crate::core::types::common::ProviderCapability::ToolCalling,
+                    ],
+                    created_at: None,
+                    updated_at: None,
+                    metadata: std::collections::HashMap::new(),
+                },
+                family: AnthropicModelFamily::ClaudeOpus46,
+                features: vec![
+                    ModelFeature::MultimodalSupport,
+                    ModelFeature::ToolCalling,
+                    ModelFeature::FunctionCalling,
+                    ModelFeature::StreamingSupport,
+                    ModelFeature::CacheControl,
+                    ModelFeature::SystemMessages,
+                    ModelFeature::BatchProcessing,
+                    ModelFeature::ThinkingMode,
+                    ModelFeature::ComputerUse,
+                ],
+                pricing: ModelPricing {
+                    input_price: 5.0,
+                    output_price: 25.0,
+                    cache_write_price: Some(6.25),
+                    cache_read_price: Some(0.50),
+                    batch_discount: Some(0.5),
+                },
+                limits: ModelLimits {
+                    max_context_length: 200_000,
+                    max_output_tokens: 32_000,
+                    max_images: Some(100),
+                    max_document_size_mb: Some(100),
+                },
+                config: ModelConfig::default(),
+            },
+        );
+
         // Claude Opus 4.5 (Latest flagship model - November 2025)
         self.register_model(
             "claude-opus-4-5-20251101",
@@ -146,9 +202,9 @@ impl AnthropicModelRegistry {
                     output_cost_per_1k_tokens: Some(0.025), // $25/1M output
                     currency: "USD".to_string(),
                     capabilities: vec![
-                        crate::core::types::common::ProviderCapability::ChatCompletion,
-                        crate::core::types::common::ProviderCapability::ChatCompletionStream,
-                        crate::core::types::common::ProviderCapability::ToolCalling,
+                        crate::core::types::ProviderCapability::ChatCompletion,
+                        crate::core::types::ProviderCapability::ChatCompletionStream,
+                        crate::core::types::ProviderCapability::ToolCalling,
                     ],
                     created_at: None,
                     updated_at: None,
@@ -200,9 +256,9 @@ impl AnthropicModelRegistry {
                     output_cost_per_1k_tokens: Some(0.015),
                     currency: "USD".to_string(),
                     capabilities: vec![
-                        crate::core::types::common::ProviderCapability::ChatCompletion,
-                        crate::core::types::common::ProviderCapability::ChatCompletionStream,
-                        crate::core::types::common::ProviderCapability::ToolCalling,
+                        crate::core::types::ProviderCapability::ChatCompletion,
+                        crate::core::types::ProviderCapability::ChatCompletionStream,
+                        crate::core::types::ProviderCapability::ToolCalling,
                     ],
                     created_at: None,
                     updated_at: None,
@@ -254,9 +310,9 @@ impl AnthropicModelRegistry {
                     output_cost_per_1k_tokens: Some(0.015),
                     currency: "USD".to_string(),
                     capabilities: vec![
-                        crate::core::types::common::ProviderCapability::ChatCompletion,
-                        crate::core::types::common::ProviderCapability::ChatCompletionStream,
-                        crate::core::types::common::ProviderCapability::ToolCalling,
+                        crate::core::types::ProviderCapability::ChatCompletion,
+                        crate::core::types::ProviderCapability::ChatCompletionStream,
+                        crate::core::types::ProviderCapability::ToolCalling,
                     ],
                     created_at: None,
                     updated_at: None,
@@ -308,9 +364,9 @@ impl AnthropicModelRegistry {
                     output_cost_per_1k_tokens: Some(0.005),
                     currency: "USD".to_string(),
                     capabilities: vec![
-                        crate::core::types::common::ProviderCapability::ChatCompletion,
-                        crate::core::types::common::ProviderCapability::ChatCompletionStream,
-                        crate::core::types::common::ProviderCapability::ToolCalling,
+                        crate::core::types::ProviderCapability::ChatCompletion,
+                        crate::core::types::ProviderCapability::ChatCompletionStream,
+                        crate::core::types::ProviderCapability::ToolCalling,
                     ],
                     created_at: None,
                     updated_at: None,
@@ -360,9 +416,9 @@ impl AnthropicModelRegistry {
                     output_cost_per_1k_tokens: Some(0.015),
                     currency: "USD".to_string(),
                     capabilities: vec![
-                        crate::core::types::common::ProviderCapability::ChatCompletion,
-                        crate::core::types::common::ProviderCapability::ChatCompletionStream,
-                        crate::core::types::common::ProviderCapability::ToolCalling,
+                        crate::core::types::ProviderCapability::ChatCompletion,
+                        crate::core::types::ProviderCapability::ChatCompletionStream,
+                        crate::core::types::ProviderCapability::ToolCalling,
                     ],
                     created_at: None,
                     updated_at: None,
@@ -414,9 +470,9 @@ impl AnthropicModelRegistry {
                     output_cost_per_1k_tokens: Some(0.075),
                     currency: "USD".to_string(),
                     capabilities: vec![
-                        crate::core::types::common::ProviderCapability::ChatCompletion,
-                        crate::core::types::common::ProviderCapability::ChatCompletionStream,
-                        crate::core::types::common::ProviderCapability::ToolCalling,
+                        crate::core::types::ProviderCapability::ChatCompletion,
+                        crate::core::types::ProviderCapability::ChatCompletionStream,
+                        crate::core::types::ProviderCapability::ToolCalling,
                     ],
                     created_at: None,
                     updated_at: None,
@@ -466,9 +522,9 @@ impl AnthropicModelRegistry {
                     output_cost_per_1k_tokens: Some(0.015),
                     currency: "USD".to_string(),
                     capabilities: vec![
-                        crate::core::types::common::ProviderCapability::ChatCompletion,
-                        crate::core::types::common::ProviderCapability::ChatCompletionStream,
-                        crate::core::types::common::ProviderCapability::ToolCalling,
+                        crate::core::types::ProviderCapability::ChatCompletion,
+                        crate::core::types::ProviderCapability::ChatCompletionStream,
+                        crate::core::types::ProviderCapability::ToolCalling,
                     ],
                     created_at: None,
                     updated_at: None,
@@ -518,9 +574,9 @@ impl AnthropicModelRegistry {
                     output_cost_per_1k_tokens: Some(0.00125),
                     currency: "USD".to_string(),
                     capabilities: vec![
-                        crate::core::types::common::ProviderCapability::ChatCompletion,
-                        crate::core::types::common::ProviderCapability::ChatCompletionStream,
-                        crate::core::types::common::ProviderCapability::ToolCalling,
+                        crate::core::types::ProviderCapability::ChatCompletion,
+                        crate::core::types::ProviderCapability::ChatCompletionStream,
+                        crate::core::types::ProviderCapability::ToolCalling,
                     ],
                     created_at: None,
                     updated_at: None,
@@ -570,8 +626,8 @@ impl AnthropicModelRegistry {
                     output_cost_per_1k_tokens: Some(0.024),
                     currency: "USD".to_string(),
                     capabilities: vec![
-                        crate::core::types::common::ProviderCapability::ChatCompletion,
-                        crate::core::types::common::ProviderCapability::ChatCompletionStream,
+                        crate::core::types::ProviderCapability::ChatCompletion,
+                        crate::core::types::ProviderCapability::ChatCompletionStream,
                     ],
                     created_at: None,
                     updated_at: None,
@@ -613,8 +669,8 @@ impl AnthropicModelRegistry {
                     output_cost_per_1k_tokens: Some(0.0024),
                     currency: "USD".to_string(),
                     capabilities: vec![
-                        crate::core::types::common::ProviderCapability::ChatCompletion,
-                        crate::core::types::common::ProviderCapability::ChatCompletionStream,
+                        crate::core::types::ProviderCapability::ChatCompletion,
+                        crate::core::types::ProviderCapability::ChatCompletionStream,
                     ],
                     created_at: None,
                     updated_at: None,
@@ -638,11 +694,35 @@ impl AnthropicModelRegistry {
                 config: ModelConfig::default(),
             },
         );
+
+        // Stable aliases and partner-platform naming variants.
+        self.register_alias("claude-opus-4-6-20260114", "claude-opus-4-6");
+        self.register_alias("claude-opus-4-5", "claude-opus-4-5-20251101");
+        self.register_alias("claude-opus-4-5-20251110", "claude-opus-4-5-20251101");
+        self.register_alias("claude-sonnet-4-5", "claude-sonnet-4-5-20251101");
+        self.register_alias("claude-sonnet-4-5-20250929", "claude-sonnet-4-5-20251101");
+        self.register_alias("claude-sonnet-4", "claude-sonnet-4-20251022");
+        self.register_alias("claude-sonnet-4-20250514", "claude-sonnet-4-20251022");
+        self.register_alias("claude-3-5-sonnet", "claude-3-5-sonnet-20241022");
+        self.register_alias("claude-3.5-sonnet", "claude-3-5-sonnet-20241022");
+        self.register_alias("claude-3-5-haiku", "claude-3-5-haiku-20241022");
+        self.register_alias("claude-3.5-haiku", "claude-3-5-haiku-20241022");
+        self.register_alias("claude-3-opus", "claude-3-opus-20240229");
+        self.register_alias("claude-3-sonnet", "claude-3-sonnet-20240229");
+        self.register_alias("claude-3-haiku", "claude-3-haiku-20240307");
     }
 
     /// Register a model
     fn register_model(&mut self, id: &str, spec: ModelSpec) {
         self.models.insert(id.to_string(), spec);
+    }
+
+    fn register_alias(&mut self, alias: &str, target: &str) {
+        if let Some(spec) = self.models.get(target) {
+            let mut alias_spec = spec.clone();
+            alias_spec.model_info.id = alias.to_string();
+            self.models.insert(alias.to_string(), alias_spec);
+        }
     }
 
     /// Get model specification
@@ -682,7 +762,10 @@ impl AnthropicModelRegistry {
         let model_lower = model_name.to_lowercase();
 
         // Check newest models first (most specific)
-        if model_lower.contains("claude-opus-4-5") || model_lower.contains("claude-opus-4.5") {
+        if model_lower.contains("claude-opus-4-6") || model_lower.contains("claude-opus-4.6") {
+            Some(AnthropicModelFamily::ClaudeOpus46)
+        } else if model_lower.contains("claude-opus-4-5") || model_lower.contains("claude-opus-4.5")
+        {
             Some(AnthropicModelFamily::ClaudeOpus45)
         } else if model_lower.contains("claude-sonnet-4-5")
             || model_lower.contains("claude-sonnet-4.5")
@@ -817,25 +900,30 @@ mod tests {
     fn test_model_registry() {
         let registry = get_anthropic_registry();
 
-        // Test Claude 3.5 Sonnet
-        let sonnet_spec = registry
-            .get_model_spec("claude-3-5-sonnet-20241022")
+        // Test latest flagship model
+        let opus_spec = registry
+            .get_model_spec("claude-opus-4-6")
             .unwrap();
-        assert_eq!(sonnet_spec.family, AnthropicModelFamily::Claude35Sonnet);
+        assert_eq!(opus_spec.family, AnthropicModelFamily::ClaudeOpus46);
         assert!(
-            sonnet_spec
+            opus_spec
                 .features
                 .contains(&ModelFeature::MultimodalSupport)
         );
-        assert!(sonnet_spec.features.contains(&ModelFeature::ComputerUse));
+        assert!(opus_spec.features.contains(&ModelFeature::ComputerUse));
 
         // Test pricing
-        assert_eq!(sonnet_spec.pricing.input_price, 3.0);
-        assert_eq!(sonnet_spec.pricing.output_price, 15.0);
+        assert_eq!(opus_spec.pricing.input_price, 5.0);
+        assert_eq!(opus_spec.pricing.output_price, 25.0);
     }
 
     #[test]
     fn test_model_family_detection() {
+        assert_eq!(
+            AnthropicModelRegistry::from_model_name("claude-opus-4-6"),
+            Some(AnthropicModelFamily::ClaudeOpus46)
+        );
+
         assert_eq!(
             AnthropicModelRegistry::from_model_name("claude-3-5-sonnet-20241022"),
             Some(AnthropicModelFamily::Claude35Sonnet)
@@ -854,22 +942,20 @@ mod tests {
 
     #[test]
     fn test_cost_calculation() {
-        let cost = CostCalculator::calculate_cost("claude-3-5-sonnet-20241022", 1000, 500);
+        let cost = CostCalculator::calculate_cost("claude-opus-4-6", 1000, 500);
         assert!(cost.is_some());
 
         let cost_value = cost.unwrap();
-        // Expected: (1000/1M * $3) + (500/1M * $15) = $0.003 + $0.0075 = $0.0105
-        assert!((cost_value - 0.0105).abs() < 0.0001);
+        // Expected: (1000/1M * $5) + (500/1M * $25) = $0.005 + $0.0125 = $0.0175
+        assert!((cost_value - 0.0175).abs() < 0.0001);
     }
 
     #[test]
     fn test_feature_support() {
         let registry = get_anthropic_registry();
 
-        // Claude 3.5 Sonnet supports computer tools
-        assert!(
-            registry.supports_feature("claude-3-5-sonnet-20241022", &ModelFeature::ComputerUse)
-        );
+        // Claude Opus 4.6 supports computer tools
+        assert!(registry.supports_feature("claude-opus-4-6", &ModelFeature::ComputerUse));
 
         // Claude 2.1 does not support computer tools
         assert!(!registry.supports_feature("claude-2.1", &ModelFeature::ComputerUse));

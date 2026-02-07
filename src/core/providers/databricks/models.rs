@@ -2,7 +2,7 @@
 //!
 //! Model registry and information for Databricks Foundation Models.
 
-use crate::core::types::common::{ModelInfo, ProviderCapability};
+use crate::core::types::{ModelInfo, ProviderCapability};
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 

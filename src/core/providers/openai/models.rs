@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::sync::OnceLock;
 
 use crate::core::providers::base::get_pricing_db;
-use crate::core::types::common::{ModelInfo, ProviderCapability};
+use crate::core::types::{ModelInfo, ProviderCapability};
 
 /// OpenAI-specific model features
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

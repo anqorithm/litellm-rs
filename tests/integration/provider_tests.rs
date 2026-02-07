@@ -7,7 +7,7 @@
 mod tests {
     use litellm_rs::core::providers::groq::{GroqConfig, GroqProvider};
     use litellm_rs::core::traits::provider::llm_provider::trait_definition::LLMProvider;
-    use litellm_rs::core::types::common::ProviderCapability;
+    use litellm_rs::core::types::ProviderCapability;
 
     /// Test Groq provider creation
     #[tokio::test]
@@ -103,8 +103,8 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn test_groq_real_chat_completion() {
-        use litellm_rs::core::types::common::RequestContext;
-        use litellm_rs::core::types::requests::{
+        use litellm_rs::core::types::RequestContext;
+        use litellm_rs::core::types::{
             ChatMessage, ChatRequest, MessageContent, MessageRole,
         };
 

@@ -2,7 +2,7 @@
 
 use crate::core::providers::bedrock::model_config::ModelConfig;
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::types::requests::ChatRequest;
+use crate::core::types::ChatRequest;
 use serde_json::{Value, json};
 
 /// Transform request for Cohere models
@@ -33,7 +33,7 @@ fn transform_command_r_request(request: &ChatRequest) -> Result<Value, ProviderE
             Some(MessageContent::Parts(parts)) => parts
                 .iter()
                 .filter_map(|part| {
-                    if let crate::core::types::requests::ContentPart::Text { text } = part {
+                    if let crate::core::types::ContentPart::Text { text } = part {
                         Some(text.clone())
                     } else {
                         None

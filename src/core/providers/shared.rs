@@ -11,7 +11,7 @@ use std::time::Duration;
 use tracing::warn;
 
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::types::requests::{MessageContent, MessageRole};
+use crate::core::types::{MessageContent, MessageRole};
 use crate::core::types::responses::{FinishReason, Usage};
 
 // ============================================================================
@@ -431,7 +431,7 @@ impl TokenCostCalculator {
 #[cfg(test)]
 pub mod test_utils {
     use super::*;
-    use crate::core::types::requests::ChatMessage;
+    use crate::core::types::ChatMessage;
 
     /// Create a mock ChatMessage for testing
     pub fn mock_message(role: MessageRole, content: &str) -> ChatMessage {
@@ -462,7 +462,7 @@ pub mod test_utils {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::requests::ContentPart;
+    use crate::core::types::ContentPart;
 
     // ==================== HttpClientBuilder Tests ====================
 

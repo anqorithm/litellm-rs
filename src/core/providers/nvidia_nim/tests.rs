@@ -302,10 +302,10 @@ async fn test_nvidia_nim_provider_capabilities() {
     let provider = NvidiaNimProvider::with_api_key("nvapi-test-key").await.unwrap();
     let capabilities = provider.capabilities();
 
-    assert!(capabilities.contains(&crate::core::types::common::ProviderCapability::ChatCompletion));
-    assert!(capabilities.contains(&crate::core::types::common::ProviderCapability::ChatCompletionStream));
-    assert!(capabilities.contains(&crate::core::types::common::ProviderCapability::ToolCalling));
-    assert!(capabilities.contains(&crate::core::types::common::ProviderCapability::Embeddings));
+    assert!(capabilities.contains(&crate::core::types::ProviderCapability::ChatCompletion));
+    assert!(capabilities.contains(&crate::core::types::ProviderCapability::ChatCompletionStream));
+    assert!(capabilities.contains(&crate::core::types::ProviderCapability::ToolCalling));
+    assert!(capabilities.contains(&crate::core::types::ProviderCapability::Embeddings));
 }
 
 #[tokio::test]
@@ -364,11 +364,11 @@ async fn test_nvidia_nim_provider_map_openai_params() {
 async fn test_nvidia_nim_provider_transform_request() {
     use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
     use crate::core::types::ChatMessage;
-    use crate::core::types::requests::MessageRole;
+    use crate::core::types::MessageRole;
 
     let provider = NvidiaNimProvider::with_api_key("nvapi-test-key").await.unwrap();
 
-    let request = crate::core::types::requests::ChatRequest {
+    let request = crate::core::types::ChatRequest {
         model: "meta/llama3-70b-instruct".to_string(),
         messages: vec![ChatMessage {
             role: MessageRole::User,
@@ -383,7 +383,7 @@ async fn test_nvidia_nim_provider_transform_request() {
         ..Default::default()
     };
 
-    let context = crate::core::types::common::RequestContext::default();
+    let context = crate::core::types::RequestContext::default();
     let result = provider.transform_request(request, context).await;
     assert!(result.is_ok());
 
