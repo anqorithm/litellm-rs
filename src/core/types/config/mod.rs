@@ -12,18 +12,11 @@ pub mod retry;
 pub mod routing;
 pub mod server;
 
-// Re-export all types
-pub use defaults::*;
-pub use health::*;
-pub use middleware::*;
-pub use observability::*;
-pub use provider::*;
-pub use rate_limit::*;
-pub use retry::*;
-pub use routing::*;
-pub use server::*;
-
 use serde::{Deserialize, Serialize};
+use self::{
+    middleware::MiddlewareConfig, observability::ObservabilityConfig,
+    provider::ProviderConfigEntry, routing::RoutingConfig, server::ServerConfig,
+};
 
 /// Main LiteLLM configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
