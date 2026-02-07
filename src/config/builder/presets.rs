@@ -19,7 +19,7 @@ pub fn prod_server() -> ServerConfigBuilder {
     ServerConfigBuilder::new()
         .host("0.0.0.0")
         .port(8080)
-        .workers(num_cpus::get())
+        .workers(std::thread::available_parallelism().map_or(1, |n| n.get()))
         .max_connections(10000)
         .timeout(Duration::from_secs(60))
 }

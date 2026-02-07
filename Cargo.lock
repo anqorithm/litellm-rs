@@ -3300,7 +3300,6 @@ dependencies = [
  "jsonwebtoken 9.3.1",
  "lru",
  "mockall",
- "num_cpus",
  "object_store",
  "once_cell",
  "opentelemetry",

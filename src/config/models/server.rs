@@ -86,7 +86,8 @@ impl ServerConfig {
 
     /// Get the number of workers (defaults to CPU count)
     pub fn worker_count(&self) -> usize {
-        self.workers.unwrap_or_else(num_cpus::get)
+        self.workers
+            .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get()))
     }
 
     /// Validate server configuration
