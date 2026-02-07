@@ -66,7 +66,6 @@
 
 #![allow(missing_docs)]
 #![warn(clippy::all)]
-#![allow(clippy::module_inception)]
 
 // Public module exports
 #[cfg(feature = "storage")]
