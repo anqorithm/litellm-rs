@@ -148,9 +148,9 @@ impl AnthropicModelRegistry {
                     output_cost_per_1k_tokens: Some(0.025), // $25/1M output
                     currency: "USD".to_string(),
                     capabilities: vec![
-                        crate::core::types::common::ProviderCapability::ChatCompletion,
-                        crate::core::types::common::ProviderCapability::ChatCompletionStream,
-                        crate::core::types::common::ProviderCapability::ToolCalling,
+                        crate::core::types::ProviderCapability::ChatCompletion,
+                        crate::core::types::ProviderCapability::ChatCompletionStream,
+                        crate::core::types::ProviderCapability::ToolCalling,
                     ],
                     created_at: None,
                     updated_at: None,

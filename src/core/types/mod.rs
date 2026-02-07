@@ -21,10 +21,6 @@ pub mod message;
 pub mod thinking;
 pub mod tools;
 
-// Backward compatibility re-export modules
-pub mod common;
-pub mod requests;
-
 // Original files kept as-is
 pub mod config;
 pub mod errors;

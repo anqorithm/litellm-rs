@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 use super::config::PROVIDER_NAME;
 use super::models::get_heroku_registry;
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::types::{common::ModelInfo, requests::ChatRequest, responses::ChatResponse};
+use crate::core::types::{ChatRequest, ModelInfo, responses::ChatResponse};
 
 /// Heroku API client logic
 pub struct HerokuClient;
