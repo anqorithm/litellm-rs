@@ -15,12 +15,24 @@ pub enum GatewayError {
     Config(String),
 
     /// Database errors
+    #[cfg(feature = "storage")]
     #[error("Database error: {0}")]
     Database(#[from] sea_orm::DbErr),
 
+    /// Database errors (storage feature disabled)
+    #[cfg(not(feature = "storage"))]
+    #[error("Database error: {0}")]
+    Database(String),
+
     /// Redis errors
+    #[cfg(feature = "redis")]
     #[error("Redis error: {0}")]
     Redis(#[from] redis::RedisError),
+
+    /// Redis errors (redis feature disabled)
+    #[cfg(not(feature = "redis"))]
+    #[error("Redis error: {0}")]
+    Redis(String),
 
     /// HTTP client errors
     #[error("HTTP client error: {0}")]

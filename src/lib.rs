@@ -69,14 +69,18 @@
 #![allow(clippy::module_inception)]
 
 // Public module exports
+#[cfg(feature = "storage")]
 mod auth;
 // Core completion API moved to core::completion
 pub mod config;
 pub mod core;
+#[cfg(feature = "storage")]
 mod monitoring;
 pub mod sdk; // New SDK module
+#[cfg(feature = "storage")]
 pub mod server;
 pub mod services; // Add services module
+#[cfg(feature = "storage")]
 pub mod storage;
 pub mod utils;
 pub mod version; // Build and version information
@@ -120,14 +124,17 @@ pub use core::router::{
     RouterError, UnifiedRouter, UnifiedRoutingStrategy as RoutingStrategy,
 };
 
+#[cfg(feature = "storage")]
 use tracing::info;
 
 /// A minimal LiteLLM Gateway implementation
+#[cfg(feature = "storage")]
 pub struct Gateway {
     config: Config,
     server: server::server::HttpServer,
 }
 
+#[cfg(feature = "storage")]
 impl Gateway {
     /// Create a new gateway instance
     pub async fn new(config: Config) -> Result<Self> {

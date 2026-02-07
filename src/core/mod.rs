@@ -7,10 +7,12 @@
 pub mod a2a; // A2A (Agent-to-Agent) Protocol Gateway
 pub mod agent; // Agent Coordinator for managing agent lifecycles
 pub mod alerting; // Alerting system (Slack, webhooks)
+#[cfg(feature = "storage")]
 pub mod analytics;
 pub mod audio; // Audio API (transcription, translation, speech)
 pub mod audit; // Audit logging system
 // pub mod base_provider;  // Removed: unused dead code
+#[cfg(feature = "storage")]
 pub mod batch;
 pub mod budget; // Budget management system
 // pub mod cache; // DualCache system (InMemory + Redis) - TODO: implement
@@ -35,6 +37,7 @@ pub mod rerank; // Rerank API for RAG systems
 pub mod router;
 pub mod secret_managers; // Secret management system
 pub mod security;
+#[cfg(feature = "storage")]
 pub mod semantic_cache;
 pub mod streaming;
 pub mod teams; // Team management module
@@ -53,12 +56,17 @@ pub mod webhooks;
 
 // pub use engine::Gateway;
 
+#[cfg(feature = "storage")]
 use crate::config::Config;
+#[cfg(feature = "storage")]
 use crate::utils::error::Result;
+#[cfg(feature = "storage")]
 use std::sync::Arc;
+#[cfg(feature = "storage")]
 use tracing::{debug, info};
 
 /// Main Gateway struct that orchestrates all components
+#[cfg(feature = "storage")]
 #[derive(Clone)]
 pub struct Gateway {
     /// Gateway configuration
@@ -75,6 +83,7 @@ pub struct Gateway {
     monitoring: Arc<crate::monitoring::system::MonitoringSystem>,
 }
 
+#[cfg(feature = "storage")]
 impl Gateway {
     /// Create a new Gateway instance
     pub async fn new(config: Config) -> Result<Self> {

@@ -34,6 +34,7 @@ pub mod strategy_impl;
 
 // Legacy modules (kept for backwards compatibility)
 pub mod health;
+#[cfg(feature = "storage")]
 pub mod legacy_router;
 pub mod load_balancer;
 pub mod metrics;
@@ -47,6 +48,7 @@ pub use deployment::{Deployment, DeploymentConfig, DeploymentId, DeploymentState
 
 // Re-exports from legacy modules
 pub use health::HealthChecker;
+#[cfg(feature = "storage")]
 pub use legacy_router::Router;
 pub use load_balancer::LoadBalancer;
 pub use metrics::RouterMetrics;
