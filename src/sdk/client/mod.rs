@@ -3,7 +3,7 @@
 //! This module provides a full-featured LLM client with support for multiple providers,
 //! intelligent routing, load balancing, and comprehensive statistics tracking.
 
-mod client;
+mod llm_client;
 mod completions;
 mod embeddings;
 mod routing;
@@ -14,5 +14,5 @@ mod types;
 mod tests;
 
 // Re-export public types and the main client
-pub use client::LLMClient;
+pub use llm_client::LLMClient;
 pub use types::{LoadBalancer, LoadBalancingStrategy, ProviderStats};

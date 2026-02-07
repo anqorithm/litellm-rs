@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use uuid::Uuid;
 
-use super::limiter::RateLimiter;
+use super::engine::RateLimiter;
 use super::types::{RateLimitKey, RateLimitResult};
 
 impl RateLimiter {

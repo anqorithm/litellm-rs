@@ -4,7 +4,7 @@ mod tests {
     use super::super::logger::Logger;
     use super::super::sanitization::Sanitization;
     use super::super::types::{LogEntry, LogLevel};
-    use super::super::utils::LoggingUtils;
+    use super::super::core::LoggingUtils;
     use std::collections::HashMap;
     use tempfile::NamedTempFile;
 

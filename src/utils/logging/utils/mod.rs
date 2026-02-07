@@ -15,14 +15,14 @@ pub mod sanitization;
 #[cfg(test)]
 mod tests;
 pub mod types;
-pub mod utils;
+pub mod core;
 
 use crate::core::providers::unified_provider::ProviderError;
 use file_logging::FileLogging;
 use request_logging::RequestLogging;
 use sanitization::Sanitization;
 use types::{LogEntry, LogLevel};
-use utils::LoggingUtils as CoreLoggingUtils;
+use self::core::LoggingUtils as CoreLoggingUtils;
 
 use std::collections::HashMap;
 use std::fs::File;

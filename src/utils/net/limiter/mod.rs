@@ -5,7 +5,7 @@
 #![allow(dead_code)]
 
 // Module declarations
-mod limiter;
+mod engine;
 mod types;
 mod utils;
 mod window;
@@ -14,5 +14,5 @@ mod window;
 mod tests;
 
 // Re-exports
-pub use limiter::RateLimiter;
+pub use engine::RateLimiter;
 pub use types::{RateLimitConfig, RateLimitKey, RateLimitResult, SlidingWindow, TokenBucket};

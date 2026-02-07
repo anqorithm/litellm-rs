@@ -5,7 +5,7 @@
 use crate::utils::error::Result;
 use std::time::{Duration, Instant};
 
-use super::limiter::RateLimiter;
+use super::engine::RateLimiter;
 use super::types::{RateLimitResult, SlidingWindow};
 
 impl RateLimiter {

@@ -6,7 +6,7 @@ mod billing;
 mod invitation;
 mod member;
 mod settings;
-mod team;
+mod entity;
 
 #[cfg(test)]
 mod tests;
@@ -21,4 +21,4 @@ pub use settings::{
     ApiAccessSettings, ChannelType, NotificationChannel, PasswordPolicy, TeamNotificationSettings,
     TeamSecuritySettings, TeamSettings,
 };
-pub use team::{Team, TeamStatus, TeamVisibility};
+pub use entity::{Team, TeamStatus, TeamVisibility};

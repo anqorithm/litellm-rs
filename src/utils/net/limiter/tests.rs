@@ -2,7 +2,7 @@
 //!
 //! This module contains comprehensive tests for the rate limiter.
 
-use super::limiter::RateLimiter;
+use super::engine::RateLimiter;
 use super::types::{RateLimitConfig, RateLimitKey, RateLimitResult, SlidingWindow, TokenBucket};
 use std::time::{Duration, Instant};
 use uuid::Uuid;

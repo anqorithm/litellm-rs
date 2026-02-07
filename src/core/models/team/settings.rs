@@ -1,6 +1,6 @@
 //! Team settings and configuration
 
-use super::team::TeamVisibility;
+use super::entity::TeamVisibility;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

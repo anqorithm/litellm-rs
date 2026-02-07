@@ -1,6 +1,6 @@
 //! Statistics and metrics methods
 
-use super::client::LLMClient;
+use super::llm_client::LLMClient;
 use super::types::ProviderStats;
 use crate::sdk::errors::Result;
 use crate::sdk::types::ChatResponse;
