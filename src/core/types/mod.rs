@@ -52,6 +52,3 @@ pub use tools::*;
 pub use config::*;
 pub use errors::*;
 pub use responses::*;
-
-// Provider config re-export for backward compatibility
-pub use crate::config::models::provider::ProviderConfig;

@@ -676,7 +676,7 @@ impl Provider {
 ///
 /// This is the main factory function for creating providers
 pub async fn create_provider(
-    config: crate::core::types::ProviderConfig,
+    config: crate::config::models::provider::ProviderConfig,
 ) -> Result<Provider, ProviderError> {
     // Determine provider type from config
     let provider_type = match config.name.as_str() {
