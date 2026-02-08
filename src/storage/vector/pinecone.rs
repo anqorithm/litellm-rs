@@ -1,6 +1,6 @@
 //! Pinecone vector store implementation (placeholder)
 
-use crate::config::VectorDbConfig;
+use crate::config::models::file_storage::VectorDbConfig;
 use crate::utils::error::error::{GatewayError, Result};
 
 use super::types::{SearchResult, VectorPoint};

@@ -78,7 +78,7 @@ impl RbacSystem {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::RbacConfig;
+    use crate::config::models::auth::RbacConfig;
     use crate::core::models::user::types::UserRole;
     use std::collections::HashSet;
 

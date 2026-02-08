@@ -7,11 +7,17 @@ pub mod models;
 pub mod validation;
 // pub mod loader;
 
-pub use models::*;
 pub use validation::Validate;
 // pub use builder::*;  // Commented out until actually used
 // pub use loader::*;
 
+use crate::config::models::auth::AuthConfig;
+use crate::config::models::gateway::GatewayConfig;
+use crate::config::models::monitoring::MonitoringConfig;
+use crate::config::models::provider::ProviderConfig;
+use crate::config::models::router::RouterConfig;
+use crate::config::models::server::ServerConfig;
+use crate::config::models::storage::StorageConfig;
 use crate::utils::error::error::{GatewayError, Result};
 use std::path::Path;
 use tracing::{debug, info};

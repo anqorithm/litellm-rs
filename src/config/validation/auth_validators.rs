@@ -4,7 +4,7 @@
 //! configuration structures including AuthConfig and RbacConfig.
 
 use super::trait_def::Validate;
-use crate::config::models::*;
+use crate::config::models::auth::{AuthConfig, RbacConfig};
 use tracing::debug;
 
 impl Validate for AuthConfig {

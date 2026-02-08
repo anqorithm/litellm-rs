@@ -4,7 +4,7 @@
 mod tests {
     use super::super::collector::MetricsCollector;
     use super::super::helpers::{calculate_average, calculate_percentile};
-    use crate::config::MonitoringConfig;
+    use crate::config::models::monitoring::MonitoringConfig;
     use std::collections::VecDeque;
 
     #[test]
@@ -26,17 +26,17 @@ mod tests {
     #[tokio::test]
     async fn test_metrics_collector_creation() {
         let config = MonitoringConfig {
-            metrics: crate::config::MetricsConfig {
+            metrics: crate::config::models::monitoring::MetricsConfig {
                 enabled: true,
                 port: 9090,
                 path: "/metrics".to_string(),
             },
-            tracing: crate::config::TracingConfig {
+            tracing: crate::config::models::monitoring::TracingConfig {
                 enabled: false,
                 endpoint: None,
                 service_name: "test".to_string(),
             },
-            health: crate::config::HealthConfig {
+            health: crate::config::models::monitoring::HealthConfig {
                 path: "/health".to_string(),
                 detailed: true,
             },

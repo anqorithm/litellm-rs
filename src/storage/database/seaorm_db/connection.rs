@@ -1,4 +1,4 @@
-use crate::config::DatabaseConfig;
+use crate::config::models::storage::DatabaseConfig;
 use crate::utils::error::error::{GatewayError, Result};
 use sea_orm::*;
 use sea_orm_migration::MigratorTrait;

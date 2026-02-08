@@ -1,7 +1,7 @@
 //! Core authentication system implementation
 
 use super::types::{AuthMethod, AuthResult, AuthzResult};
-use crate::config::AuthConfig;
+use crate::config::models::auth::AuthConfig;
 use crate::core::models::RequestContext;
 use crate::core::models::user::types::{User, UserRole};
 use crate::storage::StorageLayer;

@@ -1,6 +1,6 @@
 //! Core MonitoringSystem implementation
 
-use crate::config::MonitoringConfig;
+use crate::config::models::monitoring::MonitoringConfig;
 use crate::storage::StorageLayer;
 use crate::utils::error::error::Result;
 use std::sync::Arc;

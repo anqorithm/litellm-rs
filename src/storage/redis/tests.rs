@@ -1,7 +1,7 @@
 //! Redis module tests
 
 use super::pool::RedisPool;
-use crate::config::RedisConfig;
+use crate::config::models::storage::RedisConfig;
 
 #[test]
 fn test_sanitize_url() {

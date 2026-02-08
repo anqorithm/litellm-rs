@@ -139,7 +139,7 @@ impl RbacSystem {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::RbacConfig;
+    use crate::config::models::auth::RbacConfig;
     use crate::core::models::user::preferences::UserPreferences;
     use crate::core::models::user::types::{UserProfile, UserRole, UserStatus};
     use crate::core::models::{Metadata, UsageStats};

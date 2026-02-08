@@ -4,7 +4,8 @@
 //! structures including StorageConfig, DatabaseConfig, RedisConfig, and VectorDbConfig.
 
 use super::trait_def::Validate;
-use crate::config::models::*;
+use crate::config::models::file_storage::VectorDbConfig;
+use crate::config::models::storage::{DatabaseConfig, RedisConfig, StorageConfig};
 use tracing::debug;
 
 impl Validate for StorageConfig {

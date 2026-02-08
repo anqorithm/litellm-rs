@@ -5,7 +5,9 @@
 
 use super::ssrf::validate_url_against_ssrf;
 use super::trait_def::Validate;
-use crate::config::models::*;
+use crate::config::models::gateway::GatewayConfig;
+use crate::config::models::provider::{HealthCheckConfig, ProviderConfig, RetryConfig};
+use crate::config::models::server::ServerConfig;
 use std::collections::HashSet;
 use tracing::debug;
 

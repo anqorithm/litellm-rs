@@ -1,6 +1,6 @@
 //! Amazon S3 storage implementation
 
-use crate::config::S3Config;
+use crate::config::models::file_storage::S3Config;
 use crate::utils::error::error::{GatewayError, Result};
 #[cfg(feature = "s3")]
 use tracing::debug;

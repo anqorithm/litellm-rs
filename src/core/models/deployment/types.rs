@@ -2,7 +2,7 @@
 //!
 //! This module defines the main deployment structure and related types.
 
-use crate::config::ProviderConfig;
+use crate::config::models::provider::ProviderConfig;
 use crate::core::models::{HealthStatus, Metadata};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;

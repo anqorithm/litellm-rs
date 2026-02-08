@@ -6,7 +6,9 @@
 mod tests {
     use super::super::ssrf::validate_url_against_ssrf;
     use super::super::trait_def::Validate;
-    use crate::config::models::*;
+    use crate::config::models::auth::AuthConfig;
+    use crate::config::models::provider::ProviderConfig;
+    use crate::config::models::server::ServerConfig;
 
     // ==================== Server Config Validation ====================
 

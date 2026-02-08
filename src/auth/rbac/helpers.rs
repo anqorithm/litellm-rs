@@ -29,7 +29,7 @@ impl RbacHelpers for RbacSystem {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::RbacConfig;
+    use crate::config::models::auth::RbacConfig;
 
     // ==================== Helper Functions ====================
 

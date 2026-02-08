@@ -2,7 +2,8 @@
 //!
 //! This module provides the HttpServer struct and its core methods.
 
-use crate::config::{Config, ServerConfig};
+use crate::config::Config;
+use crate::config::models::server::ServerConfig;
 use crate::server::handlers::health_check;
 use crate::server::middleware::{AuthMiddleware, RequestIdMiddleware};
 use crate::server::routes;

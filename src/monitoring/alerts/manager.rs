@@ -2,7 +2,7 @@
 
 use super::channels::{NotificationChannel, SlackChannel};
 use super::types::{AlertRule, AlertStats, AlertStorage};
-use crate::config::AlertingConfig;
+use crate::config::models::file_storage::AlertingConfig;
 use crate::monitoring::types::{Alert, AlertSeverity};
 use crate::utils::error::error::Result;
 use parking_lot::{Mutex, RwLock};
