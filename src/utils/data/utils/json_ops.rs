@@ -158,7 +158,13 @@ impl JsonOps {
                     if !map.contains_key(*segment) {
                         map.insert(segment.to_string(), Value::Object(Map::new()));
                     }
-                    current = map.get_mut(*segment).unwrap();
+                    let Some(next) = map.get_mut(*segment) else {
+                        return Err(ProviderError::InvalidRequest {
+                            provider: "unknown",
+                            message: format!("Failed to access nested segment: {}", segment),
+                        });
+                    };
+                    current = next;
                 }
                 _ => {
                     return Err(ProviderError::InvalidRequest {
