@@ -424,6 +424,15 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde::{Serialize, de::DeserializeOwned};
+
+    fn from_json<T: DeserializeOwned>(json: &str) -> T {
+        serde_json::from_str(json).expect("test JSON deserialization should succeed")
+    }
+
+    fn to_json<T: Serialize>(value: &T) -> String {
+        serde_json::to_string(value).expect("test JSON serialization should succeed")
+    }
 
     #[test]
     fn test_create_team_body_deserialize() {
@@ -433,7 +442,7 @@ mod tests {
             "description": "A test team"
         }"#;
 
-        let body: CreateTeamBody = serde_json::from_str(json).unwrap();
+        let body: CreateTeamBody = from_json(json);
         assert_eq!(body.name, "test-team");
         assert_eq!(body.display_name, Some("Test Team".to_string()));
         assert_eq!(body.description, Some("A test team".to_string()));
@@ -443,7 +452,7 @@ mod tests {
     fn test_create_team_body_minimal() {
         let json = r#"{"name": "minimal-team"}"#;
 
-        let body: CreateTeamBody = serde_json::from_str(json).unwrap();
+        let body: CreateTeamBody = from_json(json);
         assert_eq!(body.name, "minimal-team");
         assert!(body.display_name.is_none());
         assert!(body.description.is_none());
@@ -456,7 +465,7 @@ mod tests {
             "description": "Updated description"
         }"#;
 
-        let body: UpdateTeamBody = serde_json::from_str(json).unwrap();
+        let body: UpdateTeamBody = from_json(json);
         assert_eq!(body.name, Some("new-name".to_string()));
         assert!(body.display_name.is_none());
         assert_eq!(body.description, Some("Updated description".to_string()));
@@ -469,7 +478,7 @@ mod tests {
             "role": "admin"
         }"#;
 
-        let body: AddMemberBody = serde_json::from_str(json).unwrap();
+        let body: AddMemberBody = from_json(json);
         assert_eq!(
             body.user_id.to_string(),
             "550e8400-e29b-41d4-a716-446655440000"
@@ -481,7 +490,7 @@ mod tests {
     fn test_update_role_body_deserialize() {
         let json = r#"{"role": "owner"}"#;
 
-        let body: UpdateRoleBody = serde_json::from_str(json).unwrap();
+        let body: UpdateRoleBody = from_json(json);
         assert!(matches!(body.role, TeamRole::Owner));
     }
 
@@ -496,7 +505,7 @@ mod tests {
         ];
 
         for (json, expected_role) in roles {
-            let role: TeamRole = serde_json::from_str(json).unwrap();
+            let role: TeamRole = from_json(json);
             assert!(std::mem::discriminant(&role) == std::mem::discriminant(&expected_role));
         }
     }
@@ -509,7 +518,7 @@ mod tests {
             member_count: Some(5),
         };
 
-        let json = serde_json::to_string(&response).unwrap();
+        let json = to_json(&response);
         assert!(json.contains("test-team"));
         assert!(json.contains("member_count"));
         assert!(json.contains("5"));
@@ -523,7 +532,7 @@ mod tests {
             member_count: None,
         };
 
-        let json = serde_json::to_string(&response).unwrap();
+        let json = to_json(&response);
         assert!(json.contains("test-team"));
         assert!(!json.contains("member_count"));
     }
