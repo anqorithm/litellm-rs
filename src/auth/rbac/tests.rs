@@ -5,7 +5,7 @@ mod tests {
     use crate::auth::rbac::RbacSystem;
     use crate::auth::rbac::types::{Permission, PermissionCheck, Role};
     use crate::config::models::auth::RbacConfig;
-    use crate::core::models::TeamRole;
+    use crate::core::teams::TeamRole;
     use std::collections::HashSet;
 
     async fn create_test_rbac() -> RbacSystem {
