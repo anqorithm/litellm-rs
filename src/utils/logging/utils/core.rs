@@ -2,10 +2,16 @@ use super::types::{LogEntry, LogLevel};
 use crate::core::providers::unified_provider::ProviderError;
 use std::collections::HashMap;
 use std::env;
+use std::sync::atomic::{AtomicU8, Ordering::Relaxed};
 use tracing::{Level, debug, error, info, warn};
 use uuid::Uuid;
 
 pub struct LoggingUtils;
+
+const VERBOSE_UNSET: u8 = 0;
+const VERBOSE_DISABLED: u8 = 1;
+const VERBOSE_ENABLED: u8 = 2;
+static VERBOSE_OVERRIDE: AtomicU8 = AtomicU8::new(VERBOSE_UNSET);
 
 impl LoggingUtils {
     pub fn print_verbose(message: &str, logger_only: bool, log_level: LogLevel) {
@@ -23,6 +29,12 @@ impl LoggingUtils {
     }
 
     pub fn is_verbose_enabled() -> bool {
+        match VERBOSE_OVERRIDE.load(Relaxed) {
+            VERBOSE_DISABLED => return false,
+            VERBOSE_ENABLED => return true,
+            _ => {}
+        }
+
         env::var("LITELLM_VERBOSE")
             .map(|v| v.to_lowercase())
             .map(|v| v == "true" || v == "1")
@@ -30,9 +42,14 @@ impl LoggingUtils {
     }
 
     pub fn set_verbose(enabled: bool) {
-        unsafe {
-            env::set_var("LITELLM_VERBOSE", if enabled { "true" } else { "false" });
-        }
+        VERBOSE_OVERRIDE.store(
+            if enabled {
+                VERBOSE_ENABLED
+            } else {
+                VERBOSE_DISABLED
+            },
+            Relaxed,
+        );
     }
 
     pub fn get_logging_id() -> String {

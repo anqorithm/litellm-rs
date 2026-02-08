@@ -135,6 +135,17 @@ mod unit_tests {
     // ==================== LoggingUtils Tests ====================
 
     #[test]
+    fn test_verbose_override_toggle() {
+        LoggingUtils::set_verbose(false);
+        assert!(!LoggingUtils::is_verbose_enabled());
+
+        LoggingUtils::set_verbose(true);
+        assert!(LoggingUtils::is_verbose_enabled());
+
+        LoggingUtils::set_verbose(false);
+    }
+
+    #[test]
     fn test_should_log_at_level() {
         assert!(LoggingUtils::should_log_at_level(
             &LogLevel::Debug,
