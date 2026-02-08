@@ -121,24 +121,31 @@ pub fn sanitize_for_logging(input: &str) -> String {
     use std::sync::LazyLock;
 
     static SANITIZE_PATTERNS: LazyLock<Vec<(Regex, &'static str)>> = LazyLock::new(|| {
-        vec![
+        let patterns = [
             (
-                Regex::new(r#"(?i)api[_-]?key["']?\s*[:=]\s*["']?([a-zA-Z0-9\-_]{20,})"#).unwrap(),
+                r#"(?i)api[_-]?key["']?\s*[:=]\s*["']?([a-zA-Z0-9\-_]{20,})"#,
                 "api_key: [REDACTED]",
             ),
             (
-                Regex::new(r#"(?i)token["']?\s*[:=]\s*["']?([a-zA-Z0-9\-_\.]{20,})"#).unwrap(),
+                r#"(?i)token["']?\s*[:=]\s*["']?([a-zA-Z0-9\-_\.]{20,})"#,
                 "token: [REDACTED]",
             ),
             (
-                Regex::new(r#"(?i)password["']?\s*[:=]\s*["']?([^\s"']{8,})"#).unwrap(),
+                r#"(?i)password["']?\s*[:=]\s*["']?([^\s"']{8,})"#,
                 "password: [REDACTED]",
             ),
             (
-                Regex::new(r#"(?i)secret["']?\s*[:=]\s*["']?([a-zA-Z0-9\-_]{16,})"#).unwrap(),
+                r#"(?i)secret["']?\s*[:=]\s*["']?([a-zA-Z0-9\-_]{16,})"#,
                 "secret: [REDACTED]",
             ),
-        ]
+        ];
+
+        patterns
+            .iter()
+            .filter_map(|(pattern, replacement)| {
+                Regex::new(pattern).ok().map(|regex| (regex, *replacement))
+            })
+            .collect()
     });
 
     let mut result = input.to_string();
@@ -169,8 +176,10 @@ pub fn is_valid_url(url: &str) -> bool {
 #[allow(dead_code)]
 pub fn is_valid_email(email: &str) -> bool {
     // Simple email validation regex
-    let email_regex =
-        regex::Regex::new(r#"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"#).unwrap();
+    let Ok(email_regex) = regex::Regex::new(r#"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"#)
+    else {
+        return false;
+    };
     email_regex.is_match(email)
 }
 

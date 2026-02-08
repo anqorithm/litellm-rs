@@ -2,12 +2,15 @@ use regex::Regex;
 use std::sync::LazyLock;
 
 static SENSITIVE_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
-    vec![
-        Regex::new(r"(?i)api[_-]?key[=:\s]*['\x22]?([a-zA-Z0-9\-_]+)['\x22]?").unwrap(),
-        Regex::new(r"(?i)token[=:\s]*['\x22]?([a-zA-Z0-9\-_.]+)['\x22]?").unwrap(),
-        Regex::new(r"(?i)password[=:\s]*['\x22]?([^\s'\x22]+)['\x22]?").unwrap(),
-        Regex::new(r"(?i)secret[=:\s]*['\x22]?([^\s'\x22]+)['\x22]?").unwrap(),
+    [
+        r"(?i)api[_-]?key[=:\s]*['\x22]?([a-zA-Z0-9\-_]+)['\x22]?",
+        r"(?i)token[=:\s]*['\x22]?([a-zA-Z0-9\-_.]+)['\x22]?",
+        r"(?i)password[=:\s]*['\x22]?([^\s'\x22]+)['\x22]?",
+        r"(?i)secret[=:\s]*['\x22]?([^\s'\x22]+)['\x22]?",
     ]
+    .iter()
+    .filter_map(|pattern| Regex::new(pattern).ok())
+    .collect()
 });
 
 pub struct Sanitization;
@@ -54,8 +57,12 @@ impl Sanitization {
         for re in MASK_PATTERNS.iter() {
             result = re
                 .replace_all(&result, |caps: &regex::Captures| {
-                    let full_match = caps.get(0).unwrap().as_str();
-                    let value = caps.get(1).unwrap().as_str();
+                    let Some(full_match) = caps.get(0).map(|m| m.as_str()) else {
+                        return String::new();
+                    };
+                    let Some(value) = caps.get(1).map(|m| m.as_str()) else {
+                        return full_match.to_string();
+                    };
                     let masked_value = if value.len() > 8 {
                         format!("{}***{}", &value[..2], &value[value.len() - 2..])
                     } else {
