@@ -10,36 +10,7 @@ use tracing::debug;
 impl Validate for AuthConfig {
     fn validate(&self) -> Result<(), String> {
         debug!("Validating auth configuration");
-
-        if self.enable_jwt {
-            if self.jwt_secret.is_empty() {
-                return Err("JWT secret cannot be empty".to_string());
-            }
-
-            if self.jwt_secret == "change-me-in-production" && !cfg!(test) {
-                return Err(
-                    "JWT secret must be changed from default value in production".to_string(),
-                );
-            }
-
-            if self.jwt_secret.len() < 32 {
-                return Err("JWT secret should be at least 32 characters long".to_string());
-            }
-        }
-
-        if self.jwt_expiration == 0 {
-            return Err("JWT expiration must be greater than 0".to_string());
-        }
-
-        if self.jwt_expiration > 86400 * 30 {
-            // 30 days
-            return Err("JWT expiration should not exceed 30 days".to_string());
-        }
-
-        if self.enable_api_key && self.api_key_header.is_empty() {
-            return Err("API key header cannot be empty".to_string());
-        }
-
+        AuthConfig::validate(self)?;
         self.rbac.validate()?;
 
         Ok(())
@@ -65,8 +36,8 @@ mod tests {
         AuthConfig {
             enable_jwt: true,
             enable_api_key: true,
-            jwt_secret: "a".repeat(32), // 32 character secret
-            jwt_expiration: 3600,       // 1 hour
+            jwt_secret: "AaaAaaAaaAaaAaaAaaAaaAaaAaaAaaA1!".to_string(),
+            jwt_expiration: 3600, // 1 hour
             api_key_header: "X-API-Key".to_string(),
             rbac: RbacConfig::default(),
         }
@@ -96,11 +67,7 @@ mod tests {
             "Expected validation to fail for empty JWT secret"
         );
         let err = result.unwrap_err();
-        assert!(
-            err.contains("JWT secret cannot be empty"),
-            "Got error: {}",
-            err
-        );
+        assert!(err.contains("JWT secret"), "Got error: {}", err);
     }
 
     #[test]
@@ -124,7 +91,7 @@ mod tests {
     #[test]
     fn test_auth_config_jwt_secret_exactly_32_chars() {
         let mut config = create_valid_auth_config();
-        config.jwt_secret = "a".repeat(32);
+        config.jwt_secret = "AaAaAaAaAaAaAaAaAaAaAaAaAaAaAa1!".to_string();
 
         assert!(validate_config(&config).is_ok());
     }
@@ -132,7 +99,7 @@ mod tests {
     #[test]
     fn test_auth_config_jwt_secret_long() {
         let mut config = create_valid_auth_config();
-        config.jwt_secret = "a".repeat(100);
+        config.jwt_secret = "Abc123!Z".repeat(13);
 
         assert!(validate_config(&config).is_ok());
     }
@@ -172,9 +139,7 @@ mod tests {
 
         let result = validate_config(&config);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("API key header cannot be empty"));
+        assert!(result.unwrap_err().contains("API key header"));
     }
 
     #[test]
