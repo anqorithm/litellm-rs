@@ -93,29 +93,9 @@ impl Config {
     pub fn validate(&self) -> Result<()> {
         debug!("Validating configuration");
 
-        // Validate gateway configuration (providers, storage, auth basics)
-        self.gateway
-            .validate()
+        // Single validation entry-point via Validate trait implementations.
+        validation::Validate::validate(&self.gateway)
             .map_err(|e| GatewayError::Config(format!("Gateway config error: {}", e)))?;
-
-        // Validate server configuration
-        self.gateway
-            .server
-            .validate()
-            .map_err(|e| GatewayError::Config(format!("Server config error: {}", e)))?;
-
-        // Validate auth configuration
-        self.gateway
-            .auth
-            .validate()
-            .map_err(|e| GatewayError::Config(format!("Auth config error: {}", e)))?;
-
-        // Validate CORS configuration
-        self.gateway
-            .server
-            .cors
-            .validate()
-            .map_err(|e| GatewayError::Config(format!("CORS config error: {}", e)))?;
 
         // Warn about insecure configurations
         crate::config::models::auth::warn_insecure_config(&self.gateway.auth);

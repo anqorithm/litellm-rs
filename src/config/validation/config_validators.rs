@@ -15,7 +15,8 @@ impl Validate for GatewayConfig {
     fn validate(&self) -> Result<(), String> {
         debug!("Validating gateway configuration");
 
-        self.server.validate()?;
+        Validate::validate(&self.server)?;
+        self.server.cors.validate()?;
 
         // Validate providers
         if self.providers.is_empty() {
@@ -28,16 +29,16 @@ impl Validate for GatewayConfig {
             if !provider_names.insert(&provider.name) {
                 return Err(format!("Duplicate provider name: {}", provider.name));
             }
-            provider.validate()?;
+            Validate::validate(provider)?;
         }
 
-        self.router.validate()?;
-        self.storage.validate()?;
-        self.auth.validate()?;
-        self.monitoring.validate()?;
-        self.cache.validate()?;
-        self.rate_limit.validate()?;
-        self.enterprise.validate()?;
+        Validate::validate(&self.router)?;
+        Validate::validate(&self.storage)?;
+        Validate::validate(&self.auth)?;
+        Validate::validate(&self.monitoring)?;
+        Validate::validate(&self.cache)?;
+        Validate::validate(&self.rate_limit)?;
+        Validate::validate(&self.enterprise)?;
 
         debug!("Gateway configuration validation completed");
         Ok(())

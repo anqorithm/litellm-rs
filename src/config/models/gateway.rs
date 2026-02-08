@@ -328,43 +328,7 @@ impl GatewayConfig {
 
     /// Validate the configuration
     pub fn validate(&self) -> Result<(), String> {
-        // Validate server config
-        if self.server.port == 0 {
-            return Err("Server port cannot be 0".to_string());
-        }
-
-        // Validate providers
-        if self.providers.is_empty() {
-            return Err("At least one provider must be configured".to_string());
-        }
-
-        let mut provider_names = std::collections::HashSet::new();
-        for provider in &self.providers {
-            if provider.name.is_empty() {
-                return Err("Provider name cannot be empty".to_string());
-            }
-            if !provider_names.insert(&provider.name) {
-                return Err(format!("Duplicate provider name: {}", provider.name));
-            }
-            if provider.api_key.is_empty() {
-                return Err(format!(
-                    "API key is required for provider: {}",
-                    provider.name
-                ));
-            }
-        }
-
-        // Validate storage config
-        if self.storage.database.url.is_empty() {
-            return Err("Database URL is required".to_string());
-        }
-
-        // Validate auth config
-        if self.auth.enable_jwt && self.auth.jwt_secret.is_empty() {
-            return Err("JWT secret is required".to_string());
-        }
-
-        Ok(())
+        crate::config::validation::Validate::validate(self)
     }
 
     /// Get provider by name
