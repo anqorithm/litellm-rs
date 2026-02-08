@@ -9,13 +9,10 @@ use tracing::debug;
 
 /// Simple cache with fixed capacity using HashMap
 #[derive(Default)]
-#[allow(dead_code)]
 struct SimpleCache {
     cache: HashMap<u64, u32>,
     capacity: usize,
 }
-
-#[allow(dead_code)]
 impl SimpleCache {
     fn new(capacity: usize) -> Self {
         Self {
@@ -54,14 +51,10 @@ impl SimpleCache {
 }
 
 /// Global token cache with simple eviction
-#[allow(dead_code)]
 static TOKEN_CACHE: OnceLock<RwLock<SimpleCache>> = OnceLock::new();
 
 /// Token counting cache manager
-#[allow(dead_code)]
 pub struct TokenCache;
-
-#[allow(dead_code)]
 impl TokenCache {
     /// Get cached token count for text and model combination
     pub fn get(&self, model: &str, text: &str) -> Option<u32> {
@@ -149,7 +142,6 @@ impl TokenCache {
 }
 
 /// Global token cache instance
-#[allow(dead_code)]
 pub fn token_cache() -> &'static TokenCache {
     static CACHE: TokenCache = TokenCache;
     &CACHE
