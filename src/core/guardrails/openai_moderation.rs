@@ -197,8 +197,6 @@ struct ModerationApiRequest {
 /// OpenAI Moderation API response
 #[derive(Debug, Deserialize)]
 struct ModerationApiResponse {
-    id: String,
-    model: String,
     results: Vec<ModerationApiResult>,
 }
 
@@ -256,8 +254,6 @@ mod tests {
         scores.insert("violence".to_string(), 0.1);
 
         let response = ModerationApiResponse {
-            id: "test-id".to_string(),
-            model: "text-moderation-latest".to_string(),
             results: vec![ModerationApiResult {
                 flagged: true,
                 categories,
