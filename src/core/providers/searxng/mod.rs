@@ -4,11 +4,9 @@
 
 use async_trait::async_trait;
 use futures::Stream;
-use reqwest::header::{CONTENT_TYPE, HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
 use std::pin::Pin;
 
-use crate::core::providers::base_provider::{BaseHttpClient, BaseProviderConfig};
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::{
     provider::ProviderConfig, error_mapper::trait_def::ErrorMapper,
@@ -78,36 +76,12 @@ pub type SearXNGError = ProviderError;
 #[derive(Debug, Clone)]
 pub struct SearXNGProvider {
     config: SearXNGConfig,
-    base_client: BaseHttpClient,
 }
 
 impl SearXNGProvider {
     /// Create new SearXNG provider
     pub fn new(config: SearXNGConfig) -> Result<Self, SearXNGError> {
-        let base_config = BaseProviderConfig {
-            api_key: config.api_key.clone(),
-            api_base: config.api_base.clone(),
-            timeout: Some(config.timeout),
-            max_retries: Some(config.max_retries),
-            headers: None,
-            organization: None,
-            api_version: None,
-        };
-
-        let base_client = BaseHttpClient::new(base_config)
-            .map_err(|e| ProviderError::configuration("searxng", e.to_string()))?;
-
-        Ok(Self {
-            config,
-            base_client,
-        })
-    }
-
-    /// Build request headers
-    fn build_headers(&self) -> Result<HeaderMap, SearXNGError> {
-        let mut headers = HeaderMap::new();
-        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-        Ok(headers)
+        Ok(Self { config })
     }
 }
 
