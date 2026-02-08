@@ -7,9 +7,7 @@ use futures::Stream;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::pin::Pin;
-use std::sync::Arc;
 
-use crate::core::providers::base::GlobalPoolManager;
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use crate::core::types::{
@@ -29,9 +27,7 @@ use super::streaming::AnthropicStream;
 /// Anthropic Provider - unified implementation
 #[derive(Debug, Clone)]
 pub struct AnthropicProvider {
-    config: AnthropicConfig,
     client: AnthropicClient,
-    pool_manager: Arc<GlobalPoolManager>,
     supported_models: Vec<ModelInfo>,
 }
 
@@ -40,9 +36,6 @@ impl AnthropicProvider {
     pub fn new(config: AnthropicConfig) -> Result<Self, ProviderError> {
         // Create client
         let client = AnthropicClient::new(config.clone())?;
-
-        // Get pool manager
-        let pool_manager = Arc::new(GlobalPoolManager::new()?);
 
         // Get supported models
         let registry = get_anthropic_registry();
@@ -53,9 +46,7 @@ impl AnthropicProvider {
             .collect();
 
         Ok(Self {
-            config,
             client,
-            pool_manager,
             supported_models,
         })
     }
@@ -129,46 +120,6 @@ impl AnthropicProvider {
         Ok(())
     }
 
-    /// Generate request headers
-    fn generate_headers(&self) -> HashMap<String, String> {
-        let mut headers = HashMap::new();
-
-        if let Some(api_key) = &self.config.api_key {
-            // Anthropic API uses x-api-key header, not Bearer token
-            // See: https://docs.anthropic.com/en/api/getting-started
-            headers.insert("x-api-key".to_string(), api_key.clone());
-        }
-
-        headers.insert(
-            "anthropic-version".to_string(),
-            self.config.api_version.clone(),
-        );
-        headers.insert("Content-Type".to_string(), "application/json".to_string());
-        headers.insert(
-            "User-Agent".to_string(),
-            "LiteLLM-Rust/1.0 Anthropic".to_string(),
-        );
-
-        // Add custom headers
-        for (key, value) in &self.config.custom_headers {
-            headers.insert(key.clone(), value.clone());
-        }
-
-        headers
-    }
-
-    /// Calculate cost
-    fn calculate_cost(&self, request: &ChatRequest, response: &ChatResponse) -> Option<f64> {
-        if let Some(usage) = &response.usage {
-            super::models::CostCalculator::calculate_cost(
-                &request.model,
-                usage.prompt_tokens,
-                usage.completion_tokens,
-            )
-        } else {
-            None
-        }
-    }
 }
 
 #[async_trait]
