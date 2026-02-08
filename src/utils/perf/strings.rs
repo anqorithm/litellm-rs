@@ -54,21 +54,18 @@ impl StringPool {
     }
 
     /// Get an interned string if it exists, otherwise return None
-    #[allow(dead_code)] // Reserved for future string pool operations
     pub fn get(&self, s: &str) -> Option<Arc<str>> {
         let hash = Self::hash_string(s);
         self.pool.get(&hash).map(|v| v.clone())
     }
 
     /// Get usage statistics for a string
-    #[allow(dead_code)] // May be used for debugging/monitoring
     pub fn get_usage_count(&self, s: &str) -> usize {
         let hash = Self::hash_string(s);
         self.stats.get(&hash).map(|count| *count).unwrap_or(0)
     }
 
     /// Get the most frequently used strings
-    #[allow(dead_code)] // May be used for debugging/monitoring
     pub fn get_top_strings(&self, limit: usize) -> Vec<(Arc<str>, usize)> {
         let mut entries: Vec<_> = self
             .pool
@@ -91,19 +88,16 @@ impl StringPool {
     }
 
     /// Clear the pool
-    #[allow(dead_code)] // Reserved for future string pool operations
     pub fn clear(&self) {
         self.pool.clear();
     }
 
     /// Get the number of interned strings
-    #[allow(dead_code)] // Reserved for future string pool operations
     pub fn len(&self) -> usize {
         self.pool.len()
     }
 
     /// Check if the pool is empty
-    #[allow(dead_code)] // Reserved for future string pool operations
     pub fn is_empty(&self) -> bool {
         self.pool.is_empty()
     }
@@ -128,19 +122,16 @@ pub enum SmartString {
 
 impl SmartString {
     /// Create a new SmartString from a static string
-    #[allow(dead_code)] // Reserved for future smart string operations
     pub fn from_static(s: &'static str) -> Self {
         Self::Borrowed(s)
     }
 
     /// Create a new SmartString from an owned string
-    #[allow(dead_code)] // Reserved for future smart string operations
     pub fn from_owned(s: String) -> Self {
         Self::Owned(s)
     }
 
     /// Create a new SmartString from an `Arc<str>`
-    #[allow(dead_code)] // Reserved for future smart string operations
     pub fn from_shared(s: Arc<str>) -> Self {
         Self::Shared(s)
     }
@@ -155,7 +146,6 @@ impl SmartString {
     }
 
     /// Convert to a `Cow<str>` for efficient string operations
-    #[allow(dead_code)] // Reserved for future smart string operations
     pub fn as_cow(&self) -> Cow<'_, str> {
         match self {
             Self::Borrowed(s) => Cow::Borrowed(s),
@@ -165,7 +155,6 @@ impl SmartString {
     }
 
     /// Convert to an owned String
-    #[allow(dead_code)] // Reserved for future smart string operations
     pub fn into_string(self) -> String {
         match self {
             Self::Borrowed(s) => s.to_string(),
@@ -175,13 +164,11 @@ impl SmartString {
     }
 
     /// Get the length of the string
-    #[allow(dead_code)] // Reserved for future smart string operations
     pub fn len(&self) -> usize {
         self.as_str().len()
     }
 
     /// Check if the string is empty
-    #[allow(dead_code)] // Reserved for future smart string operations
     pub fn is_empty(&self) -> bool {
         self.as_str().is_empty()
     }
@@ -250,7 +237,6 @@ pub fn intern_string(s: &str) -> Arc<str> {
 }
 
 /// Get an interned string from the global pool
-#[allow(dead_code)] // Reserved for future global string pool operations
 pub fn get_interned_string(s: &str) -> Option<Arc<str>> {
     STRING_POOL.get(s)
 }
