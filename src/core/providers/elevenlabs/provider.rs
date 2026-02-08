@@ -3,14 +3,12 @@
 //! Implements audio capabilities for ElevenLabs' text-to-speech and speech-to-text APIs.
 
 use std::collections::HashMap;
-use std::sync::Arc;
 use tracing::debug;
 
 use super::config::ElevenLabsConfig;
 use super::error::ElevenLabsErrorMapper;
 use super::stt::{self, TranscriptionRequest, TranscriptionResponse};
 use super::tts::{self, TextToSpeechRequest, TextToSpeechResponse, VoiceSettings};
-use crate::core::providers::base::GlobalPoolManager;
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::provider::ProviderConfig as _;
 use crate::core::types::health::HealthStatus;
@@ -29,7 +27,6 @@ const ELEVENLABS_CAPABILITIES: &[ProviderCapability] = &[
 #[derive(Debug, Clone)]
 pub struct ElevenLabsProvider {
     config: ElevenLabsConfig,
-    pool_manager: Arc<GlobalPoolManager>,
     models: Vec<ModelInfo>,
 }
 
@@ -41,22 +38,10 @@ impl ElevenLabsProvider {
             .validate()
             .map_err(|e| ProviderError::configuration(PROVIDER_NAME, e))?;
 
-        // Create pool manager
-        let pool_manager = Arc::new(GlobalPoolManager::new().map_err(|e| {
-            ProviderError::configuration(
-                PROVIDER_NAME,
-                format!("Failed to create pool manager: {}", e),
-            )
-        })?);
-
         // Build model list
         let models = Self::build_model_list();
 
-        Ok(Self {
-            config,
-            pool_manager,
-            models,
-        })
+        Ok(Self { config, models })
     }
 
     /// Create provider with API key only
