@@ -7,10 +7,12 @@ use tracing::debug;
 use crate::core::providers::mistral::MistralError;
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::{
-    ChatMessage, ChatRequest, FunctionCall, ToolCall as RequestToolCall,
+    ChatMessage, ChatRequest,
     message::MessageContent,
     message::MessageRole,
     responses::{ChatChoice, ChatResponse, FinishReason, Usage},
+    tools::FunctionCall,
+    tools::ToolCall as RequestToolCall,
 };
 
 /// Mistral chat transformation handler

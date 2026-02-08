@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::super::{ChatMessage, ToolCall, message::MessageContent};
+use super::super::{ChatMessage, message::MessageContent, tools::ToolCall};
 use super::delta::ChatDelta;
 use super::logprobs::{FinishReason, LogProbs};
 use super::usage::Usage;

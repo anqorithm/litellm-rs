@@ -17,7 +17,7 @@ use crate::core::traits::{
     ProviderConfig as _, provider::llm_provider::trait_definition::LLMProvider,
 };
 use crate::core::types::{
-    ChatMessage, ChatRequest, ToolCall,
+    ChatMessage, ChatRequest,
     context::RequestContext,
     embedding::EmbeddingRequest,
     health::HealthStatus,
@@ -29,6 +29,7 @@ use crate::core::types::{
         ChatChoice, ChatChunk, ChatResponse, EmbeddingData, EmbeddingResponse, FinishReason, Usage,
     },
     tools::FunctionCall,
+    tools::ToolCall,
 };
 
 /// Static capabilities for Oobabooga provider

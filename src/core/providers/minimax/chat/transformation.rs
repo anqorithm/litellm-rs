@@ -6,10 +6,12 @@ use tracing::{debug, warn};
 use crate::core::providers::minimax::MinimaxError;
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::{
-    ChatMessage, ChatRequest, FunctionCall, ToolCall,
+    ChatMessage, ChatRequest,
     message::MessageContent,
     message::MessageRole,
     responses::{ChatChoice, ChatResponse, FinishReason, Usage},
+    tools::FunctionCall,
+    tools::ToolCall,
 };
 
 /// Minimax chat transformation handler

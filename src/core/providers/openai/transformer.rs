@@ -9,8 +9,8 @@ use crate::core::types::responses::{
 };
 use crate::core::types::thinking::ThinkingContent;
 use crate::core::types::{
-    ChatMessage, ChatRequest, ContentPart, FunctionCall, ImageUrl, ResponseFormat, Tool, ToolCall,
-    ToolChoice, message::MessageContent, message::MessageRole,
+    ChatMessage, ChatRequest, ContentPart, ImageUrl, message::MessageContent, message::MessageRole,
+    tools::FunctionCall, tools::ResponseFormat, tools::Tool, tools::ToolCall, tools::ToolChoice,
 };
 use serde_json;
 
@@ -518,7 +518,7 @@ impl Transform<OpenAIChatResponse, ChatResponse> for OpenAITransformer {
 mod tests {
     use super::*;
     use crate::core::types::{
-        AudioData, DocumentSource, FunctionDefinition, ImageSource, ToolType,
+        AudioData, DocumentSource, ImageSource, tools::FunctionDefinition, tools::ToolType,
     };
 
     // ==================== Request Transformer Tests ====================
@@ -810,7 +810,7 @@ mod tests {
             messages: vec![],
             tool_choice: Some(ToolChoice::Specific {
                 choice_type: "function".to_string(),
-                function: Some(crate::core::types::FunctionChoice {
+                function: Some(crate::core::types::tools::FunctionChoice {
                     name: "get_weather".to_string(),
                 }),
             }),

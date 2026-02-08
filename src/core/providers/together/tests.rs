@@ -108,7 +108,9 @@ mod tests {
 
     #[test]
     fn test_should_handle_response_format() {
-        use crate::core::types::{ChatMessage, ChatRequest, ResponseFormat, message::MessageRole};
+        use crate::core::types::{
+            ChatMessage, ChatRequest, message::MessageRole, tools::ResponseFormat,
+        };
 
         tokio::runtime::Runtime::new().unwrap().block_on(async {
             let provider = TogetherProvider::with_api_key("test-key").await.unwrap();

@@ -448,7 +448,7 @@ impl AnthropicClient {
     /// Transform tool definitions
     fn transform_tools(
         &self,
-        tools: &[crate::core::types::Tool],
+        tools: &[crate::core::types::tools::Tool],
     ) -> Result<Vec<Value>, ProviderError> {
         let mut anthropic_tools = Vec::new();
 
@@ -466,16 +466,16 @@ impl AnthropicClient {
     /// Transform tool choice
     fn transform_tool_choice(
         &self,
-        tool_choice: &crate::core::types::ToolChoice,
+        tool_choice: &crate::core::types::tools::ToolChoice,
     ) -> Result<Value, ProviderError> {
         match tool_choice {
-            crate::core::types::ToolChoice::String(choice) => match choice.as_str() {
+            crate::core::types::tools::ToolChoice::String(choice) => match choice.as_str() {
                 "auto" => Ok(json!({"type": "auto"})),
                 "none" => Ok(json!({"type": "none"})),
                 "required" => Ok(json!({"type": "any"})),
                 _ => Ok(json!({"type": "auto"})),
             },
-            crate::core::types::ToolChoice::Specific { function, .. } => {
+            crate::core::types::tools::ToolChoice::Specific { function, .. } => {
                 if let Some(func) = function {
                     Ok(json!({
                         "type": "tool",
@@ -530,10 +530,10 @@ impl AnthropicClient {
                         item.get("name").and_then(|v| v.as_str()),
                         item.get("input"),
                     ) {
-                        tool_calls.push(crate::core::types::ToolCall {
+                        tool_calls.push(crate::core::types::tools::ToolCall {
                             id: id.to_string(),
                             tool_type: "function".to_string(),
-                            function: crate::core::types::FunctionCall {
+                            function: crate::core::types::tools::FunctionCall {
                                 name: name.to_string(),
                                 arguments: input.to_string(),
                             },
@@ -894,7 +894,7 @@ mod tests {
         let config = AnthropicConfig::new_test("test-key");
         let client = AnthropicClient::new(config).unwrap();
 
-        let tool_choice = crate::core::types::ToolChoice::String("auto".to_string());
+        let tool_choice = crate::core::types::tools::ToolChoice::String("auto".to_string());
         let result = client.transform_tool_choice(&tool_choice).unwrap();
 
         assert_eq!(result["type"], "auto");
@@ -905,7 +905,7 @@ mod tests {
         let config = AnthropicConfig::new_test("test-key");
         let client = AnthropicClient::new(config).unwrap();
 
-        let tool_choice = crate::core::types::ToolChoice::String("none".to_string());
+        let tool_choice = crate::core::types::tools::ToolChoice::String("none".to_string());
         let result = client.transform_tool_choice(&tool_choice).unwrap();
 
         assert_eq!(result["type"], "none");
@@ -916,7 +916,7 @@ mod tests {
         let config = AnthropicConfig::new_test("test-key");
         let client = AnthropicClient::new(config).unwrap();
 
-        let tool_choice = crate::core::types::ToolChoice::String("required".to_string());
+        let tool_choice = crate::core::types::tools::ToolChoice::String("required".to_string());
         let result = client.transform_tool_choice(&tool_choice).unwrap();
 
         assert_eq!(result["type"], "any");
@@ -929,9 +929,9 @@ mod tests {
         let config = AnthropicConfig::new_test("test-key");
         let client = AnthropicClient::new(config).unwrap();
 
-        let tools = vec![crate::core::types::Tool {
-            tool_type: crate::core::types::ToolType::Function,
-            function: crate::core::types::FunctionDefinition {
+        let tools = vec![crate::core::types::tools::Tool {
+            tool_type: crate::core::types::tools::ToolType::Function,
+            function: crate::core::types::tools::FunctionDefinition {
                 name: "get_weather".to_string(),
                 description: Some("Get weather for a location".to_string()),
                 parameters: Some(json!({"type": "object"})),
@@ -949,7 +949,7 @@ mod tests {
         let config = AnthropicConfig::new_test("test-key");
         let client = AnthropicClient::new(config).unwrap();
 
-        let tools: Vec<crate::core::types::Tool> = vec![];
+        let tools: Vec<crate::core::types::tools::Tool> = vec![];
         let result = client.transform_tools(&tools).unwrap();
         assert!(result.is_empty());
     }

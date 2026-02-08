@@ -15,10 +15,12 @@ use tracing::{debug, warn};
 // New type system imports - base_llm removed
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::{
-    ChatMessage, ChatRequest, FunctionCall, ToolCall as RequestToolCall,
+    ChatMessage, ChatRequest,
     message::MessageContent,
     message::MessageRole,
     responses::{ChatChoice, ChatResponse, FinishReason, Usage},
+    tools::FunctionCall,
+    tools::ToolCall as RequestToolCall,
 };
 
 /// Llama chat transformation handler

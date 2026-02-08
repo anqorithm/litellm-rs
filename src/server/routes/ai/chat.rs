@@ -197,7 +197,7 @@ fn build_core_chat_request(
         None => None,
     };
 
-    let response_format = request.response_format.map(|format| types::ResponseFormat {
+    let response_format = request.response_format.map(|format| types::tools::ResponseFormat {
         format_type: format.format_type,
         json_schema: format.json_schema,
         response_type: None,
@@ -286,10 +286,10 @@ fn convert_openai_message_to_core(message: ChatMessage) -> types::ChatMessage {
     let tool_calls = message.tool_calls.map(|calls| {
         calls
             .into_iter()
-            .map(|call| types::ToolCall {
+            .map(|call| types::tools::ToolCall {
                 id: call.id,
                 tool_type: call.tool_type,
-                function: types::FunctionCall {
+                function: types::tools::FunctionCall {
                     name: call.function.name,
                     arguments: call.function.arguments,
                 },
@@ -297,7 +297,7 @@ fn convert_openai_message_to_core(message: ChatMessage) -> types::ChatMessage {
             .collect()
     });
 
-    let function_call = message.function_call.map(|call| types::FunctionCall {
+    let function_call = message.function_call.map(|call| types::tools::FunctionCall {
         name: call.name,
         arguments: call.arguments,
     });
@@ -415,14 +415,14 @@ fn convert_core_content_part_to_openai(
     }
 }
 
-fn convert_tool(tool: Tool) -> Result<types::Tool, GatewayError> {
+fn convert_tool(tool: Tool) -> Result<types::tools::Tool, GatewayError> {
     if tool.tool_type.to_lowercase() != "function" {
         return Err(GatewayError::validation("Unsupported tool type"));
     }
 
-    Ok(types::Tool {
-        tool_type: types::ToolType::Function,
-        function: types::FunctionDefinition {
+    Ok(types::tools::Tool {
+        tool_type: types::tools::ToolType::Function,
+        function: types::tools::FunctionDefinition {
             name: tool.function.name,
             description: tool.function.description,
             parameters: tool.function.parameters,
@@ -430,14 +430,14 @@ fn convert_tool(tool: Tool) -> Result<types::Tool, GatewayError> {
     })
 }
 
-fn convert_tool_choice(choice: ToolChoice) -> types::ToolChoice {
+fn convert_tool_choice(choice: ToolChoice) -> types::tools::ToolChoice {
     match choice {
-        ToolChoice::None(value) => types::ToolChoice::String(value),
-        ToolChoice::Auto(value) => types::ToolChoice::String(value),
-        ToolChoice::Required(value) => types::ToolChoice::String(value),
-        ToolChoice::Specific(spec) => types::ToolChoice::Specific {
+        ToolChoice::None(value) => types::tools::ToolChoice::String(value),
+        ToolChoice::Auto(value) => types::tools::ToolChoice::String(value),
+        ToolChoice::Required(value) => types::tools::ToolChoice::String(value),
+        ToolChoice::Specific(spec) => types::tools::ToolChoice::Specific {
             choice_type: spec.tool_type,
-            function: Some(types::FunctionChoice {
+            function: Some(types::tools::FunctionChoice {
                 name: spec.function.name,
             }),
         },

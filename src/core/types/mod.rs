@@ -30,6 +30,5 @@ pub mod responses;
 pub use chat::*;
 pub use content::*;
 pub use thinking::*;
-pub use tools::*;
 
 // Re-export from remaining original files
