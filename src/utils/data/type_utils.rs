@@ -3,8 +3,6 @@
 //! This module provides utilities to create more ergonomic and type-safe APIs
 //! following Rust best practices.
 
-#![allow(dead_code)] // Tool module - functions may be used in the future
-
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::marker::PhantomData;
