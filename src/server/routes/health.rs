@@ -2,8 +2,6 @@
 //!
 //! This module provides health check and system status endpoints.
 
-#![allow(dead_code)]
-
 use crate::server::routes::ApiResponse;
 use crate::server::state::AppState;
 use actix_web::{HttpResponse, Result as ActixResult, web};
