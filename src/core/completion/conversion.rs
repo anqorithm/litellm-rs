@@ -77,7 +77,9 @@ pub fn convert_usage(usage: &crate::core::types::responses::Usage) -> Usage {
 mod tests {
     use super::*;
     use crate::core::types::responses::{ChatChoice, FinishReason};
-    use crate::core::types::{ThinkingUsage, message::MessageContent, message::MessageRole};
+    use crate::core::types::{
+        message::MessageContent, message::MessageRole, thinking::ThinkingUsage,
+    };
     use std::collections::HashMap;
 
     // ==================== Helper Functions ====================

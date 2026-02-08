@@ -39,7 +39,7 @@ pub fn assistant_message_with_thinking(
     content: impl Into<String>,
     thinking: impl Into<String>,
 ) -> ChatMessage {
-    use crate::core::types::ThinkingContent;
+    use crate::core::types::thinking::ThinkingContent;
 
     ChatMessage {
         role: MessageRole::Assistant,
