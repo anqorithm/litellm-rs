@@ -1,7 +1,7 @@
 //! Individual component health check implementations
 
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use super::checker::HealthChecker;
 use super::types::ComponentHealth;
@@ -171,53 +171,4 @@ impl HealthChecker {
         }
     }
 
-    /// Check external provider health
-    pub(super) async fn check_provider(
-        &self,
-        provider_name: &str,
-        provider_url: &str,
-    ) -> ComponentHealth {
-        let start_time = Instant::now();
-
-        // Simple HTTP health check
-        match reqwest::Client::new()
-            .get(provider_url)
-            .timeout(Duration::from_secs(10))
-            .send()
-            .await
-        {
-            Ok(response) => {
-                let healthy = response.status().is_success();
-                ComponentHealth {
-                    name: provider_name.to_string(),
-                    healthy,
-                    status: if healthy { "healthy" } else { "degraded" }.to_string(),
-                    last_check: chrono::Utc::now(),
-                    response_time_ms: start_time.elapsed().as_millis() as u64,
-                    error: if healthy {
-                        None
-                    } else {
-                        Some(format!("HTTP {}", response.status()))
-                    },
-                    metadata: {
-                        let mut metadata = HashMap::new();
-                        metadata.insert(
-                            "status_code".to_string(),
-                            serde_json::Value::Number(response.status().as_u16().into()),
-                        );
-                        metadata
-                    },
-                }
-            }
-            Err(e) => ComponentHealth {
-                name: provider_name.to_string(),
-                healthy: false,
-                status: "unhealthy".to_string(),
-                last_check: chrono::Utc::now(),
-                response_time_ms: start_time.elapsed().as_millis() as u64,
-                error: Some(e.to_string()),
-                metadata: HashMap::new(),
-            },
-        }
-    }
 }

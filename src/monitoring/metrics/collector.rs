@@ -15,12 +15,12 @@ use tracing::debug;
 #[derive(Debug)]
 pub struct MetricsCollector {
     /// Configuration
-    pub(super) config: Arc<MonitoringConfig>,
+    pub(super) _config: Arc<MonitoringConfig>,
     /// All metrics storage consolidated into a single lock
     /// This reduces lock contention and simplifies the code
     pub(super) storage: Arc<RwLock<MetricsStorage>>,
     /// Collection start time
-    pub(super) start_time: Instant,
+    pub(super) _start_time: Instant,
     /// Whether collection is active - using AtomicBool for lock-free access
     pub(super) active: AtomicBool,
 }
@@ -29,9 +29,9 @@ impl MetricsCollector {
     /// Create a new metrics collector
     pub async fn new(config: &MonitoringConfig) -> Result<Self> {
         Ok(Self {
-            config: Arc::new(config.clone()),
+            _config: Arc::new(config.clone()),
             storage: Arc::new(RwLock::new(MetricsStorage::default())),
-            start_time: Instant::now(),
+            _start_time: Instant::now(),
             active: AtomicBool::new(false),
         })
     }

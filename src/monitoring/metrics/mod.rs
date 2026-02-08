@@ -2,8 +2,6 @@
 //!
 //! This module provides comprehensive metrics collection for monitoring and observability.
 
-#![allow(dead_code)]
-
 mod background;
 mod bounded;
 mod collector;
