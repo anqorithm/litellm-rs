@@ -123,14 +123,14 @@ impl Default for RetryConfig {
 // ============================================================================
 
 pub struct RequestExecutor {
-    client: Client,
+    _client: Client,
     retry_config: RetryConfig,
 }
 
 impl RequestExecutor {
     pub fn new(client: Client, retry_config: RetryConfig) -> Self {
         Self {
-            client,
+            _client: client,
             retry_config,
         }
     }

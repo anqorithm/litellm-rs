@@ -26,7 +26,7 @@ use super::llm_provider::trait_definition::LLMProvider;
 /// for usage examples.
 pub struct ProviderHandle {
     name: String,
-    provider: std::sync::Arc<dyn std::any::Any + Send + Sync>,
+    _provider: std::sync::Arc<dyn std::any::Any + Send + Sync>,
     weight: f64,
     enabled: bool,
 }
@@ -49,7 +49,7 @@ impl ProviderHandle {
     {
         Self {
             name: provider.name().to_string(),
-            provider: std::sync::Arc::new(provider)
+            _provider: std::sync::Arc::new(provider)
                 as std::sync::Arc<dyn std::any::Any + Send + Sync>,
             weight,
             enabled: true,

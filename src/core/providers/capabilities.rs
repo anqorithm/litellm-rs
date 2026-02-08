@@ -191,7 +191,7 @@ impl<P> TypedProviderBuilder<P> {
         // based on self.capabilities
         TypedProviderBuilderResult {
             provider: self.provider,
-            capabilities: self.capabilities,
+            _capabilities: self.capabilities,
         }
     }
 }
@@ -203,7 +203,7 @@ pub trait BuildResult<P> {
 
 struct TypedProviderBuilderResult<P> {
     provider: P,
-    capabilities: Vec<ProviderCapability>,
+    _capabilities: Vec<ProviderCapability>,
 }
 
 impl<P> BuildResult<P> for TypedProviderBuilderResult<P> {
