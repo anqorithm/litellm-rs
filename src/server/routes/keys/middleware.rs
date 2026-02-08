@@ -3,8 +3,6 @@
 //! This module provides middleware for authentication, rate limiting,
 //! and audit logging of key management operations.
 
-#![allow(dead_code)] // Middleware structures are defined for future use
-
 use actix_web::Error;
 use actix_web::dev::{Service, ServiceRequest, ServiceResponse, Transform, forward_ready};
 use futures::future::LocalBoxFuture;

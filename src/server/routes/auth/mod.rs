@@ -2,8 +2,6 @@
 //!
 //! This module provides authentication-related API endpoints.
 
-#![allow(dead_code)]
-
 mod email;
 mod login;
 mod models;

@@ -14,7 +14,7 @@
 //! - `POST /v1/keys/verify` - Verify a key
 
 mod handlers;
-mod middleware;
+pub mod middleware;
 mod types;
 
 use actix_web::web;

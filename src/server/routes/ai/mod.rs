@@ -2,8 +2,6 @@
 //!
 //! This module provides OpenAI-compatible API endpoints for AI services.
 
-#![allow(dead_code)]
-
 // Module declarations
 mod audio;
 mod chat;

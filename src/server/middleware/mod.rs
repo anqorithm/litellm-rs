@@ -8,8 +8,6 @@
 //! - Security headers
 //! - CORS handling
 
-#![allow(dead_code)]
-
 mod auth;
 mod auth_rate_limiter;
 mod helpers;
