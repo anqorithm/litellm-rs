@@ -172,6 +172,11 @@ impl MetricsCollector {
             .insert(provider.to_string(), health_score);
     }
 
+    /// Set a custom metric value.
+    pub async fn set_custom_metric(&self, name: impl Into<String>, value: MetricValue) {
+        self.custom_metrics.write().await.insert(name.into(), value);
+    }
+
     /// Export metrics to Prometheus format
     pub async fn export_prometheus(&self) -> String {
         let metrics = self.prometheus_metrics.read().await;
@@ -226,6 +231,45 @@ impl MetricsCollector {
                 "litellm_provider_health{{provider=\"{}\"}} {}\n",
                 provider, health
             ));
+        }
+        drop(metrics);
+
+        // Custom metrics
+        let custom_metrics = self.custom_metrics.read().await;
+        for (name, metric) in custom_metrics.iter() {
+            match metric {
+                MetricValue::Counter(v) => {
+                    output.push_str(&format!(
+                        "litellm_custom_counter{{name=\"{}\"}} {}\n",
+                        name, v
+                    ));
+                }
+                MetricValue::Gauge(v) => {
+                    output.push_str(&format!("litellm_custom_gauge{{name=\"{}\"}} {}\n", name, v));
+                }
+                MetricValue::Summary { sum, count } => {
+                    output.push_str(&format!(
+                        "litellm_custom_summary_sum{{name=\"{}\"}} {}\n",
+                        name, sum
+                    ));
+                    output.push_str(&format!(
+                        "litellm_custom_summary_count{{name=\"{}\"}} {}\n",
+                        name, count
+                    ));
+                }
+                MetricValue::Histogram(values) => {
+                    output.push_str(&format!(
+                        "litellm_custom_histogram_count{{name=\"{}\"}} {}\n",
+                        name,
+                        values.len()
+                    ));
+                    let hist_sum: f64 = values.iter().sum();
+                    output.push_str(&format!(
+                        "litellm_custom_histogram_sum{{name=\"{}\"}} {}\n",
+                        name, hist_sum
+                    ));
+                }
+            }
         }
 
         output
@@ -645,6 +689,22 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[tokio::test]
+    async fn test_export_prometheus_with_custom_metrics() {
+        let collector = MetricsCollector::new();
+        collector
+            .set_custom_metric("requests.custom", MetricValue::Counter(42))
+            .await;
+        collector
+            .set_custom_metric("latency.custom", MetricValue::Gauge(1.5))
+            .await;
+
+        let output = collector.export_prometheus().await;
+
+        assert!(output.contains("litellm_custom_counter{name=\"requests.custom\"} 42"));
+        assert!(output.contains("litellm_custom_gauge{name=\"latency.custom\"} 1.5"));
     }
 
     // ==================== DataDog Integration Tests ====================
