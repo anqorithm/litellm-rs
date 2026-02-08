@@ -26,16 +26,10 @@ pub mod config;
 pub mod errors;
 pub mod responses;
 
-// Re-export all public types from split modules
-pub use cache::*;
+// Re-export selected high-traffic modules only
 pub use context::*;
 pub use health::*;
-pub use metrics::*;
 pub use model::*;
-pub use pagination::*;
-pub use service::*;
-
-pub use anthropic::*;
 pub use chat::*;
 pub use content::*;
 pub use embedding::*;
