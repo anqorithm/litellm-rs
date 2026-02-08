@@ -157,7 +157,6 @@ struct OpenAIHyperparameters {
 #[derive(Debug, Serialize)]
 #[serde(untagged)]
 enum OpenAIHyperparamValue {
-    Auto(String),
     Int(u32),
     Float(f64),
 }
