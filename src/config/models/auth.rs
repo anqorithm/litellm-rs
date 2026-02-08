@@ -1,8 +1,6 @@
 //! Authentication configuration
 
 use super::*;
-use rand::distributions::Alphanumeric;
-use rand::{Rng, thread_rng};
 use serde::{Deserialize, Serialize};
 use tracing::warn;
 
@@ -33,7 +31,7 @@ impl Default for AuthConfig {
         Self {
             enable_jwt: true,
             enable_api_key: true,
-            jwt_secret: generate_secure_jwt_secret(),
+            jwt_secret: String::new(),
             jwt_expiration: default_jwt_expiration(),
             api_key_header: default_api_key_header(),
             rbac: RbacConfig::default(),
@@ -50,7 +48,7 @@ impl AuthConfig {
         if !other.enable_api_key {
             self.enable_api_key = other.enable_api_key;
         }
-        if !other.jwt_secret.is_empty() && other.jwt_secret != "your-secret-key" {
+        if !other.jwt_secret.is_empty() {
             self.jwt_secret = other.jwt_secret;
         }
         if other.jwt_expiration != default_jwt_expiration() {
@@ -157,16 +155,6 @@ fn default_true() -> bool {
     true
 }
 
-/// Generate a secure random JWT secret
-fn generate_secure_jwt_secret() -> String {
-    // Generate a 64-character secure random string
-    thread_rng()
-        .sample_iter(&Alphanumeric)
-        .take(64)
-        .map(char::from)
-        .collect()
-}
-
 /// Warn about insecure configuration in development
 pub fn warn_insecure_config(config: &AuthConfig) {
     if !config.is_production_ready() {
@@ -179,6 +167,10 @@ pub fn warn_insecure_config(config: &AuthConfig) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn secure_jwt_secret() -> String {
+        "CustomSecret123!@#456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789".to_string()
+    }
 
     // ==================== RbacConfig Tests ====================
 
@@ -265,9 +257,10 @@ mod tests {
         let config = AuthConfig::default();
         assert!(config.enable_jwt);
         assert!(config.enable_api_key);
-        assert!(config.jwt_secret.len() >= 64);
+        assert!(config.jwt_secret.is_empty());
         assert_eq!(config.jwt_expiration, 86400); // 24 hours
         assert_eq!(config.api_key_header, "Authorization");
+        assert!(config.validate().is_err());
     }
 
     #[test]
@@ -344,7 +337,7 @@ mod tests {
         let config = AuthConfig {
             enable_jwt: true,
             enable_api_key: true,
-            jwt_secret: generate_secure_jwt_secret(),
+            jwt_secret: secure_jwt_secret(),
             jwt_expiration: 100, // less than 300
             api_key_header: "X-API-Key".to_string(),
             rbac: RbacConfig::default(),
@@ -357,7 +350,7 @@ mod tests {
         let config = AuthConfig {
             enable_jwt: true,
             enable_api_key: true,
-            jwt_secret: generate_secure_jwt_secret(),
+            jwt_secret: secure_jwt_secret(),
             jwt_expiration: 86400 * 31, // more than 30 days
             api_key_header: "X-API-Key".to_string(),
             rbac: RbacConfig::default(),
@@ -370,7 +363,7 @@ mod tests {
         let config = AuthConfig {
             enable_jwt: false,
             enable_api_key: true,
-            jwt_secret: generate_secure_jwt_secret(),
+            jwt_secret: String::new(),
             jwt_expiration: 3600,
             api_key_header: "".to_string(),
             rbac: RbacConfig::default(),
@@ -380,7 +373,14 @@ mod tests {
 
     #[test]
     fn test_auth_config_validate_success() {
-        let config = AuthConfig::default();
+        let config = AuthConfig {
+            enable_jwt: true,
+            enable_api_key: true,
+            jwt_secret: secure_jwt_secret(),
+            jwt_expiration: 3600,
+            api_key_header: "X-API-Key".to_string(),
+            rbac: RbacConfig::default(),
+        };
         assert!(config.validate().is_ok());
     }
 
@@ -392,7 +392,7 @@ mod tests {
         let disabled = AuthConfig {
             enable_jwt: false,
             enable_api_key: false,
-            jwt_secret: generate_secure_jwt_secret(),
+            jwt_secret: String::new(),
             jwt_expiration: 3600,
             api_key_header: "X-API-Key".to_string(),
             rbac: RbacConfig::default(),
@@ -421,7 +421,7 @@ mod tests {
         let other = AuthConfig {
             enable_jwt: true,
             enable_api_key: true,
-            jwt_secret: "your-secret-key".to_string(),
+            jwt_secret: String::new(),
             jwt_expiration: 7200,
             api_key_header: "X-API-Key".to_string(),
             rbac: RbacConfig::default(),
@@ -436,13 +436,5 @@ mod tests {
         let cloned = config.clone();
         assert_eq!(config.enable_jwt, cloned.enable_jwt);
         assert_eq!(config.jwt_expiration, cloned.jwt_expiration);
-    }
-
-    #[test]
-    fn test_generate_secure_jwt_secret() {
-        let secret = generate_secure_jwt_secret();
-        assert_eq!(secret.len(), 64);
-        assert!(secret.chars().any(|c| c.is_ascii_uppercase()));
-        assert!(secret.chars().any(|c| c.is_ascii_lowercase()));
     }
 }

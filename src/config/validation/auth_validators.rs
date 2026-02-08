@@ -11,16 +11,20 @@ impl Validate for AuthConfig {
     fn validate(&self) -> Result<(), String> {
         debug!("Validating auth configuration");
 
-        if self.jwt_secret.is_empty() {
-            return Err("JWT secret cannot be empty".to_string());
-        }
+        if self.enable_jwt {
+            if self.jwt_secret.is_empty() {
+                return Err("JWT secret cannot be empty".to_string());
+            }
 
-        if self.jwt_secret == "change-me-in-production" && !cfg!(test) {
-            return Err("JWT secret must be changed from default value in production".to_string());
-        }
+            if self.jwt_secret == "change-me-in-production" && !cfg!(test) {
+                return Err(
+                    "JWT secret must be changed from default value in production".to_string(),
+                );
+            }
 
-        if self.jwt_secret.len() < 32 {
-            return Err("JWT secret should be at least 32 characters long".to_string());
+            if self.jwt_secret.len() < 32 {
+                return Err("JWT secret should be at least 32 characters long".to_string());
+            }
         }
 
         if self.jwt_expiration == 0 {
@@ -32,7 +36,7 @@ impl Validate for AuthConfig {
             return Err("JWT expiration should not exceed 30 days".to_string());
         }
 
-        if self.api_key_header.is_empty() {
+        if self.enable_api_key && self.api_key_header.is_empty() {
             return Err("API key header cannot be empty".to_string());
         }
 
@@ -100,6 +104,14 @@ mod tests {
     }
 
     #[test]
+    fn test_auth_config_empty_jwt_secret_when_jwt_disabled() {
+        let mut config = create_valid_auth_config();
+        config.enable_jwt = false;
+        config.jwt_secret = "".to_string();
+        assert!(validate_config(&config).is_ok());
+    }
+
+    #[test]
     fn test_auth_config_short_jwt_secret() {
         let mut config = create_valid_auth_config();
         config.jwt_secret = "short".to_string(); // Less than 32 chars
@@ -160,11 +172,9 @@ mod tests {
 
         let result = validate_config(&config);
         assert!(result.is_err());
-        assert!(
-            result
-                .unwrap_err()
-                .contains("API key header cannot be empty")
-        );
+        assert!(result
+            .unwrap_err()
+            .contains("API key header cannot be empty"));
     }
 
     #[test]
