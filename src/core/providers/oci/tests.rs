@@ -240,7 +240,7 @@ mod provider_tests {
 mod streaming_tests {
     use super::*;
     use bytes::Bytes;
-    use crate::core::types::MessageRole;
+    use crate::core::types::message::MessageRole;
     use futures::StreamExt;
 
     #[tokio::test]

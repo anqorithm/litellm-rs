@@ -11,8 +11,8 @@ use std::time::Duration;
 use tracing::warn;
 
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::types::{MessageContent, MessageRole};
 use crate::core::types::responses::{FinishReason, Usage};
+use crate::core::types::{message::MessageContent, message::MessageRole};
 
 // ============================================================================
 // HTTP Client Builder

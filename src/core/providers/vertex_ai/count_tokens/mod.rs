@@ -146,7 +146,7 @@ impl TokenCountHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::{MessageContent, MessageRole};
+    use crate::core::types::{message::MessageContent, message::MessageRole};
 
     #[test]
     fn test_estimate_tokens() {

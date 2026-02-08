@@ -3,7 +3,9 @@
 use crate::ProviderError;
 use crate::core::types::responses::FinishReason;
 use crate::core::types::{
-    ChatMessage, ChatRequest, MessageContent, MessageRole,
+    ChatMessage, ChatRequest,
+    message::MessageContent,
+    message::MessageRole,
     responses::{ChatChoice, ChatResponse, Usage},
 };
 use serde_json::{Value, json};

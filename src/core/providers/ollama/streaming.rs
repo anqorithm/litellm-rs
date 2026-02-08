@@ -4,7 +4,7 @@
 //! Ollama uses a different format than OpenAI's SSE, so we need a custom parser.
 
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::types::MessageRole;
+use crate::core::types::message::MessageRole;
 use crate::core::types::responses::{ChatChunk, ChatDelta, ChatResponse, ChatStreamChoice, Usage};
 use bytes::Bytes;
 use futures::Stream;
@@ -345,7 +345,7 @@ fn response_to_chunks(response: ChatResponse) -> Vec<ChatChunk> {
     // Create content chunks
     if let Some(choice) = response.choices.first() {
         if let Some(content) = &choice.message.content {
-            use crate::core::types::MessageContent;
+            use crate::core::types::message::MessageContent;
             let text = match content {
                 MessageContent::Text(text) => text.clone(),
                 MessageContent::Parts(_) => content.to_string(),
@@ -512,8 +512,8 @@ mod tests {
 
     #[test]
     fn test_response_to_chunks() {
-        use crate::core::types::{ChatMessage, MessageContent};
         use crate::core::types::responses::ChatChoice;
+        use crate::core::types::{ChatMessage, message::MessageContent};
 
         let response = ChatResponse {
             id: "test-id".to_string(),

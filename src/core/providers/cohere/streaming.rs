@@ -8,7 +8,7 @@ use serde_json::Value;
 
 use super::config::CohereApiVersion;
 use super::error::CohereError;
-use crate::core::types::MessageRole;
+use crate::core::types::message::MessageRole;
 use crate::core::types::responses::{ChatChunk, ChatDelta, ChatStreamChoice, FinishReason, Usage};
 
 /// Cohere v1 streaming event types

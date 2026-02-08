@@ -10,7 +10,8 @@ use tokio::time::timeout;
 
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::{
-    ChatMessage, ChatRequest, ContentPart, MessageRole,
+    ChatMessage, ChatRequest, ContentPart,
+    message::MessageRole,
     responses::{ChatChoice, ChatResponse, Usage},
 };
 
@@ -294,10 +295,10 @@ impl AnthropicClient {
                 MessageRole::System => {
                     if let Some(content) = &message.content {
                         match content {
-                            crate::core::types::MessageContent::Text(text) => {
+                            crate::core::types::message::MessageContent::Text(text) => {
                                 system_parts.push(text.clone());
                             }
-                            crate::core::types::MessageContent::Parts(parts) => {
+                            crate::core::types::message::MessageContent::Parts(parts) => {
                                 for part in parts {
                                     if let ContentPart::Text { text } = part {
                                         system_parts.push(text.clone());
@@ -341,10 +342,10 @@ impl AnthropicClient {
 
             let content = if let Some(content) = message.content {
                 match content {
-                    crate::core::types::MessageContent::Text(text) => {
+                    crate::core::types::message::MessageContent::Text(text) => {
                         json!(text)
                     }
-                    crate::core::types::MessageContent::Parts(parts) => {
+                    crate::core::types::message::MessageContent::Parts(parts) => {
                         let mut anthropic_parts = Vec::new();
 
                         for part in parts {
@@ -549,7 +550,9 @@ impl AnthropicClient {
             content: if message_content.is_empty() {
                 None
             } else {
-                Some(crate::core::types::MessageContent::Text(message_content))
+                Some(crate::core::types::message::MessageContent::Text(
+                    message_content,
+                ))
             },
             thinking: None,
             name: None,
@@ -617,7 +620,7 @@ impl AnthropicClient {
 mod tests {
     use super::*;
     use crate::core::providers::anthropic::config::AnthropicConfig;
-    use crate::core::types::MessageContent;
+    use crate::core::types::message::MessageContent;
 
     // ==================== Client Creation Tests ====================
 

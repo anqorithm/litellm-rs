@@ -160,7 +160,7 @@ impl HerokuClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::{ChatMessage, MessageContent, MessageRole};
+    use crate::core::types::{ChatMessage, message::MessageContent, message::MessageRole};
     use std::collections::HashMap;
 
     #[test]

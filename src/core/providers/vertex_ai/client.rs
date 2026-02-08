@@ -813,8 +813,8 @@ impl LLMProvider for VertexAIProvider {
             choices: vec![crate::core::types::responses::ChatChoice {
                 index: 0,
                 message: crate::core::types::ChatMessage {
-                    role: crate::core::types::MessageRole::Assistant,
-                    content: Some(crate::core::types::MessageContent::Text(content)),
+                    role: crate::core::types::message::MessageRole::Assistant,
+                    content: Some(crate::core::types::message::MessageContent::Text(content)),
                     thinking: None,
                     name: None,
                     tool_calls: None, // Handle

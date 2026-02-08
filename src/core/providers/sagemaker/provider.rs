@@ -303,16 +303,16 @@ fn format_messages_for_tgi(request: &ChatRequest) -> String {
 
     for message in &request.messages {
         let role = match message.role {
-            crate::core::types::MessageRole::System => "System",
-            crate::core::types::MessageRole::User => "User",
-            crate::core::types::MessageRole::Assistant => "Assistant",
+            crate::core::types::message::MessageRole::System => "System",
+            crate::core::types::message::MessageRole::User => "User",
+            crate::core::types::message::MessageRole::Assistant => "Assistant",
             _ => "User",
         };
 
         if let Some(content) = &message.content {
             let text = match content {
-                crate::core::types::MessageContent::Text(t) => t.clone(),
-                crate::core::types::MessageContent::Parts(parts) => parts
+                crate::core::types::message::MessageContent::Text(t) => t.clone(),
+                crate::core::types::message::MessageContent::Parts(parts) => parts
                     .iter()
                     .filter_map(|p| {
                         if let crate::core::types::ContentPart::Text { text } = p {
@@ -358,8 +358,8 @@ fn parse_tgi_response(response_bytes: &[u8], model: &str) -> Result<ChatResponse
         choices: vec![crate::core::types::responses::ChatChoice {
             index: 0,
             message: crate::core::types::ChatMessage {
-                role: crate::core::types::MessageRole::Assistant,
-                content: Some(crate::core::types::MessageContent::Text(
+                role: crate::core::types::message::MessageRole::Assistant,
+                content: Some(crate::core::types::message::MessageContent::Text(
                     generated_text.to_string(),
                 )),
                 thinking: None,
@@ -385,8 +385,8 @@ mod tests {
         let request = ChatRequest {
             model: "test".to_string(),
             messages: vec![crate::core::types::ChatMessage {
-                role: crate::core::types::MessageRole::User,
-                content: Some(crate::core::types::MessageContent::Text(
+                role: crate::core::types::message::MessageRole::User,
+                content: Some(crate::core::types::message::MessageContent::Text(
                     "Hello".to_string(),
                 )),
                 thinking: None,

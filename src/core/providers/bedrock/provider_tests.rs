@@ -9,7 +9,7 @@ use super::provider::{BEDROCK_CAPABILITIES, BedrockProvider};
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use crate::core::types::ContentPart;
 use crate::core::types::model::ProviderCapability;
-use crate::core::types::{ChatMessage, MessageContent, MessageRole};
+use crate::core::types::{ChatMessage, message::MessageContent, message::MessageRole};
 use std::collections::HashMap;
 
 fn create_test_config() -> BedrockConfig {

@@ -6,7 +6,9 @@
 use crate::core::models::RequestContext;
 use crate::core::models::openai::{CompletionRequest, CompletionResponse};
 use crate::core::providers::ProviderRegistry;
-use crate::core::types::{ChatMessage, MessageContent, MessageRole, model::ProviderCapability};
+use crate::core::types::{
+    ChatMessage, message::MessageContent, message::MessageRole, model::ProviderCapability,
+};
 use crate::server::routes::errors;
 use crate::server::state::AppState;
 use crate::utils::error::GatewayError;

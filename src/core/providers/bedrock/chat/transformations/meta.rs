@@ -63,7 +63,7 @@ fn transform_llama2_request(request: &ChatRequest) -> Result<Value, ProviderErro
 
 /// Format messages for Llama 2 prompt format
 fn format_llama2_prompt(messages: &[crate::core::types::ChatMessage]) -> String {
-    use crate::core::types::{MessageContent, MessageRole};
+    use crate::core::types::{message::MessageContent, message::MessageRole};
 
     let mut prompt = String::from("<s>");
     let mut system_prompt = None;
@@ -114,7 +114,7 @@ fn format_llama2_prompt(messages: &[crate::core::types::ChatMessage]) -> String 
 mod tests {
     use super::*;
     use crate::core::providers::bedrock::model_config::{BedrockApiType, BedrockModelFamily};
-    use crate::core::types::{ChatMessage, MessageContent, MessageRole};
+    use crate::core::types::{ChatMessage, message::MessageContent, message::MessageRole};
 
     fn create_test_request(model: &str) -> ChatRequest {
         ChatRequest {

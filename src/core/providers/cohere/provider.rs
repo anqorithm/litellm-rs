@@ -633,7 +633,7 @@ impl LLMProvider for CohereProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::{ChatMessage, MessageContent, MessageRole};
+    use crate::core::types::{ChatMessage, message::MessageContent, message::MessageRole};
 
     fn create_test_config() -> CohereConfig {
         CohereConfig::new("test_api_key")

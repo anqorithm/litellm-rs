@@ -21,7 +21,7 @@ pub fn transform_request(
 
 /// Transform request for Command R models (chat format)
 fn transform_command_r_request(request: &ChatRequest) -> Result<Value, ProviderError> {
-    use crate::core::types::{MessageContent, MessageRole};
+    use crate::core::types::{message::MessageContent, message::MessageRole};
 
     let mut chat_history = Vec::new();
     let mut message = String::new();
@@ -133,7 +133,7 @@ fn transform_command_request(request: &ChatRequest) -> Result<Value, ProviderErr
 mod tests {
     use super::*;
     use crate::core::providers::bedrock::model_config::{BedrockApiType, BedrockModelFamily};
-    use crate::core::types::{ChatMessage, MessageContent, MessageRole};
+    use crate::core::types::{ChatMessage, message::MessageContent, message::MessageRole};
 
     fn create_test_request(model: &str) -> ChatRequest {
         ChatRequest {

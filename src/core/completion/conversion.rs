@@ -1,8 +1,8 @@
 //! Type conversion functions
 
 use super::types::{Choice, CompletionOptions, CompletionResponse};
-use crate::core::types::{ChatMessage, ChatRequest};
 use crate::core::types::responses::{ChatResponse, Usage};
+use crate::core::types::{ChatMessage, ChatRequest};
 use crate::utils::error::Result;
 
 /// Convert to chat completion request
@@ -76,8 +76,8 @@ pub fn convert_usage(usage: &crate::core::types::responses::Usage) -> Usage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::{MessageContent, MessageRole, ThinkingUsage};
     use crate::core::types::responses::{ChatChoice, FinishReason};
+    use crate::core::types::{ThinkingUsage, message::MessageContent, message::MessageRole};
     use std::collections::HashMap;
 
     // ==================== Helper Functions ====================

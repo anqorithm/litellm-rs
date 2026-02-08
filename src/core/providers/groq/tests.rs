@@ -98,7 +98,7 @@ mod tests {
 
     #[test]
     fn test_should_fake_stream() {
-        use crate::core::types::{ChatMessage, ChatRequest, MessageRole};
+        use crate::core::types::{ChatMessage, ChatRequest, message::MessageRole};
 
         tokio::runtime::Runtime::new().unwrap().block_on(async {
             let provider = GroqProvider::with_api_key("test-key").await.unwrap();
@@ -108,7 +108,7 @@ mod tests {
                 model: "llama-3.1-70b-versatile".to_string(),
                 messages: vec![ChatMessage {
                     role: MessageRole::User,
-                    content: Some(crate::core::types::MessageContent::Text(
+                    content: Some(crate::core::types::message::MessageContent::Text(
                         "Hello".to_string(),
                     )),
                     ..Default::default()

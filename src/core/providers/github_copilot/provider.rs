@@ -20,10 +20,11 @@ use super::model_info::{
 use crate::ProviderError;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use crate::core::types::{
-    ChatMessage, ChatRequest, MessageRole,
+    ChatMessage, ChatRequest,
     context::RequestContext,
     embedding::EmbeddingRequest,
     health::HealthStatus,
+    message::MessageRole,
     model::ModelInfo,
     model::ProviderCapability,
     responses::{ChatChunk, ChatResponse, EmbeddingResponse},
@@ -192,7 +193,9 @@ impl GitHubCopilotProvider {
     /// Check if request contains vision content
     fn has_vision_content(&self, messages: &[ChatMessage]) -> bool {
         for message in messages {
-            if let Some(crate::core::types::MessageContent::Parts(parts)) = &message.content {
+            if let Some(crate::core::types::message::MessageContent::Parts(parts)) =
+                &message.content
+            {
                 for part in parts {
                     if let crate::core::types::ContentPart::ImageUrl { .. } = part {
                         return true;

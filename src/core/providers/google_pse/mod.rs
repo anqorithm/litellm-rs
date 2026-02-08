@@ -20,10 +20,11 @@ use crate::core::traits::{
     provider::llm_provider::trait_definition::LLMProvider,
 };
 use crate::core::types::{
-    ChatMessage, ChatRequest, MessageRole,
+    ChatMessage, ChatRequest,
     context::RequestContext,
     embedding::EmbeddingRequest,
     health::HealthStatus,
+    message::MessageRole,
     model::ModelInfo,
     model::ProviderCapability,
     responses::{ChatChoice, ChatChunk, ChatResponse, EmbeddingResponse, FinishReason, Usage},
@@ -246,7 +247,9 @@ impl LLMProvider for GooglePSEProvider {
         debug!("Google PSE search request: model={}", request.model);
 
         let query = if let Some(last_message) = request.messages.last() {
-            if let Some(crate::core::types::MessageContent::Text(text)) = &last_message.content {
+            if let Some(crate::core::types::message::MessageContent::Text(text)) =
+                &last_message.content
+            {
                 text.clone()
             } else {
                 return Err(ProviderError::invalid_request(
@@ -306,7 +309,7 @@ impl LLMProvider for GooglePSEProvider {
                 index: 0,
                 message: ChatMessage {
                     role: MessageRole::Assistant,
-                    content: Some(crate::core::types::MessageContent::Text(content)),
+                    content: Some(crate::core::types::message::MessageContent::Text(content)),
                     thinking: None,
                     name: None,
                     tool_calls: None,

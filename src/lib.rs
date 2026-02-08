@@ -109,7 +109,7 @@ pub use core::streaming::types::{
 };
 
 // Export unified type system
-pub use core::types::{MessageContent, MessageRole};
+pub use core::types::message::{MessageContent, MessageRole};
 
 // Export core functionality
 pub use core::models::{RequestContext, openai::*};

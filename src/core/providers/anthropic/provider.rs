@@ -95,7 +95,7 @@ impl AnthropicProvider {
 
         // Check multimodal content
         let has_multimodal_content = request.messages.iter().any(|msg| {
-            if let Some(crate::core::types::MessageContent::Parts(parts)) = &msg.content {
+            if let Some(crate::core::types::message::MessageContent::Parts(parts)) = &msg.content {
                 parts
                     .iter()
                     .any(|part| !matches!(part, crate::core::types::ContentPart::Text { .. }))
@@ -321,8 +321,10 @@ impl LLMProvider for AnthropicProvider {
         let test_request = ChatRequest {
             model: "claude-3-haiku-20240307".to_string(),
             messages: vec![crate::core::types::ChatMessage {
-                role: crate::core::types::MessageRole::User,
-                content: Some(crate::core::types::MessageContent::Text("ping".to_string())),
+                role: crate::core::types::message::MessageRole::User,
+                content: Some(crate::core::types::message::MessageContent::Text(
+                    "ping".to_string(),
+                )),
                 ..Default::default()
             }],
             max_tokens: Some(1),

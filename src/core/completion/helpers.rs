@@ -1,6 +1,6 @@
 //! Helper functions for message creation
 
-use crate::core::types::{ChatMessage, MessageContent, MessageRole};
+use crate::core::types::{ChatMessage, message::MessageContent, message::MessageRole};
 
 /// Convert messages to chat messages (no-op since Message is an alias)
 pub fn convert_messages_to_chat_messages(messages: Vec<ChatMessage>) -> Vec<ChatMessage> {

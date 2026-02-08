@@ -1,7 +1,7 @@
 //! Completion types - Python LiteLLM compatible
 
-use crate::core::types::{ChatMessage, Tool, ToolChoice};
 use crate::core::types::responses::{FinishReason, Usage};
+use crate::core::types::{ChatMessage, Tool, ToolChoice};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -89,7 +89,7 @@ pub struct Choice {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::MessageRole;
+    use crate::core::types::message::MessageRole;
 
     #[test]
     fn test_completion_options_default() {
@@ -166,7 +166,7 @@ mod tests {
             index: 0,
             message: ChatMessage {
                 role: MessageRole::Assistant,
-                content: Some(crate::core::types::MessageContent::Text(
+                content: Some(crate::core::types::message::MessageContent::Text(
                     "Hello".to_string(),
                 )),
                 ..Default::default()

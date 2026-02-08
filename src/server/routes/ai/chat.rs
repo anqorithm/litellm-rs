@@ -245,15 +245,15 @@ fn build_core_chat_request(
 
 fn convert_openai_message_to_core(message: ChatMessage) -> types::ChatMessage {
     let role = match message.role {
-        MessageRole::System => types::MessageRole::System,
-        MessageRole::User => types::MessageRole::User,
-        MessageRole::Assistant => types::MessageRole::Assistant,
-        MessageRole::Tool => types::MessageRole::Tool,
-        MessageRole::Function => types::MessageRole::Function,
+        MessageRole::System => types::message::MessageRole::System,
+        MessageRole::User => types::message::MessageRole::User,
+        MessageRole::Assistant => types::message::MessageRole::Assistant,
+        MessageRole::Tool => types::message::MessageRole::Tool,
+        MessageRole::Function => types::message::MessageRole::Function,
     };
 
     let content = message.content.map(|content| match content {
-        MessageContent::Text(text) => types::MessageContent::Text(text),
+        MessageContent::Text(text) => types::message::MessageContent::Text(text),
         MessageContent::Parts(parts) => {
             let converted_parts = parts
                 .into_iter()
@@ -279,7 +279,7 @@ fn convert_openai_message_to_core(message: ChatMessage) -> types::ChatMessage {
                     }
                 })
                 .collect();
-            types::MessageContent::Parts(converted_parts)
+            types::message::MessageContent::Parts(converted_parts)
         }
     });
 
@@ -336,11 +336,11 @@ fn convert_core_chat_response(response: types::responses::ChatResponse) -> ChatC
 
 fn convert_core_message_to_openai(message: types::ChatMessage) -> ChatMessage {
     let role = match message.role {
-        types::MessageRole::System => MessageRole::System,
-        types::MessageRole::User => MessageRole::User,
-        types::MessageRole::Assistant => MessageRole::Assistant,
-        types::MessageRole::Tool => MessageRole::Tool,
-        types::MessageRole::Function => MessageRole::Function,
+        types::message::MessageRole::System => MessageRole::System,
+        types::message::MessageRole::User => MessageRole::User,
+        types::message::MessageRole::Assistant => MessageRole::Assistant,
+        types::message::MessageRole::Tool => MessageRole::Tool,
+        types::message::MessageRole::Function => MessageRole::Function,
     };
 
     let content = message.content.map(convert_core_content_to_openai);
@@ -375,10 +375,10 @@ fn convert_core_message_to_openai(message: types::ChatMessage) -> ChatMessage {
     }
 }
 
-fn convert_core_content_to_openai(content: types::MessageContent) -> MessageContent {
+fn convert_core_content_to_openai(content: types::message::MessageContent) -> MessageContent {
     match content {
-        types::MessageContent::Text(text) => MessageContent::Text(text),
-        types::MessageContent::Parts(parts) => {
+        types::message::MessageContent::Text(text) => MessageContent::Text(text),
+        types::message::MessageContent::Parts(parts) => {
             let converted_parts = parts
                 .into_iter()
                 .map(convert_core_content_part_to_openai)

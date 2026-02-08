@@ -21,7 +21,7 @@ pub fn transform_request(
 
 /// Transform request for Jamba models
 fn transform_jamba_request(request: &ChatRequest) -> Result<Value, ProviderError> {
-    use crate::core::types::{MessageContent, MessageRole};
+    use crate::core::types::{message::MessageContent, message::MessageRole};
 
     let mut messages = Vec::new();
 
@@ -103,7 +103,7 @@ fn transform_jurassic_request(request: &ChatRequest) -> Result<Value, ProviderEr
 mod tests {
     use super::*;
     use crate::core::providers::bedrock::model_config::{BedrockApiType, BedrockModelFamily};
-    use crate::core::types::{ChatMessage, MessageContent, MessageRole};
+    use crate::core::types::{ChatMessage, message::MessageContent, message::MessageRole};
 
     fn create_test_request(model: &str) -> ChatRequest {
         ChatRequest {

@@ -6,7 +6,7 @@ use crate::core::types::ChatRequest;
 use serde_json::{Value, json};
 
 #[cfg(test)]
-use crate::core::types::{ChatMessage, MessageContent, MessageRole};
+use crate::core::types::{ChatMessage, message::MessageContent, message::MessageRole};
 
 /// Transform request for Amazon Titan models
 pub fn transform_titan_request(
@@ -46,7 +46,7 @@ pub fn transform_nova_request(
     let mut messages = Vec::new();
     let mut system = None;
 
-    use crate::core::types::{MessageContent, MessageRole};
+    use crate::core::types::{message::MessageContent, message::MessageRole};
 
     for msg in &request.messages {
         match msg.role {
@@ -58,9 +58,7 @@ pub fn transform_nova_request(
                         MessageContent::Parts(parts) => parts
                             .iter()
                             .filter_map(|part| {
-                                if let crate::core::types::ContentPart::Text { text } =
-                                    part
-                                {
+                                if let crate::core::types::ContentPart::Text { text } = part {
                                     Some(text.clone())
                                 } else {
                                     None

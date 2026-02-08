@@ -43,7 +43,7 @@ pub fn transform_for_model(
 
 /// Common utility to convert messages to prompt format
 pub fn messages_to_prompt(messages: &[crate::core::types::ChatMessage]) -> String {
-    use crate::core::types::{MessageContent, MessageRole};
+    use crate::core::types::{message::MessageContent, message::MessageRole};
 
     let mut prompt = String::new();
 
@@ -85,7 +85,7 @@ pub fn messages_to_prompt(messages: &[crate::core::types::ChatMessage]) -> Strin
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::{ChatMessage, MessageContent, MessageRole};
+    use crate::core::types::{ChatMessage, message::MessageContent, message::MessageRole};
 
     fn create_user_message(text: &str) -> ChatMessage {
         ChatMessage {

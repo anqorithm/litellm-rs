@@ -263,8 +263,8 @@ impl LLMProvider for SnowflakeProvider {
             choices: vec![crate::core::types::responses::ChatChoice {
                 index: 0,
                 message: crate::core::types::ChatMessage {
-                    role: crate::core::types::MessageRole::Assistant,
-                    content: Some(crate::core::types::MessageContent::Text(
+                    role: crate::core::types::message::MessageRole::Assistant,
+                    content: Some(crate::core::types::message::MessageContent::Text(
                         content.to_string(),
                     )),
                     thinking: None,

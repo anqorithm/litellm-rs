@@ -11,7 +11,7 @@ use serde_json::Value;
 
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::{
-    MessageRole,
+    message::MessageRole,
     responses::{ChatChunk, ChatDelta, ChatStreamChoice, Usage},
 };
 
@@ -346,7 +346,9 @@ impl StreamUtils {
             content: if final_content.is_empty() {
                 None
             } else {
-                Some(crate::core::types::MessageContent::Text(final_content))
+                Some(crate::core::types::message::MessageContent::Text(
+                    final_content,
+                ))
             },
             thinking: None,
             name: None,

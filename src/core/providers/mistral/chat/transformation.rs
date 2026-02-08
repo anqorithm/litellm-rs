@@ -7,8 +7,9 @@ use tracing::debug;
 use crate::core::providers::mistral::MistralError;
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::{
-    ChatMessage, MessageContent, MessageRole,
-    ChatRequest, FunctionCall, ToolCall as RequestToolCall,
+    ChatMessage, ChatRequest, FunctionCall, ToolCall as RequestToolCall,
+    message::MessageContent,
+    message::MessageRole,
     responses::{ChatChoice, ChatResponse, FinishReason, Usage},
 };
 

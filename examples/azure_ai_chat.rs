@@ -14,7 +14,9 @@
 use litellm_rs::core::providers::azure_ai::{AzureAIConfig, AzureAIProvider};
 use litellm_rs::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use litellm_rs::core::types::context::RequestContext;
-use litellm_rs::core::types::{ChatMessage, ChatRequest, MessageContent, MessageRole};
+use litellm_rs::core::types::{
+    ChatMessage, ChatRequest, message::MessageContent, message::MessageRole,
+};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

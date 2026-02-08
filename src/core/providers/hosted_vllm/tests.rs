@@ -247,7 +247,7 @@ mod provider_tests {
 mod streaming_tests {
     use super::streaming::*;
     use crate::core::types::responses::{ChatChoice, ChatResponse, FinishReason, Usage};
-    use crate::core::types::{ChatMessage, MessageContent, MessageRole};
+    use crate::core::types::{ChatMessage, message::MessageContent, message::MessageRole};
 
     fn create_test_response() -> ChatResponse {
         ChatResponse {

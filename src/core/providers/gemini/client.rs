@@ -14,7 +14,9 @@ use tokio::time::timeout;
 
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::{
-    ChatMessage, ChatRequest, ContentPart, MessageContent, MessageRole,
+    ChatMessage, ChatRequest, ContentPart,
+    message::MessageContent,
+    message::MessageRole,
     responses::{ChatChoice, ChatResponse, Usage},
 };
 

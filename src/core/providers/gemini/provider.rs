@@ -345,8 +345,10 @@ impl LLMProvider for GeminiProvider {
         let test_request = ChatRequest {
             model: "gemini-1.0-pro".to_string(),
             messages: vec![crate::core::types::ChatMessage {
-                role: crate::core::types::MessageRole::User,
-                content: Some(crate::core::types::MessageContent::Text("Hi".to_string())),
+                role: crate::core::types::message::MessageRole::User,
+                content: Some(crate::core::types::message::MessageContent::Text(
+                    "Hi".to_string(),
+                )),
                 ..Default::default()
             }],
             temperature: Some(0.1),
@@ -403,7 +405,7 @@ impl LLMProvider for GeminiProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::{ChatMessage, MessageContent, MessageRole};
+    use crate::core::types::{ChatMessage, message::MessageContent, message::MessageRole};
 
     // Helper function to create a basic valid request
     fn create_valid_request(model: &str) -> ChatRequest {

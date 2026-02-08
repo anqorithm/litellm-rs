@@ -2,7 +2,7 @@
 
 use super::types::{ChatCompletionChunk, ChatCompletionChunkChoice, ChatCompletionDelta, Event};
 use crate::core::models::openai::Usage;
-use crate::core::types::MessageRole;
+use crate::core::types::message::MessageRole;
 use crate::utils::error::Result;
 use actix_web::web;
 use futures::stream::{Stream, StreamExt};

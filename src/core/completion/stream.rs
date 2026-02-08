@@ -358,7 +358,7 @@ mod tests {
             choices: vec![ChatCompletionChunkChoice {
                 index: 0,
                 delta: ChatCompletionDelta {
-                    role: Some(crate::core::types::MessageRole::Assistant),
+                    role: Some(crate::core::types::message::MessageRole::Assistant),
                     content: Some("Hello".to_string()),
                     tool_calls: None,
                 },
@@ -476,7 +476,7 @@ mod tests {
                 choices: vec![ChatCompletionChunkChoice {
                     index: 0,
                     delta: ChatCompletionDelta {
-                        role: Some(crate::core::types::MessageRole::Assistant),
+                        role: Some(crate::core::types::message::MessageRole::Assistant),
                         content: None,
                         tool_calls: None,
                     },

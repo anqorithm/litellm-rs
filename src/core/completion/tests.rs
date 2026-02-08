@@ -1,7 +1,7 @@
 //! Completion module tests
 
 use super::*;
-use crate::core::types::MessageRole;
+use crate::core::types::message::MessageRole;
 
 #[test]
 fn test_message_creation() {

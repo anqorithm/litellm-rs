@@ -6,8 +6,7 @@ use serde_json::Value;
 
 use crate::core::types::responses::FinishReason;
 use crate::core::types::{
-    ChatRequest, MessageContent, MessageRole,
-    responses::ChatResponse,
+    ChatRequest, message::MessageContent, message::MessageRole, responses::ChatResponse,
 };
 
 /// Batch job for processing multiple requests

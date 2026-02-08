@@ -295,7 +295,7 @@ impl LLMProvider for PerplexityProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::{ChatMessage, MessageContent, MessageRole};
+    use crate::core::types::{ChatMessage, message::MessageContent, message::MessageRole};
 
     fn create_test_config() -> PerplexityConfig {
         let mut config = PerplexityConfig::new("perplexity");

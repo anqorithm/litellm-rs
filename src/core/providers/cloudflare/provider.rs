@@ -268,8 +268,8 @@ impl LLMProvider for CloudflareProvider {
             choices: vec![crate::core::types::responses::ChatChoice {
                 index: 0,
                 message: crate::core::types::ChatMessage {
-                    role: crate::core::types::MessageRole::Assistant,
-                    content: Some(crate::core::types::MessageContent::Text(content)),
+                    role: crate::core::types::message::MessageRole::Assistant,
+                    content: Some(crate::core::types::message::MessageContent::Text(content)),
                     thinking: None,
                     name: None,
                     function_call: None,
@@ -323,8 +323,8 @@ impl LLMProvider for CloudflareProvider {
             choices: vec![crate::core::types::responses::ChatChoice {
                 index: 0,
                 message: crate::core::types::ChatMessage {
-                    role: crate::core::types::MessageRole::Assistant,
-                    content: Some(crate::core::types::MessageContent::Text(content)),
+                    role: crate::core::types::message::MessageRole::Assistant,
+                    content: Some(crate::core::types::message::MessageContent::Text(content)),
                     thinking: None,
                     name: None,
                     function_call: None,
@@ -412,7 +412,7 @@ impl LLMProvider for CloudflareProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::{ChatMessage, MessageContent, MessageRole};
+    use crate::core::types::{ChatMessage, message::MessageContent, message::MessageRole};
 
     fn create_test_config() -> CloudflareConfig {
         CloudflareConfig {

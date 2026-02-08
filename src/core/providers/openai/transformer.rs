@@ -3,14 +3,14 @@
 //! Unified transformation layer for converting between unified LiteLLM types and OpenAI-specific formats
 
 use crate::core::traits::Transform;
-use crate::core::types::thinking::ThinkingContent;
-use crate::core::types::{
-    ChatMessage, ChatRequest, ContentPart, FunctionCall, ImageUrl, MessageContent, MessageRole,
-    ResponseFormat, Tool, ToolCall, ToolChoice,
-};
 use crate::core::types::responses::{
     ChatChoice, ChatChunk, ChatDelta, ChatResponse, ChatStreamChoice, FinishReason, LogProbs,
     TokenLogProb, TopLogProb, Usage,
+};
+use crate::core::types::thinking::ThinkingContent;
+use crate::core::types::{
+    ChatMessage, ChatRequest, ContentPart, FunctionCall, ImageUrl, ResponseFormat, Tool, ToolCall,
+    ToolChoice, message::MessageContent, message::MessageRole,
 };
 use serde_json;
 

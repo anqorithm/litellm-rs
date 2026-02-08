@@ -9,8 +9,10 @@ use super::models::{ReplicateModelType, get_replicate_registry};
 use super::prediction::{CreatePredictionRequest, PredictionResponse, PredictionStatus};
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::{
-    ChatMessage, ChatRequest, MessageContent, MessageRole,
+    ChatMessage, ChatRequest,
     image::ImageGenerationRequest,
+    message::MessageContent,
+    message::MessageRole,
     model::ModelInfo,
     responses::{ChatChoice, ChatResponse, ImageData, ImageGenerationResponse, Usage},
 };
@@ -56,7 +58,7 @@ impl ReplicateClient {
 
         // Extract system prompt if present
         let system_prompt = request.messages.iter().find_map(|msg| {
-            if msg.role == crate::core::types::MessageRole::System {
+            if msg.role == crate::core::types::message::MessageRole::System {
                 msg.content.as_ref().map(|c| c.to_string())
             } else {
                 None
@@ -308,7 +310,7 @@ impl ReplicateClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::{ChatMessage, MessageContent, MessageRole};
+    use crate::core::types::{ChatMessage, message::MessageContent, message::MessageRole};
 
     fn create_test_chat_request() -> ChatRequest {
         ChatRequest {
