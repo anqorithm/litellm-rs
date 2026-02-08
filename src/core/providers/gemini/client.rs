@@ -14,7 +14,8 @@ use tokio::time::timeout;
 
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::{
-    ChatMessage, ChatRequest, ContentPart,
+    ChatMessage, ChatRequest,
+    content::ContentPart,
     message::MessageContent,
     message::MessageRole,
     responses::{ChatChoice, ChatResponse, Usage},
@@ -597,7 +598,7 @@ mod tests {
                     text: "What's in this image?".to_string(),
                 },
                 ContentPart::Image {
-                    source: crate::core::types::ImageSource {
+                    source: crate::core::types::content::ImageSource {
                         data: "test".to_string(),
                         media_type: "image/png".to_string(),
                     },

@@ -31,7 +31,7 @@ fn transform_jamba_request(request: &ChatRequest) -> Result<Value, ProviderError
             Some(MessageContent::Parts(parts)) => parts
                 .iter()
                 .filter_map(|part| {
-                    if let crate::core::types::ContentPart::Text { text } = part {
+                    if let crate::core::types::content::ContentPart::Text { text } = part {
                         Some(text.clone())
                     } else {
                         None

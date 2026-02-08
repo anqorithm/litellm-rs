@@ -195,10 +195,10 @@ impl OllamaProvider {
 
                     for part in parts {
                         match part {
-                            crate::core::types::ContentPart::Text { text } => {
+                            crate::core::types::content::ContentPart::Text { text } => {
                                 text_parts.push(text.clone());
                             }
-                            crate::core::types::ContentPart::ImageUrl { image_url } => {
+                            crate::core::types::content::ContentPart::ImageUrl { image_url } => {
                                 // Extract base64 image data from data URL or URL
                                 let url = &image_url.url;
                                 if url.starts_with("data:") {
@@ -212,7 +212,7 @@ impl OllamaProvider {
                                     images.push(url.clone());
                                 }
                             }
-                            crate::core::types::ContentPart::Image { source, .. } => {
+                            crate::core::types::content::ContentPart::Image { source, .. } => {
                                 // Base64 encoded image
                                 images.push(source.data.clone());
                             }

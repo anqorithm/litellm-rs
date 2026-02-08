@@ -462,7 +462,7 @@ pub mod test_utils {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::ContentPart;
+    use crate::core::types::content::ContentPart;
 
     // ==================== HttpClientBuilder Tests ====================
 

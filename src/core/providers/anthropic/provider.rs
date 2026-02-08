@@ -96,9 +96,9 @@ impl AnthropicProvider {
         // Check multimodal content
         let has_multimodal_content = request.messages.iter().any(|msg| {
             if let Some(crate::core::types::message::MessageContent::Parts(parts)) = &msg.content {
-                parts
-                    .iter()
-                    .any(|part| !matches!(part, crate::core::types::ContentPart::Text { .. }))
+                parts.iter().any(|part| {
+                    !matches!(part, crate::core::types::content::ContentPart::Text { .. })
+                })
             } else {
                 false
             }

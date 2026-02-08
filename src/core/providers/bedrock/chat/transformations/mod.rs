@@ -55,7 +55,7 @@ pub fn messages_to_prompt(messages: &[crate::core::types::ChatMessage]) -> Strin
                 parts
                     .iter()
                     .filter_map(|part| {
-                        if let crate::core::types::ContentPart::Text { text } = part {
+                        if let crate::core::types::content::ContentPart::Text { text } = part {
                             Some(text.clone())
                         } else {
                             None

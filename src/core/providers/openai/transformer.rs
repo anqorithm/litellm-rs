@@ -9,8 +9,9 @@ use crate::core::types::responses::{
 };
 use crate::core::types::thinking::ThinkingContent;
 use crate::core::types::{
-    ChatMessage, ChatRequest, ContentPart, ImageUrl, message::MessageContent, message::MessageRole,
-    tools::FunctionCall, tools::ResponseFormat, tools::Tool, tools::ToolCall, tools::ToolChoice,
+    ChatMessage, ChatRequest, content::ContentPart, content::ImageUrl, message::MessageContent,
+    message::MessageRole, tools::FunctionCall, tools::ResponseFormat, tools::Tool, tools::ToolCall,
+    tools::ToolChoice,
 };
 use serde_json;
 
@@ -401,7 +402,7 @@ impl OpenAIResponseTransformer {
                 },
             }),
             OpenAIContentPart::InputAudio { input_audio } => Ok(ContentPart::Audio {
-                audio: crate::core::types::AudioData {
+                audio: crate::core::types::content::AudioData {
                     data: input_audio.data,
                     format: Some(input_audio.format),
                 },
@@ -518,7 +519,8 @@ impl Transform<OpenAIChatResponse, ChatResponse> for OpenAITransformer {
 mod tests {
     use super::*;
     use crate::core::types::{
-        AudioData, DocumentSource, ImageSource, tools::FunctionDefinition, tools::ToolType,
+        content::AudioData, content::DocumentSource, content::ImageSource,
+        tools::FunctionDefinition, tools::ToolType,
     };
 
     // ==================== Request Transformer Tests ====================

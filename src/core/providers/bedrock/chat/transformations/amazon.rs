@@ -58,7 +58,9 @@ pub fn transform_nova_request(
                         MessageContent::Parts(parts) => parts
                             .iter()
                             .filter_map(|part| {
-                                if let crate::core::types::ContentPart::Text { text } = part {
+                                if let crate::core::types::content::ContentPart::Text { text } =
+                                    part
+                                {
                                     Some(text.clone())
                                 } else {
                                     None
@@ -83,30 +85,30 @@ pub fn transform_nova_request(
                         Some(MessageContent::Parts(parts)) => {
                             parts.iter().filter_map(|part| {
                                 match part {
-                                    crate::core::types::ContentPart::Text { text } => {
+                                    crate::core::types::content::ContentPart::Text { text } => {
                                         Some(json!({"text": text}))
                                     }
-                                    crate::core::types::ContentPart::Image { .. } => {
+                                    crate::core::types::content::ContentPart::Image { .. } => {
                                         // TODO: Handle image content for Nova Canvas
                                         None
                                     }
-                                    crate::core::types::ContentPart::ImageUrl { .. } => {
+                                    crate::core::types::content::ContentPart::ImageUrl { .. } => {
                                         // TODO: Handle image URL content
                                         None
                                     }
-                                    crate::core::types::ContentPart::Audio { .. } => {
+                                    crate::core::types::content::ContentPart::Audio { .. } => {
                                         // TODO: Handle audio content
                                         None
                                     }
-                                    crate::core::types::ContentPart::Document { .. } => {
+                                    crate::core::types::content::ContentPart::Document { .. } => {
                                         // TODO: Handle document content
                                         None
                                     }
-                                    crate::core::types::ContentPart::ToolResult { .. } => {
+                                    crate::core::types::content::ContentPart::ToolResult { .. } => {
                                         // TODO: Handle tool result content
                                         None
                                     }
-                                    crate::core::types::ContentPart::ToolUse { .. } => {
+                                    crate::core::types::content::ContentPart::ToolUse { .. } => {
                                         // TODO: Handle tool use content
                                         None
                                     }

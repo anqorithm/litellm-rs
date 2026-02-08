@@ -197,11 +197,13 @@ fn build_core_chat_request(
         None => None,
     };
 
-    let response_format = request.response_format.map(|format| types::tools::ResponseFormat {
-        format_type: format.format_type,
-        json_schema: format.json_schema,
-        response_type: None,
-    });
+    let response_format = request
+        .response_format
+        .map(|format| types::tools::ResponseFormat {
+            format_type: format.format_type,
+            json_schema: format.json_schema,
+            response_type: None,
+        });
 
     let mut extra_params = std::collections::HashMap::new();
     if let Some(modalities) = request.modalities {
@@ -259,10 +261,10 @@ fn convert_openai_message_to_core(message: ChatMessage) -> types::ChatMessage {
                 .into_iter()
                 .map(|part| match part {
                     crate::core::models::openai::ContentPart::Text { text } => {
-                        types::ContentPart::Text { text }
+                        types::content::ContentPart::Text { text }
                     }
                     crate::core::models::openai::ContentPart::ImageUrl { image_url } => {
-                        types::ContentPart::ImageUrl {
+                        types::content::ContentPart::ImageUrl {
                             image_url: types::content::ImageUrl {
                                 url: image_url.url,
                                 detail: image_url.detail,
@@ -270,7 +272,7 @@ fn convert_openai_message_to_core(message: ChatMessage) -> types::ChatMessage {
                         }
                     }
                     crate::core::models::openai::ContentPart::Audio { audio } => {
-                        types::ContentPart::Audio {
+                        types::content::ContentPart::Audio {
                             audio: types::content::AudioData {
                                 data: audio.data,
                                 format: Some(audio.format),
@@ -297,10 +299,12 @@ fn convert_openai_message_to_core(message: ChatMessage) -> types::ChatMessage {
             .collect()
     });
 
-    let function_call = message.function_call.map(|call| types::tools::FunctionCall {
-        name: call.name,
-        arguments: call.arguments,
-    });
+    let function_call = message
+        .function_call
+        .map(|call| types::tools::FunctionCall {
+            name: call.name,
+            arguments: call.arguments,
+        });
 
     types::ChatMessage {
         role,
@@ -389,13 +393,13 @@ fn convert_core_content_to_openai(content: types::message::MessageContent) -> Me
 }
 
 fn convert_core_content_part_to_openai(
-    part: types::ContentPart,
+    part: types::content::ContentPart,
 ) -> crate::core::models::openai::ContentPart {
     match part {
-        types::ContentPart::Text { text } => {
+        types::content::ContentPart::Text { text } => {
             crate::core::models::openai::ContentPart::Text { text }
         }
-        types::ContentPart::ImageUrl { image_url } => {
+        types::content::ContentPart::ImageUrl { image_url } => {
             crate::core::models::openai::ContentPart::ImageUrl {
                 image_url: crate::core::models::openai::ImageUrl {
                     url: image_url.url,
@@ -403,7 +407,7 @@ fn convert_core_content_part_to_openai(
                 },
             }
         }
-        types::ContentPart::Audio { audio } => crate::core::models::openai::ContentPart::Audio {
+        types::content::ContentPart::Audio { audio } => crate::core::models::openai::ContentPart::Audio {
             audio: crate::core::models::openai::AudioContent {
                 data: audio.data,
                 format: audio.format.unwrap_or_else(|| "unknown".to_string()),

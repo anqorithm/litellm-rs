@@ -152,7 +152,9 @@ impl DashscopeChatTransformation {
                             let text_parts: Vec<String> = parts
                                 .iter()
                                 .filter_map(|part| {
-                                    if let crate::core::types::ContentPart::Text { text } = part {
+                                    if let crate::core::types::content::ContentPart::Text { text } =
+                                        part
+                                    {
                                         Some(text.clone())
                                     } else {
                                         None
@@ -618,10 +620,10 @@ mod tests {
         let messages = vec![ChatMessage {
             role: MessageRole::User,
             content: Some(MessageContent::Parts(vec![
-                crate::core::types::ContentPart::Text {
+                crate::core::types::content::ContentPart::Text {
                     text: "Hello".to_string(),
                 },
-                crate::core::types::ContentPart::Text {
+                crate::core::types::content::ContentPart::Text {
                     text: "World".to_string(),
                 },
             ])),

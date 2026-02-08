@@ -315,7 +315,7 @@ fn format_messages_for_tgi(request: &ChatRequest) -> String {
                 crate::core::types::message::MessageContent::Parts(parts) => parts
                     .iter()
                     .filter_map(|p| {
-                        if let crate::core::types::ContentPart::Text { text } = p {
+                        if let crate::core::types::content::ContentPart::Text { text } = p {
                             Some(text.clone())
                         } else {
                             None

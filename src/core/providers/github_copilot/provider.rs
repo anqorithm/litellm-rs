@@ -197,7 +197,7 @@ impl GitHubCopilotProvider {
                 &message.content
             {
                 for part in parts {
-                    if let crate::core::types::ContentPart::ImageUrl { .. } = part {
+                    if let crate::core::types::content::ContentPart::ImageUrl { .. } = part {
                         return true;
                     }
                 }

@@ -41,7 +41,7 @@ pub use stream::{CompletionChunk, CompletionStream, StreamChoice, StreamDelta};
 pub use types::{Choice, CompletionOptions, CompletionResponse, FunctionCall, ToolCall};
 
 // Re-export types with proper paths
-pub use crate::core::types::{ContentPart, message::MessageContent, message::MessageRole};
+pub use crate::core::types::{content::ContentPart, message::MessageContent, message::MessageRole};
 
 /// LiteLLM Error type alias
 pub type LiteLLMError = crate::utils::error::GatewayError;
