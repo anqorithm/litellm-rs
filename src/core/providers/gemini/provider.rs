@@ -7,9 +7,7 @@ use futures::Stream;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::pin::Pin;
-use std::sync::Arc;
 
-use crate::core::providers::base::GlobalPoolManager;
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::{provider::ProviderConfig, provider::llm_provider::trait_definition::LLMProvider};
 use crate::core::types::{
@@ -32,9 +30,7 @@ use super::streaming::GeminiStream;
 /// Gemini Provider - Unified implementation
 #[derive(Debug)]
 pub struct GeminiProvider {
-    config: GeminiConfig,
     client: GeminiClient,
-    pool_manager: Arc<GlobalPoolManager>,
     supported_models: Vec<ModelInfo>,
 }
 
@@ -47,10 +43,7 @@ impl GeminiProvider {
             .map_err(|e| ProviderError::configuration("gemini", e))?;
 
         // Create
-        let client = GeminiClient::new(config.clone())?;
-
-        // Get
-        let pool_manager = Arc::new(GlobalPoolManager::new()?);
+        let client = GeminiClient::new(config)?;
 
         // Get
         let registry = get_gemini_registry();
@@ -61,9 +54,7 @@ impl GeminiProvider {
             .collect();
 
         Ok(Self {
-            config,
             client,
-            pool_manager,
             supported_models,
         })
     }
