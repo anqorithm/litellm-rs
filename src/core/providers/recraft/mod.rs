@@ -4,11 +4,9 @@
 
 use async_trait::async_trait;
 use futures::Stream;
-use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
 use std::pin::Pin;
 
-use crate::core::providers::base_provider::{BaseHttpClient, BaseProviderConfig};
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::{
     provider::ProviderConfig, error_mapper::trait_def::ErrorMapper,
@@ -78,46 +76,12 @@ pub type RecraftError = ProviderError;
 #[derive(Debug, Clone)]
 pub struct RecraftProvider {
     config: RecraftConfig,
-    base_client: BaseHttpClient,
 }
 
 impl RecraftProvider {
     /// Create new Recraft provider
     pub fn new(config: RecraftConfig) -> Result<Self, RecraftError> {
-        let base_config = BaseProviderConfig {
-            api_key: config.api_key.clone(),
-            api_base: config.api_base.clone(),
-            timeout: Some(config.timeout),
-            max_retries: Some(config.max_retries),
-            headers: None,
-            organization: None,
-            api_version: None,
-        };
-
-        let base_client = BaseHttpClient::new(base_config)
-            .map_err(|e| ProviderError::configuration("recraft", e.to_string()))?;
-
-        Ok(Self {
-            config,
-            base_client,
-        })
-    }
-
-    /// Build request headers
-    fn build_headers(&self) -> Result<HeaderMap, RecraftError> {
-        let mut headers = HeaderMap::new();
-
-        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-
-        if let Some(api_key) = &self.config.api_key {
-            let auth_value =
-                HeaderValue::from_str(&format!("Bearer {}", api_key)).map_err(|e| {
-                    ProviderError::configuration("recraft", format!("Invalid API key: {}", e))
-                })?;
-            headers.insert(AUTHORIZATION, auth_value);
-        }
-
-        Ok(headers)
+        Ok(Self { config })
     }
 }
 
