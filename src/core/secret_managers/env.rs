@@ -3,7 +3,11 @@
 //! Reads secrets from environment variables.
 
 use async_trait::async_trait;
-use std::env;
+use std::{
+    collections::{HashMap, HashSet},
+    env,
+    sync::{Arc, RwLock},
+};
 
 use crate::core::traits::secret_manager::{
     ListSecretsOptions, ListSecretsResult, SecretError, SecretManager, SecretMetadata, SecretResult,
@@ -23,12 +27,14 @@ use crate::core::traits::secret_manager::{
 pub struct EnvSecretManager {
     /// Optional prefix for environment variable names
     prefix: Option<String>,
+    /// Process-local overrides to avoid mutating global environment at runtime
+    overrides: Arc<RwLock<HashMap<String, Option<String>>>>,
 }
 
 impl EnvSecretManager {
     /// Create a new environment secret manager
     pub fn new() -> Self {
-        Self { prefix: None }
+        Self::default()
     }
 
     /// Create with a prefix for environment variable names
@@ -37,6 +43,7 @@ impl EnvSecretManager {
     pub fn with_prefix(prefix: impl Into<String>) -> Self {
         Self {
             prefix: Some(prefix.into()),
+            ..Self::default()
         }
     }
 
@@ -46,6 +53,37 @@ impl EnvSecretManager {
             Some(prefix) => format!("{}{}", prefix, name),
             None => name.to_string(),
         }
+    }
+
+    fn get_override(&self, env_name: &str) -> Option<Option<String>> {
+        let overrides = self
+            .overrides
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        overrides.get(env_name).cloned()
+    }
+
+    fn set_override(&self, env_name: String, value: Option<String>) {
+        let mut overrides = self
+            .overrides
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        overrides.insert(env_name, value);
+    }
+
+    fn visible_secret_name(&self, key: &str, filter_prefix: Option<&str>) -> Option<String> {
+        let key_without_manager_prefix = match &self.prefix {
+            Some(prefix) => key.strip_prefix(prefix)?,
+            None => key,
+        };
+
+        if let Some(filter_prefix) = filter_prefix {
+            if !key_without_manager_prefix.starts_with(filter_prefix) {
+                return None;
+            }
+        }
+
+        Some(key_without_manager_prefix.to_string())
     }
 }
 
@@ -57,6 +95,11 @@ impl SecretManager for EnvSecretManager {
 
     async fn read_secret(&self, name: &str) -> SecretResult<Option<String>> {
         let env_name = self.get_env_name(name);
+
+        if let Some(override_value) = self.get_override(&env_name) {
+            return Ok(override_value);
+        }
+
         match env::var(&env_name) {
             Ok(value) => Ok(Some(value)),
             Err(env::VarError::NotPresent) => Ok(None),
@@ -69,70 +112,52 @@ impl SecretManager for EnvSecretManager {
 
     async fn write_secret(&self, name: &str, value: &str) -> SecretResult<()> {
         let env_name = self.get_env_name(name);
-        // Note: This only sets the variable for the current process
-        // SAFETY: We're setting an environment variable which is safe in single-threaded
-        // contexts or when properly synchronized. This is primarily for testing/development.
-        unsafe {
-            env::set_var(&env_name, value);
-        }
+        self.set_override(env_name, Some(value.to_string()));
         Ok(())
     }
 
     async fn delete_secret(&self, name: &str) -> SecretResult<()> {
         let env_name = self.get_env_name(name);
-        // SAFETY: We're removing an environment variable which is safe in single-threaded
-        // contexts or when properly synchronized. This is primarily for testing/development.
-        unsafe {
-            env::remove_var(&env_name);
-        }
+        self.set_override(env_name, None);
         Ok(())
     }
 
     async fn list_secrets(&self, options: &ListSecretsOptions) -> SecretResult<ListSecretsResult> {
-        let mut secrets = Vec::new();
+        let filter_prefix = options.prefix.as_deref();
+        let mut secret_names = HashSet::new();
 
         for (key, _) in env::vars() {
-            // Filter by prefix if configured
-            let matches_manager_prefix = match &self.prefix {
-                Some(prefix) => key.starts_with(prefix),
-                None => true,
-            };
-
-            if !matches_manager_prefix {
-                continue;
+            if let Some(secret_name) = self.visible_secret_name(key.as_str(), filter_prefix) {
+                secret_names.insert(secret_name);
             }
+        }
 
-            // Filter by user-provided prefix
-            let matches_filter_prefix = match &options.prefix {
-                Some(filter_prefix) => {
-                    let key_without_manager_prefix = match &self.prefix {
-                        Some(prefix) => key.strip_prefix(prefix).unwrap_or(&key),
-                        None => &key,
-                    };
-                    key_without_manager_prefix.starts_with(filter_prefix)
-                }
-                None => true,
-            };
+        let overrides = self
+            .overrides
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
 
-            if !matches_filter_prefix {
-                continue;
-            }
-
-            // Remove manager prefix from the key for the result
-            let secret_name = match &self.prefix {
-                Some(prefix) => key.strip_prefix(prefix).unwrap_or(&key).to_string(),
-                None => key,
-            };
-
-            secrets.push(SecretMetadata::new(secret_name));
-
-            // Check max results
-            if let Some(max) = options.max_results {
-                if secrets.len() >= max {
-                    break;
+        for (key, value) in overrides.iter() {
+            if let Some(secret_name) = self.visible_secret_name(key.as_str(), filter_prefix) {
+                if value.is_some() {
+                    secret_names.insert(secret_name);
+                } else {
+                    secret_names.remove(secret_name.as_str());
                 }
             }
         }
+
+        let mut secret_names = secret_names.into_iter().collect::<Vec<_>>();
+        secret_names.sort_unstable();
+
+        if let Some(max) = options.max_results {
+            secret_names.truncate(max);
+        }
+
+        let secrets = secret_names
+            .into_iter()
+            .map(SecretMetadata::new)
+            .collect::<Vec<_>>();
 
         Ok(ListSecretsResult {
             secrets,
@@ -144,27 +169,17 @@ impl SecretManager for EnvSecretManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::env;
-
-    // Helper to safely set env var in tests
-    unsafe fn set_test_env(key: &str, value: &str) {
-        unsafe { env::set_var(key, value) };
-    }
-
-    // Helper to safely remove env var in tests
-    unsafe fn remove_test_env(key: &str) {
-        unsafe { env::remove_var(key) };
-    }
 
     #[tokio::test]
     async fn test_read_existing_secret() {
         let manager = EnvSecretManager::new();
-        unsafe { set_test_env("TEST_SECRET_READ", "test_value") };
+        manager
+            .write_secret("TEST_SECRET_READ", "test_value")
+            .await
+            .unwrap();
 
         let result = manager.read_secret("TEST_SECRET_READ").await.unwrap();
         assert_eq!(result, Some("test_value".to_string()));
-
-        unsafe { remove_test_env("TEST_SECRET_READ") };
     }
 
     #[tokio::test]
@@ -187,50 +202,58 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(env::var("TEST_SECRET_WRITE").unwrap(), "written_value");
-
-        unsafe { remove_test_env("TEST_SECRET_WRITE") };
+        let result = manager.read_secret("TEST_SECRET_WRITE").await.unwrap();
+        assert_eq!(result, Some("written_value".to_string()));
     }
 
     #[tokio::test]
     async fn test_delete_secret() {
         let manager = EnvSecretManager::new();
-        unsafe { set_test_env("TEST_SECRET_DELETE", "to_delete") };
+        manager
+            .write_secret("TEST_SECRET_DELETE", "to_delete")
+            .await
+            .unwrap();
 
         manager.delete_secret("TEST_SECRET_DELETE").await.unwrap();
 
-        assert!(env::var("TEST_SECRET_DELETE").is_err());
+        assert!(
+            manager
+                .read_secret("TEST_SECRET_DELETE")
+                .await
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[tokio::test]
     async fn test_with_prefix() {
         let manager = EnvSecretManager::with_prefix("LITELLM_");
-        unsafe { set_test_env("LITELLM_API_KEY", "prefixed_value") };
+        manager
+            .write_secret("API_KEY", "prefixed_value")
+            .await
+            .unwrap();
 
         let result = manager.read_secret("API_KEY").await.unwrap();
         assert_eq!(result, Some("prefixed_value".to_string()));
-
-        unsafe { remove_test_env("LITELLM_API_KEY") };
     }
 
     #[tokio::test]
     async fn test_exists() {
         let manager = EnvSecretManager::new();
-        unsafe { set_test_env("TEST_SECRET_EXISTS", "exists") };
+        manager
+            .write_secret("TEST_SECRET_EXISTS", "exists")
+            .await
+            .unwrap();
 
         assert!(manager.exists("TEST_SECRET_EXISTS").await.unwrap());
         assert!(!manager.exists("NONEXISTENT_SECRET_67890").await.unwrap());
-
-        unsafe { remove_test_env("TEST_SECRET_EXISTS") };
     }
 
     #[tokio::test]
     async fn test_list_secrets_with_prefix() {
         let manager = EnvSecretManager::with_prefix("TEST_LIST_");
-        unsafe {
-            set_test_env("TEST_LIST_SECRET1", "value1");
-            set_test_env("TEST_LIST_SECRET2", "value2");
-        }
+        manager.write_secret("SECRET1", "value1").await.unwrap();
+        manager.write_secret("SECRET2", "value2").await.unwrap();
 
         let result = manager
             .list_secrets(&ListSecretsOptions::new())
@@ -241,11 +264,6 @@ mod tests {
         let names: Vec<_> = result.secrets.iter().map(|s| s.name.as_str()).collect();
         assert!(names.contains(&"SECRET1"));
         assert!(names.contains(&"SECRET2"));
-
-        unsafe {
-            remove_test_env("TEST_LIST_SECRET1");
-            remove_test_env("TEST_LIST_SECRET2");
-        }
     }
 
     #[tokio::test]
