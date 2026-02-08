@@ -224,6 +224,7 @@ impl AzureAssistantHandler {
         )
     }
 
+    #[cfg(test)]
     fn build_threads_url(&self, path: &str) -> String {
         format!(
             "{}openai/threads{}?api-version={}",
@@ -236,6 +237,7 @@ impl AzureAssistantHandler {
             self.client.get_config().api_version
         )
     }
+
 }
 
 #[async_trait]

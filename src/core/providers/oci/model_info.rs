@@ -137,6 +137,7 @@ pub fn get_available_models() -> &'static [OciModel] {
 }
 
 /// Get models by provider
+#[cfg(test)]
 pub fn get_models_by_provider(provider: &str) -> Vec<&'static OciModel> {
     OCI_MODELS
         .iter()
@@ -152,6 +153,7 @@ pub fn supports_tools(model_id: &str) -> bool {
 }
 
 /// Check if a model supports vision
+#[cfg(test)]
 pub fn supports_vision(model_id: &str) -> bool {
     get_model_info(model_id)
         .map(|m| m.supports_multimodal)

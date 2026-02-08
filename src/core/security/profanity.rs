@@ -10,7 +10,7 @@ pub struct ProfanityFilter {
     /// Replacement character
     replacement_char: char,
     /// Whether to use fuzzy matching
-    fuzzy_matching: bool,
+    _fuzzy_matching: bool,
 }
 
 impl Default for ProfanityFilter {
@@ -29,7 +29,7 @@ impl ProfanityFilter {
                 // Add more blocked words
             ],
             replacement_char: '*',
-            fuzzy_matching: true,
+            _fuzzy_matching: true,
         }
     }
 
@@ -63,7 +63,7 @@ mod tests {
         let filter = ProfanityFilter::new();
         assert!(!filter.blocked_words.is_empty());
         assert_eq!(filter.replacement_char, '*');
-        assert!(filter.fuzzy_matching);
+        assert!(filter._fuzzy_matching);
     }
 
     #[test]
@@ -188,7 +188,7 @@ mod tests {
         let cloned = original.clone();
         assert_eq!(original.blocked_words, cloned.blocked_words);
         assert_eq!(original.replacement_char, cloned.replacement_char);
-        assert_eq!(original.fuzzy_matching, cloned.fuzzy_matching);
+        assert_eq!(original._fuzzy_matching, cloned._fuzzy_matching);
     }
 
     // ==================== Edge Cases ====================

@@ -3,21 +3,30 @@
 //! Uses the unified SSE parser for consistent streaming across providers.
 //! Also provides fake streaming support when needed.
 
+#[cfg(test)]
 use super::error::SnowflakeError;
+#[cfg(test)]
 use crate::core::providers::base::sse::{OpenAICompatibleTransformer, UnifiedSSEStream};
+#[cfg(test)]
 use crate::core::types::responses::{ChatChunk, ChatDelta, ChatResponse, ChatStreamChoice};
+#[cfg(test)]
 use crate::core::types::{message::MessageContent, message::MessageRole};
+#[cfg(test)]
 use bytes::Bytes;
+#[cfg(test)]
 use futures::Stream;
+#[cfg(test)]
 use std::pin::Pin;
 
 /// Snowflake uses OpenAI-compatible SSE format
+#[cfg(test)]
 pub type SnowflakeStreamInner = UnifiedSSEStream<
     Pin<Box<dyn Stream<Item = Result<Bytes, reqwest::Error>> + Send>>,
     OpenAICompatibleTransformer,
 >;
 
 /// Helper function to create Snowflake stream
+#[cfg(test)]
 pub fn create_snowflake_stream(
     stream: impl Stream<Item = Result<Bytes, reqwest::Error>> + Send + 'static,
 ) -> SnowflakeStreamInner {
@@ -26,10 +35,12 @@ pub fn create_snowflake_stream(
 }
 
 /// Wrapper stream that converts ProviderError to SnowflakeError for backward compatibility
+#[cfg(test)]
 pub struct SnowflakeStream {
     inner: SnowflakeStreamInner,
 }
 
+#[cfg(test)]
 impl SnowflakeStream {
     pub fn new(stream: impl Stream<Item = Result<Bytes, reqwest::Error>> + Send + 'static) -> Self {
         Self {
@@ -38,6 +49,7 @@ impl SnowflakeStream {
     }
 }
 
+#[cfg(test)]
 impl Stream for SnowflakeStream {
     type Item = Result<ChatChunk, SnowflakeError>;
 
@@ -64,6 +76,7 @@ impl Stream for SnowflakeStream {
 }
 
 /// Create a fake stream from a complete response
+#[cfg(test)]
 pub async fn create_fake_stream(
     response: ChatResponse,
 ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, SnowflakeError>> + Send>>, SnowflakeError> {
@@ -74,6 +87,7 @@ pub async fn create_fake_stream(
 }
 
 /// Convert a complete ChatResponse to stream chunks
+#[cfg(test)]
 fn response_to_chunks(response: ChatResponse) -> Vec<ChatChunk> {
     let mut chunks = Vec::new();
 

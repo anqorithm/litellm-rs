@@ -142,11 +142,13 @@ fn extract_model_prefix(model_id: &str) -> &str {
 }
 
 /// Get US regions specifically
+#[cfg(test)]
 pub fn get_us_regions() -> &'static [&'static str] {
     &["us-east-1", "us-east-2", "us-west-1", "us-west-2"]
 }
 
 /// Get EU regions specifically
+#[cfg(test)]
 pub fn get_eu_regions() -> &'static [&'static str] {
     &[
         "eu-west-1",
@@ -161,6 +163,7 @@ pub fn get_eu_regions() -> &'static [&'static str] {
 }
 
 /// Get Asia Pacific regions specifically
+#[cfg(test)]
 pub fn get_ap_regions() -> &'static [&'static str] {
     &[
         "ap-northeast-1",

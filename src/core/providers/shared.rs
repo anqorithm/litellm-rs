@@ -329,14 +329,14 @@ use tokio::sync::Semaphore;
 /// Rate limiter for providers
 pub struct RateLimiter {
     semaphore: Arc<Semaphore>,
-    requests_per_second: u32,
+    _requests_per_second: u32,
 }
 
 impl RateLimiter {
     pub fn new(requests_per_second: u32) -> Self {
         Self {
             semaphore: Arc::new(Semaphore::new(requests_per_second as usize)),
-            requests_per_second,
+            _requests_per_second: requests_per_second,
         }
     }
 
@@ -831,7 +831,7 @@ mod tests {
     fn test_rate_limiter_new() {
         let limiter = RateLimiter::new(10);
         assert_eq!(limiter.available_permits(), 10);
-        assert_eq!(limiter.requests_per_second, 10);
+        assert_eq!(limiter._requests_per_second, 10);
     }
 
     #[tokio::test]

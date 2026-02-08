@@ -94,6 +94,8 @@ impl GeminiEmbeddingHandler {
         &self,
         request: GeminiEmbeddingRequest,
     ) -> Result<ContentEmbedding, ProviderError> {
+        self.validate_content_request(&request.content, request.output_dimensionality)?;
+
         // Transform to Vertex AI format
         let instances =
             vec![self.transform_content_to_instance(&request.content, &request.task_type)?];
@@ -128,7 +130,10 @@ impl GeminiEmbeddingHandler {
         let instances: Result<Vec<_>, _> = request
             .requests
             .iter()
-            .map(|req| self.transform_content_to_instance(&req.content, &req.task_type))
+            .map(|req| {
+                self.validate_content_request(&req.content, req.output_dimensionality)?;
+                self.transform_content_to_instance(&req.content, &req.task_type)
+            })
             .collect();
 
         let instances = instances?;
@@ -232,10 +237,14 @@ impl GeminiEmbeddingHandler {
         dot_product / (magnitude1 * magnitude2)
     }
 
-    /// Validate embedding request
-    fn validate_request(&self, request: &GeminiEmbeddingRequest) -> Result<(), ProviderError> {
+    /// Validate embedding request fields common to single and batch APIs
+    fn validate_content_request(
+        &self,
+        content: &ContentInput,
+        output_dimensionality: Option<i32>,
+    ) -> Result<(), ProviderError> {
         // Check content length
-        match &request.content {
+        match content {
             ContentInput::Text(text) => {
                 if text.len() > self.model.max_input_length() * 4 {
                     return Err(ProviderError::invalid_request(
@@ -263,7 +272,7 @@ impl GeminiEmbeddingHandler {
         }
 
         // Check output dimensionality
-        if let Some(dims) = request.output_dimensionality {
+        if let Some(dims) = output_dimensionality {
             if dims <= 0 || dims > self.model.dimensions() as i32 {
                 return Err(ProviderError::invalid_request(
                     "vertex_ai",
@@ -273,6 +282,11 @@ impl GeminiEmbeddingHandler {
         }
 
         Ok(())
+    }
+
+    #[cfg(test)]
+    fn validate_request(&self, request: &GeminiEmbeddingRequest) -> Result<(), ProviderError> {
+        self.validate_content_request(&request.content, request.output_dimensionality)
     }
 }
 

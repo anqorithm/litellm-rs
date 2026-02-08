@@ -222,11 +222,13 @@ pub fn get_model_info(model_id: &str) -> Option<&'static GitHubModel> {
 }
 
 /// Check if a model supports vision
+#[cfg(test)]
 pub fn is_vision_model(model_id: &str) -> bool {
     get_model_info(model_id).is_some_and(|m| m.supports_multimodal)
 }
 
 /// Check if a model supports tools
+#[cfg(test)]
 pub fn supports_tools(model_id: &str) -> bool {
     get_model_info(model_id).is_some_and(|m| m.supports_tools)
 }

@@ -6,8 +6,15 @@
 use super::error::WatsonxError;
 use crate::core::providers::base::sse::{OpenAICompatibleTransformer, UnifiedSSEStream};
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::types::responses::{ChatChunk, ChatDelta, ChatResponse, ChatStreamChoice};
-use crate::core::types::{message::MessageContent, message::MessageRole};
+use crate::core::types::responses::ChatChunk;
+#[cfg(test)]
+use crate::core::types::responses::{ChatDelta, ChatStreamChoice};
+#[cfg(test)]
+use crate::core::types::responses::ChatResponse;
+#[cfg(test)]
+use crate::core::types::message::MessageContent;
+#[cfg(test)]
+use crate::core::types::message::MessageRole;
 use bytes::Bytes;
 use futures::Stream;
 use std::pin::Pin;
@@ -65,6 +72,7 @@ impl Stream for WatsonxStream {
 }
 
 /// Create a fake stream from a complete response
+#[cfg(test)]
 pub async fn create_fake_stream(
     response: ChatResponse,
 ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, WatsonxError>> + Send>>, WatsonxError> {
@@ -75,6 +83,7 @@ pub async fn create_fake_stream(
 }
 
 /// Convert a complete ChatResponse to stream chunks
+#[cfg(test)]
 fn response_to_chunks(response: ChatResponse) -> Vec<ChatChunk> {
     let mut chunks = Vec::new();
 

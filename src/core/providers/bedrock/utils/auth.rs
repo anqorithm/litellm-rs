@@ -152,6 +152,7 @@ impl AwsAuth {
 }
 
 /// Extract AWS credentials from various parameter formats
+#[cfg(test)]
 pub fn extract_credentials_from_params(
     params: &HashMap<String, String>,
 ) -> Result<AwsCredentials, ProviderError> {

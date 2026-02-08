@@ -383,6 +383,7 @@ pub fn get_available_models() -> Vec<&'static str> {
 }
 
 /// Get all models that support tool/function calling
+#[cfg(test)]
 pub fn get_tool_capable_models() -> Vec<&'static str> {
     MODEL_CONFIGS
         .iter()

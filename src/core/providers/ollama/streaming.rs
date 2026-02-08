@@ -5,7 +5,9 @@
 
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::message::MessageRole;
-use crate::core::types::responses::{ChatChunk, ChatDelta, ChatResponse, ChatStreamChoice, Usage};
+use crate::core::types::responses::{ChatChunk, ChatDelta, ChatStreamChoice, Usage};
+#[cfg(test)]
+use crate::core::types::responses::ChatResponse;
 use bytes::Bytes;
 use futures::Stream;
 use std::pin::Pin;
@@ -18,8 +20,8 @@ pub struct OllamaStreamChunk {
     pub model: String,
 
     /// Created timestamp
-    #[serde(default)]
-    pub created_at: Option<String>,
+    #[serde(default, rename = "created_at")]
+    pub _created_at: Option<String>,
 
     /// Message content
     #[serde(default)]
@@ -42,12 +44,12 @@ pub struct OllamaStreamChunk {
     pub eval_count: Option<u32>,
 
     /// Total duration in nanoseconds
-    #[serde(default)]
-    pub total_duration: Option<u64>,
+    #[serde(default, rename = "total_duration")]
+    pub _total_duration: Option<u64>,
 
     /// Load duration in nanoseconds
-    #[serde(default)]
-    pub load_duration: Option<u64>,
+    #[serde(default, rename = "load_duration")]
+    pub _load_duration: Option<u64>,
 
     /// Error message (if any)
     #[serde(default)]
@@ -308,6 +310,7 @@ where
 }
 
 /// Create a fake stream from a complete response
+#[cfg(test)]
 pub async fn create_fake_stream(
     response: ChatResponse,
 ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError> {
@@ -317,6 +320,7 @@ pub async fn create_fake_stream(
 }
 
 /// Convert a complete ChatResponse to stream chunks
+#[cfg(test)]
 fn response_to_chunks(response: ChatResponse) -> Vec<ChatChunk> {
     let mut chunks = Vec::new();
 
@@ -425,7 +429,7 @@ mod tests {
         let chunk: OllamaStreamChunk = serde_json::from_str(json).unwrap();
         assert_eq!(chunk.model, "llama3:8b");
         assert!(!chunk.done);
-        assert_eq!(chunk.created_at, Some("2024-01-01T00:00:00Z".to_string()));
+        assert_eq!(chunk._created_at, Some("2024-01-01T00:00:00Z".to_string()));
         assert!(chunk.message.is_some());
         assert_eq!(chunk.message.unwrap().content, Some("Hello".to_string()));
     }
@@ -452,8 +456,8 @@ mod tests {
         assert_eq!(chunk.done_reason, Some("stop".to_string()));
         assert_eq!(chunk.prompt_eval_count, Some(10));
         assert_eq!(chunk.eval_count, Some(50));
-        assert_eq!(chunk.total_duration, Some(1_000_000_000));
-        assert_eq!(chunk.load_duration, Some(1000));
+        assert_eq!(chunk._total_duration, Some(1_000_000_000));
+        assert_eq!(chunk._load_duration, Some(1000));
     }
 
     #[test]
