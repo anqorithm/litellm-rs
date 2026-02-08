@@ -17,15 +17,13 @@ pub use transformation::LlamaChatTransformation;
 /// Llama chat handler - simplified implementation using new type system
 #[derive(Debug, Clone)]
 pub struct LlamaChatHandler {
-    config: LlamaConfig,
     transformation: LlamaChatTransformation,
 }
 
 impl LlamaChatHandler {
     /// Create a new chat handler
-    pub fn new(config: LlamaConfig) -> Result<Self, ProviderError> {
+    pub fn new(_config: LlamaConfig) -> Result<Self, ProviderError> {
         Ok(Self {
-            config,
             transformation: LlamaChatTransformation::new(),
         })
     }
