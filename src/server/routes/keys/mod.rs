@@ -17,9 +17,6 @@ mod handlers;
 mod middleware;
 mod types;
 
-pub use handlers::*;
-pub use types::*;
-
 use actix_web::web;
 
 /// Configure key management routes
