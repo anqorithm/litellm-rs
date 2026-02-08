@@ -684,10 +684,14 @@ impl LLMProvider for VertexAIProvider {
     ) -> std::result::Result<Value, Self::Error> {
         let mut params = HashMap::new();
 
-        params.insert(
-            "messages".to_string(),
-            serde_json::to_value(request.messages).unwrap(),
-        );
+        params.insert("messages".to_string(), {
+            serde_json::to_value(request.messages).map_err(|e| {
+                ProviderError::response_parsing(
+                    "vertex_ai",
+                    format!("Failed to serialize messages: {}", e),
+                )
+            })?
+        });
         params.insert("model".to_string(), Value::String(request.model.clone()));
 
         if let Some(max_tokens) = request.max_tokens {
@@ -716,7 +720,15 @@ impl LLMProvider for VertexAIProvider {
         }
 
         if let Some(stop) = request.stop {
-            params.insert("stop".to_string(), serde_json::to_value(stop).unwrap());
+            params.insert(
+                "stop".to_string(),
+                serde_json::to_value(stop).map_err(|e| {
+                    ProviderError::response_parsing(
+                        "vertex_ai",
+                        format!("Failed to serialize stop sequences: {}", e),
+                    )
+                })?,
+            );
         }
 
         if request.stream {
@@ -724,18 +736,35 @@ impl LLMProvider for VertexAIProvider {
         }
 
         if let Some(tools) = request.tools {
-            params.insert("tools".to_string(), serde_json::to_value(tools).unwrap());
+            params.insert(
+                "tools".to_string(),
+                serde_json::to_value(tools).map_err(|e| {
+                    ProviderError::response_parsing(
+                        "vertex_ai",
+                        format!("Failed to serialize tools: {}", e),
+                    )
+                })?,
+            );
         }
 
         if let Some(tool_choice) = request.tool_choice {
             params.insert(
                 "tool_choice".to_string(),
-                serde_json::to_value(tool_choice).unwrap(),
+                serde_json::to_value(tool_choice).map_err(|e| {
+                    ProviderError::response_parsing(
+                        "vertex_ai",
+                        format!("Failed to serialize tool choice: {}", e),
+                    )
+                })?,
             );
         }
 
         let vertex_params = self.map_openai_params(params, &request.model).await?;
-        Ok(serde_json::to_value(vertex_params).unwrap())
+        Ok(Value::Object(
+            vertex_params
+                .into_iter()
+                .collect::<serde_json::Map<String, Value>>(),
+        ))
     }
 
     /// Response
