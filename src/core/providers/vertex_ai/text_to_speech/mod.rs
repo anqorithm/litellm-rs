@@ -78,13 +78,15 @@ pub struct Voice {
 
 /// Text-to-speech handler
 pub struct TextToSpeechHandler {
-    project_id: String,
+    _project_id: String,
 }
 
 impl TextToSpeechHandler {
     /// Create new text-to-speech handler
     pub fn new(project_id: String) -> Self {
-        Self { project_id }
+        Self {
+            _project_id: project_id,
+        }
     }
 
     /// Synthesize speech from text

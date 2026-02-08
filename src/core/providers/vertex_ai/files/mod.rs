@@ -93,16 +93,16 @@ pub struct ListFilesResponse {
 
 /// File handler for managing uploads and operations
 pub struct FileHandler {
-    project_id: String,
-    location: String,
+    _project_id: String,
+    _location: String,
 }
 
 impl FileHandler {
     /// Create new file handler
     pub fn new(project_id: String, location: String) -> Self {
         Self {
-            project_id,
-            location,
+            _project_id: project_id,
+            _location: location,
         }
     }
 

@@ -75,8 +75,8 @@ pub struct ContentEmbedding {
 /// Gemini embedding handler
 pub struct GeminiEmbeddingHandler {
     model: VertexEmbeddingModel,
-    project_id: String,
-    location: String,
+    _project_id: String,
+    _location: String,
 }
 
 impl GeminiEmbeddingHandler {
@@ -84,8 +84,8 @@ impl GeminiEmbeddingHandler {
     pub fn new(model: VertexEmbeddingModel, project_id: String, location: String) -> Self {
         Self {
             model,
-            project_id,
-            location,
+            _project_id: project_id,
+            _location: location,
         }
     }
 

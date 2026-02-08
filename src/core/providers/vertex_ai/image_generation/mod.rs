@@ -84,16 +84,16 @@ impl ImageGenerationModel {
 
 /// Image generation handler
 pub struct ImageGenerationHandler {
-    project_id: String,
-    location: String,
+    _project_id: String,
+    _location: String,
 }
 
 impl ImageGenerationHandler {
     /// Create new image generation handler
     pub fn new(project_id: String, location: String) -> Self {
         Self {
-            project_id,
-            location,
+            _project_id: project_id,
+            _location: location,
         }
     }
 

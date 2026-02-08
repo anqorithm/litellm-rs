@@ -107,7 +107,7 @@ pub struct VertexAIProvider {
     auth: Arc<VertexAuth>,
     http_client: Client,
     // Cost calculation integrated internally
-    health_status: Arc<RwLock<HealthStatus>>,
+    _health_status: Arc<RwLock<HealthStatus>>,
     gemini_transformer: GeminiTransformer,
     partner_transformer: PartnerModelTransformer,
 }
@@ -127,7 +127,7 @@ impl VertexAIProvider {
             config,
             auth,
             http_client,
-            health_status,
+            _health_status: health_status,
             gemini_transformer: GeminiTransformer::new(),
             partner_transformer: PartnerModelTransformer::new(),
         })
