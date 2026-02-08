@@ -3,8 +3,6 @@
 //! This module provides utilities for efficient shared state management,
 //! reducing the need for excessive Arc wrapping while maintaining thread safety.
 
-#![allow(dead_code)] // Tool module - functions may be used in the future
-
 use parking_lot::RwLock;
 use std::sync::Arc;
 use std::sync::OnceLock;

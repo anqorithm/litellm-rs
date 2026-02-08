@@ -3,8 +3,6 @@
 //! This module provides extension traits and utilities to make error handling
 //! more ergonomic and reduce the need for unwrap() calls.
 
-#![allow(dead_code)] // Tool module - functions may be used in the future
-
 use crate::utils::error::error::{GatewayError, Result};
 use tracing::{error, warn};
 

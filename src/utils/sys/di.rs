@@ -3,8 +3,6 @@
 //! This module provides a lightweight dependency injection system
 //! that follows Rust best practices and improves testability.
 
-#![allow(dead_code)] // Tool module - functions may be used in the future
-
 use crate::utils::error::error::{GatewayError, Result};
 use parking_lot::RwLock;
 use std::any::{Any, TypeId};
@@ -851,6 +849,7 @@ mod tests {
         if register_result.is_ok() {
             let retrieved: Result<Arc<UniqueGlobalService2>> = get_global();
             assert!(retrieved.is_ok());
+            assert_eq!(retrieved.unwrap().value, "global_singleton");
         }
     }
 
