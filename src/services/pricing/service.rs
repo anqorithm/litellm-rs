@@ -74,10 +74,8 @@ impl PricingService {
             .get_model_info(model)
             .ok_or_else(|| GatewayError::not_found(format!("Model not found: {}", model)))?;
 
-        let provider = model_info.litellm_provider.clone();
-
         // Provider-specific cost calculation
-        match provider.as_str() {
+        match model_info.litellm_provider.as_str() {
             "openai" | "azure" => {
                 self.calculate_token_based_cost(model, &model_info, input_tokens, output_tokens)
             }
@@ -249,16 +247,17 @@ impl PricingService {
 
     /// Add custom model pricing
     pub fn add_custom_model(&self, model: String, model_info: ModelInfo) {
+        let provider = model_info.litellm_provider.clone();
         {
             let mut data = self.pricing_data.write();
-            data.models.insert(model.clone(), model_info.clone());
+            data.models.insert(model.clone(), model_info);
         }
 
         // Send update event
         let _ = self.event_sender.send(PricingUpdateEvent {
             event_type: PricingEventType::ModelAdded,
             model,
-            provider: model_info.litellm_provider,
+            provider,
             timestamp: SystemTime::now(),
         });
     }
