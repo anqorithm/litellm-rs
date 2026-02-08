@@ -9,14 +9,12 @@ use tracing::{Level, debug, error, info, warn};
 use uuid::Uuid;
 
 /// Async logger for high-performance logging
-#[allow(dead_code)]
 pub struct AsyncLogger {
     sender: mpsc::Sender<LogEntry>,
     config: AsyncLoggerConfig,
     sample_counter: AtomicU64,
 }
 
-#[allow(dead_code)]
 impl AsyncLogger {
     /// Create a new async logger with bounded channel to prevent memory leaks
     pub fn new(config: AsyncLoggerConfig) -> Self {
@@ -193,17 +191,14 @@ impl AsyncLogger {
 }
 
 /// Global async logger instance
-#[allow(dead_code)]
 static ASYNC_LOGGER: OnceLock<AsyncLogger> = OnceLock::new();
 
 /// Initialize the global async logger
-#[allow(dead_code)]
 pub fn init_async_logger(config: AsyncLoggerConfig) {
     ASYNC_LOGGER.get_or_init(|| AsyncLogger::new(config));
 }
 
 /// Get the global async logger
-#[allow(dead_code)]
 pub fn async_logger() -> Option<&'static AsyncLogger> {
     ASYNC_LOGGER.get()
 }
