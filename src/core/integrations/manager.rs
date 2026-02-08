@@ -293,11 +293,12 @@ impl IntegrationManager {
         }
 
         if self.config.fail_fast && !errors.is_empty() {
-            let (name, err) = errors.into_iter().next().unwrap();
-            return Err(IntegrationError::Other(format!(
-                "Integration {} shutdown failed: {}",
-                name, err
-            )));
+            if let Some((name, err)) = errors.into_iter().next() {
+                return Err(IntegrationError::Other(format!(
+                    "Integration {} shutdown failed: {}",
+                    name, err
+                )));
+            }
         }
 
         Ok(())
@@ -490,11 +491,12 @@ impl IntegrationManager {
         }
 
         if self.config.fail_fast && !errors.is_empty() {
-            let (name, err) = errors.into_iter().next().unwrap();
-            return Err(IntegrationError::Other(format!(
-                "Integration {} failed: {}",
-                name, err
-            )));
+            if let Some((name, err)) = errors.into_iter().next() {
+                return Err(IntegrationError::Other(format!(
+                    "Integration {} failed: {}",
+                    name, err
+                )));
+            }
         }
 
         Ok(())
