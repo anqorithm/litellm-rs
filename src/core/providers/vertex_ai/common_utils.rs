@@ -149,19 +149,27 @@ pub fn build_gemini_request(
     });
 
     if let Some(config) = generation_config {
-        request["generationConfig"] = serde_json::to_value(config).unwrap();
+        if let Ok(value) = serde_json::to_value(config) {
+            request["generationConfig"] = value;
+        }
     }
 
     if let Some(settings) = safety_settings {
-        request["safetySettings"] = serde_json::to_value(settings).unwrap();
+        if let Ok(value) = serde_json::to_value(settings) {
+            request["safetySettings"] = value;
+        }
     }
 
     if let Some(tools) = tools {
-        request["tools"] = serde_json::to_value(tools).unwrap();
+        if let Ok(value) = serde_json::to_value(tools) {
+            request["tools"] = value;
+        }
     }
 
     if let Some(tool_config) = tool_config {
-        request["toolConfig"] = serde_json::to_value(tool_config).unwrap();
+        if let Ok(value) = serde_json::to_value(tool_config) {
+            request["toolConfig"] = value;
+        }
     }
 
     request
