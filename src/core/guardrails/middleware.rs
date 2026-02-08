@@ -4,8 +4,9 @@
 
 use actix_web::body::MessageBody;
 use actix_web::dev::{Service, ServiceRequest, ServiceResponse, Transform, forward_ready};
-use actix_web::http::StatusCode;
-use actix_web::{Error, HttpResponse, body::BoxBody};
+use actix_web::{Error, body::BoxBody};
+#[cfg(test)]
+use actix_web::{HttpResponse, http::StatusCode};
 use futures::future::{LocalBoxFuture, Ready, ready};
 use std::sync::Arc;
 use tracing::debug;
@@ -89,7 +90,7 @@ where
 }
 
 /// Create a blocked response
-#[allow(dead_code)]
+#[cfg(test)]
 fn create_blocked_response(message: &str) -> HttpResponse<BoxBody> {
     HttpResponse::build(StatusCode::BAD_REQUEST)
         .content_type("application/json")

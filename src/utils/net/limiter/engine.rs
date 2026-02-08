@@ -12,7 +12,6 @@ use super::types::{RateLimitConfig, RateLimitKey, RateLimitResult, SlidingWindow
 
 /// Rate limiter implementation
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct RateLimiter {
     /// Rate limit configurations
     pub(super) configs: Arc<RwLock<HashMap<String, RateLimitConfig>>>,

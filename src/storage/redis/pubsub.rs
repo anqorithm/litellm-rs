@@ -10,7 +10,6 @@ use redis::AsyncCommands;
 /// Redis subscription wrapper
 /// Note: Subscription functionality temporarily disabled due to Redis API changes
 /// This should be fixed when updating to a compatible Redis version
-#[allow(dead_code)]
 pub struct Subscription {
     _placeholder: (),
 }
