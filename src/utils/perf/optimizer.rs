@@ -3,8 +3,6 @@
 //! This module provides utilities to optimize runtime performance,
 //! reduce allocations, and improve overall system efficiency.
 
-#![allow(dead_code)] // Tool module - functions may be used in the future
-
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;

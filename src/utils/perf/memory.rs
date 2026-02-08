@@ -3,8 +3,6 @@
 //! This module provides utilities to reduce memory allocations and improve
 //! performance through object pooling and reuse.
 
-#![allow(dead_code)] // Tool module - functions may be used in the future
-
 use parking_lot::Mutex;
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -137,7 +135,7 @@ impl<T> Drop for PooledObject<T> {
 /// A memory-efficient buffer pool for byte operations
 pub struct BufferPool {
     pool: ObjectPool<Vec<u8>>,
-    default_capacity: usize,
+    _default_capacity: usize,
 }
 
 impl BufferPool {
@@ -147,7 +145,7 @@ impl BufferPool {
 
         Self {
             pool,
-            default_capacity,
+            _default_capacity: default_capacity,
         }
     }
 

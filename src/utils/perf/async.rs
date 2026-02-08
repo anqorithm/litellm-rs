@@ -3,8 +3,6 @@
 //! This module provides utilities to improve async code patterns,
 //! reduce unnecessary spawning, and improve performance.
 
-#![allow(dead_code)] // Tool module - functions may be used in the future
-
 use crate::utils::error::error::{GatewayError, Result};
 use futures::{Future, StreamExt};
 use std::time::Duration;
@@ -150,7 +148,7 @@ impl RetryPolicy {
 /// Utility for batching operations
 pub struct BatchProcessor {
     batch_size: usize,
-    flush_interval: Duration,
+    _flush_interval: Duration,
 }
 
 impl BatchProcessor {
@@ -158,7 +156,7 @@ impl BatchProcessor {
     pub fn new(batch_size: usize, flush_interval: Duration) -> Self {
         Self {
             batch_size,
-            flush_interval,
+            _flush_interval: flush_interval,
         }
     }
 
