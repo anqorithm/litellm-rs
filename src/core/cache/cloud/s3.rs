@@ -262,6 +262,12 @@ mod implementation {
             let meta_bytes = serde_json::to_vec(&metadata).map_err(|e| {
                 GatewayError::FileStorage(format!("Failed to serialize metadata: {}", e))
             })?;
+            let storage_class = self.config.storage_class.as_str().parse().map_err(|_| {
+                GatewayError::Config(format!(
+                    "Invalid S3 storage class: {}",
+                    self.config.storage_class.as_str()
+                ))
+            })?;
 
             // Write the value
             self.client
@@ -269,7 +275,7 @@ mod implementation {
                 .bucket(&self.config.base.bucket)
                 .key(&s3_key)
                 .body(ByteStream::from(bytes))
-                .storage_class(self.config.storage_class.as_str().parse().unwrap())
+                .storage_class(storage_class)
                 .content_type("application/json")
                 .send()
                 .await
