@@ -8,7 +8,6 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::pin::Pin;
 
-use crate::core::providers::base_provider::{BaseHttpClient, BaseProviderConfig};
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::{
     provider::ProviderConfig, error_mapper::trait_def::ErrorMapper,
@@ -32,7 +31,6 @@ use super::model_info::{ModelFeature, get_spark_registry};
 #[derive(Debug, Clone)]
 pub struct SparkProvider {
     config: SparkConfig,
-    base_client: BaseHttpClient,
     supported_models: Vec<ModelInfo>,
 }
 
@@ -44,19 +42,6 @@ impl SparkProvider {
             .validate()
             .map_err(|e| ProviderError::configuration("spark", e))?;
 
-        let base_config = BaseProviderConfig {
-            api_key: config.api_key.clone(),
-            api_base: Some(config.api_base.clone()),
-            timeout: Some(config.request_timeout),
-            max_retries: Some(config.max_retries),
-            headers: None,
-            organization: None,
-            api_version: None,
-        };
-
-        let base_client = BaseHttpClient::new(base_config)
-            .map_err(|e| ProviderError::configuration("spark", e.to_string()))?;
-
         // Get supported models from registry
         let registry = get_spark_registry();
         let supported_models = registry
@@ -67,7 +52,6 @@ impl SparkProvider {
 
         Ok(Self {
             config,
-            base_client,
             supported_models,
         })
     }
@@ -112,31 +96,6 @@ impl SparkProvider {
         }
 
         Ok(())
-    }
-
-    /// Generate HMAC authentication signature
-    fn generate_signature(&self, timestamp: i64) -> Result<String, ProviderError> {
-        use base64::{Engine, engine::general_purpose::STANDARD};
-        use hmac::{Hmac, Mac};
-        use sha2::Sha256;
-
-        type HmacSha256 = Hmac<Sha256>;
-
-        let api_secret = self.config.api_secret.as_ref().ok_or_else(|| {
-            ProviderError::configuration("spark", "API secret is required for authentication")
-        })?;
-
-        let message = format!("{}", timestamp);
-
-        let mut mac = HmacSha256::new_from_slice(api_secret.as_bytes()).map_err(|e| {
-            ProviderError::configuration("spark", format!("Invalid API secret: {}", e))
-        })?;
-
-        mac.update(message.as_bytes());
-        let result = mac.finalize();
-        let code_bytes = result.into_bytes();
-
-        Ok(STANDARD.encode(code_bytes))
     }
 }
 
