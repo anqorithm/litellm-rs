@@ -141,11 +141,6 @@ fn extract_model_prefix(model_id: &str) -> &str {
     }
 }
 
-/// Get regions where a specific model family is available
-pub fn get_model_regions(model_family: &str) -> Option<&'static [&'static str]> {
-    MODEL_REGION_MAPPING.get(model_family).copied()
-}
-
 /// Get US regions specifically
 pub fn get_us_regions() -> &'static [&'static str] {
     &["us-east-1", "us-east-2", "us-west-1", "us-west-2"]

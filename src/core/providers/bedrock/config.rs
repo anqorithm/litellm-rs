@@ -75,18 +75,6 @@ impl ProviderConfig for BedrockConfig {
     }
 }
 
-/// Model configuration for Bedrock models
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ModelConfig {
-    pub model_id: String,
-    pub max_tokens: usize,
-    pub supports_streaming: bool,
-    pub supports_function_calling: bool,
-    pub supports_vision: bool,
-    pub input_cost_per_1k: f64,
-    pub output_cost_per_1k: f64,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
