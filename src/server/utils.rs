@@ -4,45 +4,8 @@
 
 use crate::server::HttpServer;
 use crate::utils::error::error::GatewayError;
-use tracing::{info, warn};
 
 impl HttpServer {
-    /// Graceful shutdown signal handler
-    ///
-    /// Public API for external callers to use for graceful shutdown handling.
-    #[allow(dead_code)]
-    pub async fn shutdown_signal() {
-        let ctrl_c = async {
-            match tokio::signal::ctrl_c().await {
-                Ok(()) => info!("Received Ctrl+C signal, shutting down gracefully"),
-                Err(e) => warn!("Failed to install Ctrl+C handler: {}", e),
-            }
-        };
-
-        #[cfg(unix)]
-        let terminate = async {
-            match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
-                Ok(mut signal) => {
-                    signal.recv().await;
-                    info!("Received terminate signal, shutting down gracefully");
-                }
-                Err(e) => {
-                    warn!("Failed to install SIGTERM handler: {}", e);
-                    // Wait indefinitely if signal handler fails
-                    std::future::pending::<()>().await;
-                }
-            }
-        };
-
-        #[cfg(not(unix))]
-        let terminate = std::future::pending::<()>();
-
-        tokio::select! {
-            _ = ctrl_c => {},
-            _ = terminate => {},
-        }
-    }
-
     /// Format a user-friendly error message for port binding failures
     pub(crate) fn format_bind_error(
         error: std::io::Error,

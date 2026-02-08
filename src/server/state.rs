@@ -64,10 +64,4 @@ impl AppState {
             pricing,
         }
     }
-
-    /// Get gateway configuration
-    #[allow(dead_code)] // May be used by handlers
-    pub fn config(&self) -> &Config {
-        &self.config
-    }
 }
