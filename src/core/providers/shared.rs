@@ -387,7 +387,14 @@ impl ResponseValidator {
 
         // Validate choices array
         if let Some(choices) = response.get("choices") {
-            if !choices.is_array() || choices.as_array().unwrap().is_empty() {
+            let Some(choices_array) = choices.as_array() else {
+                return Err(ProviderError::ResponseParsing {
+                    provider,
+                    message: "Choices must be a non-empty array".to_string(),
+                });
+            };
+
+            if choices_array.is_empty() {
                 return Err(ProviderError::ResponseParsing {
                     provider,
                     message: "Choices must be a non-empty array".to_string(),
