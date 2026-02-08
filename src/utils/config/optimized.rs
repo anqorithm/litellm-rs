@@ -3,8 +3,6 @@
 //! This module provides optimized configuration loading and management
 //! with better performance and reduced memory usage.
 
-#![allow(dead_code)] // Tool module - functions may be used in the future
-
 use crate::utils::error::error::{GatewayError, Result};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
