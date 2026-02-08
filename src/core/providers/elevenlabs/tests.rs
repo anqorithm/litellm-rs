@@ -5,6 +5,7 @@
 use super::*;
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::model::ProviderCapability;
+use crate::utils::test_env;
 
 // ==================== Config Tests ====================
 
@@ -391,7 +392,7 @@ fn test_error_mapper_empty_body() {
 #[tokio::test]
 async fn test_provider_creation_without_key() {
     // Clear any environment variable for this test
-    unsafe { std::env::remove_var("ELEVENLABS_API_KEY") };
+    test_env::remove_var("ELEVENLABS_API_KEY");
 
     let config = ElevenLabsConfig::default();
     let result = ElevenLabsProvider::new(config).await;

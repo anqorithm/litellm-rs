@@ -5,6 +5,7 @@
 use super::config::LambdaAIConfig;
 use super::model_info::{get_available_models, get_model_info, is_reasoning_model};
 use super::*;
+use crate::utils::test_env;
 
 #[test]
 fn test_provider_name() {
@@ -136,7 +137,7 @@ fn test_error_types() {
 #[tokio::test]
 async fn test_provider_creation_without_key() {
     // Clear any existing env var
-    unsafe { std::env::remove_var("LAMBDA_API_KEY") };
+    test_env::remove_var("LAMBDA_API_KEY");
 
     let config = LambdaAIConfig::default();
     let result = provider::LambdaAIProvider::new(config).await;

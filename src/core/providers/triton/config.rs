@@ -162,6 +162,7 @@ fn default_max_retries() -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::test_env;
 
     #[test]
     fn test_triton_config_default() {
@@ -220,7 +221,8 @@ mod tests {
     #[test]
     fn test_triton_config_validation_no_url() {
         // Clear env var for this test
-        unsafe { std::env::remove_var("TRITON_SERVER_URL") };
+        let _guard = test_env::lock();
+        test_env::remove_var("TRITON_SERVER_URL");
         let config = TritonConfig::default();
         assert!(config.validate().is_err());
     }

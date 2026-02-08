@@ -143,6 +143,7 @@ fn default_max_retries() -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::test_env;
 
     #[test]
     fn test_lambda_ai_config_default() {
@@ -194,7 +195,8 @@ mod tests {
     #[test]
     fn test_lambda_ai_config_validation_no_key() {
         // Clear env var for this test
-        unsafe { std::env::remove_var(ENV_API_KEY) };
+        let _guard = test_env::lock();
+        test_env::remove_var(ENV_API_KEY);
         let config = LambdaAIConfig::default();
         assert!(config.validate().is_err());
     }

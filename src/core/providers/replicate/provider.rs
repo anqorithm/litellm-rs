@@ -455,6 +455,7 @@ impl LLMProvider for ReplicateProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::test_env;
 
     #[test]
     fn test_provider_creation_without_api_key() {
@@ -538,9 +539,8 @@ mod tests {
     #[test]
     fn test_from_env_missing_token() {
         // Clear any existing env var
-        unsafe {
-            std::env::remove_var("REPLICATE_API_TOKEN");
-        }
+        let _guard = test_env::lock();
+        test_env::remove_var("REPLICATE_API_TOKEN");
 
         let result = ReplicateProvider::from_env();
         assert!(result.is_err());

@@ -30,6 +30,8 @@ pub mod net; // Network & client utilities
 pub mod perf; // Performance optimization
 pub mod sync; // Concurrent-safe containers
 pub mod sys; // System utilities // Business logic
+#[cfg(test)]
+pub mod test_env; // Test-only env var helpers
 
 // Re-export commonly used types from each module for convenience
 pub use ai::models::capabilities::ModelCapabilities;

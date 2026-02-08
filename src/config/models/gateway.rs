@@ -402,9 +402,7 @@ impl GatewayConfig {
 mod tests {
     use super::*;
     use crate::config::models::enterprise::SsoConfig;
-    use std::sync::Mutex;
-
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
+    use crate::utils::test_env;
 
     const TEST_ENV_KEYS: [&str; 17] = [
         ENV_HOST,
@@ -433,11 +431,11 @@ mod tests {
     }
 
     fn set_test_env(key: &str, value: &str) {
-        unsafe { env::set_var(key, value) };
+        test_env::set_var(key, value);
     }
 
     fn remove_test_env(key: &str) {
-        unsafe { env::remove_var(key) };
+        test_env::remove_var(key);
     }
 
     fn create_test_provider(name: &str) -> ProviderConfig {
@@ -470,7 +468,7 @@ mod tests {
 
     #[test]
     fn test_gateway_config_from_env() {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let _guard = test_env::lock();
         clear_test_env();
         set_test_env(ENV_HOST, "127.0.0.1");
         set_test_env(ENV_PORT, "18080");
@@ -521,7 +519,7 @@ mod tests {
 
     #[test]
     fn test_gateway_config_from_env_requires_providers() {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let _guard = test_env::lock();
         clear_test_env();
         set_test_env(ENV_ENABLE_JWT, "true");
         set_test_env(ENV_JWT_SECRET, "StrongJwtSecretWithMixedCaseAndNumbers1234");
@@ -535,7 +533,7 @@ mod tests {
 
     #[test]
     fn test_gateway_config_from_env_invalid_port() {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let _guard = test_env::lock();
         clear_test_env();
         set_test_env(ENV_PORT, "invalid-port");
         set_test_env(ENV_ENABLE_JWT, "true");

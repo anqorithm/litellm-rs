@@ -147,6 +147,7 @@ fn default_max_retries() -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::test_env;
 
     #[test]
     fn test_vllm_config_default() {
@@ -197,9 +198,8 @@ mod tests {
     #[test]
     fn test_vllm_config_validation_no_base() {
         // Clear env var for this test
-        unsafe {
-            std::env::remove_var("VLLM_API_BASE");
-        }
+        let _guard = test_env::lock();
+        test_env::remove_var("VLLM_API_BASE");
         let config = VLLMConfig::default();
         assert!(config.validate().is_err());
     }

@@ -539,6 +539,7 @@ impl LLMProvider for RunwayMLProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::test_env;
 
     #[test]
     fn test_provider_creation_without_api_key() {
@@ -675,9 +676,8 @@ mod tests {
     #[test]
     fn test_from_env_missing_api_key() {
         // Clear any existing env var
-        unsafe {
-            std::env::remove_var("RUNWAYML_API_KEY");
-        }
+        let _guard = test_env::lock();
+        test_env::remove_var("RUNWAYML_API_KEY");
 
         let result = RunwayMLProvider::from_env();
         assert!(result.is_err());

@@ -1,6 +1,7 @@
 //! Integration tests for GitHub Copilot provider
 
 use super::*;
+use crate::utils::test_env;
 
 #[tokio::test]
 async fn test_github_copilot_provider_creation_default() {
@@ -11,10 +12,11 @@ async fn test_github_copilot_provider_creation_default() {
 
 #[tokio::test]
 async fn test_github_copilot_config_from_env() {
-    unsafe { std::env::set_var("GITHUB_COPILOT_TOKEN_DIR", "/custom/path") };
+    let _guard = test_env::lock();
+    test_env::set_var("GITHUB_COPILOT_TOKEN_DIR", "/custom/path");
     let config = GitHubCopilotConfig::default();
     assert_eq!(config.get_token_dir(), "/custom/path");
-    unsafe { std::env::remove_var("GITHUB_COPILOT_TOKEN_DIR") };
+    test_env::remove_var("GITHUB_COPILOT_TOKEN_DIR");
 }
 
 // Note: Error conversion tests removed - GitHubCopilotError is now a type alias to ProviderError

@@ -6,6 +6,7 @@ mod unit_tests {
     use crate::core::traits::provider::ProviderConfig;
     use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
     use crate::core::types::model::ProviderCapability;
+    use crate::utils::test_env;
 
     // ==================== Configuration Tests ====================
 
@@ -58,14 +59,13 @@ mod unit_tests {
 
     #[test]
     fn test_config_validation() {
+        let _guard = test_env::lock();
         // Valid config with API base
         let config = VLLMConfig::new("http://localhost:8000/v1");
         assert!(config.validate().is_ok());
 
         // Invalid config without API base (and no env var)
-        unsafe {
-            std::env::remove_var("VLLM_API_BASE");
-        }
+        test_env::remove_var("VLLM_API_BASE");
         let config = VLLMConfig::default();
         assert!(config.validate().is_err());
 

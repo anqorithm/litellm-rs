@@ -1,22 +1,24 @@
 //! Integration tests for GitHub Models provider
 
 use super::*;
+use crate::utils::test_env;
 
 #[tokio::test]
 async fn test_github_provider_new_without_key() {
     let config = GitHubConfig::default();
     // Clear env var for this test
-    unsafe { std::env::remove_var("GITHUB_TOKEN") };
+    test_env::remove_var("GITHUB_TOKEN");
     let provider = GitHubProvider::new(config).await;
     assert!(provider.is_err());
 }
 
 #[tokio::test]
 async fn test_github_config_from_env() {
-    unsafe { std::env::set_var("GITHUB_TOKEN", "ghp_test_env_key") };
+    let _guard = test_env::lock();
+    test_env::set_var("GITHUB_TOKEN", "ghp_test_env_key");
     let config = GitHubConfig::default();
     assert_eq!(config.get_api_key(), Some("ghp_test_env_key".to_string()));
-    unsafe { std::env::remove_var("GITHUB_TOKEN") };
+    test_env::remove_var("GITHUB_TOKEN");
 }
 
 #[test]

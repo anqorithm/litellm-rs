@@ -88,17 +88,13 @@ impl EnvUtils {
     /// Set environment variable (for testing)
     #[cfg(test)]
     pub fn set_env(key: &str, value: &str) {
-        unsafe {
-            env::set_var(key, value);
-        }
+        crate::utils::test_env::set_var(key, value);
     }
 
     /// Remove environment variable (for testing)
     #[cfg(test)]
     pub fn remove_env(key: &str) {
-        unsafe {
-            env::remove_var(key);
-        }
+        crate::utils::test_env::remove_var(key);
     }
 }
 

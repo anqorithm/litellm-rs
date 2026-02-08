@@ -229,16 +229,16 @@ impl Default for SecretManagerRegistry {
 mod tests {
     use super::*;
     use crate::core::secret_managers::EnvSecretManager;
-    use std::env;
+    use crate::utils::test_env;
 
     // Helper to safely set env var in tests
     fn set_test_env(key: &str, value: &str) {
-        unsafe { env::set_var(key, value) };
+        test_env::set_var(key, value);
     }
 
     // Helper to safely remove env var in tests
     fn remove_test_env(key: &str) {
-        unsafe { env::remove_var(key) };
+        test_env::remove_var(key);
     }
 
     #[tokio::test]
