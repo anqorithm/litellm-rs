@@ -2,7 +2,7 @@
 //!
 //! Configuration for NVIDIA Triton Inference Server connection.
 
-use crate::core::traits::ProviderConfig;
+use crate::core::traits::provider::ProviderConfig;
 use serde::{Deserialize, Serialize};
 
 /// Triton provider configuration

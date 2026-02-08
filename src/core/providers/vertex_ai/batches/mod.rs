@@ -4,8 +4,10 @@ use crate::ProviderError;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::core::types::FinishReason;
-use crate::core::types::{ChatRequest, MessageContent, MessageRole, responses::ChatResponse};
+use crate::core::types::responses::FinishReason;
+use crate::core::types::{
+    chat::ChatRequest, message::MessageContent, message::MessageRole, responses::ChatResponse,
+};
 
 /// Batch job for processing multiple requests
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -288,7 +290,7 @@ fn parse_default_batch_response(
     response: Value,
     model: &str,
 ) -> Result<ChatResponse, ProviderError> {
-    use crate::core::types::ChatMessage;
+    use crate::core::types::chat::ChatMessage;
     use crate::core::types::responses::ChatChoice;
 
     let content = response["content"]

@@ -13,13 +13,19 @@ use super::config::LlamafileConfig;
 use crate::core::providers::base::{GlobalPoolManager, HttpMethod, header};
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::{
-    ProviderConfig as _, provider::llm_provider::trait_definition::LLMProvider,
+    provider::ProviderConfig as _, provider::llm_provider::trait_definition::LLMProvider,
 };
 use crate::core::types::{
-    ChatMessage, ChatRequest, HealthStatus, MessageContent, MessageRole, ModelInfo,
-    ProviderCapability, RequestContext, ToolCall,
+    chat::ChatMessage, chat::ChatRequest,
+    context::RequestContext,
+    health::HealthStatus,
+    message::MessageContent,
+    message::MessageRole,
+    model::ModelInfo,
+    model::ProviderCapability,
     responses::{ChatChoice, ChatChunk, ChatResponse, FinishReason, Usage},
     tools::FunctionCall,
+    tools::ToolCall,
 };
 
 /// Provider name constant

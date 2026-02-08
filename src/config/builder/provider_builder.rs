@@ -1,9 +1,9 @@
 //! Provider configuration builder implementation
 
 use super::types::ProviderConfigBuilder;
-use crate::config::ProviderConfig;
+use crate::config::models::provider::ProviderConfig;
 use crate::utils::data::type_utils::{NonEmptyString, PositiveF64};
-use crate::utils::error::{GatewayError, Result};
+use crate::utils::error::error::{GatewayError, Result};
 use std::time::Duration;
 
 impl ProviderConfigBuilder {
@@ -116,8 +116,8 @@ impl ProviderConfigBuilder {
             max_concurrent_requests: 10,
             timeout: self.timeout.map(|d| d.as_secs()).unwrap_or(30),
             max_retries: 3,
-            retry: crate::config::RetryConfig::default(),
-            health_check: crate::config::HealthCheckConfig::default(),
+            retry: crate::config::models::provider::RetryConfig::default(),
+            health_check: crate::config::models::provider::HealthCheckConfig::default(),
             settings: std::collections::HashMap::new(),
             models: self.models,
             enabled: self.enabled,

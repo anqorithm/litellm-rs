@@ -2,13 +2,13 @@
 //!
 //! This module contains utility methods for the rate limiter and RateLimitKey implementation.
 
-use crate::utils::error::Result;
+use crate::utils::error::error::Result;
 use std::collections::HashMap;
 #[allow(unused_imports)]
 use std::time::{Duration, Instant};
 use uuid::Uuid;
 
-use super::limiter::RateLimiter;
+use super::engine::RateLimiter;
 use super::types::{RateLimitKey, RateLimitResult};
 
 impl RateLimiter {

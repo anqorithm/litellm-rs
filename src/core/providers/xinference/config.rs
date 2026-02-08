@@ -1,6 +1,6 @@
 //! Xinference Provider Configuration
 
-use crate::core::traits::ProviderConfig;
+use crate::core::traits::provider::ProviderConfig;
 use serde::{Deserialize, Serialize};
 
 /// Xinference provider configuration

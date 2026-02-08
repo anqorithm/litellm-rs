@@ -7,7 +7,7 @@ use super::types::{
     WebhookPayload, WebhookStats,
 };
 use crate::core::models::RequestContext;
-use crate::utils::error::{GatewayError, Result};
+use crate::utils::error::error::{GatewayError, Result};
 use crate::utils::net::http::create_custom_client;
 use reqwest::Client;
 use std::collections::HashMap;

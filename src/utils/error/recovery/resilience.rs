@@ -1,6 +1,6 @@
 //! Resilience patterns for resource isolation and timeout protection
 
-use crate::utils::error::{GatewayError, Result};
+use crate::utils::error::error::{GatewayError, Result};
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::debug;

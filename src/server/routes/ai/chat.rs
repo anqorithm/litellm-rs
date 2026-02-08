@@ -10,11 +10,15 @@ use crate::core::providers::ProviderRegistry;
 use crate::core::streaming::types::{
     ChatCompletionChunk, ChatCompletionChunkChoice, ChatCompletionDelta, Event,
 };
-use crate::core::types::{self, ProviderCapability};
+use crate::core::types::{
+    self,
+    chat::{ChatMessage as CoreChatMessage, ChatRequest as CoreChatRequest},
+    model::ProviderCapability,
+};
 use crate::server::routes::errors;
 use crate::server::state::AppState;
 use crate::utils::data::validation::RequestValidator;
-use crate::utils::error::GatewayError;
+use crate::utils::error::error::GatewayError;
 use actix_web::http::header::{CACHE_CONTROL, CONTENT_TYPE};
 use actix_web::{HttpRequest, HttpResponse, Result as ActixResult, web};
 use futures::StreamExt;
@@ -163,7 +167,7 @@ fn build_core_chat_request(
     request: ChatCompletionRequest,
     model: String,
     stream: bool,
-) -> Result<types::ChatRequest, GatewayError> {
+) -> Result<CoreChatRequest, GatewayError> {
     let tools = match request.tools {
         Some(tools) => {
             let mut converted = Vec::with_capacity(tools.len());
@@ -197,11 +201,13 @@ fn build_core_chat_request(
         None => None,
     };
 
-    let response_format = request.response_format.map(|format| types::ResponseFormat {
-        format_type: format.format_type,
-        json_schema: format.json_schema,
-        response_type: None,
-    });
+    let response_format = request
+        .response_format
+        .map(|format| types::tools::ResponseFormat {
+            format_type: format.format_type,
+            json_schema: format.json_schema,
+            response_type: None,
+        });
 
     let mut extra_params = std::collections::HashMap::new();
     if let Some(modalities) = request.modalities {
@@ -211,7 +217,7 @@ fn build_core_chat_request(
         extra_params.insert("audio".to_string(), json!(audio));
     }
 
-    Ok(types::ChatRequest {
+    Ok(CoreChatRequest {
         model,
         messages: request
             .messages
@@ -243,26 +249,26 @@ fn build_core_chat_request(
     })
 }
 
-fn convert_openai_message_to_core(message: ChatMessage) -> types::ChatMessage {
+fn convert_openai_message_to_core(message: ChatMessage) -> CoreChatMessage {
     let role = match message.role {
-        MessageRole::System => types::MessageRole::System,
-        MessageRole::User => types::MessageRole::User,
-        MessageRole::Assistant => types::MessageRole::Assistant,
-        MessageRole::Tool => types::MessageRole::Tool,
-        MessageRole::Function => types::MessageRole::Function,
+        MessageRole::System => types::message::MessageRole::System,
+        MessageRole::User => types::message::MessageRole::User,
+        MessageRole::Assistant => types::message::MessageRole::Assistant,
+        MessageRole::Tool => types::message::MessageRole::Tool,
+        MessageRole::Function => types::message::MessageRole::Function,
     };
 
     let content = message.content.map(|content| match content {
-        MessageContent::Text(text) => types::MessageContent::Text(text),
+        MessageContent::Text(text) => types::message::MessageContent::Text(text),
         MessageContent::Parts(parts) => {
             let converted_parts = parts
                 .into_iter()
                 .map(|part| match part {
                     crate::core::models::openai::ContentPart::Text { text } => {
-                        types::ContentPart::Text { text }
+                        types::content::ContentPart::Text { text }
                     }
                     crate::core::models::openai::ContentPart::ImageUrl { image_url } => {
-                        types::ContentPart::ImageUrl {
+                        types::content::ContentPart::ImageUrl {
                             image_url: types::content::ImageUrl {
                                 url: image_url.url,
                                 detail: image_url.detail,
@@ -270,7 +276,7 @@ fn convert_openai_message_to_core(message: ChatMessage) -> types::ChatMessage {
                         }
                     }
                     crate::core::models::openai::ContentPart::Audio { audio } => {
-                        types::ContentPart::Audio {
+                        types::content::ContentPart::Audio {
                             audio: types::content::AudioData {
                                 data: audio.data,
                                 format: Some(audio.format),
@@ -279,17 +285,17 @@ fn convert_openai_message_to_core(message: ChatMessage) -> types::ChatMessage {
                     }
                 })
                 .collect();
-            types::MessageContent::Parts(converted_parts)
+            types::message::MessageContent::Parts(converted_parts)
         }
     });
 
-    let tool_calls = message.tool_calls.map(|calls| {
+    let tool_calls: Option<Vec<types::tools::ToolCall>> = message.tool_calls.map(|calls| {
         calls
             .into_iter()
-            .map(|call| types::ToolCall {
+            .map(|call| types::tools::ToolCall {
                 id: call.id,
                 tool_type: call.tool_type,
-                function: types::FunctionCall {
+                function: types::tools::FunctionCall {
                     name: call.function.name,
                     arguments: call.function.arguments,
                 },
@@ -297,12 +303,14 @@ fn convert_openai_message_to_core(message: ChatMessage) -> types::ChatMessage {
             .collect()
     });
 
-    let function_call = message.function_call.map(|call| types::FunctionCall {
-        name: call.name,
-        arguments: call.arguments,
-    });
+    let function_call = message
+        .function_call
+        .map(|call| types::tools::FunctionCall {
+            name: call.name,
+            arguments: call.arguments,
+        });
 
-    types::ChatMessage {
+    CoreChatMessage {
         role,
         content,
         thinking: None,
@@ -313,7 +321,7 @@ fn convert_openai_message_to_core(message: ChatMessage) -> types::ChatMessage {
     }
 }
 
-fn convert_core_chat_response(response: types::ChatResponse) -> ChatCompletionResponse {
+fn convert_core_chat_response(response: types::responses::ChatResponse) -> ChatCompletionResponse {
     ChatCompletionResponse {
         id: response.id,
         object: response.object,
@@ -334,18 +342,18 @@ fn convert_core_chat_response(response: types::ChatResponse) -> ChatCompletionRe
     }
 }
 
-fn convert_core_message_to_openai(message: types::ChatMessage) -> ChatMessage {
+fn convert_core_message_to_openai(message: CoreChatMessage) -> ChatMessage {
     let role = match message.role {
-        types::MessageRole::System => MessageRole::System,
-        types::MessageRole::User => MessageRole::User,
-        types::MessageRole::Assistant => MessageRole::Assistant,
-        types::MessageRole::Tool => MessageRole::Tool,
-        types::MessageRole::Function => MessageRole::Function,
+        types::message::MessageRole::System => MessageRole::System,
+        types::message::MessageRole::User => MessageRole::User,
+        types::message::MessageRole::Assistant => MessageRole::Assistant,
+        types::message::MessageRole::Tool => MessageRole::Tool,
+        types::message::MessageRole::Function => MessageRole::Function,
     };
 
     let content = message.content.map(convert_core_content_to_openai);
 
-    let tool_calls = message.tool_calls.map(|calls| {
+    let tool_calls: Option<Vec<ToolCall>> = message.tool_calls.map(|calls| {
         calls
             .into_iter()
             .map(|call| ToolCall {
@@ -375,10 +383,10 @@ fn convert_core_message_to_openai(message: types::ChatMessage) -> ChatMessage {
     }
 }
 
-fn convert_core_content_to_openai(content: types::MessageContent) -> MessageContent {
+fn convert_core_content_to_openai(content: types::message::MessageContent) -> MessageContent {
     match content {
-        types::MessageContent::Text(text) => MessageContent::Text(text),
-        types::MessageContent::Parts(parts) => {
+        types::message::MessageContent::Text(text) => MessageContent::Text(text),
+        types::message::MessageContent::Parts(parts) => {
             let converted_parts = parts
                 .into_iter()
                 .map(convert_core_content_part_to_openai)
@@ -389,13 +397,13 @@ fn convert_core_content_to_openai(content: types::MessageContent) -> MessageCont
 }
 
 fn convert_core_content_part_to_openai(
-    part: types::ContentPart,
+    part: types::content::ContentPart,
 ) -> crate::core::models::openai::ContentPart {
     match part {
-        types::ContentPart::Text { text } => {
+        types::content::ContentPart::Text { text } => {
             crate::core::models::openai::ContentPart::Text { text }
         }
-        types::ContentPart::ImageUrl { image_url } => {
+        types::content::ContentPart::ImageUrl { image_url } => {
             crate::core::models::openai::ContentPart::ImageUrl {
                 image_url: crate::core::models::openai::ImageUrl {
                     url: image_url.url,
@@ -403,26 +411,28 @@ fn convert_core_content_part_to_openai(
                 },
             }
         }
-        types::ContentPart::Audio { audio } => crate::core::models::openai::ContentPart::Audio {
-            audio: crate::core::models::openai::AudioContent {
-                data: audio.data,
-                format: audio.format.unwrap_or_else(|| "unknown".to_string()),
-            },
-        },
+        types::content::ContentPart::Audio { audio } => {
+            crate::core::models::openai::ContentPart::Audio {
+                audio: crate::core::models::openai::AudioContent {
+                    data: audio.data,
+                    format: audio.format.unwrap_or_else(|| "unknown".to_string()),
+                },
+            }
+        }
         _ => crate::core::models::openai::ContentPart::Text {
             text: "[unsupported content part]".to_string(),
         },
     }
 }
 
-fn convert_tool(tool: Tool) -> Result<types::Tool, GatewayError> {
+fn convert_tool(tool: Tool) -> Result<types::tools::Tool, GatewayError> {
     if tool.tool_type.to_lowercase() != "function" {
         return Err(GatewayError::validation("Unsupported tool type"));
     }
 
-    Ok(types::Tool {
-        tool_type: types::ToolType::Function,
-        function: types::FunctionDefinition {
+    Ok(types::tools::Tool {
+        tool_type: types::tools::ToolType::Function,
+        function: types::tools::FunctionDefinition {
             name: tool.function.name,
             description: tool.function.description,
             parameters: tool.function.parameters,
@@ -430,21 +440,21 @@ fn convert_tool(tool: Tool) -> Result<types::Tool, GatewayError> {
     })
 }
 
-fn convert_tool_choice(choice: ToolChoice) -> types::ToolChoice {
+fn convert_tool_choice(choice: ToolChoice) -> types::tools::ToolChoice {
     match choice {
-        ToolChoice::None(value) => types::ToolChoice::String(value),
-        ToolChoice::Auto(value) => types::ToolChoice::String(value),
-        ToolChoice::Required(value) => types::ToolChoice::String(value),
-        ToolChoice::Specific(spec) => types::ToolChoice::Specific {
+        ToolChoice::None(value) => types::tools::ToolChoice::String(value),
+        ToolChoice::Auto(value) => types::tools::ToolChoice::String(value),
+        ToolChoice::Required(value) => types::tools::ToolChoice::String(value),
+        ToolChoice::Specific(spec) => types::tools::ToolChoice::Specific {
             choice_type: spec.tool_type,
-            function: Some(types::FunctionChoice {
+            function: Some(types::tools::FunctionChoice {
                 name: spec.function.name,
             }),
         },
     }
 }
 
-fn convert_logprobs(logprobs: types::LogProbs) -> Logprobs {
+fn convert_logprobs(logprobs: types::responses::LogProbs) -> Logprobs {
     let content = if logprobs.content.is_empty() {
         None
     } else {
@@ -473,18 +483,18 @@ fn convert_logprobs(logprobs: types::LogProbs) -> Logprobs {
     Logprobs { content }
 }
 
-fn convert_finish_reason(reason: types::FinishReason) -> String {
+fn convert_finish_reason(reason: types::responses::FinishReason) -> String {
     match reason {
-        types::FinishReason::Stop => "stop",
-        types::FinishReason::Length => "length",
-        types::FinishReason::ToolCalls => "tool_calls",
-        types::FinishReason::ContentFilter => "content_filter",
-        types::FinishReason::FunctionCall => "function_call",
+        types::responses::FinishReason::Stop => "stop",
+        types::responses::FinishReason::Length => "length",
+        types::responses::FinishReason::ToolCalls => "tool_calls",
+        types::responses::FinishReason::ContentFilter => "content_filter",
+        types::responses::FinishReason::FunctionCall => "function_call",
     }
     .to_string()
 }
 
-fn convert_usage(usage: types::Usage) -> Usage {
+fn convert_usage(usage: types::responses::Usage) -> Usage {
     Usage {
         prompt_tokens: usage.prompt_tokens,
         completion_tokens: usage.completion_tokens,
@@ -504,7 +514,7 @@ fn convert_usage(usage: types::Usage) -> Usage {
     }
 }
 
-fn convert_core_chunk_to_streaming(chunk: types::ChatChunk) -> ChatCompletionChunk {
+fn convert_core_chunk_to_streaming(chunk: types::responses::ChatChunk) -> ChatCompletionChunk {
     ChatCompletionChunk {
         id: chunk.id,
         object: chunk.object,
@@ -535,7 +545,7 @@ fn convert_core_chunk_to_streaming(chunk: types::ChatChunk) -> ChatCompletionChu
 }
 
 fn convert_tool_call_delta(
-    delta: types::ToolCallDelta,
+    delta: types::responses::ToolCallDelta,
 ) -> crate::core::streaming::types::ToolCallDelta {
     crate::core::streaming::types::ToolCallDelta {
         index: delta.index,
@@ -556,10 +566,16 @@ mod tests {
 
     #[test]
     fn test_convert_finish_reason() {
-        assert_eq!(convert_finish_reason(types::FinishReason::Stop), "stop");
-        assert_eq!(convert_finish_reason(types::FinishReason::Length), "length");
         assert_eq!(
-            convert_finish_reason(types::FinishReason::ToolCalls),
+            convert_finish_reason(types::responses::FinishReason::Stop),
+            "stop"
+        );
+        assert_eq!(
+            convert_finish_reason(types::responses::FinishReason::Length),
+            "length"
+        );
+        assert_eq!(
+            convert_finish_reason(types::responses::FinishReason::ToolCalls),
             "tool_calls"
         );
     }

@@ -7,8 +7,8 @@ crate::define_http_provider_with_hooks!(
     error_mapper: super::error_mapper::CustomApiErrorMapper,
     model_info: super::model_info::get_supported_models,
     capabilities: &[
-        crate::core::types::ProviderCapability::ChatCompletion,
-        crate::core::types::ProviderCapability::ChatCompletionStream,
+        crate::core::types::model::ProviderCapability::ChatCompletion,
+        crate::core::types::model::ProviderCapability::ChatCompletionStream,
     ],
     url_builder: |provider: &CustomHttpxProvider| -> String { provider.config.endpoint_url.clone() },
     request_builder: |provider: &CustomHttpxProvider, url: &str| -> reqwest::RequestBuilder {
@@ -36,7 +36,7 @@ crate::define_http_provider_with_hooks!(
         ))
     },
     request_transform: |provider: &CustomHttpxProvider,
-                        request: crate::core::types::ChatRequest|
+                        request: crate::core::types::chat::ChatRequest|
      -> Result<serde_json::Value, crate::core::providers::unified_provider::ProviderError> {
         if let Some(template) = &provider.config.request_template {
             let req_str = template.replace("{model}", &request.model).replace(
@@ -95,7 +95,7 @@ crate::define_http_provider_with_hooks!(
     error_map: |_provider: &CustomHttpxProvider,
                 status: u16,
                 error_text: String,
-                request: &crate::core::types::ChatRequest|
+                request: &crate::core::types::chat::ChatRequest|
      -> crate::core::providers::unified_provider::ProviderError {
         match status {
             401 => crate::core::providers::unified_provider::ProviderError::authentication(
@@ -118,7 +118,7 @@ crate::define_http_provider_with_hooks!(
         }
     },
     health_check: |_provider: &CustomHttpxProvider| async {
-        crate::core::types::HealthStatus::Healthy
+        crate::core::types::health::HealthStatus::Healthy
     },
     streaming_error: "Streaming not yet implemented",
 );

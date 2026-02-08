@@ -7,7 +7,7 @@ use crate::core::models::user::types::User;
 use crate::core::models::{ApiKey, Metadata, UsageStats};
 use crate::storage::StorageLayer;
 use crate::utils::auth::crypto::keys::{extract_api_key_prefix, generate_api_key, hash_api_key};
-use crate::utils::error::Result;
+use crate::utils::error::error::Result;
 use chrono::Utc;
 use std::sync::Arc;
 use tracing::{debug, info, warn};

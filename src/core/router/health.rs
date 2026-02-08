@@ -1,7 +1,7 @@
 //! Health checking for providers
 
 use crate::core::providers::ProviderRegistry;
-use crate::utils::error::{GatewayError, Result};
+use crate::utils::error::error::{GatewayError, Result};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -223,7 +223,10 @@ impl HealthChecker {
 
         match tokio::time::timeout(self.timeout, provider.health_check()).await {
             Ok(health_status) => {
-                if matches!(health_status, crate::core::types::HealthStatus::Healthy) {
+                if matches!(
+                    health_status,
+                    crate::core::types::health::HealthStatus::Healthy
+                ) {
                     let response_time = start_time.elapsed();
                     let mut statuses = self.statuses.write().await;
                     let status = statuses.entry(name.to_string()).or_default();

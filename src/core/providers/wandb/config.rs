@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::traits::ProviderConfig;
+use crate::core::traits::provider::ProviderConfig;
 
 /// Provider name constant for error messages
 pub const PROVIDER_NAME: &str = "wandb";

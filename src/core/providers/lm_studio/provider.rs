@@ -13,15 +13,22 @@ use super::config::LMStudioConfig;
 use super::error::LMStudioError;
 use crate::core::providers::base::{GlobalPoolManager, HttpMethod, header};
 use crate::core::traits::{
-    ProviderConfig as _, provider::llm_provider::trait_definition::LLMProvider,
+    provider::ProviderConfig as _, provider::llm_provider::trait_definition::LLMProvider,
 };
 use crate::core::types::{
-    ChatMessage, ChatRequest, EmbeddingRequest, HealthStatus, MessageContent, MessageRole,
-    ModelInfo, ProviderCapability, RequestContext, ToolCall,
+    chat::ChatMessage, chat::ChatRequest,
+    context::RequestContext,
+    embedding::EmbeddingRequest,
+    health::HealthStatus,
+    message::MessageContent,
+    message::MessageRole,
+    model::ModelInfo,
+    model::ProviderCapability,
     responses::{
         ChatChoice, ChatChunk, ChatResponse, EmbeddingData, EmbeddingResponse, FinishReason, Usage,
     },
     tools::FunctionCall,
+    tools::ToolCall,
 };
 
 /// Static capabilities for LM Studio provider

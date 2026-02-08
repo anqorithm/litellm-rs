@@ -8,8 +8,8 @@ use serde_json::{Value, json};
 
 use super::models::get_perplexity_registry;
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::types::MessageRole;
-use crate::core::types::{ChatRequest, ModelInfo, responses::ChatResponse};
+use crate::core::types::message::MessageRole;
+use crate::core::types::{chat::ChatRequest, model::ModelInfo, responses::ChatResponse};
 
 /// Perplexity-specific response with citations
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -242,8 +242,8 @@ impl PerplexityClient {
     fn convert_perplexity_response(
         perplexity: PerplexityResponse,
     ) -> Result<ChatResponse, ProviderError> {
-        use crate::core::types::ChatMessage;
-        use crate::core::types::MessageContent;
+        use crate::core::types::chat::ChatMessage;
+        use crate::core::types::message::MessageContent;
         use crate::core::types::responses::{ChatChoice, FinishReason, Usage};
 
         let choices: Vec<ChatChoice> = perplexity
@@ -375,7 +375,7 @@ impl PerplexityClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::{ChatMessage, MessageContent, MessageRole};
+    use crate::core::types::{chat::ChatMessage, message::MessageContent, message::MessageRole};
     use std::collections::HashMap;
 
     fn create_test_request() -> ChatRequest {

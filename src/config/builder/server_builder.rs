@@ -1,7 +1,7 @@
 //! Server configuration builder implementation
 
 use super::types::ServerConfigBuilder;
-use crate::config::ServerConfig;
+use crate::config::models::server::ServerConfig;
 use crate::utils::data::type_utils::Builder;
 use std::time::Duration;
 
@@ -71,7 +71,7 @@ impl ServerConfigBuilder {
             max_body_size: 1024 * 1024, // 1MB default
             dev_mode: false,
             tls: None,
-            cors: crate::config::CorsConfig {
+            cors: crate::config::models::server::CorsConfig {
                 enabled: self.enable_cors,
                 allowed_origins: if self.cors_origins.is_empty() {
                     vec!["*".to_string()]

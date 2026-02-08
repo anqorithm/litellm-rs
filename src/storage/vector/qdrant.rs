@@ -1,7 +1,7 @@
 //! Qdrant vector store implementation
 
-use crate::config::VectorDbConfig;
-use crate::utils::error::{GatewayError, Result};
+use crate::config::models::file_storage::VectorDbConfig;
+use crate::utils::error::error::{GatewayError, Result};
 use tracing::{debug, info};
 
 use super::types::{SearchResult, VectorPoint};

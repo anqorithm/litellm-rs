@@ -3,7 +3,7 @@
 //! This module provides atomic increment/decrement operations and utility functions.
 
 use super::pool::RedisPool;
-use crate::utils::error::{GatewayError, Result};
+use crate::utils::error::error::{GatewayError, Result};
 use redis::AsyncCommands;
 
 impl RedisPool {

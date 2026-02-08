@@ -1,8 +1,8 @@
 //! Role management methods
 
-use crate::core::models::TeamRole;
+use crate::core::models::team::TeamRole;
 use crate::core::models::user::types::UserRole;
-use crate::utils::error::{GatewayError, Result};
+use crate::utils::error::error::{GatewayError, Result};
 
 use super::system::RbacSystem;
 use super::types::Role;
@@ -78,7 +78,7 @@ impl RbacSystem {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::RbacConfig;
+    use crate::config::models::auth::RbacConfig;
     use crate::core::models::user::types::UserRole;
     use std::collections::HashSet;
 

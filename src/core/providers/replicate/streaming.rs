@@ -114,7 +114,7 @@ fn create_chat_chunk(text: &str) -> ChatChunk {
         choices: vec![ChatStreamChoice {
             index: 0,
             delta: ChatDelta {
-                role: Some(crate::core::types::MessageRole::Assistant),
+                role: Some(crate::core::types::message::MessageRole::Assistant),
                 content: Some(text.to_string()),
                 thinking: None,
                 tool_calls: None,
@@ -244,7 +244,7 @@ mod tests {
         assert_eq!(chunk.choices.len(), 1);
         assert_eq!(
             chunk.choices[0].delta.role,
-            Some(crate::core::types::MessageRole::Assistant)
+            Some(crate::core::types::message::MessageRole::Assistant)
         );
         assert_eq!(
             chunk.choices[0].delta.content,

@@ -2,11 +2,11 @@
 
 use crate::core::providers::bedrock::model_config::ModelConfig;
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::types::ChatRequest;
+use crate::core::types::chat::ChatRequest;
 use serde_json::{Value, json};
 
 #[cfg(test)]
-use crate::core::types::{ChatMessage, MessageContent, MessageRole};
+use crate::core::types::{chat::ChatMessage, message::MessageContent, message::MessageRole};
 
 /// Transform request for Amazon Titan models
 pub fn transform_titan_request(
@@ -46,7 +46,7 @@ pub fn transform_nova_request(
     let mut messages = Vec::new();
     let mut system = None;
 
-    use crate::core::types::{MessageContent, MessageRole};
+    use crate::core::types::{message::MessageContent, message::MessageRole};
 
     for msg in &request.messages {
         match msg.role {
@@ -58,7 +58,9 @@ pub fn transform_nova_request(
                         MessageContent::Parts(parts) => parts
                             .iter()
                             .filter_map(|part| {
-                                if let crate::core::types::ContentPart::Text { text } = part {
+                                if let crate::core::types::content::ContentPart::Text { text } =
+                                    part
+                                {
                                     Some(text.clone())
                                 } else {
                                     None
@@ -83,30 +85,30 @@ pub fn transform_nova_request(
                         Some(MessageContent::Parts(parts)) => {
                             parts.iter().filter_map(|part| {
                                 match part {
-                                    crate::core::types::ContentPart::Text { text } => {
+                                    crate::core::types::content::ContentPart::Text { text } => {
                                         Some(json!({"text": text}))
                                     }
-                                    crate::core::types::ContentPart::Image { .. } => {
+                                    crate::core::types::content::ContentPart::Image { .. } => {
                                         // TODO: Handle image content for Nova Canvas
                                         None
                                     }
-                                    crate::core::types::ContentPart::ImageUrl { .. } => {
+                                    crate::core::types::content::ContentPart::ImageUrl { .. } => {
                                         // TODO: Handle image URL content
                                         None
                                     }
-                                    crate::core::types::ContentPart::Audio { .. } => {
+                                    crate::core::types::content::ContentPart::Audio { .. } => {
                                         // TODO: Handle audio content
                                         None
                                     }
-                                    crate::core::types::ContentPart::Document { .. } => {
+                                    crate::core::types::content::ContentPart::Document { .. } => {
                                         // TODO: Handle document content
                                         None
                                     }
-                                    crate::core::types::ContentPart::ToolResult { .. } => {
+                                    crate::core::types::content::ContentPart::ToolResult { .. } => {
                                         // TODO: Handle tool result content
                                         None
                                     }
-                                    crate::core::types::ContentPart::ToolUse { .. } => {
+                                    crate::core::types::content::ContentPart::ToolUse { .. } => {
                                         // TODO: Handle tool use content
                                         None
                                     }

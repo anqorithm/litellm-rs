@@ -4,7 +4,7 @@ use super::router_tests::create_test_deployment;
 use crate::core::router::config::{RouterConfig, RoutingStrategy};
 use crate::core::router::deployment::HealthStatus;
 use crate::core::router::error::RouterError;
-use crate::core::router::router::Router;
+use crate::core::router::unified::Router;
 use std::sync::atomic::Ordering;
 
 #[tokio::test]

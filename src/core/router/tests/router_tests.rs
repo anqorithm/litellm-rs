@@ -4,7 +4,7 @@ use crate::core::providers::Provider;
 use crate::core::providers::openai::OpenAIProvider;
 use crate::core::router::config::{RouterConfig, RoutingStrategy};
 use crate::core::router::deployment::Deployment;
-use crate::core::router::router::Router;
+use crate::core::router::unified::Router;
 use std::sync::atomic::Ordering;
 
 async fn create_test_provider() -> Provider {

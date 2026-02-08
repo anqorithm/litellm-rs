@@ -17,10 +17,16 @@ use super::models::{
 use crate::core::providers::base::{
     GlobalPoolManager, HeaderPair, HttpMethod, header, header_owned,
 };
-use crate::core::traits::{ProviderConfig, provider::llm_provider::trait_definition::LLMProvider};
+use crate::core::traits::{provider::ProviderConfig, provider::llm_provider::trait_definition::LLMProvider};
 use crate::core::types::{
-    ChatMessage, ChatRequest, EmbeddingRequest, HealthStatus, MessageContent, MessageRole,
-    ModelInfo, ProviderCapability, RequestContext,
+    chat::ChatMessage, chat::ChatRequest,
+    context::RequestContext,
+    embedding::EmbeddingRequest,
+    health::HealthStatus,
+    message::MessageContent,
+    message::MessageRole,
+    model::ModelInfo,
+    model::ProviderCapability,
     responses::{ChatChoice, ChatChunk, ChatResponse, EmbeddingResponse, FinishReason, Usage},
 };
 

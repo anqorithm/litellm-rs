@@ -3,7 +3,7 @@
 //! OCI uses an OpenAI-compatible SSE format for streaming responses.
 
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::types::MessageRole;
+use crate::core::types::message::MessageRole;
 use crate::core::types::responses::{ChatChunk, ChatDelta, ChatStreamChoice, FinishReason};
 use bytes::Bytes;
 use futures::Stream;

@@ -14,12 +14,17 @@ use crate::core::providers::base::{
 };
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::{
-    ProviderConfig, error_mapper::trait_def::ErrorMapper,
+    provider::ProviderConfig, error_mapper::trait_def::ErrorMapper,
     provider::llm_provider::trait_definition::LLMProvider,
 };
 use crate::core::types::{
-    ChatMessage, ChatRequest, EmbeddingRequest, HealthStatus, MessageContent, ModelInfo,
-    ProviderCapability, RequestContext,
+    chat::ChatMessage, chat::ChatRequest,
+    context::RequestContext,
+    embedding::EmbeddingRequest,
+    health::HealthStatus,
+    message::MessageContent,
+    model::ModelInfo,
+    model::ProviderCapability,
     responses::{
         ChatChoice, ChatChunk, ChatResponse, EmbeddingData, EmbeddingResponse, FinishReason, Usage,
     },
@@ -245,13 +250,13 @@ impl DatabricksProvider {
                         .get("role")
                         .and_then(|v| v.as_str())
                         .map(|r| match r {
-                            "assistant" => crate::core::types::MessageRole::Assistant,
-                            "user" => crate::core::types::MessageRole::User,
-                            "system" => crate::core::types::MessageRole::System,
-                            "tool" => crate::core::types::MessageRole::Tool,
-                            _ => crate::core::types::MessageRole::Assistant,
+                            "assistant" => crate::core::types::message::MessageRole::Assistant,
+                            "user" => crate::core::types::message::MessageRole::User,
+                            "system" => crate::core::types::message::MessageRole::System,
+                            "tool" => crate::core::types::message::MessageRole::Tool,
+                            _ => crate::core::types::message::MessageRole::Assistant,
                         })
-                        .unwrap_or(crate::core::types::MessageRole::Assistant);
+                        .unwrap_or(crate::core::types::message::MessageRole::Assistant);
 
                     let content = msg
                         .get("content")
@@ -271,7 +276,7 @@ impl DatabricksProvider {
                     }
                 } else {
                     ChatMessage {
-                        role: crate::core::types::MessageRole::Assistant,
+                        role: crate::core::types::message::MessageRole::Assistant,
                         content: None,
                         thinking: None,
                         name: None,
@@ -646,7 +651,7 @@ mod tests {
         let provider = DatabricksProvider::new(config).unwrap();
 
         let messages = vec![ChatMessage {
-            role: crate::core::types::MessageRole::User,
+            role: crate::core::types::message::MessageRole::User,
             content: Some(MessageContent::Text("Hello".to_string())),
             thinking: None,
             name: None,
@@ -670,7 +675,7 @@ mod tests {
         let request = ChatRequest {
             model: "dbrx-instruct".to_string(),
             messages: vec![ChatMessage {
-                role: crate::core::types::MessageRole::User,
+                role: crate::core::types::message::MessageRole::User,
                 content: Some(MessageContent::Text("Test".to_string())),
                 thinking: None,
                 name: None,

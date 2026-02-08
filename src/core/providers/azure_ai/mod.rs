@@ -32,8 +32,13 @@ use std::pin::Pin;
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use crate::core::types::{
-    ChatRequest, EmbeddingRequest, HealthStatus, ImageGenerationRequest, ModelInfo,
-    ProviderCapability, RequestContext,
+    chat::ChatRequest,
+    context::RequestContext,
+    embedding::EmbeddingRequest,
+    health::HealthStatus,
+    image::ImageGenerationRequest,
+    model::ModelInfo,
+    model::ProviderCapability,
     responses::{ChatChunk, ChatResponse, EmbeddingResponse, ImageGenerationResponse},
 };
 
@@ -294,7 +299,7 @@ impl AzureAIProviderFactory {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::{ChatMessage, MessageContent, MessageRole};
+    use crate::core::types::{chat::ChatMessage, message::MessageContent, message::MessageRole};
 
     fn create_test_config() -> AzureAIConfig {
         let mut config = AzureAIConfig::new("azure_ai");

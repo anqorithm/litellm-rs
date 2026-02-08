@@ -62,8 +62,8 @@ pub async fn log_api_usage(context: &RequestContext, model: &str, tokens_used: u
 }
 
 /// Convert API RequestContext to core context used by providers
-pub fn to_core_context(context: &RequestContext) -> crate::core::types::RequestContext {
-    let mut core_context = crate::core::types::RequestContext::new();
+pub fn to_core_context(context: &RequestContext) -> crate::core::types::context::RequestContext {
+    let mut core_context = crate::core::types::context::RequestContext::new();
     core_context.request_id = context.request_id.clone();
     core_context.user_id = context.user_id.map(|id| id.to_string());
     core_context.client_ip = context.client_ip.clone();

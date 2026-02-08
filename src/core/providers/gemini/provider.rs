@@ -11,10 +11,15 @@ use std::sync::Arc;
 
 use crate::core::providers::base::GlobalPoolManager;
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::traits::{ProviderConfig, provider::llm_provider::trait_definition::LLMProvider};
+use crate::core::traits::{provider::ProviderConfig, provider::llm_provider::trait_definition::LLMProvider};
 use crate::core::types::{
-    ChatRequest, EmbeddingRequest, HealthStatus, ImageGenerationRequest, ModelInfo,
-    ProviderCapability, RequestContext,
+    chat::ChatRequest,
+    context::RequestContext,
+    embedding::EmbeddingRequest,
+    health::HealthStatus,
+    image::ImageGenerationRequest,
+    model::ModelInfo,
+    model::ProviderCapability,
     responses::{ChatChunk, ChatResponse, EmbeddingResponse, ImageGenerationResponse},
 };
 
@@ -339,9 +344,11 @@ impl LLMProvider for GeminiProvider {
         // Health check request
         let test_request = ChatRequest {
             model: "gemini-1.0-pro".to_string(),
-            messages: vec![crate::core::types::ChatMessage {
-                role: crate::core::types::MessageRole::User,
-                content: Some(crate::core::types::MessageContent::Text("Hi".to_string())),
+            messages: vec![crate::core::types::chat::ChatMessage {
+                role: crate::core::types::message::MessageRole::User,
+                content: Some(crate::core::types::message::MessageContent::Text(
+                    "Hi".to_string(),
+                )),
                 ..Default::default()
             }],
             temperature: Some(0.1),
@@ -398,7 +405,7 @@ impl LLMProvider for GeminiProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::{ChatMessage, MessageContent, MessageRole};
+    use crate::core::types::{chat::ChatMessage, message::MessageContent, message::MessageRole};
 
     // Helper function to create a basic valid request
     fn create_valid_request(model: &str) -> ChatRequest {

@@ -13,12 +13,16 @@ use std::sync::Arc;
 use crate::core::providers::base::{GlobalPoolManager, HeaderPair, get_pricing_db, header};
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::{
-    ProviderConfig, error_mapper::trait_def::ErrorMapper,
+    provider::ProviderConfig, error_mapper::trait_def::ErrorMapper,
     provider::llm_provider::trait_definition::LLMProvider,
 };
 use crate::core::types::{
-    ChatRequest, HealthStatus, ImageGenerationRequest, ModelInfo, ProviderCapability,
-    RequestContext,
+    chat::ChatRequest,
+    context::RequestContext,
+    health::HealthStatus,
+    image::ImageGenerationRequest,
+    model::ModelInfo,
+    model::ProviderCapability,
     responses::{ChatChunk, ChatResponse, ImageData, ImageGenerationResponse},
 };
 

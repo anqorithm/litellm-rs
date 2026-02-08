@@ -10,7 +10,9 @@ use tokio::time::timeout;
 
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::{
-    ChatMessage, ChatRequest, ContentPart, MessageRole,
+    chat::ChatMessage, chat::ChatRequest,
+    content::ContentPart,
+    message::MessageRole,
     responses::{ChatChoice, ChatResponse, Usage},
 };
 
@@ -294,10 +296,10 @@ impl AnthropicClient {
                 MessageRole::System => {
                     if let Some(content) = &message.content {
                         match content {
-                            crate::core::types::MessageContent::Text(text) => {
+                            crate::core::types::message::MessageContent::Text(text) => {
                                 system_parts.push(text.clone());
                             }
-                            crate::core::types::MessageContent::Parts(parts) => {
+                            crate::core::types::message::MessageContent::Parts(parts) => {
                                 for part in parts {
                                     if let ContentPart::Text { text } = part {
                                         system_parts.push(text.clone());
@@ -341,10 +343,10 @@ impl AnthropicClient {
 
             let content = if let Some(content) = message.content {
                 match content {
-                    crate::core::types::MessageContent::Text(text) => {
+                    crate::core::types::message::MessageContent::Text(text) => {
                         json!(text)
                     }
-                    crate::core::types::MessageContent::Parts(parts) => {
+                    crate::core::types::message::MessageContent::Parts(parts) => {
                         let mut anthropic_parts = Vec::new();
 
                         for part in parts {
@@ -447,7 +449,7 @@ impl AnthropicClient {
     /// Transform tool definitions
     fn transform_tools(
         &self,
-        tools: &[crate::core::types::Tool],
+        tools: &[crate::core::types::tools::Tool],
     ) -> Result<Vec<Value>, ProviderError> {
         let mut anthropic_tools = Vec::new();
 
@@ -465,16 +467,16 @@ impl AnthropicClient {
     /// Transform tool choice
     fn transform_tool_choice(
         &self,
-        tool_choice: &crate::core::types::ToolChoice,
+        tool_choice: &crate::core::types::tools::ToolChoice,
     ) -> Result<Value, ProviderError> {
         match tool_choice {
-            crate::core::types::ToolChoice::String(choice) => match choice.as_str() {
+            crate::core::types::tools::ToolChoice::String(choice) => match choice.as_str() {
                 "auto" => Ok(json!({"type": "auto"})),
                 "none" => Ok(json!({"type": "none"})),
                 "required" => Ok(json!({"type": "any"})),
                 _ => Ok(json!({"type": "auto"})),
             },
-            crate::core::types::ToolChoice::Specific { function, .. } => {
+            crate::core::types::tools::ToolChoice::Specific { function, .. } => {
                 if let Some(func) = function {
                     Ok(json!({
                         "type": "tool",
@@ -529,10 +531,10 @@ impl AnthropicClient {
                         item.get("name").and_then(|v| v.as_str()),
                         item.get("input"),
                     ) {
-                        tool_calls.push(crate::core::types::ToolCall {
+                        tool_calls.push(crate::core::types::tools::ToolCall {
                             id: id.to_string(),
                             tool_type: "function".to_string(),
-                            function: crate::core::types::FunctionCall {
+                            function: crate::core::types::tools::FunctionCall {
                                 name: name.to_string(),
                                 arguments: input.to_string(),
                             },
@@ -549,7 +551,9 @@ impl AnthropicClient {
             content: if message_content.is_empty() {
                 None
             } else {
-                Some(crate::core::types::MessageContent::Text(message_content))
+                Some(crate::core::types::message::MessageContent::Text(
+                    message_content,
+                ))
             },
             thinking: None,
             name: None,
@@ -570,10 +574,10 @@ impl AnthropicClient {
                 .get("stop_reason")
                 .and_then(|r| r.as_str())
                 .map(|reason| match reason {
-                    "end_turn" => crate::core::types::FinishReason::Stop,
-                    "max_tokens" => crate::core::types::FinishReason::Length,
-                    "tool_use" => crate::core::types::FinishReason::ToolCalls,
-                    _ => crate::core::types::FinishReason::Stop,
+                    "end_turn" => crate::core::types::responses::FinishReason::Stop,
+                    "max_tokens" => crate::core::types::responses::FinishReason::Length,
+                    "tool_use" => crate::core::types::responses::FinishReason::ToolCalls,
+                    _ => crate::core::types::responses::FinishReason::Stop,
                 }),
             logprobs: None,
         };
@@ -617,7 +621,7 @@ impl AnthropicClient {
 mod tests {
     use super::*;
     use crate::core::providers::anthropic::config::AnthropicConfig;
-    use crate::core::types::MessageContent;
+    use crate::core::types::message::MessageContent;
 
     // ==================== Client Creation Tests ====================
 
@@ -891,7 +895,7 @@ mod tests {
         let config = AnthropicConfig::new_test("test-key");
         let client = AnthropicClient::new(config).unwrap();
 
-        let tool_choice = crate::core::types::ToolChoice::String("auto".to_string());
+        let tool_choice = crate::core::types::tools::ToolChoice::String("auto".to_string());
         let result = client.transform_tool_choice(&tool_choice).unwrap();
 
         assert_eq!(result["type"], "auto");
@@ -902,7 +906,7 @@ mod tests {
         let config = AnthropicConfig::new_test("test-key");
         let client = AnthropicClient::new(config).unwrap();
 
-        let tool_choice = crate::core::types::ToolChoice::String("none".to_string());
+        let tool_choice = crate::core::types::tools::ToolChoice::String("none".to_string());
         let result = client.transform_tool_choice(&tool_choice).unwrap();
 
         assert_eq!(result["type"], "none");
@@ -913,7 +917,7 @@ mod tests {
         let config = AnthropicConfig::new_test("test-key");
         let client = AnthropicClient::new(config).unwrap();
 
-        let tool_choice = crate::core::types::ToolChoice::String("required".to_string());
+        let tool_choice = crate::core::types::tools::ToolChoice::String("required".to_string());
         let result = client.transform_tool_choice(&tool_choice).unwrap();
 
         assert_eq!(result["type"], "any");
@@ -926,9 +930,9 @@ mod tests {
         let config = AnthropicConfig::new_test("test-key");
         let client = AnthropicClient::new(config).unwrap();
 
-        let tools = vec![crate::core::types::Tool {
-            tool_type: crate::core::types::ToolType::Function,
-            function: crate::core::types::FunctionDefinition {
+        let tools = vec![crate::core::types::tools::Tool {
+            tool_type: crate::core::types::tools::ToolType::Function,
+            function: crate::core::types::tools::FunctionDefinition {
                 name: "get_weather".to_string(),
                 description: Some("Get weather for a location".to_string()),
                 parameters: Some(json!({"type": "object"})),
@@ -946,7 +950,7 @@ mod tests {
         let config = AnthropicConfig::new_test("test-key");
         let client = AnthropicClient::new(config).unwrap();
 
-        let tools: Vec<crate::core::types::Tool> = vec![];
+        let tools: Vec<crate::core::types::tools::Tool> = vec![];
         let result = client.transform_tools(&tools).unwrap();
         assert!(result.is_empty());
     }
@@ -1046,7 +1050,7 @@ mod tests {
         let result = client.transform_chat_response(response).unwrap();
         assert!(matches!(
             result.choices[0].finish_reason,
-            Some(crate::core::types::FinishReason::Stop)
+            Some(crate::core::types::responses::FinishReason::Stop)
         ));
 
         // max_tokens -> Length
@@ -1059,7 +1063,7 @@ mod tests {
         let result = client.transform_chat_response(response).unwrap();
         assert!(matches!(
             result.choices[0].finish_reason,
-            Some(crate::core::types::FinishReason::Length)
+            Some(crate::core::types::responses::FinishReason::Length)
         ));
 
         // tool_use -> ToolCalls
@@ -1072,7 +1076,7 @@ mod tests {
         let result = client.transform_chat_response(response).unwrap();
         assert!(matches!(
             result.choices[0].finish_reason,
-            Some(crate::core::types::FinishReason::ToolCalls)
+            Some(crate::core::types::responses::FinishReason::ToolCalls)
         ));
     }
 }

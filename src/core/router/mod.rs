@@ -11,13 +11,12 @@
 //! - `error` - Error types and cooldown reasons
 //! - `fallback` - Fallback configuration and execution results
 //! - `deployment` - Deployment management and health tracking
-//! - `router` - Core Router struct and deployment management
+//! - `unified` - Core Router struct and deployment management
 //! - `selection` - Deployment selection logic
 //! - `strategy_impl` - Routing strategy implementations
 //! - `execution` - Execution helpers and error conversion
 //! - `execute_impl` - Execute methods with retry and fallback support
 //! - `gateway_config` - Gateway configuration integration
-//! - `legacy_router` - Legacy Router implementation
 
 // New modular router components
 pub mod budget_routing;
@@ -28,9 +27,9 @@ pub mod execute_impl;
 pub mod execution;
 pub mod fallback;
 pub mod gateway_config;
-pub mod router;
 pub mod selection;
 pub mod strategy_impl;
+pub mod unified;
 
 // Legacy modules (kept for backwards compatibility)
 pub mod health;
@@ -44,15 +43,9 @@ mod tests;
 // Re-exports from deployment module
 pub use deployment::{Deployment, DeploymentConfig, DeploymentId, DeploymentState, HealthStatus};
 
-// Re-exports from legacy modules
-pub use health::HealthChecker;
-pub use load_balancer::LoadBalancer;
-pub use metrics::RouterMetrics;
-pub use strategy::types::RoutingStrategy;
-
 // Re-exports from new modular router (UnifiedRouter)
 pub use budget_routing::{BudgetAwareRouter, BudgetAwareRouting, RequestBudgetCheck};
 pub use config::{RouterConfig, RoutingStrategy as UnifiedRoutingStrategy};
 pub use error::{CooldownReason, RouterError};
 pub use fallback::{ExecutionResult, FallbackConfig, FallbackType};
-pub use router::Router as UnifiedRouter;
+pub use unified::Router as UnifiedRouter;

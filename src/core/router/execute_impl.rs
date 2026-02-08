@@ -9,7 +9,7 @@ use super::execution::{
     provider_error_to_router_error, router_error_to_provider_error,
 };
 use super::fallback::{ExecutionResult, FallbackType};
-use super::router::Router;
+use super::unified::Router;
 use crate::core::providers::unified_provider::ProviderError;
 
 impl Router {

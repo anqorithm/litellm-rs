@@ -6,7 +6,13 @@
 mod tests {
     use super::super::ssrf::validate_url_against_ssrf;
     use super::super::trait_def::Validate;
-    use crate::config::models::*;
+    use crate::config::models::auth::AuthConfig;
+    use crate::config::models::cache::CacheConfig;
+    use crate::config::models::enterprise::{EnterpriseConfig, SsoConfig};
+    use crate::config::models::provider::ProviderConfig;
+    use crate::config::models::rate_limit::RateLimitConfig;
+    use crate::config::models::server::ServerConfig;
+    use crate::config::models::storage::{DatabaseConfig, RedisConfig};
 
     // ==================== Server Config Validation ====================
 
@@ -178,6 +184,72 @@ mod tests {
         assert!(config.validate().is_err());
     }
 
+    // ==================== Enabled Flag Validation ====================
+
+    #[test]
+    fn test_cache_validation_skips_when_disabled() {
+        let config = CacheConfig {
+            enabled: false,
+            ttl: 0,
+            max_size: 0,
+            semantic_cache: true,
+            similarity_threshold: 2.0,
+        };
+        assert!(Validate::validate(&config).is_ok());
+    }
+
+    #[test]
+    fn test_rate_limit_validation_skips_when_disabled() {
+        let config = RateLimitConfig {
+            enabled: false,
+            default_rpm: 0,
+            default_tpm: 0,
+            ..Default::default()
+        };
+        assert!(Validate::validate(&config).is_ok());
+    }
+
+    #[test]
+    fn test_database_validation_skips_when_disabled() {
+        let config = DatabaseConfig {
+            enabled: false,
+            url: "".to_string(),
+            max_connections: 0,
+            connection_timeout: 0,
+            ssl: false,
+        };
+        assert!(Validate::validate(&config).is_ok());
+    }
+
+    #[test]
+    fn test_redis_validation_skips_when_disabled() {
+        let config = RedisConfig {
+            enabled: false,
+            url: "".to_string(),
+            max_connections: 0,
+            connection_timeout: 0,
+            cluster: false,
+        };
+        assert!(Validate::validate(&config).is_ok());
+    }
+
+    #[test]
+    fn test_enterprise_validation_skips_when_disabled() {
+        let config = EnterpriseConfig {
+            enabled: false,
+            sso: Some(SsoConfig {
+                provider: "invalid-provider".to_string(),
+                client_id: "".to_string(),
+                client_secret: "".to_string(),
+                redirect_url: "".to_string(),
+                settings: Default::default(),
+            }),
+            audit_logging: false,
+            advanced_analytics: false,
+        };
+        assert!(Validate::validate(&config).is_ok());
+    }
+
     // ==================== SSRF Validation - Valid URLs ====================
 
     #[test]
@@ -285,10 +357,11 @@ mod tests {
         assert!(
             validate_url_against_ssrf("http://169.254.169.254/latest/meta-data", "test").is_err()
         );
-        assert!(
-            validate_url_against_ssrf("http://metadata.google.internal/computeMetadata", "test")
-                .is_err()
-        );
+        assert!(validate_url_against_ssrf(
+            "http://metadata.google.internal/computeMetadata",
+            "test"
+        )
+        .is_err());
     }
 
     #[test]

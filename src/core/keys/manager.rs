@@ -8,7 +8,7 @@ use super::types::{
     VerifyKeyResult,
 };
 use crate::utils::auth::crypto::keys::{extract_api_key_prefix, generate_api_key, hash_api_key};
-use crate::utils::error::{GatewayError, Result};
+use crate::utils::error::error::{GatewayError, Result};
 use chrono::Utc;
 use std::sync::Arc;
 use tracing::{debug, info, warn};

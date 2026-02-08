@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::super::{ChatMessage, MessageContent, ToolCall};
+use super::super::{chat::ChatMessage, message::MessageContent, tools::ToolCall};
 use super::delta::ChatDelta;
 use super::logprobs::{FinishReason, LogProbs};
 use super::usage::Usage;
@@ -163,7 +163,7 @@ impl Default for ChatResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::MessageRole;
+    use crate::core::types::message::MessageRole;
 
     fn create_test_message(content: &str) -> ChatMessage {
         ChatMessage {

@@ -2,8 +2,8 @@
 
 use super::core::LoadBalancer;
 use crate::core::providers::Provider;
-use crate::core::types::RequestContext;
-use crate::utils::error::{GatewayError, Result};
+use crate::core::types::context::RequestContext;
+use crate::utils::error::error::{GatewayError, Result};
 use tracing::debug;
 
 impl LoadBalancer {

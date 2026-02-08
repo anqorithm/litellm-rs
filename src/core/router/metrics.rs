@@ -1,6 +1,6 @@
 //! Router metrics collection and reporting
 
-use crate::utils::error::Result;
+use crate::utils::error::error::Result;
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;

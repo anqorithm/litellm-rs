@@ -11,7 +11,7 @@ use serde_json::Value;
 
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::{
-    MessageRole,
+    message::MessageRole,
     responses::{ChatChunk, ChatDelta, ChatStreamChoice, Usage},
 };
 
@@ -228,10 +228,10 @@ impl AnthropicStream {
                     .and_then(|d| d.get("stop_reason"))
                     .and_then(|r| r.as_str())
                     .map(|reason| match reason {
-                        "end_turn" => crate::core::types::FinishReason::Stop,
-                        "max_tokens" => crate::core::types::FinishReason::Length,
-                        "tool_use" => crate::core::types::FinishReason::ToolCalls,
-                        _ => crate::core::types::FinishReason::Stop,
+                        "end_turn" => crate::core::types::responses::FinishReason::Stop,
+                        "max_tokens" => crate::core::types::responses::FinishReason::Length,
+                        "tool_use" => crate::core::types::responses::FinishReason::ToolCalls,
+                        _ => crate::core::types::responses::FinishReason::Stop,
                     });
 
                 Ok(Some(ChatChunk {
@@ -310,7 +310,7 @@ impl StreamUtils {
     /// Collect stream to response
     pub async fn collect_stream_to_response(
         mut stream: AnthropicStream,
-    ) -> Result<crate::core::types::ChatResponse, ProviderError> {
+    ) -> Result<crate::core::types::responses::ChatResponse, ProviderError> {
         let mut content_parts = Vec::new();
         let mut final_usage = None;
         let mut response_id = String::new();
@@ -341,12 +341,14 @@ impl StreamUtils {
         }
 
         let final_content = content_parts.join("");
-        let message = crate::core::types::ChatMessage {
+        let message = crate::core::types::chat::ChatMessage {
             role: MessageRole::Assistant,
             content: if final_content.is_empty() {
                 None
             } else {
-                Some(crate::core::types::MessageContent::Text(final_content))
+                Some(crate::core::types::message::MessageContent::Text(
+                    final_content,
+                ))
             },
             thinking: None,
             name: None,
@@ -355,14 +357,14 @@ impl StreamUtils {
             function_call: None,
         };
 
-        let choice = crate::core::types::ChatChoice {
+        let choice = crate::core::types::responses::ChatChoice {
             index: 0,
             message,
-            finish_reason: Some(crate::core::types::FinishReason::Stop),
+            finish_reason: Some(crate::core::types::responses::FinishReason::Stop),
             logprobs: None,
         };
 
-        Ok(crate::core::types::ChatResponse {
+        Ok(crate::core::types::responses::ChatResponse {
             id: response_id,
             object: "chat.completion".to_string(),
             created,
@@ -579,7 +581,7 @@ mod tests {
         let chunk = result.unwrap().unwrap();
         assert_eq!(
             chunk.choices[0].finish_reason,
-            Some(crate::core::types::FinishReason::Stop)
+            Some(crate::core::types::responses::FinishReason::Stop)
         );
 
         // Test max_tokens
@@ -591,7 +593,7 @@ mod tests {
         let chunk = result.unwrap().unwrap();
         assert_eq!(
             chunk.choices[0].finish_reason,
-            Some(crate::core::types::FinishReason::Length)
+            Some(crate::core::types::responses::FinishReason::Length)
         );
 
         // Test tool_use
@@ -603,7 +605,7 @@ mod tests {
         let chunk = result.unwrap().unwrap();
         assert_eq!(
             chunk.choices[0].finish_reason,
-            Some(crate::core::types::FinishReason::ToolCalls)
+            Some(crate::core::types::responses::FinishReason::ToolCalls)
         );
     }
 

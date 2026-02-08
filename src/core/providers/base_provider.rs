@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::traits::ProviderConfig;
+use crate::core::traits::provider::ProviderConfig;
 
 /// Common provider configuration fields
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -322,7 +322,7 @@ pub struct OpenAIRequestTransformer;
 
 impl OpenAIRequestTransformer {
     /// Transform standard chat request to OpenAI format
-    pub fn transform_chat_request(request: &crate::core::types::ChatRequest) -> Value {
+    pub fn transform_chat_request(request: &crate::core::types::chat::ChatRequest) -> Value {
         let mut body = serde_json::json!({
             "model": request.model,
             "messages": request.messages,

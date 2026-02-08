@@ -2,7 +2,7 @@
 //!
 //! This module contains the main Deployment struct implementations.
 
-use crate::config::ProviderConfig;
+use crate::config::models::provider::ProviderConfig;
 use crate::core::models::deployment::health::{CircuitBreakerState, DeploymentHealth};
 use crate::core::models::deployment::metrics::DeploymentMetrics;
 use crate::core::models::deployment::types::{
@@ -169,7 +169,7 @@ impl Deployment {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::ProviderConfig;
+    use crate::config::models::provider::ProviderConfig;
     use std::collections::HashMap;
 
     #[test]
@@ -190,8 +190,8 @@ mod tests {
             tpm: 10000,
             enabled: true,
             max_concurrent_requests: 10,
-            retry: crate::config::RetryConfig::default(),
-            health_check: crate::config::HealthCheckConfig::default(),
+            retry: crate::config::models::provider::RetryConfig::default(),
+            health_check: crate::config::models::provider::HealthCheckConfig::default(),
             settings: HashMap::new(),
             tags: vec!["test".to_string()],
         };
@@ -218,8 +218,8 @@ mod tests {
             max_concurrent_requests: 10,
             timeout: 30,
             max_retries: 3,
-            retry: crate::config::RetryConfig::default(),
-            health_check: crate::config::HealthCheckConfig::default(),
+            retry: crate::config::models::provider::RetryConfig::default(),
+            health_check: crate::config::models::provider::HealthCheckConfig::default(),
             settings: HashMap::new(),
             models: vec![],
             tags: vec![],

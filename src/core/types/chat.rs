@@ -208,7 +208,7 @@ impl ChatRequest {
     ///
     /// # Example
     /// ```rust
-    /// # use litellm_rs::core::types::{ChatRequest, ThinkingConfig};
+    /// # use litellm_rs::core::types::{chat::ChatRequest, thinking::ThinkingConfig};
     /// let request = ChatRequest::new("openrouter/deepseek/deepseek-r1")
     ///     .add_user_message("Solve this problem step by step")
     ///     .with_thinking(ThinkingConfig::high_effort());

@@ -2,7 +2,7 @@
 //!
 //! Configuration for Heroku AI Inference API
 
-use crate::core::traits::ProviderConfig;
+use crate::core::traits::provider::ProviderConfig;
 use crate::define_provider_config;
 
 /// Provider name constant

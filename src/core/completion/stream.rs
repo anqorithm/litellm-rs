@@ -1,12 +1,12 @@
 //! Completion streaming types
 
 use crate::core::streaming::types::ChatCompletionChunk;
-use crate::core::types::FinishReason;
+use crate::core::types::responses::FinishReason;
 use futures::stream::BoxStream;
 
 /// Streaming completion response
 pub type CompletionStream =
-    BoxStream<'static, Result<CompletionChunk, crate::utils::error::GatewayError>>;
+    BoxStream<'static, Result<CompletionChunk, crate::utils::error::error::GatewayError>>;
 
 /// Chunk in a streaming completion response
 #[derive(Debug, Clone)]
@@ -358,7 +358,7 @@ mod tests {
             choices: vec![ChatCompletionChunkChoice {
                 index: 0,
                 delta: ChatCompletionDelta {
-                    role: Some(crate::core::types::MessageRole::Assistant),
+                    role: Some(crate::core::types::message::MessageRole::Assistant),
                     content: Some("Hello".to_string()),
                     tool_calls: None,
                 },
@@ -476,7 +476,7 @@ mod tests {
                 choices: vec![ChatCompletionChunkChoice {
                     index: 0,
                     delta: ChatCompletionDelta {
-                        role: Some(crate::core::types::MessageRole::Assistant),
+                        role: Some(crate::core::types::message::MessageRole::Assistant),
                         content: None,
                         tool_calls: None,
                     },

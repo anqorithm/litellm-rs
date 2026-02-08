@@ -1,7 +1,7 @@
 //! Featherless Client
 
-use crate::core::types::ChatRequest;
-use crate::core::types::ModelInfo;
+use crate::core::types::chat::ChatRequest;
+use crate::core::types::model::ModelInfo;
 use serde_json::Value;
 
 pub struct FeatherlessClient;

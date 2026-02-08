@@ -14,11 +14,16 @@ use super::config::VoyageConfig;
 use super::error::VoyageError;
 use super::model_info::{get_available_models, get_model_info, supports_custom_dimensions};
 use crate::core::providers::base::{GlobalPoolManager, HttpMethod, header};
-use crate::core::traits::ProviderConfig as _;
+use crate::core::traits::provider::ProviderConfig as _;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use crate::core::types::{
-    ChatRequest, EmbeddingInput, EmbeddingRequest, HealthStatus, ModelInfo, ProviderCapability,
-    RequestContext,
+    chat::ChatRequest,
+    context::RequestContext,
+    embedding::EmbeddingInput,
+    embedding::EmbeddingRequest,
+    health::HealthStatus,
+    model::ModelInfo,
+    model::ProviderCapability,
     responses::{ChatChunk, ChatResponse, EmbeddingData, EmbeddingResponse, Usage},
 };
 

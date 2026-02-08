@@ -13,8 +13,8 @@ pub mod redis_optimized;
 /// Vector storage module
 pub mod vector;
 
-use crate::config::StorageConfig;
-use crate::utils::error::{GatewayError, Result};
+use crate::config::models::storage::StorageConfig;
+use crate::utils::error::error::{GatewayError, Result};
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 
@@ -365,7 +365,7 @@ pub struct StorageHealthStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{DatabaseConfig, RedisConfig};
+    use crate::config::models::storage::{DatabaseConfig, RedisConfig};
 
     #[tokio::test]
     async fn test_storage_layer_creation() {

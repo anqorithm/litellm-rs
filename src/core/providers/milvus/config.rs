@@ -8,7 +8,7 @@
 //!
 //! Reference: <https://milvus.io/docs/restful_api.md>
 
-use crate::core::traits::ProviderConfig;
+use crate::core::traits::provider::ProviderConfig;
 use serde::{Deserialize, Serialize};
 
 /// Default Milvus REST API port

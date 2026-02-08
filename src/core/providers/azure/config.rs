@@ -113,7 +113,7 @@ impl AzureConfig {
 }
 
 /// Implement ProviderConfig trait for AzureConfig
-impl crate::core::traits::ProviderConfig for AzureConfig {
+impl crate::core::traits::provider::ProviderConfig for AzureConfig {
     fn validate(&self) -> Result<(), String> {
         if self.get_effective_azure_endpoint().is_none() {
             return Err("Azure endpoint is required".to_string());
@@ -211,7 +211,7 @@ mod tests {
 
     #[test]
     fn test_azure_config_validation() {
-        use crate::core::traits::ProviderConfig;
+        use crate::core::traits::provider::ProviderConfig;
 
         let config = AzureConfig::new();
         assert!(config.validate().is_err()); // Missing endpoint
@@ -223,7 +223,7 @@ mod tests {
 
     #[test]
     fn test_azure_config_provider_config_trait() {
-        use crate::core::traits::ProviderConfig;
+        use crate::core::traits::provider::ProviderConfig;
 
         let config = AzureConfig::new()
             .with_api_key("test-key".to_string())

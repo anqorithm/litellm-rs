@@ -14,10 +14,15 @@ use super::error::CloudflareError;
 use super::model_info::{calculate_cost, get_available_models, get_model_info};
 use crate::core::providers::base::{GlobalPoolManager, HttpMethod, header};
 use crate::core::traits::{
-    ProviderConfig as _, provider::llm_provider::trait_definition::LLMProvider,
+    provider::ProviderConfig as _, provider::llm_provider::trait_definition::LLMProvider,
 };
 use crate::core::types::{
-    ChatRequest, EmbeddingRequest, HealthStatus, ModelInfo, ProviderCapability, RequestContext,
+    chat::ChatRequest,
+    context::RequestContext,
+    embedding::EmbeddingRequest,
+    health::HealthStatus,
+    model::ModelInfo,
+    model::ProviderCapability,
     responses::{ChatChunk, ChatResponse, EmbeddingResponse, FinishReason},
 };
 
@@ -262,9 +267,9 @@ impl LLMProvider for CloudflareProvider {
             model: model.to_string(),
             choices: vec![crate::core::types::responses::ChatChoice {
                 index: 0,
-                message: crate::core::types::ChatMessage {
-                    role: crate::core::types::MessageRole::Assistant,
-                    content: Some(crate::core::types::MessageContent::Text(content)),
+                message: crate::core::types::chat::ChatMessage {
+                    role: crate::core::types::message::MessageRole::Assistant,
+                    content: Some(crate::core::types::message::MessageContent::Text(content)),
                     thinking: None,
                     name: None,
                     function_call: None,
@@ -317,9 +322,9 @@ impl LLMProvider for CloudflareProvider {
             model: request.model.clone(),
             choices: vec![crate::core::types::responses::ChatChoice {
                 index: 0,
-                message: crate::core::types::ChatMessage {
-                    role: crate::core::types::MessageRole::Assistant,
-                    content: Some(crate::core::types::MessageContent::Text(content)),
+                message: crate::core::types::chat::ChatMessage {
+                    role: crate::core::types::message::MessageRole::Assistant,
+                    content: Some(crate::core::types::message::MessageContent::Text(content)),
                     thinking: None,
                     name: None,
                     function_call: None,
@@ -407,7 +412,7 @@ impl LLMProvider for CloudflareProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::{ChatMessage, MessageContent, MessageRole};
+    use crate::core::types::{chat::ChatMessage, message::MessageContent, message::MessageRole};
 
     fn create_test_config() -> CloudflareConfig {
         CloudflareConfig {

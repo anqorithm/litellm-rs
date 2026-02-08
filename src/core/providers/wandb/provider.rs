@@ -20,11 +20,16 @@ use super::logger::{LLMCallLog, WandbLogger};
 use crate::core::providers::base_provider::HttpErrorMapper;
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::{
-    ProviderConfig, error_mapper::trait_def::ErrorMapper,
+    provider::ProviderConfig, error_mapper::trait_def::ErrorMapper,
     provider::llm_provider::trait_definition::LLMProvider,
 };
 use crate::core::types::{
-    ChatRequest, EmbeddingRequest, HealthStatus, ModelInfo, ProviderCapability, RequestContext,
+    chat::ChatRequest,
+    context::RequestContext,
+    embedding::EmbeddingRequest,
+    health::HealthStatus,
+    model::ModelInfo,
+    model::ProviderCapability,
     responses::{ChatChunk, ChatResponse, EmbeddingResponse},
 };
 
@@ -409,7 +414,7 @@ impl LLMProvider for WandbProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::{EmbeddingInput, EmbeddingRequest};
+    use crate::core::types::{embedding::EmbeddingInput, embedding::EmbeddingRequest};
 
     fn create_test_config() -> WandbConfig {
         WandbConfig::new("test-api-key")

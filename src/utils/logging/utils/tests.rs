@@ -1,10 +1,10 @@
 #[cfg(test)]
 mod tests {
+    use super::super::core::LoggingUtils;
     use super::super::file_logging::FileLogging;
     use super::super::logger::Logger;
     use super::super::sanitization::Sanitization;
     use super::super::types::{LogEntry, LogLevel};
-    use super::super::utils::LoggingUtils;
     use std::collections::HashMap;
     use tempfile::NamedTempFile;
 

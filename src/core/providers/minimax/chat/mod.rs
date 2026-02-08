@@ -32,7 +32,7 @@ impl MinimaxChatHandler {
     /// Transform a standard chat request to Minimax format
     pub fn transform_request(
         &self,
-        request: crate::core::types::ChatRequest,
+        request: crate::core::types::chat::ChatRequest,
     ) -> Result<Value, MinimaxError> {
         debug!("Transforming chat request for Minimax");
 
@@ -60,7 +60,7 @@ impl MinimaxChatHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::{ChatMessage, MessageContent, MessageRole};
+    use crate::core::types::{chat::ChatMessage, message::MessageContent, message::MessageRole};
 
     fn create_test_config() -> MinimaxConfig {
         MinimaxConfig {
@@ -88,7 +88,7 @@ mod tests {
         let config = create_test_config();
         let handler = MinimaxChatHandler::new(config).unwrap();
 
-        let request = crate::core::types::ChatRequest {
+        let request = crate::core::types::chat::ChatRequest {
             model: "MiniMax-M2.1".to_string(),
             messages: vec![ChatMessage {
                 role: MessageRole::User,

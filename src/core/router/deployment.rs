@@ -390,11 +390,10 @@ impl Deployment {
 /// Get current Unix timestamp in seconds
 ///
 /// Returns the number of seconds since UNIX_EPOCH.
-/// Panics if system time is before UNIX_EPOCH (should never happen on modern systems).
 fn current_timestamp() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .expect("System time before UNIX_EPOCH")
+        .unwrap_or_else(|_| std::time::Duration::from_secs(0))
         .as_secs()
 }
 

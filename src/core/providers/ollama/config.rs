@@ -2,7 +2,7 @@
 //!
 //! Configuration for Ollama API access including connection settings and model options.
 
-use crate::core::traits::ProviderConfig;
+use crate::core::traits::provider::ProviderConfig;
 use serde::{Deserialize, Serialize};
 
 /// Ollama provider configuration

@@ -5,7 +5,7 @@
 
 use crate::config::Config;
 use crate::server::HttpServer;
-use crate::utils::error::{GatewayError, Result};
+use crate::utils::error::error::{GatewayError, Result};
 use tracing::info;
 
 /// Server builder for easier configuration

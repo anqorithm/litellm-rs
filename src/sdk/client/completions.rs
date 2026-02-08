@@ -1,6 +1,6 @@
 //! Chat completion methods
 
-use super::client::LLMClient;
+use super::llm_client::LLMClient;
 use crate::sdk::{errors::*, types::*};
 use std::time::SystemTime;
 use tracing::{debug, error, warn};

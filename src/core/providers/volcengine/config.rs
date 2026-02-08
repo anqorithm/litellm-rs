@@ -2,7 +2,7 @@
 //!
 //! Configuration for ByteDance's Volcengine AI platform
 
-use crate::core::traits::ProviderConfig;
+use crate::core::traits::provider::ProviderConfig;
 use crate::define_provider_config;
 
 // Configuration using the provider config macro

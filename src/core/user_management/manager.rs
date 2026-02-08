@@ -5,7 +5,7 @@ use super::team_ops::TeamOperations;
 use super::types::{Organization, Team, User};
 use super::user_ops::UserOperations;
 use crate::storage::database::Database;
-use crate::utils::error::Result;
+use crate::utils::error::error::Result;
 use std::sync::Arc;
 
 /// User management system

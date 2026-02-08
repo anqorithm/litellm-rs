@@ -1,7 +1,7 @@
 //! Permission checking methods
 
 use crate::core::models::user::types::User;
-use crate::utils::error::{GatewayError, Result};
+use crate::utils::error::error::{GatewayError, Result};
 use std::collections::HashSet;
 
 use super::helpers::RbacHelpers;
@@ -139,7 +139,7 @@ impl RbacSystem {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::RbacConfig;
+    use crate::config::models::auth::RbacConfig;
     use crate::core::models::user::preferences::UserPreferences;
     use crate::core::models::user::types::{UserProfile, UserRole, UserStatus};
     use crate::core::models::{Metadata, UsageStats};

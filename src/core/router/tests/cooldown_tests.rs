@@ -5,7 +5,7 @@ use crate::core::providers::unified_provider::ProviderError;
 use crate::core::router::config::RouterConfig;
 use crate::core::router::deployment::HealthStatus;
 use crate::core::router::error::CooldownReason;
-use crate::core::router::router::Router;
+use crate::core::router::unified::Router;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;

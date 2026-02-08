@@ -9,7 +9,11 @@ use std::collections::HashMap;
 use crate::core::providers::base::{HeaderPair, HttpMethod, get_pricing_db, header};
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::{
-    ChatRequest, HealthStatus, ModelInfo, ProviderCapability, RequestContext,
+    chat::ChatRequest,
+    context::RequestContext,
+    health::HealthStatus,
+    model::ModelInfo,
+    model::ProviderCapability,
     responses::{ChatChoice, ChatResponse, Usage},
 };
 

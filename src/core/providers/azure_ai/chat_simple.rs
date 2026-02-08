@@ -10,7 +10,10 @@ use std::pin::Pin;
 use super::config::{AzureAIConfig, AzureAIEndpointType};
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::{
-    ChatMessage, ChatRequest, MessageContent, MessageRole, RequestContext,
+    chat::ChatMessage, chat::ChatRequest,
+    context::RequestContext,
+    message::MessageContent,
+    message::MessageRole,
     responses::{
         ChatChoice, ChatChunk, ChatDelta, ChatResponse, ChatStreamChoice, FinishReason, Usage,
     },

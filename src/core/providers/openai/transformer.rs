@@ -2,12 +2,16 @@
 //!
 //! Unified transformation layer for converting between unified LiteLLM types and OpenAI-specific formats
 
-use crate::core::traits::Transform;
+use crate::core::traits::transformer::Transform;
+use crate::core::types::responses::{
+    ChatChoice, ChatChunk, ChatDelta, ChatResponse, ChatStreamChoice, FinishReason, LogProbs,
+    TokenLogProb, TopLogProb, Usage,
+};
 use crate::core::types::thinking::ThinkingContent;
 use crate::core::types::{
-    ChatChoice, ChatChunk, ChatDelta, ChatMessage, ChatRequest, ChatResponse, ChatStreamChoice,
-    ContentPart, FinishReason, FunctionCall, ImageUrl, LogProbs, MessageContent, MessageRole,
-    ResponseFormat, TokenLogProb, Tool, ToolCall, ToolChoice, TopLogProb, Usage,
+    chat::ChatMessage, chat::ChatRequest, content::ContentPart, content::ImageUrl, message::MessageContent,
+    message::MessageRole, tools::FunctionCall, tools::ResponseFormat, tools::Tool, tools::ToolCall,
+    tools::ToolChoice,
 };
 use serde_json;
 
@@ -398,7 +402,7 @@ impl OpenAIResponseTransformer {
                 },
             }),
             OpenAIContentPart::InputAudio { input_audio } => Ok(ContentPart::Audio {
-                audio: crate::core::types::AudioData {
+                audio: crate::core::types::content::AudioData {
                     data: input_audio.data,
                     format: Some(input_audio.format),
                 },
@@ -434,7 +438,7 @@ impl OpenAIResponseTransformer {
             total_tokens: usage.total_tokens,
             thinking_usage: None,
             prompt_tokens_details: usage.prompt_tokens_details.map(|details| {
-                crate::core::types::PromptTokensDetails {
+                crate::core::types::responses::PromptTokensDetails {
                     cached_tokens: details.cached_tokens,
                     audio_tokens: details.audio_tokens,
                 }
@@ -515,7 +519,8 @@ impl Transform<OpenAIChatResponse, ChatResponse> for OpenAITransformer {
 mod tests {
     use super::*;
     use crate::core::types::{
-        AudioData, DocumentSource, FunctionDefinition, ImageSource, ToolType,
+        content::AudioData, content::DocumentSource, content::ImageSource,
+        tools::FunctionDefinition, tools::ToolType,
     };
 
     // ==================== Request Transformer Tests ====================
@@ -807,7 +812,7 @@ mod tests {
             messages: vec![],
             tool_choice: Some(ToolChoice::Specific {
                 choice_type: "function".to_string(),
-                function: Some(crate::core::types::FunctionChoice {
+                function: Some(crate::core::types::tools::FunctionChoice {
                     name: "get_weather".to_string(),
                 }),
             }),

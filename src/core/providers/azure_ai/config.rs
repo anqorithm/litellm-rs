@@ -5,7 +5,7 @@
 // use serde::{Deserialize, Serialize};  // Not needed with the macro
 use std::collections::HashMap;
 
-use crate::core::traits::ProviderConfig;
+use crate::core::traits::provider::ProviderConfig;
 use crate::define_provider_config;
 
 // Configuration

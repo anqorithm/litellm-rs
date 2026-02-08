@@ -2,7 +2,7 @@
 
 use crate::core::router::strategy::executor::StrategyExecutor;
 use crate::core::router::strategy::types::{ProviderUsage, RoutingStrategy};
-use crate::core::types::RequestContext;
+use crate::core::types::context::RequestContext;
 
 #[test]
 fn test_provider_usage_percentage() {

@@ -5,7 +5,7 @@ mod tests {
     use super::super::*;
     use crate::core::providers::unified_provider::ProviderError;
     use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
-    use crate::core::types::ProviderCapability;
+    use crate::core::types::model::ProviderCapability;
 
     fn create_test_config() -> WatsonxConfig {
         WatsonxConfig {
@@ -281,7 +281,7 @@ mod tests {
 
     #[test]
     fn test_config_validation() {
-        use crate::core::traits::ProviderConfig;
+        use crate::core::traits::provider::ProviderConfig;
 
         // Valid config
         let valid_config = WatsonxConfig {

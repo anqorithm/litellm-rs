@@ -2,7 +2,7 @@
 
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::router::fallback::{FallbackConfig, FallbackType};
-use crate::core::router::router::Router;
+use crate::core::router::unified::Router;
 
 #[test]
 fn test_fallback_config_builder() {

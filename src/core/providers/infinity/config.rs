@@ -2,7 +2,7 @@
 //!
 //! Configuration for Infinity embedding and reranking server access.
 
-use crate::core::traits::ProviderConfig;
+use crate::core::traits::provider::ProviderConfig;
 use serde::{Deserialize, Serialize};
 
 /// Infinity provider configuration

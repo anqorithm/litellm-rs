@@ -1,4 +1,4 @@
-use crate::utils::error::Result;
+use crate::utils::error::error::Result;
 use tracing::warn;
 
 use super::types::{DatabaseStats, SeaOrmDatabase};
@@ -20,7 +20,7 @@ impl SeaOrmDatabase {
     #[allow(dead_code)] // Reserved for future metrics storage functionality
     pub async fn store_metrics(
         &self,
-        _metrics: &crate::core::models::metrics::RequestMetrics,
+        _metrics: &crate::core::models::metrics::request::RequestMetrics,
     ) -> Result<()> {
         // TODO: Implement metrics storage
         warn!("store_metrics not implemented yet");

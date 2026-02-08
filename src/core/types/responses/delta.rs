@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::super::MessageRole;
+use super::super::message::MessageRole;
 use super::super::thinking::ThinkingDelta;
 
 /// Streaming delta content

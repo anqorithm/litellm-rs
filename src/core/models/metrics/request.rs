@@ -1,7 +1,10 @@
 //! Request metrics models
 
 use super::super::Metadata;
-use super::{CacheMetrics, CostInfo, ErrorInfo, TokenUsage};
+use super::cache::CacheMetrics;
+use super::cost::CostInfo;
+use super::error::ErrorInfo;
+use super::token::TokenUsage;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;

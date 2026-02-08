@@ -3,7 +3,7 @@
 //! Main content filtering implementation with PII detection and moderation.
 
 use crate::core::models::openai::*;
-use crate::utils::error::Result;
+use crate::utils::error::error::Result;
 use tracing::warn;
 
 use super::patterns::*;

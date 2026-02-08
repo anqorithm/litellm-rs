@@ -11,7 +11,7 @@ use tracing::debug;
 // Use the transformation module
 use crate::core::providers::meta_llama::LlamaConfig;
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::types::{ChatRequest, responses::ChatResponse};
+use crate::core::types::{chat::ChatRequest, responses::ChatResponse};
 pub use transformation::LlamaChatTransformation;
 
 /// Llama chat handler - simplified implementation using new type system
@@ -98,7 +98,7 @@ impl LlamaChatHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::{ChatMessage, MessageContent, MessageRole};
+    use crate::core::types::{chat::ChatMessage, message::MessageContent, message::MessageRole};
 
     #[test]
     fn test_handler_creation() {

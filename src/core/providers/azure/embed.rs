@@ -6,7 +6,8 @@ use reqwest::header::HeaderMap;
 use serde_json::{Value, json};
 
 use crate::core::types::{
-    EmbeddingRequest, RequestContext,
+    context::RequestContext,
+    embedding::EmbeddingRequest,
     responses::{EmbeddingData, EmbeddingResponse},
 };
 
@@ -139,8 +140,8 @@ impl AzureEmbeddingUtils {
     pub fn validate_request(request: &EmbeddingRequest) -> Result<(), AzureError> {
         // Check if input is empty based on the enum variant
         let is_empty = match &request.input {
-            crate::core::types::EmbeddingInput::Text(text) => text.is_empty(),
-            crate::core::types::EmbeddingInput::Array(array) => array.is_empty(),
+            crate::core::types::embedding::EmbeddingInput::Text(text) => text.is_empty(),
+            crate::core::types::embedding::EmbeddingInput::Array(array) => array.is_empty(),
         };
 
         if is_empty {
@@ -169,10 +170,10 @@ impl AzureEmbeddingUtils {
 
         // Handle input based on enum variant
         match &request.input {
-            crate::core::types::EmbeddingInput::Text(text) => {
+            crate::core::types::embedding::EmbeddingInput::Text(text) => {
                 body["input"] = json!(text);
             }
-            crate::core::types::EmbeddingInput::Array(array) => {
+            crate::core::types::embedding::EmbeddingInput::Array(array) => {
                 body["input"] = json!(array);
             }
         }
@@ -246,7 +247,7 @@ impl AzureEmbeddingUtils {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::EmbeddingInput;
+    use crate::core::types::embedding::EmbeddingInput;
 
     // ==================== Validation Tests ====================
 

@@ -4,7 +4,7 @@
 //! structures including RouterConfig, CircuitBreakerConfig, and RetryConfig.
 
 use super::trait_def::Validate;
-use crate::config::models::*;
+use crate::config::models::router::{CircuitBreakerConfig, LoadBalancerConfig, RouterConfig};
 use tracing::debug;
 
 impl Validate for RouterConfig {
@@ -51,6 +51,7 @@ impl Validate for LoadBalancerConfig {
 mod tests {
     use super::super::trait_def::Validate;
     use super::*; // Import the trait explicitly
+    use crate::config::models::provider::RetryConfig;
 
     // Helper to call the Validate trait method explicitly
     fn validate_config<T: Validate>(config: &T) -> Result<(), String> {

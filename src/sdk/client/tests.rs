@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 mod tests {
-    use super::super::client::LLMClient;
+    use super::super::llm_client::LLMClient;
     use crate::sdk::config::{ConfigBuilder, ProviderType};
     use crate::sdk::types::{ChatOptions, ChatRequest};
     use std::collections::HashMap;

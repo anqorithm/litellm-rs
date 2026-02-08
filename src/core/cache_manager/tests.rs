@@ -5,7 +5,7 @@ mod tests {
     use crate::core::cache_manager::manager::CacheManager;
     use crate::core::cache_manager::types::{CacheConfig, CacheKey};
     use crate::core::models::openai::*;
-    use crate::utils::error::Result;
+    use crate::utils::error::error::Result;
 
     #[tokio::test]
     async fn test_cache_manager() -> Result<()> {

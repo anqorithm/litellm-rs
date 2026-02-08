@@ -26,7 +26,7 @@ mod tests {
     use super::super::model_info;
     use super::*;
     use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
-    use crate::core::types::ProviderCapability;
+    use crate::core::types::model::ProviderCapability;
 
     #[tokio::test]
     async fn test_provider_creation() {

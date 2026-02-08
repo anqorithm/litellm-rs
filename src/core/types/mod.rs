@@ -26,25 +26,4 @@ pub mod config;
 pub mod errors;
 pub mod responses;
 
-// Re-export all public types from split modules
-pub use cache::*;
-pub use context::*;
-pub use health::*;
-pub use metrics::*;
-pub use model::*;
-pub use pagination::*;
-pub use service::*;
-
-pub use anthropic::*;
-pub use chat::*;
-pub use content::*;
-pub use embedding::*;
-pub use image::*;
-pub use message::*;
-pub use thinking::*;
-pub use tools::*;
-
-// Re-export from remaining original files
-pub use config::*;
-pub use errors::*;
-pub use responses::*;
+// No top-level type re-exports: use explicit module paths from call sites.

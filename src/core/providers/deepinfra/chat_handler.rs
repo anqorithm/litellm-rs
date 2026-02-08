@@ -5,7 +5,8 @@
 use crate::core::providers::deepinfra::DeepInfraConfig;
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::{
-    ChatRequest, RequestContext,
+    chat::ChatRequest,
+    context::RequestContext,
     responses::{ChatChunk, ChatResponse},
 };
 // Removed unused async_trait import

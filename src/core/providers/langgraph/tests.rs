@@ -5,7 +5,7 @@ use super::models::{
 };
 use super::*;
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::traits::ProviderConfig;
+use crate::core::traits::provider::ProviderConfig;
 use crate::core::traits::error_mapper::trait_def::ErrorMapper;
 
 // ==================== Config Tests ====================
@@ -311,7 +311,7 @@ fn test_provider_name() {
 #[test]
 fn test_provider_capabilities() {
     use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
-    use crate::core::types::ProviderCapability;
+    use crate::core::types::model::ProviderCapability;
 
     let config = LangGraphConfig::with_api_key("test-key");
     let provider = LangGraphProvider::new(config).unwrap();

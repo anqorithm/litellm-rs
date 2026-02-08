@@ -1,7 +1,7 @@
 //! Type definitions for streaming responses
 
 use crate::core::models::openai::Usage;
-use crate::core::types::MessageRole;
+use crate::core::types::message::MessageRole;
 use actix_web::web;
 
 /// Simple Event structure for SSE compatibility

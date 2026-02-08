@@ -4,7 +4,7 @@
 //! Note: Subscription functionality is temporarily disabled due to Redis API changes.
 
 use super::pool::RedisPool;
-use crate::utils::error::{GatewayError, Result};
+use crate::utils::error::error::{GatewayError, Result};
 use redis::AsyncCommands;
 
 /// Redis subscription wrapper

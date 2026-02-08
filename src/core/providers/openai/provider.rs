@@ -8,8 +8,13 @@ use std::pin::Pin;
 
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use crate::core::types::{
-    ChatRequest, EmbeddingRequest, HealthStatus, ImageGenerationRequest, ModelInfo,
-    ProviderCapability, RequestContext,
+    chat::ChatRequest,
+    context::RequestContext,
+    embedding::EmbeddingRequest,
+    health::HealthStatus,
+    image::ImageGenerationRequest,
+    model::ModelInfo,
+    model::ProviderCapability,
     responses::{ChatChunk, ChatResponse, EmbeddingResponse, ImageGenerationResponse},
 };
 
@@ -244,7 +249,7 @@ impl OpenAIProvider {
                 // Rough estimation: 1 token per 4 characters
                 if let Some(content) = &msg.content {
                     match content {
-                        crate::core::types::MessageContent::Text(text) => text.len() / 4,
+                        crate::core::types::message::MessageContent::Text(text) => text.len() / 4,
                         _ => 100, // Default for non-text content
                     }
                 } else {

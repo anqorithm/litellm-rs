@@ -4,11 +4,12 @@ use crate::core::models::RequestContext;
 use crate::core::models::openai::{EmbeddingRequest, EmbeddingResponse};
 use crate::core::providers::ProviderRegistry;
 use crate::core::types::{
-    EmbeddingInput, EmbeddingRequest as CoreEmbeddingRequest, ProviderCapability,
+    embedding::EmbeddingInput, embedding::EmbeddingRequest as CoreEmbeddingRequest,
+    model::ProviderCapability,
 };
 use crate::server::routes::errors;
 use crate::server::state::AppState;
-use crate::utils::error::GatewayError;
+use crate::utils::error::error::GatewayError;
 use actix_web::{HttpRequest, HttpResponse, Result as ActixResult, web};
 use tracing::{error, info};
 

@@ -1,6 +1,6 @@
 //! API validation utilities
 
-use crate::utils::error::{GatewayError, Result};
+use crate::utils::error::error::{GatewayError, Result};
 use uuid::Uuid;
 
 /// API validation utilities

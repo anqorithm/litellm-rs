@@ -7,7 +7,7 @@
 mod tests {
     use litellm_rs::core::providers::groq::{GroqConfig, GroqProvider};
     use litellm_rs::core::traits::provider::llm_provider::trait_definition::LLMProvider;
-    use litellm_rs::core::types::ProviderCapability;
+    use litellm_rs::core::types::model::ProviderCapability;
 
     /// Test Groq provider creation
     #[tokio::test]
@@ -103,8 +103,10 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn test_groq_real_chat_completion() {
-        use litellm_rs::core::types::RequestContext;
-        use litellm_rs::core::types::{ChatMessage, ChatRequest, MessageContent, MessageRole};
+        use litellm_rs::core::types::context::RequestContext;
+        use litellm_rs::core::types::{
+            chat::ChatMessage, chat::ChatRequest, message::MessageContent, message::MessageRole,
+        };
 
         let api_key =
             std::env::var("GROQ_API_KEY").expect("GROQ_API_KEY environment variable not set");

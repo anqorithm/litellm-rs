@@ -3,8 +3,8 @@
 use super::background::{start_cleanup_task, start_system_metrics_collection};
 use super::bounded::{BoundedPush, MAX_METRIC_SAMPLES, MAX_RECENT_EVENTS};
 use super::types::MetricsStorage;
-use crate::config::MonitoringConfig;
-use crate::utils::error::Result;
+use crate::config::models::monitoring::MonitoringConfig;
+use crate::utils::error::error::Result;
 use parking_lot::RwLock;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};

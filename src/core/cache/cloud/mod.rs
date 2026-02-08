@@ -26,7 +26,7 @@ use serde::{Serialize, de::DeserializeOwned};
 use std::time::Duration;
 
 use super::types::CacheKey;
-use crate::utils::error::Result;
+use crate::utils::error::error::Result;
 
 /// Trait for cloud storage cache backends
 #[async_trait]

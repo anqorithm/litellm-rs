@@ -5,8 +5,10 @@
 
 use crate::core::providers::{Provider, ProviderRegistry};
 use crate::core::types::responses::EmbeddingResponse;
-use crate::core::types::{EmbeddingInput as TypesEmbeddingInput, EmbeddingRequest};
-use crate::utils::error::{GatewayError, Result};
+use crate::core::types::{
+    embedding::EmbeddingInput as TypesEmbeddingInput, embedding::EmbeddingRequest,
+};
+use crate::utils::error::error::{GatewayError, Result};
 use std::sync::Arc;
 use tokio::sync::OnceCell;
 use tracing::debug;

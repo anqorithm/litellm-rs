@@ -5,7 +5,7 @@
 
 #![allow(dead_code)] // Tool module - functions may be used in the future
 
-use crate::utils::error::{GatewayError, Result};
+use crate::utils::error::error::{GatewayError, Result};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

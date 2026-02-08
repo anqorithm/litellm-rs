@@ -4,7 +4,7 @@
 mod tests {
     use super::super::*;
     use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
-    use crate::core::types::ProviderCapability;
+    use crate::core::types::model::ProviderCapability;
 
     #[tokio::test]
     async fn test_provider_creation() {
@@ -129,7 +129,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_chat_completion_not_supported() {
-        use crate::core::types::{ChatMessage, ChatRequest, MessageContent, MessageRole};
+        use crate::core::types::{
+            chat::ChatMessage, chat::ChatRequest, message::MessageContent, message::MessageRole,
+        };
 
         let provider = InfinityProvider::with_api_base("http://localhost:8080")
             .await
@@ -146,7 +148,10 @@ mod tests {
         };
 
         let result = provider
-            .chat_completion(request, crate::core::types::RequestContext::default())
+            .chat_completion(
+                request,
+                crate::core::types::context::RequestContext::default(),
+            )
             .await;
         assert!(result.is_err());
     }

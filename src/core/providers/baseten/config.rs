@@ -2,7 +2,7 @@
 //!
 //! Configuration for Baseten API access including authentication and model settings.
 
-use crate::core::traits::ProviderConfig;
+use crate::core::traits::provider::ProviderConfig;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::sync::LazyLock;

@@ -1,6 +1,6 @@
 //! Embedding methods (placeholder for future implementation)
 
-use super::client::LLMClient;
+use super::llm_client::LLMClient;
 use crate::sdk::errors::*;
 
 impl LLMClient {

@@ -15,13 +15,19 @@ use super::error::{BedrockError, BedrockErrorMapper};
 use super::model_config::get_model_config;
 use super::transformation;
 use super::utils::{CostCalculator, validate_region};
-use crate::core::traits::ProviderConfig as _;
+use crate::core::traits::provider::ProviderConfig as _;
 
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use crate::core::types::{
-    ChatMessage, ChatRequest, EmbeddingRequest, HealthStatus, MessageContent, MessageRole,
-    ModelInfo, ProviderCapability, RequestContext,
+    chat::ChatMessage, chat::ChatRequest,
+    context::RequestContext,
+    embedding::EmbeddingRequest,
+    health::HealthStatus,
+    message::MessageContent,
+    message::MessageRole,
+    model::ModelInfo,
+    model::ProviderCapability,
     responses::{ChatChunk, ChatResponse, EmbeddingResponse},
 };
 
@@ -91,7 +97,7 @@ impl BedrockProvider {
     /// Generate images using Bedrock image models
     pub async fn generate_image(
         &self,
-        request: &crate::core::types::ImageGenerationRequest,
+        request: &crate::core::types::image::ImageGenerationRequest,
     ) -> Result<crate::core::types::responses::ImageGenerationResponse, BedrockError> {
         super::images::execute_image_generation(&self.client, request).await
     }
@@ -142,7 +148,7 @@ impl BedrockProvider {
                     parts
                         .iter()
                         .filter_map(|part| {
-                            if let crate::core::types::ContentPart::Text { text } = part {
+                            if let crate::core::types::content::ContentPart::Text { text } = part {
                                 Some(text.clone())
                             } else {
                                 None

@@ -4,7 +4,7 @@
 
 #![allow(dead_code)]
 
-use crate::utils::error::{GatewayError, Result};
+use crate::utils::error::error::{GatewayError, Result};
 use regex::Regex;
 use std::collections::HashMap;
 use std::env;

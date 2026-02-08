@@ -3,8 +3,8 @@
 //! Modern unified API for chat completions in Bedrock
 
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::types::ChatRequest;
-use crate::core::types::{MessageContent, MessageRole};
+use crate::core::types::chat::ChatRequest;
+use crate::core::types::{message::MessageContent, message::MessageRole};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -220,7 +220,9 @@ fn transform_to_converse(request: &ChatRequest) -> Result<ConverseRequest, Provi
                             parts
                                 .iter()
                                 .filter_map(|part| {
-                                    if let crate::core::types::ContentPart::Text { text } = part {
+                                    if let crate::core::types::content::ContentPart::Text { text } =
+                                        part
+                                    {
                                         Some(text.clone())
                                     } else {
                                         None
@@ -255,30 +257,42 @@ fn transform_to_converse(request: &ChatRequest) -> Result<ConverseRequest, Provi
                                 .iter()
                                 .filter_map(|part| {
                                     match part {
-                                        crate::core::types::ContentPart::Text { text } => {
+                                        crate::core::types::content::ContentPart::Text { text } => {
                                             Some(ContentBlock::Text { text: text.clone() })
                                         }
-                                        crate::core::types::ContentPart::Image { .. } => {
+                                        crate::core::types::content::ContentPart::Image {
+                                            ..
+                                        } => {
                                             // TODO: Handle image content
                                             None
                                         }
-                                        crate::core::types::ContentPart::ImageUrl { .. } => {
+                                        crate::core::types::content::ContentPart::ImageUrl {
+                                            ..
+                                        } => {
                                             // TODO: Handle image URL content
                                             None
                                         }
-                                        crate::core::types::ContentPart::Audio { .. } => {
+                                        crate::core::types::content::ContentPart::Audio {
+                                            ..
+                                        } => {
                                             // TODO: Handle audio content
                                             None
                                         }
-                                        crate::core::types::ContentPart::Document { .. } => {
+                                        crate::core::types::content::ContentPart::Document {
+                                            ..
+                                        } => {
                                             // TODO: Handle document content
                                             None
                                         }
-                                        crate::core::types::ContentPart::ToolResult { .. } => {
+                                        crate::core::types::content::ContentPart::ToolResult {
+                                            ..
+                                        } => {
                                             // TODO: Handle tool result content
                                             None
                                         }
-                                        crate::core::types::ContentPart::ToolUse { .. } => {
+                                        crate::core::types::content::ContentPart::ToolUse {
+                                            ..
+                                        } => {
                                             // TODO: Handle tool use content
                                             None
                                         }
@@ -352,7 +366,7 @@ fn transform_to_converse(request: &ChatRequest) -> Result<ConverseRequest, Provi
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::{ChatMessage, MessageContent, MessageRole};
+    use crate::core::types::{chat::ChatMessage, message::MessageContent, message::MessageRole};
 
     // ==================== Data Structure Tests ====================
 

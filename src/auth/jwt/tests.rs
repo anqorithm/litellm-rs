@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod tests {
     use crate::auth::jwt::types::{JwtHandler, TokenType};
-    use crate::config::AuthConfig;
+    use crate::config::models::auth::AuthConfig;
     use uuid::Uuid;
 
     async fn create_test_handler() -> JwtHandler {
@@ -13,7 +13,7 @@ mod tests {
             api_key_header: "Authorization".to_string(),
             enable_api_key: true,
             enable_jwt: true,
-            rbac: crate::config::RbacConfig {
+            rbac: crate::config::models::auth::RbacConfig {
                 enabled: true,
                 default_role: "user".to_string(),
                 admin_roles: vec!["admin".to_string()],

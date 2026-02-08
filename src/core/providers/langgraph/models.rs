@@ -2,7 +2,7 @@
 //!
 //! Graph configurations, thread state, and model information for LangGraph Cloud
 
-use crate::core::types::ModelInfo;
+use crate::core::types::model::ModelInfo;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::OnceLock;

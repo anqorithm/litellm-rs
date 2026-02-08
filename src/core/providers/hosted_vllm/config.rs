@@ -3,7 +3,7 @@
 //! Configuration for connecting to hosted vLLM inference servers.
 //! vLLM servers provide an OpenAI-compatible API, so configuration is minimal.
 
-use crate::core::traits::ProviderConfig;
+use crate::core::traits::provider::ProviderConfig;
 use serde::{Deserialize, Serialize};
 
 /// Hosted vLLM provider configuration

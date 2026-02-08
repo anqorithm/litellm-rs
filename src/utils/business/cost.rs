@@ -2,8 +2,9 @@
 //!
 //! This module provides cost calculation functionality for different AI providers.
 
-use crate::core::models::metrics::{CostInfo, CostRates, TokenUsage};
-use crate::utils::error::{GatewayError, Result};
+use crate::core::models::metrics::cost::{CostInfo, CostRates};
+use crate::core::models::metrics::token::TokenUsage;
+use crate::utils::error::error::{GatewayError, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

@@ -11,8 +11,12 @@ use tracing::debug;
 use crate::core::{
     traits::{error_mapper::trait_def::ErrorMapper, provider::LLMProvider},
     types::{
-        ChatRequest, EmbeddingRequest, HealthStatus, ImageGenerationRequest, ModelInfo,
-        ProviderCapability, RequestContext,
+        chat::ChatRequest,
+        context::RequestContext,
+        embedding::EmbeddingRequest,
+        health::HealthStatus,
+        image::ImageGenerationRequest,
+        model::{ModelInfo, ProviderCapability},
         responses::{ChatResponse, EmbeddingResponse, ImageGenerationResponse},
     },
 };
@@ -397,8 +401,8 @@ impl LLMProvider for VertexAIProvider {
         "vertex_ai"
     }
 
-    fn capabilities(&self) -> &'static [crate::core::types::ProviderCapability] {
-        use crate::core::types::ProviderCapability;
+    fn capabilities(&self) -> &'static [crate::core::types::model::ProviderCapability] {
+        use crate::core::types::model::ProviderCapability;
         &[
             ProviderCapability::ChatCompletion,
             ProviderCapability::ChatCompletionStream,
@@ -808,9 +812,9 @@ impl LLMProvider for VertexAIProvider {
             model: model.to_string(),
             choices: vec![crate::core::types::responses::ChatChoice {
                 index: 0,
-                message: crate::core::types::ChatMessage {
-                    role: crate::core::types::MessageRole::Assistant,
-                    content: Some(crate::core::types::MessageContent::Text(content)),
+                message: crate::core::types::chat::ChatMessage {
+                    role: crate::core::types::message::MessageRole::Assistant,
+                    content: Some(crate::core::types::message::MessageContent::Text(content)),
                     thinking: None,
                     name: None,
                     tool_calls: None, // Handle
@@ -1116,7 +1120,7 @@ mod tests {
 
     #[test]
     fn test_provider_capabilities() {
-        use crate::core::types::ProviderCapability;
+        use crate::core::types::model::ProviderCapability;
         let expected = [
             ProviderCapability::ChatCompletion,
             ProviderCapability::ChatCompletionStream,

@@ -2,7 +2,7 @@
 
 use super::histogram::BoundedHistogram;
 use super::types::{MetricValue, TokenUsage};
-use crate::utils::error::Result;
+use crate::utils::error::error::Result;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;

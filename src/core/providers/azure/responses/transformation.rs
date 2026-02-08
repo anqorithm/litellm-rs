@@ -240,14 +240,18 @@ impl AzureResponseTransformation {
             if usage.get("prompt_tokens").is_none() && usage.get("input_tokens").is_some() {
                 if let Some(input_tokens) = usage.get("input_tokens").cloned() {
                     usage["prompt_tokens"] = input_tokens;
-                    usage.as_object_mut().unwrap().remove("input_tokens");
+                    if let Some(usage_obj) = usage.as_object_mut() {
+                        usage_obj.remove("input_tokens");
+                    }
                 }
             }
 
             if usage.get("completion_tokens").is_none() && usage.get("output_tokens").is_some() {
                 if let Some(output_tokens) = usage.get("output_tokens").cloned() {
                     usage["completion_tokens"] = output_tokens;
-                    usage.as_object_mut().unwrap().remove("output_tokens");
+                    if let Some(usage_obj) = usage.as_object_mut() {
+                        usage_obj.remove("output_tokens");
+                    }
                 }
             }
         }

@@ -1,7 +1,7 @@
 //! Audio transcription functionality
 
 use crate::core::providers::{Provider, ProviderRegistry};
-use crate::utils::error::{GatewayError, Result};
+use crate::utils::error::error::{GatewayError, Result};
 use std::sync::Arc;
 use tracing::{debug, info};
 

@@ -11,7 +11,7 @@ mod translation;
 pub mod types;
 
 use crate::core::providers::ProviderRegistry;
-use crate::utils::error::Result;
+use crate::utils::error::error::Result;
 use std::sync::Arc;
 
 // Internal service imports

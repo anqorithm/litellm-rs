@@ -15,7 +15,11 @@ use crate::core::providers::base::{
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use crate::core::types::{
-    ChatRequest, HealthStatus, ModelInfo, ProviderCapability, RequestContext,
+    chat::ChatRequest,
+    context::RequestContext,
+    health::HealthStatus,
+    model::ModelInfo,
+    model::ProviderCapability,
     responses::{ChatChunk, ChatResponse},
 };
 
@@ -266,10 +270,10 @@ impl OpenAIProvider {
     pub fn get_model_info(
         &self,
         model_id: &str,
-    ) -> Result<crate::core::types::ModelInfo, ProviderError> {
+    ) -> Result<crate::core::types::model::ModelInfo, ProviderError> {
         // Return a default ModelInfo for any model
         // Like Python LiteLLM, we don't validate models locally
-        use crate::core::types::ModelInfo;
+        use crate::core::types::model::ModelInfo;
         Ok(ModelInfo {
             id: model_id.to_string(),
             name: model_id.to_string(),

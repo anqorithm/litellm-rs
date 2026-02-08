@@ -7,8 +7,8 @@ use super::{
 };
 
 use crate::core::providers::{Provider, ProviderRegistry, ProviderType};
-use crate::core::types::{ChatRequest, RequestContext};
-use crate::utils::error::{GatewayError, Result};
+use crate::core::types::{chat::ChatRequest, context::RequestContext};
+use crate::utils::error::error::{GatewayError, Result};
 use async_trait::async_trait;
 use futures::stream::StreamExt;
 use std::sync::Arc;
@@ -284,7 +284,7 @@ pub async fn completion_stream(
 
 /// Convert ChatChunk (from provider) to CompletionChunk (for streaming API)
 fn convert_chat_chunk_to_completion_chunk(
-    chunk: crate::core::types::ChatChunk,
+    chunk: crate::core::types::responses::ChatChunk,
 ) -> stream::CompletionChunk {
     stream::CompletionChunk {
         id: chunk.id,

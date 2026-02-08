@@ -3,9 +3,9 @@
 #[cfg(test)]
 mod tests {
     use super::super::*;
-    use crate::core::traits::ProviderConfig;
+    use crate::core::traits::provider::ProviderConfig;
     use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
-    use crate::core::types::ProviderCapability;
+    use crate::core::types::model::ProviderCapability;
 
     // ==================== Configuration Tests ====================
 
@@ -256,13 +256,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_transform_request() {
-        use crate::core::types::{ChatMessage, MessageContent, MessageRole};
+        use crate::core::types::{chat::ChatMessage, message::MessageContent, message::MessageRole};
 
         let provider = VLLMProvider::with_api_base("http://localhost:8000/v1")
             .await
             .unwrap();
 
-        let request = crate::core::types::ChatRequest {
+        let request = crate::core::types::chat::ChatRequest {
             model: "test-model".to_string(),
             messages: vec![ChatMessage {
                 role: MessageRole::User,
@@ -274,7 +274,7 @@ mod tests {
             ..Default::default()
         };
 
-        let context = crate::core::types::RequestContext::default();
+        let context = crate::core::types::context::RequestContext::default();
         let result = provider.transform_request(request, context).await;
 
         assert!(result.is_ok());
@@ -318,7 +318,7 @@ mod tests {
     #[test]
     fn test_streaming_response_to_chunks() {
         use crate::core::types::responses::{ChatChoice, ChatResponse, FinishReason, Usage};
-        use crate::core::types::{ChatMessage, MessageContent};
+        use crate::core::types::{chat::ChatMessage, message::MessageContent};
 
         let response = ChatResponse {
             id: "test-id".to_string(),
@@ -329,7 +329,7 @@ mod tests {
             choices: vec![ChatChoice {
                 index: 0,
                 message: ChatMessage {
-                    role: crate::core::types::MessageRole::Assistant,
+                    role: crate::core::types::message::MessageRole::Assistant,
                     content: Some(MessageContent::Text("Hello world".to_string())),
                     name: None,
                     tool_calls: None,

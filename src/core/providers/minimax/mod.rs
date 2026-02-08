@@ -18,11 +18,16 @@ use crate::core::providers::base_provider::{
 };
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::{
-    ProviderConfig, error_mapper::trait_def::ErrorMapper,
+    provider::ProviderConfig, error_mapper::trait_def::ErrorMapper,
     provider::llm_provider::trait_definition::LLMProvider,
 };
 use crate::core::types::{
-    ChatRequest, EmbeddingRequest, HealthStatus, ModelInfo, ProviderCapability, RequestContext,
+    chat::ChatRequest,
+    context::RequestContext,
+    embedding::EmbeddingRequest,
+    health::HealthStatus,
+    model::ModelInfo,
+    model::ProviderCapability,
     responses::{ChatChunk, ChatResponse, EmbeddingResponse},
 };
 
@@ -476,7 +481,7 @@ impl LLMProvider for MinimaxProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::{ChatMessage, MessageContent, MessageRole};
+    use crate::core::types::{chat::ChatMessage, message::MessageContent, message::MessageRole};
 
     fn create_test_config() -> MinimaxConfig {
         MinimaxConfig {
@@ -780,7 +785,7 @@ mod tests {
     async fn test_embeddings_not_supported() {
         let provider = MinimaxProvider::new(create_test_config()).await.unwrap();
 
-        let request = crate::core::types::EmbeddingRequest {
+        let request = crate::core::types::embedding::EmbeddingRequest {
             model: "MiniMax-M2.1".to_string(),
             input: crate::core::types::embedding::EmbeddingInput::Text("test".to_string()),
             encoding_format: None,

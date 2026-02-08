@@ -1,6 +1,6 @@
 //! Helper functions for message creation
 
-use crate::core::types::{ChatMessage, MessageContent, MessageRole};
+use crate::core::types::{chat::ChatMessage, message::MessageContent, message::MessageRole};
 
 /// Convert messages to chat messages (no-op since Message is an alias)
 pub fn convert_messages_to_chat_messages(messages: Vec<ChatMessage>) -> Vec<ChatMessage> {
@@ -39,7 +39,7 @@ pub fn assistant_message_with_thinking(
     content: impl Into<String>,
     thinking: impl Into<String>,
 ) -> ChatMessage {
-    use crate::core::types::ThinkingContent;
+    use crate::core::types::thinking::ThinkingContent;
 
     ChatMessage {
         role: MessageRole::Assistant,

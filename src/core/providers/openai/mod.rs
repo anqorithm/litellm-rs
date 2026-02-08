@@ -27,8 +27,7 @@ pub mod image_variations;
 pub mod realtime;
 pub mod vector_stores;
 
-// Re-exports for easy access
-pub use capabilities::*;
+// No top-level capability glob re-exports: use explicit module paths.
 pub use client::OpenAIProvider;
 pub use config::OpenAIConfig;
 pub use error::OpenAIError;

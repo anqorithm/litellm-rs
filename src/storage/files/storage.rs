@@ -1,7 +1,7 @@
 //! FileStorage enum implementation with dispatch methods
 
-use crate::config::FileStorageConfig;
-use crate::utils::error::{GatewayError, Result};
+use crate::config::models::file_storage::FileStorageConfig;
+use crate::utils::error::error::{GatewayError, Result};
 use tracing::info;
 
 use super::local::LocalStorage;

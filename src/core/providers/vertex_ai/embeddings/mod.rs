@@ -5,7 +5,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::core::types::{
-    EmbeddingInput, EmbeddingRequest,
+    embedding::EmbeddingInput,
+    embedding::EmbeddingRequest,
     responses::{EmbeddingData, EmbeddingResponse},
 };
 
@@ -426,7 +427,7 @@ impl BatchEmbeddingHandler {
         for chunk in inputs.chunks(self.batch_size) {
             let request = EmbeddingRequest {
                 model: self.model.model_id(),
-                input: crate::core::types::EmbeddingInput::Array(chunk.to_vec()),
+                input: crate::core::types::embedding::EmbeddingInput::Array(chunk.to_vec()),
                 encoding_format: None,
                 dimensions: None,
                 user: None,

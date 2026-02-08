@@ -2,10 +2,10 @@
 //!
 //! This module contains sliding window algorithms for tracking requests and tokens.
 
-use crate::utils::error::Result;
+use crate::utils::error::error::Result;
 use std::time::{Duration, Instant};
 
-use super::limiter::RateLimiter;
+use super::engine::RateLimiter;
 use super::types::{RateLimitResult, SlidingWindow};
 
 impl RateLimiter {

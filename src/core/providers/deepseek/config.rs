@@ -2,7 +2,7 @@
 //!
 //! Configuration
 
-use crate::core::traits::ProviderConfig;
+use crate::core::traits::provider::ProviderConfig;
 use crate::define_provider_config;
 
 // Configuration

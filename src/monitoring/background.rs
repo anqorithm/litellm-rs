@@ -1,6 +1,6 @@
 //! Background task implementations for MonitoringSystem
 
-use crate::utils::error::Result;
+use crate::utils::error::error::Result;
 use std::time::Duration;
 
 use tracing::{debug, warn};

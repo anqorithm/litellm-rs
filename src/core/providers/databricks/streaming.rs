@@ -6,7 +6,7 @@ use bytes::Bytes;
 use futures::{Stream, StreamExt};
 
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::types::MessageRole;
+use crate::core::types::message::MessageRole;
 use crate::core::types::responses::{ChatChunk, ChatDelta, ChatStreamChoice, FinishReason};
 
 /// Parse a single SSE line into a ChatChunk

@@ -3,7 +3,7 @@
 //! This module provides operations for Redis Lists and Sets data structures.
 
 use super::pool::RedisPool;
-use crate::utils::error::{GatewayError, Result};
+use crate::utils::error::error::{GatewayError, Result};
 use redis::{AsyncCommands, RedisResult};
 
 impl RedisPool {

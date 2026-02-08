@@ -1,6 +1,6 @@
 //! Provider selection and routing methods
 
-use super::client::LLMClient;
+use super::llm_client::LLMClient;
 use super::types::{LoadBalancingStrategy, ProviderStats};
 use crate::sdk::errors::*;
 use crate::sdk::types::{ChatRequest, Message};

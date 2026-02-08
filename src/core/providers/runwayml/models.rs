@@ -2,7 +2,7 @@
 //!
 //! Model registry and information for Runway ML video and image generation.
 
-use crate::core::types::{ModelInfo, ProviderCapability};
+use crate::core::types::{model::ModelInfo, model::ProviderCapability};
 use std::collections::HashMap;
 use std::sync::LazyLock;
 

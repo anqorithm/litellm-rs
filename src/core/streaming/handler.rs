@@ -2,8 +2,8 @@
 
 use super::types::{ChatCompletionChunk, ChatCompletionChunkChoice, ChatCompletionDelta, Event};
 use crate::core::models::openai::Usage;
-use crate::core::types::MessageRole;
-use crate::utils::error::Result;
+use crate::core::types::message::MessageRole;
+use crate::utils::error::error::Result;
 use actix_web::web;
 use futures::stream::{Stream, StreamExt};
 use serde_json::json;

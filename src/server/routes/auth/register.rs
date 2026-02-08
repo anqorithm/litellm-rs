@@ -23,7 +23,7 @@ pub async fn register(
         );
     }
 
-    if let Err(e) = crate::utils::config::ConfigValidator::validate_email(&request.email) {
+    if let Err(e) = crate::utils::config::helpers::ConfigValidator::validate_email(&request.email) {
         return Ok(
             HttpResponse::BadRequest().json(ApiResponse::<()>::error_for_type(e.to_string()))
         );

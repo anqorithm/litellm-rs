@@ -5,7 +5,7 @@ use crate::config::{
     AuthConfig, Config, GatewayConfig, ProviderConfig, ServerConfig, StorageConfig,
 };
 use crate::utils::data::type_utils::Builder;
-use crate::utils::error::{GatewayError, Result};
+use crate::utils::error::error::{GatewayError, Result};
 use std::collections::HashMap;
 
 impl ConfigBuilder {
@@ -69,11 +69,11 @@ impl ConfigBuilder {
             auth: self.auth.unwrap_or_default(),
             storage: self.storage.unwrap_or_default(),
             providers: self.providers,
-            router: crate::config::RouterConfig::default(),
-            monitoring: crate::config::MonitoringConfig::default(),
-            cache: crate::config::CacheConfig::default(),
-            rate_limit: crate::config::RateLimitConfig::default(),
-            enterprise: crate::config::EnterpriseConfig::default(),
+            router: crate::config::models::router::RouterConfig::default(),
+            monitoring: crate::config::models::monitoring::MonitoringConfig::default(),
+            cache: crate::config::models::cache::CacheConfig::default(),
+            rate_limit: crate::config::models::rate_limit::RateLimitConfig::default(),
+            enterprise: crate::config::models::enterprise::EnterpriseConfig::default(),
         };
 
         let config = Config { gateway };

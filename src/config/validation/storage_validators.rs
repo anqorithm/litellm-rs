@@ -4,15 +4,20 @@
 //! structures including StorageConfig, DatabaseConfig, RedisConfig, and VectorDbConfig.
 
 use super::trait_def::Validate;
-use crate::config::models::*;
+use crate::config::models::file_storage::VectorDbConfig;
+use crate::config::models::storage::{DatabaseConfig, RedisConfig, StorageConfig};
 use tracing::debug;
 
 impl Validate for StorageConfig {
     fn validate(&self) -> Result<(), String> {
         debug!("Validating storage configuration");
 
-        self.database.validate()?;
-        self.redis.validate()?;
+        if self.database.enabled {
+            self.database.validate()?;
+        }
+        if self.redis.enabled {
+            self.redis.validate()?;
+        }
 
         if let Some(vector_db) = &self.vector_db {
             vector_db.validate()?;
@@ -24,6 +29,10 @@ impl Validate for StorageConfig {
 
 impl Validate for DatabaseConfig {
     fn validate(&self) -> Result<(), String> {
+        if !self.enabled {
+            return Ok(());
+        }
+
         if self.url.is_empty() {
             return Err("Database URL cannot be empty".to_string());
         }
@@ -50,6 +59,10 @@ impl Validate for DatabaseConfig {
 
 impl Validate for RedisConfig {
     fn validate(&self) -> Result<(), String> {
+        if !self.enabled {
+            return Ok(());
+        }
+
         if self.url.is_empty() {
             return Err("Redis URL cannot be empty".to_string());
         }

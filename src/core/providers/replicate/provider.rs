@@ -11,10 +11,14 @@ use std::sync::Arc;
 
 use crate::core::providers::base::{GlobalPoolManager, HeaderPair, HttpMethod, header};
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::traits::{ProviderConfig, provider::llm_provider::trait_definition::LLMProvider};
+use crate::core::traits::{provider::ProviderConfig, provider::llm_provider::trait_definition::LLMProvider};
 use crate::core::types::{
-    ChatRequest, HealthStatus, ImageGenerationRequest, ModelInfo, ProviderCapability,
-    RequestContext,
+    chat::ChatRequest,
+    context::RequestContext,
+    health::HealthStatus,
+    image::ImageGenerationRequest,
+    model::ModelInfo,
+    model::ProviderCapability,
     responses::{ChatChunk, ChatResponse, ImageGenerationResponse},
 };
 
@@ -374,7 +378,7 @@ impl LLMProvider for ReplicateProvider {
             // Convert to a single chunk stream
             let content = response.choices.first().and_then(|c| {
                 c.message.content.as_ref().and_then(|mc| match mc {
-                    crate::core::types::MessageContent::Text(s) => Some(s.clone()),
+                    crate::core::types::message::MessageContent::Text(s) => Some(s.clone()),
                     _ => None,
                 })
             });
@@ -388,7 +392,7 @@ impl LLMProvider for ReplicateProvider {
                 choices: vec![crate::core::types::responses::ChatStreamChoice {
                     index: 0,
                     delta: crate::core::types::responses::ChatDelta {
-                        role: Some(crate::core::types::MessageRole::Assistant),
+                        role: Some(crate::core::types::message::MessageRole::Assistant),
                         content,
                         thinking: None,
                         tool_calls: None,
@@ -553,7 +557,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_transform_request() {
-        use crate::core::types::{ChatMessage, MessageContent, MessageRole};
+        use crate::core::types::{chat::ChatMessage, message::MessageContent, message::MessageRole};
 
         let config = ReplicateConfig::new("test-token");
         let provider = ReplicateProvider::new(config).unwrap();

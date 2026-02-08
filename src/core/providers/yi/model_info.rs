@@ -1,6 +1,6 @@
 //! Yi (01.AI) Model Information
 
-use crate::core::types::ModelInfo;
+use crate::core::types::model::ModelInfo;
 
 pub fn get_supported_models() -> Vec<ModelInfo> {
     vec![

@@ -7,9 +7,10 @@ mod provider_tests {
     use super::*;
     use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
     use crate::core::types::{
-        ChatMessage, ChatRequest, EmbeddingInput, EmbeddingRequest, MessageContent, MessageRole,
+        chat::ChatMessage, chat::ChatRequest, embedding::EmbeddingInput, embedding::EmbeddingRequest,
+        message::MessageContent, message::MessageRole,
     };
-    use crate::core::types::{ProviderCapability, RequestContext};
+    use crate::core::types::{context::RequestContext, model::ProviderCapability};
 
     async fn create_test_provider() -> VoyageProvider {
         let config = VoyageConfig {
@@ -322,7 +323,7 @@ mod model_info_tests {
 #[cfg(test)]
 mod config_tests {
     use super::config::*;
-    use crate::core::traits::ProviderConfig;
+    use crate::core::traits::provider::ProviderConfig;
 
     #[test]
     fn test_config_default() {

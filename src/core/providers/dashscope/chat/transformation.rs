@@ -6,8 +6,12 @@ use tracing::{debug, warn};
 use crate::core::providers::dashscope::DashscopeError;
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::{
-    ChatMessage, ChatRequest, FinishReason, FunctionCall, MessageContent, MessageRole, ToolCall,
-    responses::{ChatChoice, ChatResponse, Usage},
+    chat::ChatMessage, chat::ChatRequest,
+    message::MessageContent,
+    message::MessageRole,
+    responses::{ChatChoice, ChatResponse, FinishReason, Usage},
+    tools::FunctionCall,
+    tools::ToolCall,
 };
 
 /// Dashscope chat transformation handler
@@ -148,7 +152,9 @@ impl DashscopeChatTransformation {
                             let text_parts: Vec<String> = parts
                                 .iter()
                                 .filter_map(|part| {
-                                    if let crate::core::types::ContentPart::Text { text } = part {
+                                    if let crate::core::types::content::ContentPart::Text { text } =
+                                        part
+                                    {
                                         Some(text.clone())
                                     } else {
                                         None
@@ -614,10 +620,10 @@ mod tests {
         let messages = vec![ChatMessage {
             role: MessageRole::User,
             content: Some(MessageContent::Parts(vec![
-                crate::core::types::ContentPart::Text {
+                crate::core::types::content::ContentPart::Text {
                     text: "Hello".to_string(),
                 },
-                crate::core::types::ContentPart::Text {
+                crate::core::types::content::ContentPart::Text {
                     text: "World".to_string(),
                 },
             ])),

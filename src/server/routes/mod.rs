@@ -254,7 +254,7 @@ impl ListQuery {
 /// Error response helpers
 pub mod errors {
     use super::*;
-    use crate::utils::error::GatewayError;
+    use crate::utils::error::error::GatewayError;
 
     /// Convert GatewayError to HTTP response
     pub fn gateway_error_to_response(error: GatewayError) -> HttpResponse {

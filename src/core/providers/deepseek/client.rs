@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 
 use super::models::get_deepseek_registry;
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::types::{ChatRequest, ModelInfo, responses::ChatResponse};
+use crate::core::types::{chat::ChatRequest, model::ModelInfo, responses::ChatResponse};
 
 /// DeepSeek API client logic
 pub struct DeepSeekClient;
@@ -134,7 +134,7 @@ impl DeepSeekClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::{ChatMessage, MessageContent, MessageRole};
+    use crate::core::types::{chat::ChatMessage, message::MessageContent, message::MessageRole};
     use std::collections::HashMap;
 
     #[test]

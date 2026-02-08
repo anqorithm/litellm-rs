@@ -5,7 +5,7 @@ use super::optimizer::{CostOptimizer, OptimizationSuggestion};
 use super::reports::{GeneratedReport, ReportGenerator};
 use super::types::UserMetrics;
 use crate::storage::database::Database;
-use crate::utils::error::Result;
+use crate::utils::error::error::Result;
 use chrono::{DateTime, Duration, Utc};
 use std::sync::Arc;
 use tracing::info;

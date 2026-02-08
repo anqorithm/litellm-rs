@@ -2,7 +2,7 @@
 
 use crate::core::providers::bedrock::model_config::ModelConfig;
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::types::ChatRequest;
+use crate::core::types::chat::ChatRequest;
 use serde_json::{Value, json};
 
 /// Transform request for AI21 models
@@ -21,7 +21,7 @@ pub fn transform_request(
 
 /// Transform request for Jamba models
 fn transform_jamba_request(request: &ChatRequest) -> Result<Value, ProviderError> {
-    use crate::core::types::{MessageContent, MessageRole};
+    use crate::core::types::{message::MessageContent, message::MessageRole};
 
     let mut messages = Vec::new();
 
@@ -31,7 +31,7 @@ fn transform_jamba_request(request: &ChatRequest) -> Result<Value, ProviderError
             Some(MessageContent::Parts(parts)) => parts
                 .iter()
                 .filter_map(|part| {
-                    if let crate::core::types::ContentPart::Text { text } = part {
+                    if let crate::core::types::content::ContentPart::Text { text } = part {
                         Some(text.clone())
                     } else {
                         None
@@ -103,7 +103,7 @@ fn transform_jurassic_request(request: &ChatRequest) -> Result<Value, ProviderEr
 mod tests {
     use super::*;
     use crate::core::providers::bedrock::model_config::{BedrockApiType, BedrockModelFamily};
-    use crate::core::types::{ChatMessage, MessageContent, MessageRole};
+    use crate::core::types::{chat::ChatMessage, message::MessageContent, message::MessageRole};
 
     fn create_test_request(model: &str) -> ChatRequest {
         ChatRequest {

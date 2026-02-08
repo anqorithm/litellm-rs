@@ -2,7 +2,7 @@
 
 use crate::core::providers::bedrock::model_config::ModelConfig;
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::types::ChatRequest;
+use crate::core::types::chat::ChatRequest;
 use serde_json::{Value, json};
 
 /// Transform request for Meta Llama models
@@ -62,8 +62,8 @@ fn transform_llama2_request(request: &ChatRequest) -> Result<Value, ProviderErro
 }
 
 /// Format messages for Llama 2 prompt format
-fn format_llama2_prompt(messages: &[crate::core::types::ChatMessage]) -> String {
-    use crate::core::types::{MessageContent, MessageRole};
+fn format_llama2_prompt(messages: &[crate::core::types::chat::ChatMessage]) -> String {
+    use crate::core::types::{message::MessageContent, message::MessageRole};
 
     let mut prompt = String::from("<s>");
     let mut system_prompt = None;
@@ -74,7 +74,7 @@ fn format_llama2_prompt(messages: &[crate::core::types::ChatMessage]) -> String 
             Some(MessageContent::Parts(parts)) => parts
                 .iter()
                 .filter_map(|part| {
-                    if let crate::core::types::ContentPart::Text { text } = part {
+                    if let crate::core::types::content::ContentPart::Text { text } = part {
                         Some(text.clone())
                     } else {
                         None
@@ -114,7 +114,7 @@ fn format_llama2_prompt(messages: &[crate::core::types::ChatMessage]) -> String 
 mod tests {
     use super::*;
     use crate::core::providers::bedrock::model_config::{BedrockApiType, BedrockModelFamily};
-    use crate::core::types::{ChatMessage, MessageContent, MessageRole};
+    use crate::core::types::{chat::ChatMessage, message::MessageContent, message::MessageRole};
 
     fn create_test_request(model: &str) -> ChatRequest {
         ChatRequest {

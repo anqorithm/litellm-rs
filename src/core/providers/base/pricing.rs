@@ -200,8 +200,8 @@ impl PricingDatabase {
         &self,
         model_id: &str,
         provider: &str,
-    ) -> Option<crate::core::types::ModelInfo> {
-        use crate::core::types::ModelInfo;
+    ) -> Option<crate::core::types::model::ModelInfo> {
+        use crate::core::types::model::ModelInfo;
         use std::collections::HashMap;
 
         let pricing = self.get_model_info(model_id)?;

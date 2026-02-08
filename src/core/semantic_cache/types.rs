@@ -90,7 +90,7 @@ pub(super) struct CacheData {
 #[async_trait::async_trait]
 pub trait EmbeddingProvider: Send + Sync {
     /// Generate embedding for text
-    async fn generate_embedding(&self, text: &str) -> crate::utils::error::Result<Vec<f32>>;
+    async fn generate_embedding(&self, text: &str) -> crate::utils::error::error::Result<Vec<f32>>;
 
     /// Get embedding dimension
     fn embedding_dimension(&self) -> usize;

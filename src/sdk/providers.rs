@@ -69,8 +69,8 @@ impl ProviderRegistry {
 /// Convert SDK config to gateway config
 fn convert_to_gateway_config(
     config: &crate::sdk::config::ProviderConfig,
-) -> Result<crate::config::ProviderConfig> {
-    Ok(crate::config::ProviderConfig {
+) -> Result<crate::config::models::provider::ProviderConfig> {
+    Ok(crate::config::models::provider::ProviderConfig {
         name: config.id.clone(),
         provider_type: match &config.provider_type {
             crate::sdk::config::ProviderType::OpenAI => "openai".to_string(),
@@ -98,8 +98,8 @@ fn convert_to_gateway_config(
         tpm: config.rate_limit_tpm.unwrap_or(50000),
         enabled: config.enabled,
         max_concurrent_requests: 10, // Default value
-        retry: crate::config::RetryConfig::default(),
-        health_check: crate::config::HealthCheckConfig::default(),
+        retry: crate::config::models::provider::RetryConfig::default(),
+        health_check: crate::config::models::provider::HealthCheckConfig::default(),
         settings: HashMap::new(),
         tags: Vec::new(),
     })

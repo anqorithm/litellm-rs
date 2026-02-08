@@ -16,10 +16,15 @@ use crate::core::providers::base::{GlobalPoolManager, HttpMethod, header_owned};
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::error_mapper::trait_def::ErrorMapper;
 use crate::core::traits::{
-    ProviderConfig as _, provider::llm_provider::trait_definition::LLMProvider,
+    provider::ProviderConfig as _, provider::llm_provider::trait_definition::LLMProvider,
 };
 use crate::core::types::{
-    ChatRequest, EmbeddingRequest, HealthStatus, ModelInfo, ProviderCapability, RequestContext,
+    chat::ChatRequest,
+    context::RequestContext,
+    embedding::EmbeddingRequest,
+    health::HealthStatus,
+    model::ModelInfo,
+    model::ProviderCapability,
     responses::{ChatChunk, ChatResponse, EmbeddingResponse},
 };
 
@@ -156,7 +161,12 @@ impl OciProvider {
         });
 
         // Add optional parameters
-        let chat_request = payload.get_mut("chatRequest").unwrap();
+        let chat_request = payload.get_mut("chatRequest").ok_or_else(|| {
+            ProviderError::serialization(
+                "oci",
+                "Failed to build OCI payload: missing chatRequest field",
+            )
+        })?;
 
         if let Some(temp) = request.temperature {
             chat_request["temperature"] = serde_json::Value::Number(
@@ -466,9 +476,9 @@ fn transform_oci_response(response: serde_json::Value) -> Result<ChatResponse, P
         model,
         choices: vec![crate::core::types::responses::ChatChoice {
             index: 0,
-            message: crate::core::types::ChatMessage {
-                role: crate::core::types::MessageRole::Assistant,
-                content: Some(crate::core::types::MessageContent::Text(text)),
+            message: crate::core::types::chat::ChatMessage {
+                role: crate::core::types::message::MessageRole::Assistant,
+                content: Some(crate::core::types::message::MessageContent::Text(text)),
                 thinking: None,
                 name: None,
                 tool_calls: None,

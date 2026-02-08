@@ -4,10 +4,14 @@
 //! configuration structures including EnterpriseConfig and SsoConfig.
 
 use super::trait_def::Validate;
-use crate::config::models::*;
+use crate::config::models::enterprise::{EnterpriseConfig, SsoConfig};
 
 impl Validate for EnterpriseConfig {
     fn validate(&self) -> Result<(), String> {
+        if !self.enabled {
+            return Ok(());
+        }
+
         if let Some(sso) = &self.sso {
             sso.validate()?;
         }

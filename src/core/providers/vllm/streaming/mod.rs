@@ -6,7 +6,7 @@
 use super::error::VLLMError;
 use crate::core::providers::base::sse::{OpenAICompatibleTransformer, UnifiedSSEStream};
 use crate::core::types::responses::{ChatChunk, ChatDelta, ChatResponse, ChatStreamChoice};
-use crate::core::types::{MessageContent, MessageRole};
+use crate::core::types::{message::MessageContent, message::MessageRole};
 use bytes::Bytes;
 use futures::Stream;
 use std::pin::Pin;
@@ -164,7 +164,7 @@ mod tests {
     use crate::core::types::responses::{ChatChoice, FinishReason, Usage};
 
     fn create_test_response() -> ChatResponse {
-        use crate::core::types::ChatMessage;
+        use crate::core::types::chat::ChatMessage;
 
         ChatResponse {
             id: "test-id".to_string(),

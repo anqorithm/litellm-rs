@@ -86,7 +86,7 @@ pub mod version; // Build and version information
 
 // Re-export main types
 pub use config::Config;
-pub use utils::error::{GatewayError, Result};
+pub use utils::error::error::{GatewayError, Result};
 pub use version::{BuildInfo, GIT_HASH, VERSION, build_info, full_version};
 
 // Export core completion functionality (Python LiteLLM compatible)
@@ -109,7 +109,7 @@ pub use core::streaming::types::{
 };
 
 // Export unified type system
-pub use core::types::{MessageContent, MessageRole};
+pub use core::types::message::{MessageContent, MessageRole};
 
 // Export core functionality
 pub use core::models::{RequestContext, openai::*};

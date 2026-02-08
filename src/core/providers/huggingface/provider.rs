@@ -13,11 +13,16 @@ use crate::core::providers::base_provider::{
     BaseHttpClient, BaseProviderConfig, HeaderBuilder, HttpErrorMapper,
 };
 use crate::core::traits::{
-    ProviderConfig, error_mapper::trait_def::ErrorMapper,
+    provider::ProviderConfig, error_mapper::trait_def::ErrorMapper,
     provider::llm_provider::trait_definition::LLMProvider,
 };
 use crate::core::types::{
-    ChatRequest, EmbeddingRequest, HealthStatus, ModelInfo, ProviderCapability, RequestContext,
+    chat::ChatRequest,
+    context::RequestContext,
+    embedding::EmbeddingRequest,
+    health::HealthStatus,
+    model::ModelInfo,
+    model::ProviderCapability,
     responses::{ChatChunk, ChatResponse, EmbeddingResponse},
 };
 
@@ -567,8 +572,8 @@ impl LLMProvider for HuggingFaceProvider {
 
         // Calculate input count for usage estimation
         let input_count = match &request.input {
-            crate::core::types::EmbeddingInput::Text(_) => 1,
-            crate::core::types::EmbeddingInput::Array(arr) => arr.len(),
+            crate::core::types::embedding::EmbeddingInput::Text(_) => 1,
+            crate::core::types::embedding::EmbeddingInput::Array(arr) => arr.len(),
         };
 
         self.embedding_handler

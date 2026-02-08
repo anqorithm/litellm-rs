@@ -2,7 +2,7 @@
 
 use super::destinations::LogDestination;
 use super::types::LogEntry;
-use crate::utils::error::{GatewayError, Result};
+use crate::utils::error::error::{GatewayError, Result};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
