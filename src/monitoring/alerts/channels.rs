@@ -10,7 +10,6 @@ use tokio::net::TcpStream;
 
 /// Notification channel trait
 #[async_trait::async_trait]
-#[allow(dead_code)]
 pub trait NotificationChannel: Send + Sync + std::fmt::Debug {
     /// Send a notification
     async fn send(&self, alert: &Alert) -> Result<()>;
@@ -33,7 +32,6 @@ pub struct SlackChannel {
 
 /// Email notification channel
 #[derive(Debug)]
-#[allow(dead_code)]
 pub struct EmailChannel {
     smtp_config: SmtpConfig,
     recipients: Vec<String>,
@@ -42,7 +40,6 @@ pub struct EmailChannel {
 
 /// SMTP configuration
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct SmtpConfig {
     pub server: String,
     pub port: u16,
@@ -51,7 +48,6 @@ pub struct SmtpConfig {
     pub from_address: String,
 }
 
-#[allow(dead_code)]
 impl SlackChannel {
     /// Create a new Slack notification channel
     pub fn new(
@@ -137,7 +133,6 @@ impl NotificationChannel for SlackChannel {
     }
 }
 
-#[allow(dead_code)]
 impl EmailChannel {
     /// Create a new email notification channel
     pub fn new(

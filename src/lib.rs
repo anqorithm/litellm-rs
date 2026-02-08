@@ -74,7 +74,7 @@ mod auth;
 pub mod config;
 pub mod core;
 #[cfg(feature = "storage")]
-mod monitoring;
+pub mod monitoring;
 pub mod sdk; // New SDK module
 #[cfg(feature = "storage")]
 pub mod server;

@@ -237,7 +237,7 @@ macro_rules! provider_config {
         pub struct $name {
             $(
                 $(#[$field_meta])*
-                $(#[serde(default = concat!("default_", stringify!($field)))])?
+                $(#[serde(default = stringify!($field))])?
                 pub $field: $field_type,
             )*
         }
@@ -254,7 +254,6 @@ macro_rules! provider_config {
 
         $(
             $(
-                #[allow(dead_code)]
                 fn $field() -> $field_type {
                     provider_config!(@default $field_type $(, $default)?)
                 }
