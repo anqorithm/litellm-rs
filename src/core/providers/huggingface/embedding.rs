@@ -11,19 +11,12 @@ use crate::core::types::responses::{EmbeddingData, EmbeddingResponse, Usage};
 
 /// HuggingFace embedding handler
 #[derive(Debug, Clone)]
-pub struct HuggingFaceEmbeddingHandler {
-    config: HuggingFaceConfig,
-}
+pub struct HuggingFaceEmbeddingHandler;
 
 impl HuggingFaceEmbeddingHandler {
     /// Create a new embedding handler
-    pub fn new(config: HuggingFaceConfig) -> Self {
-        Self { config }
-    }
-
-    /// Get the config
-    pub fn config(&self) -> &HuggingFaceConfig {
-        &self.config
+    pub fn new(_config: HuggingFaceConfig) -> Self {
+        Self
     }
 
     /// Transform an embedding request to HuggingFace format
