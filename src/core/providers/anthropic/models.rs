@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
-use crate::core::types::ModelInfo;
+use crate::core::types::model::ModelInfo;
 
 /// Model
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -148,9 +148,9 @@ impl AnthropicModelRegistry {
                     output_cost_per_1k_tokens: Some(0.025), // $25/1M output
                     currency: "USD".to_string(),
                     capabilities: vec![
-                        crate::core::types::ProviderCapability::ChatCompletion,
-                        crate::core::types::ProviderCapability::ChatCompletionStream,
-                        crate::core::types::ProviderCapability::ToolCalling,
+                        crate::core::types::model::ProviderCapability::ChatCompletion,
+                        crate::core::types::model::ProviderCapability::ChatCompletionStream,
+                        crate::core::types::model::ProviderCapability::ToolCalling,
                     ],
                     created_at: None,
                     updated_at: None,
@@ -202,9 +202,9 @@ impl AnthropicModelRegistry {
                     output_cost_per_1k_tokens: Some(0.025), // $25/1M output
                     currency: "USD".to_string(),
                     capabilities: vec![
-                        crate::core::types::ProviderCapability::ChatCompletion,
-                        crate::core::types::ProviderCapability::ChatCompletionStream,
-                        crate::core::types::ProviderCapability::ToolCalling,
+                        crate::core::types::model::ProviderCapability::ChatCompletion,
+                        crate::core::types::model::ProviderCapability::ChatCompletionStream,
+                        crate::core::types::model::ProviderCapability::ToolCalling,
                     ],
                     created_at: None,
                     updated_at: None,
@@ -256,9 +256,9 @@ impl AnthropicModelRegistry {
                     output_cost_per_1k_tokens: Some(0.015),
                     currency: "USD".to_string(),
                     capabilities: vec![
-                        crate::core::types::ProviderCapability::ChatCompletion,
-                        crate::core::types::ProviderCapability::ChatCompletionStream,
-                        crate::core::types::ProviderCapability::ToolCalling,
+                        crate::core::types::model::ProviderCapability::ChatCompletion,
+                        crate::core::types::model::ProviderCapability::ChatCompletionStream,
+                        crate::core::types::model::ProviderCapability::ToolCalling,
                     ],
                     created_at: None,
                     updated_at: None,
@@ -310,9 +310,9 @@ impl AnthropicModelRegistry {
                     output_cost_per_1k_tokens: Some(0.015),
                     currency: "USD".to_string(),
                     capabilities: vec![
-                        crate::core::types::ProviderCapability::ChatCompletion,
-                        crate::core::types::ProviderCapability::ChatCompletionStream,
-                        crate::core::types::ProviderCapability::ToolCalling,
+                        crate::core::types::model::ProviderCapability::ChatCompletion,
+                        crate::core::types::model::ProviderCapability::ChatCompletionStream,
+                        crate::core::types::model::ProviderCapability::ToolCalling,
                     ],
                     created_at: None,
                     updated_at: None,
@@ -364,9 +364,9 @@ impl AnthropicModelRegistry {
                     output_cost_per_1k_tokens: Some(0.005),
                     currency: "USD".to_string(),
                     capabilities: vec![
-                        crate::core::types::ProviderCapability::ChatCompletion,
-                        crate::core::types::ProviderCapability::ChatCompletionStream,
-                        crate::core::types::ProviderCapability::ToolCalling,
+                        crate::core::types::model::ProviderCapability::ChatCompletion,
+                        crate::core::types::model::ProviderCapability::ChatCompletionStream,
+                        crate::core::types::model::ProviderCapability::ToolCalling,
                     ],
                     created_at: None,
                     updated_at: None,
@@ -416,9 +416,9 @@ impl AnthropicModelRegistry {
                     output_cost_per_1k_tokens: Some(0.015),
                     currency: "USD".to_string(),
                     capabilities: vec![
-                        crate::core::types::ProviderCapability::ChatCompletion,
-                        crate::core::types::ProviderCapability::ChatCompletionStream,
-                        crate::core::types::ProviderCapability::ToolCalling,
+                        crate::core::types::model::ProviderCapability::ChatCompletion,
+                        crate::core::types::model::ProviderCapability::ChatCompletionStream,
+                        crate::core::types::model::ProviderCapability::ToolCalling,
                     ],
                     created_at: None,
                     updated_at: None,
@@ -470,9 +470,9 @@ impl AnthropicModelRegistry {
                     output_cost_per_1k_tokens: Some(0.075),
                     currency: "USD".to_string(),
                     capabilities: vec![
-                        crate::core::types::ProviderCapability::ChatCompletion,
-                        crate::core::types::ProviderCapability::ChatCompletionStream,
-                        crate::core::types::ProviderCapability::ToolCalling,
+                        crate::core::types::model::ProviderCapability::ChatCompletion,
+                        crate::core::types::model::ProviderCapability::ChatCompletionStream,
+                        crate::core::types::model::ProviderCapability::ToolCalling,
                     ],
                     created_at: None,
                     updated_at: None,
@@ -522,9 +522,9 @@ impl AnthropicModelRegistry {
                     output_cost_per_1k_tokens: Some(0.015),
                     currency: "USD".to_string(),
                     capabilities: vec![
-                        crate::core::types::ProviderCapability::ChatCompletion,
-                        crate::core::types::ProviderCapability::ChatCompletionStream,
-                        crate::core::types::ProviderCapability::ToolCalling,
+                        crate::core::types::model::ProviderCapability::ChatCompletion,
+                        crate::core::types::model::ProviderCapability::ChatCompletionStream,
+                        crate::core::types::model::ProviderCapability::ToolCalling,
                     ],
                     created_at: None,
                     updated_at: None,
@@ -574,9 +574,9 @@ impl AnthropicModelRegistry {
                     output_cost_per_1k_tokens: Some(0.00125),
                     currency: "USD".to_string(),
                     capabilities: vec![
-                        crate::core::types::ProviderCapability::ChatCompletion,
-                        crate::core::types::ProviderCapability::ChatCompletionStream,
-                        crate::core::types::ProviderCapability::ToolCalling,
+                        crate::core::types::model::ProviderCapability::ChatCompletion,
+                        crate::core::types::model::ProviderCapability::ChatCompletionStream,
+                        crate::core::types::model::ProviderCapability::ToolCalling,
                     ],
                     created_at: None,
                     updated_at: None,
@@ -626,8 +626,8 @@ impl AnthropicModelRegistry {
                     output_cost_per_1k_tokens: Some(0.024),
                     currency: "USD".to_string(),
                     capabilities: vec![
-                        crate::core::types::ProviderCapability::ChatCompletion,
-                        crate::core::types::ProviderCapability::ChatCompletionStream,
+                        crate::core::types::model::ProviderCapability::ChatCompletion,
+                        crate::core::types::model::ProviderCapability::ChatCompletionStream,
                     ],
                     created_at: None,
                     updated_at: None,
@@ -669,8 +669,8 @@ impl AnthropicModelRegistry {
                     output_cost_per_1k_tokens: Some(0.0024),
                     currency: "USD".to_string(),
                     capabilities: vec![
-                        crate::core::types::ProviderCapability::ChatCompletion,
-                        crate::core::types::ProviderCapability::ChatCompletionStream,
+                        crate::core::types::model::ProviderCapability::ChatCompletion,
+                        crate::core::types::model::ProviderCapability::ChatCompletionStream,
                     ],
                     created_at: None,
                     updated_at: None,
@@ -901,9 +901,7 @@ mod tests {
         let registry = get_anthropic_registry();
 
         // Test latest flagship model
-        let opus_spec = registry
-            .get_model_spec("claude-opus-4-6")
-            .unwrap();
+        let opus_spec = registry.get_model_spec("claude-opus-4-6").unwrap();
         assert_eq!(opus_spec.family, AnthropicModelFamily::ClaudeOpus46);
         assert!(
             opus_spec

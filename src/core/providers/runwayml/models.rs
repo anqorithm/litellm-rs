@@ -2,9 +2,9 @@
 //!
 //! Model registry and information for Runway ML video and image generation.
 
-use crate::core::types::{ModelInfo, ProviderCapability};
-use std::sync::LazyLock;
+use crate::core::types::{model::ModelInfo, model::ProviderCapability};
 use std::collections::HashMap;
+use std::sync::LazyLock;
 
 /// Runway ML model types
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -232,7 +232,8 @@ impl Default for RunwayMLModelRegistry {
 }
 
 /// Global model registry instance
-pub static RUNWAYML_REGISTRY: LazyLock<RunwayMLModelRegistry> = LazyLock::new(RunwayMLModelRegistry::new);
+pub static RUNWAYML_REGISTRY: LazyLock<RunwayMLModelRegistry> =
+    LazyLock::new(RunwayMLModelRegistry::new);
 
 /// Get the global Runway ML model registry
 pub fn get_runwayml_registry() -> &'static RunwayMLModelRegistry {

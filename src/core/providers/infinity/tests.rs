@@ -4,7 +4,7 @@
 mod tests {
     use super::super::*;
     use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
-    use crate::core::types::ProviderCapability;
+    use crate::core::types::model::ProviderCapability;
 
     #[tokio::test]
     async fn test_provider_creation() {
@@ -146,10 +146,7 @@ mod tests {
         };
 
         let result = provider
-            .chat_completion(
-                request,
-                crate::core::types::RequestContext::default(),
-            )
+            .chat_completion(request, crate::core::types::RequestContext::default())
             .await;
         assert!(result.is_err());
     }

@@ -10,7 +10,7 @@ use crate::core::providers::ProviderRegistry;
 use crate::core::streaming::types::{
     ChatCompletionChunk, ChatCompletionChunkChoice, ChatCompletionDelta, Event,
 };
-use crate::core::types::{self, ProviderCapability};
+use crate::core::types::{self, model::ProviderCapability};
 use crate::server::routes::errors;
 use crate::server::state::AppState;
 use crate::utils::data::validation::RequestValidator;
@@ -556,8 +556,14 @@ mod tests {
 
     #[test]
     fn test_convert_finish_reason() {
-        assert_eq!(convert_finish_reason(types::responses::FinishReason::Stop), "stop");
-        assert_eq!(convert_finish_reason(types::responses::FinishReason::Length), "length");
+        assert_eq!(
+            convert_finish_reason(types::responses::FinishReason::Stop),
+            "stop"
+        );
+        assert_eq!(
+            convert_finish_reason(types::responses::FinishReason::Length),
+            "length"
+        );
         assert_eq!(
             convert_finish_reason(types::responses::FinishReason::ToolCalls),
             "tool_calls"

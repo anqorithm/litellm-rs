@@ -12,7 +12,8 @@ use crate::core::{
         provider::{LLMProvider, ProviderConfig},
     },
     types::{
-        ChatRequest, ModelInfo, ProviderCapability, RequestContext, health::HealthStatus,
+        ChatRequest, RequestContext, health::HealthStatus, model::ModelInfo,
+        model::ProviderCapability,
         responses::ChatResponse,
     },
 };

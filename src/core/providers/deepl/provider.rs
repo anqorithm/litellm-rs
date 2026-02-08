@@ -36,7 +36,7 @@ crate::define_http_provider_with_hooks!(
     error_mapper: super::error_mapper::DeepLErrorMapper,
     model_info: super::model_info::get_supported_models,
     capabilities: &[
-        crate::core::types::ProviderCapability::AudioTranslation,
+        crate::core::types::model::ProviderCapability::AudioTranslation,
     ],
     url_builder: |provider: &DeepLProvider| -> String {
         let base_url = provider
@@ -340,7 +340,7 @@ mod tests {
     use super::super::config::DeepLConfig;
     use super::*;
     use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
-    use crate::core::types::ProviderCapability;
+    use crate::core::types::model::ProviderCapability;
 
     #[tokio::test]
     async fn test_provider_creation() {

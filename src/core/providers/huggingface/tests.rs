@@ -2,8 +2,8 @@
 
 use super::*;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
-use crate::core::types::{ProviderCapability, RequestContext};
 use crate::core::types::{ChatMessage, ChatRequest, MessageContent, MessageRole};
+use crate::core::types::{RequestContext, model::ProviderCapability};
 
 fn create_test_config() -> HuggingFaceConfig {
     HuggingFaceConfig::new("hf_test_api_key")

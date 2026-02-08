@@ -3,7 +3,7 @@
 //! Unit tests for OCI provider.
 
 use super::*;
-use crate::core::types::{ProviderCapability, RequestContext};
+use crate::core::types::{model::ProviderCapability, RequestContext};
 use crate::core::types::health::HealthStatus;
 use crate::core::types::EmbeddingRequest;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;

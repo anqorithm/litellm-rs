@@ -1,6 +1,6 @@
 //! ExaAi Model Information
 
-use crate::core::types::ModelInfo;
+use crate::core::types::model::ModelInfo;
 use std::collections::HashMap;
 
 pub struct ExaAiModelRegistry;
@@ -20,8 +20,8 @@ impl ExaAiModelRegistry {
             output_cost_per_1k_tokens: None,
             currency: "USD".to_string(),
             capabilities: vec![
-                crate::core::types::ProviderCapability::ChatCompletion,
-                crate::core::types::ProviderCapability::ChatCompletionStream,
+                crate::core::types::model::ProviderCapability::ChatCompletion,
+                crate::core::types::model::ProviderCapability::ChatCompletionStream,
             ],
             created_at: None,
             updated_at: None,

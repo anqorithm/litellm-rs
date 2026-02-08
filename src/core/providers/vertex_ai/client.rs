@@ -11,9 +11,9 @@ use tracing::debug;
 use crate::core::{
     traits::{error_mapper::trait_def::ErrorMapper, provider::LLMProvider},
     types::{
-        ChatRequest, EmbeddingRequest, ImageGenerationRequest, ModelInfo, ProviderCapability,
-        RequestContext,
+        ChatRequest, EmbeddingRequest, ImageGenerationRequest, RequestContext,
         health::HealthStatus,
+        model::{ModelInfo, ProviderCapability},
         responses::{ChatResponse, EmbeddingResponse, ImageGenerationResponse},
     },
 };
@@ -398,8 +398,8 @@ impl LLMProvider for VertexAIProvider {
         "vertex_ai"
     }
 
-    fn capabilities(&self) -> &'static [crate::core::types::ProviderCapability] {
-        use crate::core::types::ProviderCapability;
+    fn capabilities(&self) -> &'static [crate::core::types::model::ProviderCapability] {
+        use crate::core::types::model::ProviderCapability;
         &[
             ProviderCapability::ChatCompletion,
             ProviderCapability::ChatCompletionStream,
@@ -1117,7 +1117,7 @@ mod tests {
 
     #[test]
     fn test_provider_capabilities() {
-        use crate::core::types::ProviderCapability;
+        use crate::core::types::model::ProviderCapability;
         let expected = [
             ProviderCapability::ChatCompletion,
             ProviderCapability::ChatCompletionStream,

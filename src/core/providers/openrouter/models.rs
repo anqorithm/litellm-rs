@@ -2,7 +2,7 @@
 //!
 //! Model specifications and registry for OpenRouter API
 
-use crate::core::types::ModelInfo;
+use crate::core::types::model::ModelInfo;
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
@@ -88,17 +88,17 @@ impl OpenRouterModelRegistry {
                 currency: "USD".to_string(),
                 capabilities: {
                     let mut caps =
-                        vec![crate::core::types::ProviderCapability::ChatCompletion];
+                        vec![crate::core::types::model::ProviderCapability::ChatCompletion];
                     if spec.features.contains(&OpenRouterModelFeature::Streaming) {
                         caps.push(
-                            crate::core::types::ProviderCapability::ChatCompletionStream,
+                            crate::core::types::model::ProviderCapability::ChatCompletionStream,
                         );
                     }
                     if spec
                         .features
                         .contains(&OpenRouterModelFeature::FunctionCalling)
                     {
-                        caps.push(crate::core::types::ProviderCapability::FunctionCalling);
+                        caps.push(crate::core::types::model::ProviderCapability::FunctionCalling);
                     }
                     caps
                 },

@@ -5,7 +5,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::core::types::ModelInfo;
+use crate::core::types::model::ModelInfo;
 
 /// HuggingFace task types for inference
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]

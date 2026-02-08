@@ -5,7 +5,7 @@
 use super::*;
 use crate::core::providers::base::GlobalPoolManager;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
-use crate::core::types::ProviderCapability;
+use crate::core::types::model::ProviderCapability;
 use crate::core::types::{ChatMessage, ChatRequest, MessageContent, MessageRole};
 use std::collections::HashMap;
 use std::sync::Arc;

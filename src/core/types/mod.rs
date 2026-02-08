@@ -33,7 +33,6 @@ pub use context::*;
 pub use embedding::*;
 pub use image::*;
 pub use message::*;
-pub use model::*;
 pub use thinking::*;
 pub use tools::*;
 

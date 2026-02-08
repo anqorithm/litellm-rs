@@ -302,10 +302,10 @@ async fn test_nvidia_nim_provider_capabilities() {
     let provider = NvidiaNimProvider::with_api_key("nvapi-test-key").await.unwrap();
     let capabilities = provider.capabilities();
 
-    assert!(capabilities.contains(&crate::core::types::ProviderCapability::ChatCompletion));
-    assert!(capabilities.contains(&crate::core::types::ProviderCapability::ChatCompletionStream));
-    assert!(capabilities.contains(&crate::core::types::ProviderCapability::ToolCalling));
-    assert!(capabilities.contains(&crate::core::types::ProviderCapability::Embeddings));
+    assert!(capabilities.contains(&crate::core::types::model::ProviderCapability::ChatCompletion));
+    assert!(capabilities.contains(&crate::core::types::model::ProviderCapability::ChatCompletionStream));
+    assert!(capabilities.contains(&crate::core::types::model::ProviderCapability::ToolCalling));
+    assert!(capabilities.contains(&crate::core::types::model::ProviderCapability::Embeddings));
 }
 
 #[tokio::test]

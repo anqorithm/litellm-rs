@@ -9,7 +9,7 @@ use serde_json::{Value, json};
 use super::models::get_perplexity_registry;
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::MessageRole;
-use crate::core::types::{ChatRequest, ModelInfo, responses::ChatResponse};
+use crate::core::types::{ChatRequest, model::ModelInfo, responses::ChatResponse};
 
 /// Perplexity-specific response with citations
 #[derive(Debug, Clone, Serialize, Deserialize)]

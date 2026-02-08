@@ -2,7 +2,7 @@
 //!
 //! Dynamic model support - accepts any model name and passes it through
 
-use crate::core::types::{ModelInfo, ProviderCapability};
+use crate::core::types::{model::ModelInfo, model::ProviderCapability};
 use std::collections::HashMap;
 
 /// OpenAI-like model registry

@@ -14,7 +14,7 @@ use crate::core::providers::base::GlobalPoolManager;
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::ProviderConfig as _;
 use crate::core::types::health::HealthStatus;
-use crate::core::types::{ModelInfo, ProviderCapability};
+use crate::core::types::{model::ModelInfo, model::ProviderCapability};
 
 /// Provider name constant
 const PROVIDER_NAME: &str = "elevenlabs";

@@ -311,7 +311,7 @@ fn test_provider_name() {
 #[test]
 fn test_provider_capabilities() {
     use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
-    use crate::core::types::ProviderCapability;
+    use crate::core::types::model::ProviderCapability;
 
     let config = LangGraphConfig::with_api_key("test-key");
     let provider = LangGraphProvider::new(config).unwrap();

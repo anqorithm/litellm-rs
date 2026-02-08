@@ -18,7 +18,7 @@ use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use crate::core::types::health::HealthStatus;
 use crate::core::types::responses::{ChatChunk, ChatResponse, EmbeddingResponse};
 use crate::core::types::{ChatRequest, EmbeddingRequest};
-use crate::core::types::{ModelInfo, ProviderCapability, RequestContext};
+use crate::core::types::{RequestContext, model::ModelInfo, model::ProviderCapability};
 
 /// Static capabilities for Snowflake provider
 const SNOWFLAKE_CAPABILITIES: &[ProviderCapability] = &[

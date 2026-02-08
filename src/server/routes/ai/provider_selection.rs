@@ -1,7 +1,7 @@
 //! Provider selection helpers for AI routes
 
 use crate::core::providers::{Provider, ProviderRegistry};
-use crate::core::types::ProviderCapability;
+use crate::core::types::model::ProviderCapability;
 use crate::utils::error::GatewayError;
 
 pub struct ProviderSelection<'a> {

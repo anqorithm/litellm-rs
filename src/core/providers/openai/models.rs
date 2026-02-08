@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::sync::OnceLock;
 
 use crate::core::providers::base::get_pricing_db;
-use crate::core::types::{ModelInfo, ProviderCapability};
+use crate::core::types::{model::ModelInfo, model::ProviderCapability};
 
 /// OpenAI-specific model features
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -239,8 +239,7 @@ impl OpenAIModelRegistry {
         }
 
         // O-series reasoning models
-        if model_id.starts_with("o1") || model_id.starts_with("o3") || model_id.starts_with("o4")
-        {
+        if model_id.starts_with("o1") || model_id.starts_with("o3") || model_id.starts_with("o4") {
             features.push(OpenAIModelFeature::ReasoningMode);
         }
 

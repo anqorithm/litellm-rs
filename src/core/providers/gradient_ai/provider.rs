@@ -18,8 +18,10 @@ use crate::core::traits::{
     ProviderConfig as _, provider::llm_provider::trait_definition::LLMProvider,
 };
 use crate::core::types::{
-    ChatRequest, EmbeddingRequest, ModelInfo, ProviderCapability, RequestContext,
+    ChatRequest, EmbeddingRequest, RequestContext,
     health::HealthStatus,
+    model::ModelInfo,
+    model::ProviderCapability,
     responses::{ChatChunk, ChatResponse, EmbeddingResponse},
 };
 

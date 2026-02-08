@@ -570,7 +570,7 @@ macro_rules! define_openai_compatible_provider {
         pub struct $struct_name {
             config: $config_type,
             http_client: std::sync::Arc<reqwest::Client>,
-            supported_models: Vec<$crate::core::types::ModelInfo>,
+            supported_models: Vec<$crate::core::types::model::ModelInfo>,
         }
 
         impl $struct_name {
@@ -627,14 +627,14 @@ macro_rules! define_openai_compatible_provider {
                 $provider_name
             }
 
-            fn capabilities(&self) -> &'static [$crate::core::types::ProviderCapability] {
+            fn capabilities(&self) -> &'static [$crate::core::types::model::ProviderCapability] {
                 &[
-                    $crate::core::types::ProviderCapability::ChatCompletion,
-                    $crate::core::types::ProviderCapability::ChatCompletionStream,
+                    $crate::core::types::model::ProviderCapability::ChatCompletion,
+                    $crate::core::types::model::ProviderCapability::ChatCompletionStream,
                 ]
             }
 
-            fn models(&self) -> &[$crate::core::types::ModelInfo] {
+            fn models(&self) -> &[$crate::core::types::model::ModelInfo] {
                 &self.supported_models
             }
 
@@ -1004,7 +1004,7 @@ macro_rules! define_http_provider_with_hooks {
         pub struct $struct_name {
             config: $config_type,
             http_client: std::sync::Arc<reqwest::Client>,
-            supported_models: Vec<$crate::core::types::ModelInfo>,
+            supported_models: Vec<$crate::core::types::model::ModelInfo>,
         }
 
         impl $struct_name {
@@ -1052,11 +1052,11 @@ macro_rules! define_http_provider_with_hooks {
                 $provider_name
             }
 
-            fn capabilities(&self) -> &'static [$crate::core::types::ProviderCapability] {
+            fn capabilities(&self) -> &'static [$crate::core::types::model::ProviderCapability] {
                 $capabilities
             }
 
-            fn models(&self) -> &[$crate::core::types::ModelInfo] {
+            fn models(&self) -> &[$crate::core::types::model::ModelInfo] {
                 &self.supported_models
             }
 
@@ -1207,7 +1207,7 @@ macro_rules! define_pooled_http_provider_with_hooks {
         pub struct $struct_name {
             config: $config_type,
             pool_manager: std::sync::Arc<$crate::core::providers::base::GlobalPoolManager>,
-            supported_models: Vec<$crate::core::types::ModelInfo>,
+            supported_models: Vec<$crate::core::types::model::ModelInfo>,
         }
 
         impl $struct_name {
@@ -1259,11 +1259,11 @@ macro_rules! define_pooled_http_provider_with_hooks {
                 $provider_name
             }
 
-            fn capabilities(&self) -> &'static [$crate::core::types::ProviderCapability] {
+            fn capabilities(&self) -> &'static [$crate::core::types::model::ProviderCapability] {
                 $capabilities
             }
 
-            fn models(&self) -> &[$crate::core::types::ModelInfo] {
+            fn models(&self) -> &[$crate::core::types::model::ModelInfo] {
                 &self.supported_models
             }
 

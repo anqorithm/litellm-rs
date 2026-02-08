@@ -8,7 +8,8 @@ use std::collections::HashMap;
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::health::HealthStatus;
 use crate::core::types::{
-    ChatRequest, ModelInfo, ProviderCapability, responses::ChatResponse, thinking::ThinkingContent,
+    ChatRequest, model::ModelInfo, model::ProviderCapability, responses::ChatResponse,
+    thinking::ThinkingContent,
 };
 
 use super::config::OpenRouterConfig;

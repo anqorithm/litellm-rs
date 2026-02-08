@@ -2,11 +2,11 @@
 //!
 //! Shares model_prices_and_context_window.json data with Python version
 
-use std::sync::LazyLock;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
+use std::sync::LazyLock;
 use tracing::warn;
 
 /// Model
@@ -200,8 +200,8 @@ impl PricingDatabase {
         &self,
         model_id: &str,
         provider: &str,
-    ) -> Option<crate::core::types::ModelInfo> {
-        use crate::core::types::ModelInfo;
+    ) -> Option<crate::core::types::model::ModelInfo> {
+        use crate::core::types::model::ModelInfo;
         use std::collections::HashMap;
 
         let pricing = self.get_model_info(model_id)?;

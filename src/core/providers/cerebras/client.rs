@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 
 use super::models::get_cerebras_registry;
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::types::{ChatRequest, ModelInfo, responses::ChatResponse};
+use crate::core::types::{ChatRequest, model::ModelInfo, responses::ChatResponse};
 
 /// Cerebras API client logic
 pub struct CerebrasClient;

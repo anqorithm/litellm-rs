@@ -144,7 +144,7 @@ use crate::core::types::responses::{
     ChatChunk, ChatResponse, EmbeddingResponse, ImageGenerationResponse,
 };
 use crate::core::types::{ChatRequest, EmbeddingRequest, ImageGenerationRequest};
-use crate::core::types::{ProviderCapability, RequestContext};
+use crate::core::types::{RequestContext, model::ProviderCapability};
 use chrono::{DateTime, Utc};
 pub use contextual_error::ContextualError;
 pub use provider_registry::ProviderRegistry;
@@ -545,7 +545,7 @@ impl Provider {
     }
 
     /// List available models
-    pub fn list_models(&self) -> &[crate::core::types::ModelInfo] {
+    pub fn list_models(&self) -> &[crate::core::types::model::ModelInfo] {
         use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
         dispatch_provider_value!(self, models)
     }
@@ -658,7 +658,7 @@ impl Provider {
     pub async fn get_model(
         &self,
         model_id: &str,
-    ) -> Result<Option<crate::core::types::ModelInfo>, UnifiedProviderError> {
+    ) -> Result<Option<crate::core::types::model::ModelInfo>, UnifiedProviderError> {
         // Look through available models for this provider
         let models = self.list_models();
         for model in models {
