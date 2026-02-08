@@ -163,12 +163,6 @@ impl WebhookManager {
         }
     }
 
-    /// Deliver a single webhook
-    pub(super) async fn deliver_webhook(&self, delivery: &mut WebhookDelivery) -> Result<()> {
-        let config = self.get_webhook_config(&delivery.webhook_id).await?;
-        self.deliver_webhook_internal(delivery, &config).await
-    }
-
     /// Generate webhook signature
     pub(super) fn generate_signature(
         &self,

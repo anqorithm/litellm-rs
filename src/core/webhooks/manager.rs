@@ -143,15 +143,6 @@ impl WebhookManager {
         Ok(())
     }
 
-    /// Get webhook configuration
-    pub(super) async fn get_webhook_config(&self, webhook_id: &str) -> Result<WebhookConfig> {
-        let data = self.data.read().await;
-        data.webhooks
-            .get(webhook_id)
-            .cloned()
-            .ok_or_else(|| GatewayError::NotFound(format!("Webhook not found: {}", webhook_id)))
-    }
-
     /// Get webhook statistics
     pub async fn get_stats(&self) -> WebhookStats {
         self.data.read().await.stats.clone()
