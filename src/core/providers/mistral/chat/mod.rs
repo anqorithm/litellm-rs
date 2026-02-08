@@ -15,15 +15,13 @@ pub use transformation::MistralChatTransformation;
 /// Mistral chat handler - simplified implementation using new type system
 #[derive(Debug, Clone)]
 pub struct MistralChatHandler {
-    config: MistralConfig,
     transformation: MistralChatTransformation,
 }
 
 impl MistralChatHandler {
     /// Create a new chat handler
-    pub fn new(config: MistralConfig) -> Result<Self, MistralError> {
+    pub fn new(_config: MistralConfig) -> Result<Self, MistralError> {
         Ok(Self {
-            config,
             transformation: MistralChatTransformation::new(),
         })
     }
