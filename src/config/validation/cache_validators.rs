@@ -9,6 +9,10 @@ use crate::config::models::rate_limit::RateLimitConfig;
 
 impl Validate for CacheConfig {
     fn validate(&self) -> Result<(), String> {
+        if !self.enabled {
+            return Ok(());
+        }
+
         if self.ttl == 0 {
             return Err("Cache TTL must be greater than 0".to_string());
         }
@@ -29,6 +33,10 @@ impl Validate for CacheConfig {
 
 impl Validate for RateLimitConfig {
     fn validate(&self) -> Result<(), String> {
+        if !self.enabled {
+            return Ok(());
+        }
+
         if self.default_rpm == 0 {
             return Err("Default RPM must be greater than 0".to_string());
         }
