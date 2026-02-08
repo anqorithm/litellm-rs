@@ -40,7 +40,6 @@ pub struct VLLMProvider {
     config: VLLMConfig,
     pool_manager: Arc<GlobalPoolManager>,
     models: Vec<ModelInfo>,
-    served_model: Option<VLLMModelInfo>,
 }
 
 impl VLLMProvider {
@@ -57,10 +56,8 @@ impl VLLMProvider {
         })?);
 
         // Build model list - vLLM serves a specific model
-        let served_model = config.model.as_ref().map(|m| get_or_create_model_info(m));
-
-        let models = if let Some(ref model_info) = served_model {
-            vec![model_info_to_gateway_model(model_info)]
+        let models = if let Some(model_info) = config.model.as_ref().map(|m| get_or_create_model_info(m)) {
+            vec![model_info_to_gateway_model(&model_info)]
         } else {
             // If no model specified, return empty - will be populated on first request
             vec![]
@@ -70,7 +67,6 @@ impl VLLMProvider {
             config,
             pool_manager,
             models,
-            served_model,
         })
     }
 
