@@ -115,7 +115,7 @@ impl ConnectionPool {
     ///
     /// Use this only when you need a separate connection pool from the global one.
     /// Most use cases should use `new()` which shares the global client.
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub fn new_isolated() -> Result<Self, ProviderError> {
         let client = Client::builder()
             .timeout(Duration::from_secs(PoolConfig::TIMEOUT_SECS))

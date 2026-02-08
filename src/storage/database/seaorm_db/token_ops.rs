@@ -90,18 +90,4 @@ impl SeaOrmDatabase {
 
         Ok(())
     }
-
-    /// Clean up expired password reset tokens
-    #[allow(dead_code)] // Reserved for future token cleanup functionality
-    pub async fn cleanup_expired_tokens(&self) -> Result<u64> {
-        debug!("Cleaning up expired password reset tokens");
-
-        let result = entities::PasswordResetToken::delete_many()
-            .filter(password_reset_token::Column::ExpiresAt.lt(chrono::Utc::now()))
-            .exec(&self.db)
-            .await
-            .map_err(GatewayError::Database)?;
-
-        Ok(result.rows_affected)
-    }
 }
