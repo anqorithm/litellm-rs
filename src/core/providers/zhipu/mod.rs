@@ -15,8 +15,9 @@ use crate::core::traits::{
     provider::llm_provider::trait_definition::LLMProvider,
 };
 use crate::core::types::{
-    HealthStatus, ModelInfo, ProviderCapability, RequestContext,
-    ChatRequest, EmbeddingRequest, ImageGenerationRequest,
+    ChatRequest, EmbeddingRequest, ImageGenerationRequest, ModelInfo, ProviderCapability,
+    RequestContext,
+    health::HealthStatus,
     responses::{ChatChunk, ChatResponse, EmbeddingResponse, ImageGenerationResponse},
 };
 

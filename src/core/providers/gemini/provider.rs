@@ -13,8 +13,9 @@ use crate::core::providers::base::GlobalPoolManager;
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::{ProviderConfig, provider::llm_provider::trait_definition::LLMProvider};
 use crate::core::types::{
-    HealthStatus, ModelInfo, ProviderCapability, RequestContext,
-    ChatRequest, EmbeddingRequest, ImageGenerationRequest,
+    ChatRequest, EmbeddingRequest, ImageGenerationRequest, ModelInfo, ProviderCapability,
+    RequestContext,
+    health::HealthStatus,
     responses::{ChatChunk, ChatResponse, EmbeddingResponse, ImageGenerationResponse},
 };
 

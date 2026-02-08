@@ -140,11 +140,11 @@ mod unified_provider_tests;
 
 // Export main types
 pub use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
-use crate::core::types::{ProviderCapability, RequestContext};
-use crate::core::types::{ChatRequest, EmbeddingRequest, ImageGenerationRequest};
 use crate::core::types::responses::{
     ChatChunk, ChatResponse, EmbeddingResponse, ImageGenerationResponse,
 };
+use crate::core::types::{ChatRequest, EmbeddingRequest, ImageGenerationRequest};
+use crate::core::types::{ProviderCapability, RequestContext};
 use chrono::{DateTime, Utc};
 pub use contextual_error::ContextualError;
 pub use provider_registry::ProviderRegistry;
@@ -539,7 +539,7 @@ impl Provider {
     }
 
     /// Execute health check
-    pub async fn health_check(&self) -> crate::core::types::HealthStatus {
+    pub async fn health_check(&self) -> crate::core::types::health::HealthStatus {
         use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
         dispatch_provider_async_direct!(self, health_check)
     }

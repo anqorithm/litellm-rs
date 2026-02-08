@@ -27,14 +27,13 @@ pub mod errors;
 pub mod responses;
 
 // Re-export selected high-traffic modules only
-pub use context::*;
-pub use health::*;
-pub use model::*;
 pub use chat::*;
 pub use content::*;
+pub use context::*;
 pub use embedding::*;
 pub use image::*;
 pub use message::*;
+pub use model::*;
 pub use thinking::*;
 pub use tools::*;
 

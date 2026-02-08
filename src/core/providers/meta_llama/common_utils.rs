@@ -13,7 +13,7 @@ use tracing::{debug, error, warn};
 
 use super::LlamaProviderConfig;
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::types::HealthStatus;
+use crate::core::types::health::HealthStatus;
 use crate::utils::net::http::create_custom_client;
 
 /// Provider name constant

@@ -13,7 +13,8 @@ use super::tts::{self, TextToSpeechRequest, TextToSpeechResponse, VoiceSettings}
 use crate::core::providers::base::GlobalPoolManager;
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::ProviderConfig as _;
-use crate::core::types::{HealthStatus, ModelInfo, ProviderCapability};
+use crate::core::types::health::HealthStatus;
+use crate::core::types::{ModelInfo, ProviderCapability};
 
 /// Provider name constant
 const PROVIDER_NAME: &str = "elevenlabs";

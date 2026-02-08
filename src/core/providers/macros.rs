@@ -834,8 +834,8 @@ macro_rules! define_openai_compatible_provider {
                 ))
             }
 
-            async fn health_check(&self) -> $crate::core::types::HealthStatus {
-                $crate::core::types::HealthStatus::Healthy
+            async fn health_check(&self) -> $crate::core::types::health::HealthStatus {
+                $crate::core::types::health::HealthStatus::Healthy
             }
 
             async fn calculate_cost(
@@ -1159,7 +1159,7 @@ macro_rules! define_http_provider_with_hooks {
                 ))
             }
 
-            async fn health_check(&self) -> $crate::core::types::HealthStatus {
+            async fn health_check(&self) -> $crate::core::types::health::HealthStatus {
                 ($health_check)(self).await
             }
 
@@ -1351,7 +1351,7 @@ macro_rules! define_pooled_http_provider_with_hooks {
                 ($streaming)(self, request, context).await
             }
 
-            async fn health_check(&self) -> $crate::core::types::HealthStatus {
+            async fn health_check(&self) -> $crate::core::types::health::HealthStatus {
                 ($health_check)(self).await
             }
 

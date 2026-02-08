@@ -186,10 +186,10 @@ crate::define_http_provider_with_hooks!(
 
             match req_builder.send().await {
                 Ok(response) if response.status().is_success() => {
-                    crate::core::types::HealthStatus::Healthy
+                    crate::core::types::health::HealthStatus::Healthy
                 }
-                Ok(_) => crate::core::types::HealthStatus::Unhealthy,
-                Err(_) => crate::core::types::HealthStatus::Unhealthy,
+                Ok(_) => crate::core::types::health::HealthStatus::Unhealthy,
+                Err(_) => crate::core::types::health::HealthStatus::Unhealthy,
             }
         }
     },

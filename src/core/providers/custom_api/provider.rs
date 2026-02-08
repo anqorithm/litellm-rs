@@ -118,7 +118,7 @@ crate::define_http_provider_with_hooks!(
         }
     },
     health_check: |_provider: &CustomHttpxProvider| async {
-        crate::core::types::HealthStatus::Healthy
+        crate::core::types::health::HealthStatus::Healthy
     },
     streaming_error: "Streaming not yet implemented",
 );

@@ -17,8 +17,8 @@ use crate::core::providers::base::{GlobalPoolManager, HttpMethod, header};
 use crate::core::traits::ProviderConfig as _;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use crate::core::types::{
-    HealthStatus, ModelInfo, ProviderCapability, RequestContext,
-    ChatRequest, EmbeddingInput, EmbeddingRequest,
+    ChatRequest, EmbeddingInput, EmbeddingRequest, ModelInfo, ProviderCapability, RequestContext,
+    health::HealthStatus,
     responses::{ChatChunk, ChatResponse, EmbeddingData, EmbeddingResponse, Usage},
 };
 
