@@ -81,8 +81,6 @@
 //! - [`key_generator`] - Cache key generation utilities
 //! - [`llm_cache`] - LLM-specific caching for chat and embeddings
 
-#![allow(dead_code)]
-
 pub mod cloud;
 pub mod dual;
 pub mod key_generator;
