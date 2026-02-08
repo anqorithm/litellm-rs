@@ -12,7 +12,6 @@ use std::collections::HashMap;
 #[derive(Debug, Clone)]
 pub struct CostCalculator {
     /// Provider cost configurations
-    #[allow(dead_code)]
     provider_costs: HashMap<String, ProviderCostConfig>,
 }
 
@@ -75,7 +74,6 @@ impl CostCalculator {
     }
 
     /// Load cost configuration from file
-    #[allow(dead_code)]
     pub fn from_file(path: &str) -> Result<Self> {
         let content = std::fs::read_to_string(path)
             .map_err(|e| GatewayError::Config(format!("Failed to read cost config: {}", e)))?;
@@ -87,7 +85,6 @@ impl CostCalculator {
     }
 
     /// Calculate cost for a request
-    #[allow(dead_code)]
     pub fn calculate_cost(
         &self,
         provider: &str,
@@ -165,7 +162,6 @@ impl CostCalculator {
     }
 
     /// Get cost rates for a model
-    #[allow(dead_code)]
     pub fn get_cost_rates(&self, provider: &str, model: &str) -> Result<CostRates> {
         let provider_config = self
             .provider_costs
@@ -191,19 +187,16 @@ impl CostCalculator {
     }
 
     /// Add or update provider cost configuration
-    #[allow(dead_code)]
     pub fn add_provider_config(&mut self, config: ProviderCostConfig) {
         self.provider_costs.insert(config.provider.clone(), config);
     }
 
     /// Get all supported providers
-    #[allow(dead_code)]
     pub fn get_providers(&self) -> Vec<String> {
         self.provider_costs.keys().cloned().collect()
     }
 
     /// Get models for a provider
-    #[allow(dead_code)]
     pub fn get_models(&self, provider: &str) -> Vec<String> {
         if let Some(config) = self.provider_costs.get(provider) {
             config.models.keys().cloned().collect()
@@ -336,13 +329,11 @@ impl Default for CostCalculator {
 /// Utility functions for cost calculations
 pub mod utils {
     /// Convert cost between currencies (simplified)
-    #[allow(dead_code)]
     pub fn convert_currency(amount: f64, from: &str, to: &str, rate: f64) -> f64 {
         if from == to { amount } else { amount * rate }
     }
 
     /// Calculate cost savings between two providers
-    #[allow(dead_code)]
     pub fn calculate_savings(cost1: f64, cost2: f64) -> (f64, f64) {
         let savings = (cost1 - cost2).abs();
         let percentage = if cost1 > 0.0 {
@@ -354,7 +345,6 @@ pub mod utils {
     }
 
     /// Estimate monthly cost based on usage patterns
-    #[allow(dead_code)]
     pub fn estimate_monthly_cost(
         daily_requests: u32,
         avg_input_tokens: u32,
@@ -369,7 +359,6 @@ pub mod utils {
     }
 
     /// Calculate cost per request
-    #[allow(dead_code)]
     pub fn cost_per_request(total_cost: f64, request_count: u32) -> f64 {
         if request_count > 0 {
             total_cost / request_count as f64
