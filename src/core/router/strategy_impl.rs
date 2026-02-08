@@ -399,7 +399,8 @@ mod tests {
         deployments.insert("d1".to_string(), create_test_deployment("d1", config).await);
 
         let candidates = vec!["d1".to_string()];
-        let selected = weighted_random(&candidates, &deployments).unwrap();
+        let selected = weighted_random(&candidates, &deployments)
+            .expect("weighted_random should return a candidate for non-empty input");
         assert_eq!(selected, "d1");
     }
 
@@ -421,7 +422,8 @@ mod tests {
 
         // Run multiple times and verify result is always in candidates
         for _ in 0..100 {
-            let selected = weighted_random(&candidates, &deployments).unwrap();
+            let selected = weighted_random(&candidates, &deployments)
+                .expect("weighted_random should return a candidate for non-empty input");
             assert!(candidates.contains(&selected));
         }
     }
@@ -454,7 +456,8 @@ mod tests {
         let mut d2_count = 0;
 
         for _ in 0..1000 {
-            let selected = weighted_random(&candidates, &deployments).unwrap();
+            let selected = weighted_random(&candidates, &deployments)
+                .expect("weighted_random should return a candidate for non-empty input");
             if selected == "d1" {
                 d1_count += 1;
             } else {
@@ -487,7 +490,8 @@ mod tests {
 
         // Should fall back to uniform random
         for _ in 0..10 {
-            let selected = weighted_random(&candidates, &deployments).unwrap();
+            let selected = weighted_random(&candidates, &deployments)
+                .expect("weighted_random should return a candidate for non-empty input");
             assert!(candidates.contains(&selected));
         }
     }
@@ -510,7 +514,8 @@ mod tests {
         deployments.insert("d1".to_string(), create_test_deployment("d1", config).await);
 
         let candidates = vec!["d1".to_string()];
-        let selected = least_busy(&candidates, &deployments).unwrap();
+        let selected = least_busy(&candidates, &deployments)
+            .expect("least_busy should return a candidate for non-empty input");
         assert_eq!(selected, "d1");
     }
 
@@ -531,7 +536,8 @@ mod tests {
         deployments.insert("d3".to_string(), d3);
 
         let candidates = vec!["d1".to_string(), "d2".to_string(), "d3".to_string()];
-        let selected = least_busy(&candidates, &deployments).unwrap();
+        let selected = least_busy(&candidates, &deployments)
+            .expect("least_busy should return a candidate for non-empty input");
 
         // d2 has the fewest active requests
         assert_eq!(selected, "d2");
@@ -553,7 +559,8 @@ mod tests {
 
         // Result should be one of the tied deployments
         for _ in 0..10 {
-            let selected = least_busy(&candidates, &deployments).unwrap();
+            let selected = least_busy(&candidates, &deployments)
+                .expect("least_busy should return a candidate for non-empty input");
             assert!(selected == "d1" || selected == "d2");
         }
     }
@@ -568,7 +575,8 @@ mod tests {
         }
 
         let candidates: Vec<String> = (1..=3).map(|i| format!("d{}", i)).collect();
-        let selected = least_busy(&candidates, &deployments).unwrap();
+        let selected = least_busy(&candidates, &deployments)
+            .expect("least_busy should return a candidate for non-empty input");
         assert!(candidates.contains(&selected));
     }
 
