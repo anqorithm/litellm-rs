@@ -334,7 +334,6 @@ fn generate_span_id() -> String {
 /// Active span tracking
 struct ActiveSpan {
     span: Span,
-    request: LlmStartEvent,
 }
 
 /// Span batch for export
@@ -357,10 +356,6 @@ impl SpanBatch {
 
     fn len(&self) -> usize {
         self.spans.len()
-    }
-
-    fn is_empty(&self) -> bool {
-        self.spans.is_empty()
     }
 
     fn age(&self) -> Duration {
@@ -600,10 +595,7 @@ impl Integration for OpenTelemetryIntegration {
         }
 
         // Store active span
-        let active = ActiveSpan {
-            span,
-            request: event.clone(),
-        };
+        let active = ActiveSpan { span };
 
         self.active_spans
             .write()
@@ -698,10 +690,7 @@ impl Integration for OpenTelemetryIntegration {
             span = span.attribute("llm.provider", provider.clone());
         }
 
-        let active = ActiveSpan {
-            span,
-            request: LlmStartEvent::new(&event.request_id, &event.model),
-        };
+        let active = ActiveSpan { span };
 
         self.active_spans
             .write()
