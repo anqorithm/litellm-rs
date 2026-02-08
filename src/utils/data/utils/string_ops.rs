@@ -46,9 +46,11 @@ impl StringOps {
     }
 
     pub fn extract_urls_from_text(text: &str) -> Vec<String> {
-        let url_pattern = regex::Regex::new(
+        let Ok(url_pattern) = regex::Regex::new(
             r"https?://(?:[-\w.])+(?::[0-9]+)?(?:/(?:[\w/_.])*(?:\?(?:[\w&=%.])*)?(?:#(?:[\w.])*)?)?")
-            .unwrap();
+        else {
+            return Vec::new();
+        };
 
         url_pattern
             .find_iter(text)
