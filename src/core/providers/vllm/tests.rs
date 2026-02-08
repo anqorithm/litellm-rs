@@ -63,7 +63,6 @@ mod unit_tests {
         assert!(config.validate().is_ok());
 
         // Invalid config without API base (and no env var)
-        // SAFETY: This is a single-threaded test
         unsafe {
             std::env::remove_var("VLLM_API_BASE");
         }

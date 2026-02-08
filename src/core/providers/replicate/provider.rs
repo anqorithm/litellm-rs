@@ -538,7 +538,6 @@ mod tests {
     #[test]
     fn test_from_env_missing_token() {
         // Clear any existing env var
-        // SAFETY: Tests are single-threaded and this is just for testing
         unsafe {
             std::env::remove_var("REPLICATE_API_TOKEN");
         }

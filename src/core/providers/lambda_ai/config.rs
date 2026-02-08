@@ -194,7 +194,6 @@ mod tests {
     #[test]
     fn test_lambda_ai_config_validation_no_key() {
         // Clear env var for this test
-        // SAFETY: This is safe in a single-threaded test context
         unsafe { std::env::remove_var(ENV_API_KEY) };
         let config = LambdaAIConfig::default();
         assert!(config.validate().is_err());

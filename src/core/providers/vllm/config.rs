@@ -196,8 +196,7 @@ mod tests {
 
     #[test]
     fn test_vllm_config_validation_no_base() {
-        // Clear env var for this test (safely using unsafe block required in newer Rust)
-        // SAFETY: This is a single-threaded test and we're just clearing an env var
+        // Clear env var for this test
         unsafe {
             std::env::remove_var("VLLM_API_BASE");
         }

@@ -161,7 +161,6 @@ mod tests {
     #[test]
     fn test_groq_config_validation_no_key() {
         // Clear env var for this test
-        // SAFETY: This is safe in a single-threaded test context
         unsafe { std::env::remove_var("GROQ_API_KEY") };
         let config = GroqConfig::default();
         assert!(config.validate().is_err());

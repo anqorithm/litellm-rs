@@ -232,12 +232,12 @@ mod tests {
     use std::env;
 
     // Helper to safely set env var in tests
-    unsafe fn set_test_env(key: &str, value: &str) {
+    fn set_test_env(key: &str, value: &str) {
         unsafe { env::set_var(key, value) };
     }
 
     // Helper to safely remove env var in tests
-    unsafe fn remove_test_env(key: &str) {
+    fn remove_test_env(key: &str) {
         unsafe { env::remove_var(key) };
     }
 
@@ -248,7 +248,7 @@ mod tests {
             .register("env", Arc::new(EnvSecretManager::new()))
             .await;
 
-        unsafe { set_test_env("TEST_REGISTRY_SECRET", "test_value") };
+        set_test_env("TEST_REGISTRY_SECRET", "test_value");
 
         let result = registry
             .read_secret("env", "TEST_REGISTRY_SECRET")
@@ -256,7 +256,7 @@ mod tests {
             .unwrap();
         assert_eq!(result, Some("test_value".to_string()));
 
-        unsafe { remove_test_env("TEST_REGISTRY_SECRET") };
+        remove_test_env("TEST_REGISTRY_SECRET");
     }
 
     #[tokio::test]
@@ -267,7 +267,7 @@ mod tests {
             .await;
         registry.set_default("env").await;
 
-        unsafe { set_test_env("TEST_DEFAULT_SECRET", "default_value") };
+        set_test_env("TEST_DEFAULT_SECRET", "default_value");
 
         let result = registry
             .read_secret_default("TEST_DEFAULT_SECRET")
@@ -275,7 +275,7 @@ mod tests {
             .unwrap();
         assert_eq!(result, Some("default_value".to_string()));
 
-        unsafe { remove_test_env("TEST_DEFAULT_SECRET") };
+        remove_test_env("TEST_DEFAULT_SECRET");
     }
 
     #[tokio::test]
@@ -301,7 +301,7 @@ mod tests {
             .register("env", Arc::new(EnvSecretManager::new()))
             .await;
 
-        unsafe { set_test_env("TEST_REF_SECRET", "resolved_value") };
+        set_test_env("TEST_REF_SECRET", "resolved_value");
 
         let result = registry
             .resolve_reference("${secret:env:TEST_REF_SECRET}")
@@ -309,7 +309,7 @@ mod tests {
             .unwrap();
         assert_eq!(result, Some("resolved_value".to_string()));
 
-        unsafe { remove_test_env("TEST_REF_SECRET") };
+        remove_test_env("TEST_REF_SECRET");
     }
 
     #[tokio::test]
@@ -320,7 +320,7 @@ mod tests {
             .await;
         registry.set_default("env").await;
 
-        unsafe { set_test_env("TEST_REF_DEFAULT", "default_resolved") };
+        set_test_env("TEST_REF_DEFAULT", "default_resolved");
 
         let result = registry
             .resolve_reference("${secret:TEST_REF_DEFAULT}")
@@ -328,7 +328,7 @@ mod tests {
             .unwrap();
         assert_eq!(result, Some("default_resolved".to_string()));
 
-        unsafe { remove_test_env("TEST_REF_DEFAULT") };
+        remove_test_env("TEST_REF_DEFAULT");
     }
 
     #[tokio::test]
@@ -346,19 +346,15 @@ mod tests {
             .register("env", Arc::new(EnvSecretManager::new()))
             .await;
 
-        unsafe {
-            set_test_env("TEST_ALL_KEY1", "value1");
-            set_test_env("TEST_ALL_KEY2", "value2");
-        }
+        set_test_env("TEST_ALL_KEY1", "value1");
+        set_test_env("TEST_ALL_KEY2", "value2");
 
         let input = "api_key=${secret:env:TEST_ALL_KEY1}&other=${secret:env:TEST_ALL_KEY2}";
         let result = registry.resolve_all_references(input).await.unwrap();
         assert_eq!(result, "api_key=value1&other=value2");
 
-        unsafe {
-            remove_test_env("TEST_ALL_KEY1");
-            remove_test_env("TEST_ALL_KEY2");
-        }
+        remove_test_env("TEST_ALL_KEY1");
+        remove_test_env("TEST_ALL_KEY2");
     }
 
     #[tokio::test]

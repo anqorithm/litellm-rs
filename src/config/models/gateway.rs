@@ -428,8 +428,16 @@ mod tests {
 
     fn clear_test_env() {
         for key in TEST_ENV_KEYS {
-            unsafe { env::remove_var(key) };
+            remove_test_env(key);
         }
+    }
+
+    fn set_test_env(key: &str, value: &str) {
+        unsafe { env::set_var(key, value) };
+    }
+
+    fn remove_test_env(key: &str) {
+        unsafe { env::remove_var(key) };
     }
 
     fn create_test_provider(name: &str) -> ProviderConfig {
@@ -464,26 +472,24 @@ mod tests {
     fn test_gateway_config_from_env() {
         let _guard = ENV_LOCK.lock().unwrap();
         clear_test_env();
-        unsafe {
-            env::set_var(ENV_HOST, "127.0.0.1");
-            env::set_var(ENV_PORT, "18080");
-            env::set_var(
-                ENV_DATABASE_URL,
-                "postgresql://env-user:env-pass@localhost/env-db",
-            );
-            env::set_var(ENV_ENABLE_JWT, "true");
-            env::set_var(ENV_JWT_SECRET, "StrongJwtSecretWithMixedCaseAndNumbers1234");
-            env::set_var(ENV_PROVIDERS, "openai");
-            env::set_var("LITELLM_PROVIDER_OPENAI_TYPE", "openai");
-            env::set_var("LITELLM_PROVIDER_OPENAI_API_KEY", "sk-test-key");
-            env::set_var(
-                "LITELLM_PROVIDER_OPENAI_BASE_URL",
-                "https://api.openai.com/v1",
-            );
-            env::set_var("LITELLM_PROVIDER_OPENAI_MODELS", "gpt-4o,gpt-4.1");
-            env::set_var("LITELLM_PROVIDER_OPENAI_TAGS", "prod,primary");
-            env::set_var("LITELLM_PROVIDER_OPENAI_MAX_RETRIES", "5");
-        }
+        set_test_env(ENV_HOST, "127.0.0.1");
+        set_test_env(ENV_PORT, "18080");
+        set_test_env(
+            ENV_DATABASE_URL,
+            "postgresql://env-user:env-pass@localhost/env-db",
+        );
+        set_test_env(ENV_ENABLE_JWT, "true");
+        set_test_env(ENV_JWT_SECRET, "StrongJwtSecretWithMixedCaseAndNumbers1234");
+        set_test_env(ENV_PROVIDERS, "openai");
+        set_test_env("LITELLM_PROVIDER_OPENAI_TYPE", "openai");
+        set_test_env("LITELLM_PROVIDER_OPENAI_API_KEY", "sk-test-key");
+        set_test_env(
+            "LITELLM_PROVIDER_OPENAI_BASE_URL",
+            "https://api.openai.com/v1",
+        );
+        set_test_env("LITELLM_PROVIDER_OPENAI_MODELS", "gpt-4o,gpt-4.1");
+        set_test_env("LITELLM_PROVIDER_OPENAI_TAGS", "prod,primary");
+        set_test_env("LITELLM_PROVIDER_OPENAI_MAX_RETRIES", "5");
 
         let config = GatewayConfig::from_env().unwrap();
         assert_eq!(config.server.host, "127.0.0.1");
@@ -517,10 +523,8 @@ mod tests {
     fn test_gateway_config_from_env_requires_providers() {
         let _guard = ENV_LOCK.lock().unwrap();
         clear_test_env();
-        unsafe {
-            env::set_var(ENV_ENABLE_JWT, "true");
-            env::set_var(ENV_JWT_SECRET, "StrongJwtSecretWithMixedCaseAndNumbers1234");
-        }
+        set_test_env(ENV_ENABLE_JWT, "true");
+        set_test_env(ENV_JWT_SECRET, "StrongJwtSecretWithMixedCaseAndNumbers1234");
 
         let result = GatewayConfig::from_env();
         assert!(result.is_err());
@@ -533,14 +537,12 @@ mod tests {
     fn test_gateway_config_from_env_invalid_port() {
         let _guard = ENV_LOCK.lock().unwrap();
         clear_test_env();
-        unsafe {
-            env::set_var(ENV_PORT, "invalid-port");
-            env::set_var(ENV_ENABLE_JWT, "true");
-            env::set_var(ENV_JWT_SECRET, "StrongJwtSecretWithMixedCaseAndNumbers1234");
-            env::set_var(ENV_PROVIDERS, "openai");
-            env::set_var("LITELLM_PROVIDER_OPENAI_TYPE", "openai");
-            env::set_var("LITELLM_PROVIDER_OPENAI_API_KEY", "sk-test-key");
-        }
+        set_test_env(ENV_PORT, "invalid-port");
+        set_test_env(ENV_ENABLE_JWT, "true");
+        set_test_env(ENV_JWT_SECRET, "StrongJwtSecretWithMixedCaseAndNumbers1234");
+        set_test_env(ENV_PROVIDERS, "openai");
+        set_test_env("LITELLM_PROVIDER_OPENAI_TYPE", "openai");
+        set_test_env("LITELLM_PROVIDER_OPENAI_API_KEY", "sk-test-key");
 
         let result = GatewayConfig::from_env();
         assert!(result.is_err());

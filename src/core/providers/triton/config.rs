@@ -220,7 +220,6 @@ mod tests {
     #[test]
     fn test_triton_config_validation_no_url() {
         // Clear env var for this test
-        // SAFETY: This is safe in a single-threaded test context
         unsafe { std::env::remove_var("TRITON_SERVER_URL") };
         let config = TritonConfig::default();
         assert!(config.validate().is_err());
