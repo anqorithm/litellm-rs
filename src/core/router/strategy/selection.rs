@@ -123,13 +123,17 @@ impl SelectionMethods {
             ));
         }
         // Collect weights and calculate total within lock scope
-        let (total_weight, weights): (f64, Vec<(String, f64)>) = {
+        let (total_weight, weights): (f64, Vec<f64>) = {
             let data = routing_data.read();
-            let weights: Vec<(String, f64)> = providers
-                .iter()
-                .map(|p| (p.clone(), data.weights.get(p).copied().unwrap_or(1.0)))
-                .collect();
-            let total: f64 = weights.iter().map(|(_, w)| w).sum();
+            let mut weights = Vec::with_capacity(providers.len());
+            let mut total = 0.0;
+
+            for provider in providers {
+                let weight = data.weights.get(provider).copied().unwrap_or(1.0);
+                total += weight;
+                weights.push(weight);
+            }
+
             (total, weights)
         }; // Lock released here
 
@@ -143,9 +147,10 @@ impl SelectionMethods {
         let mut random = rng.gen_range(0.0..1.0) * total_weight;
 
         // Select provider based on weight
-        for (provider, weight) in &weights {
+        for (idx, weight) in weights.iter().enumerate() {
             random -= weight;
             if random <= 0.0 {
+                let provider = &providers[idx];
                 debug!(
                     "Weighted selected provider: {} (weight: {})",
                     provider, weight
