@@ -31,13 +31,16 @@ mod types;
 mod tests;
 
 // Re-export main types
-pub use conversion::{convert_from_chat_completion_response, convert_to_chat_completion_request};
+pub use conversion::{
+    convert_from_chat_completion_response, convert_to_chat_completion_request, convert_usage,
+};
 pub use default_router::{DefaultRouter, ErrorRouter, acompletion, completion, completion_stream};
 pub use helpers::{
-    assistant_message, convert_messages_to_chat_messages, system_message, user_message,
+    assistant_message, assistant_message_with_thinking, convert_messages_to_chat_messages,
+    system_message, user_message,
 };
 pub use router_trait::{Message, Router};
-pub use stream::{CompletionChunk, CompletionStream, StreamChoice, StreamDelta};
+pub use stream::{CompletionChunk, CompletionStream, StreamChoice, StreamDelta, convert_stream_chunk};
 pub use types::{Choice, CompletionOptions, CompletionResponse, FunctionCall, ToolCall};
 
 // Re-export types with proper paths
