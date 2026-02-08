@@ -18,8 +18,9 @@ use crate::core::traits::{
     ProviderConfig as _, provider::llm_provider::trait_definition::LLMProvider,
 };
 use crate::core::types::{
-    ChatRequest, EmbeddingRequest,
+    ChatRequest,
     context::RequestContext,
+    embedding::EmbeddingRequest,
     health::HealthStatus,
     model::ModelInfo,
     model::ProviderCapability,
@@ -315,8 +316,8 @@ impl LLMProvider for InfinityProvider {
 
         // Convert input to Vec<String>
         let input: Vec<String> = match request.input {
-            crate::core::types::EmbeddingInput::Text(s) => vec![s],
-            crate::core::types::EmbeddingInput::Array(v) => v,
+            crate::core::types::embedding::EmbeddingInput::Text(s) => vec![s],
+            crate::core::types::embedding::EmbeddingInput::Array(v) => v,
         };
 
         // Build Infinity-specific request

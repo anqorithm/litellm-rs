@@ -28,8 +28,10 @@ use crate::core::providers::base::{
 use crate::core::traits::ProviderConfig as _;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use crate::core::types::{
-    ChatRequest, EmbeddingInput, EmbeddingRequest,
+    ChatRequest,
     context::RequestContext,
+    embedding::EmbeddingInput,
+    embedding::EmbeddingRequest,
     health::HealthStatus,
     model::ModelInfo,
     model::ProviderCapability,

@@ -24,8 +24,9 @@ use crate::core::traits::{
     provider::llm_provider::trait_definition::LLMProvider,
 };
 use crate::core::types::{
-    ChatRequest, EmbeddingRequest,
+    ChatRequest,
     context::RequestContext,
+    embedding::EmbeddingRequest,
     health::HealthStatus,
     model::ModelInfo,
     model::ProviderCapability,
@@ -413,7 +414,7 @@ impl LLMProvider for WandbProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::{EmbeddingInput, EmbeddingRequest};
+    use crate::core::types::{embedding::EmbeddingInput, embedding::EmbeddingRequest};
 
     fn create_test_config() -> WandbConfig {
         WandbConfig::new("test-api-key")

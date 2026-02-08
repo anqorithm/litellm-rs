@@ -7,7 +7,8 @@ use super::*;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use crate::core::types::model::ProviderCapability;
 use crate::core::types::{
-    ChatMessage, ChatRequest, EmbeddingInput, EmbeddingRequest, MessageContent, MessageRole,
+    ChatMessage, ChatRequest, MessageContent, MessageRole, embedding::EmbeddingInput,
+    embedding::EmbeddingRequest,
 };
 use rerank::{RerankDocument, RerankRequest};
 use serde_json::json;

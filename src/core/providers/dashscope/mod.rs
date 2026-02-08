@@ -21,8 +21,9 @@ use crate::core::traits::{
     provider::llm_provider::trait_definition::LLMProvider,
 };
 use crate::core::types::{
-    ChatRequest, EmbeddingRequest,
+    ChatRequest,
     context::RequestContext,
+    embedding::EmbeddingRequest,
     health::HealthStatus,
     model::ModelInfo,
     model::ProviderCapability,
@@ -947,7 +948,7 @@ mod tests {
     async fn test_embeddings_not_supported() {
         let provider = DashscopeProvider::new(create_test_config()).await.unwrap();
 
-        let request = crate::core::types::EmbeddingRequest {
+        let request = crate::core::types::embedding::EmbeddingRequest {
             model: "qwen-turbo".to_string(),
             input: crate::core::types::embedding::EmbeddingInput::Text("test".to_string()),
             encoding_format: None,

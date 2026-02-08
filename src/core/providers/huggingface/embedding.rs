@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 use tracing::debug;
 
 use crate::core::providers::huggingface::{HuggingFaceConfig, HuggingFaceError};
-use crate::core::types::EmbeddingRequest;
+use crate::core::types::embedding::EmbeddingRequest;
 use crate::core::types::responses::{EmbeddingData, EmbeddingResponse, Usage};
 
 /// HuggingFace embedding handler
@@ -29,10 +29,10 @@ impl HuggingFaceEmbeddingHandler {
     /// Transform an embedding request to HuggingFace format
     pub fn transform_request(&self, request: &EmbeddingRequest) -> Value {
         let input = match &request.input {
-            crate::core::types::EmbeddingInput::Text(text) => {
+            crate::core::types::embedding::EmbeddingInput::Text(text) => {
                 json!([text])
             }
-            crate::core::types::EmbeddingInput::Array(texts) => {
+            crate::core::types::embedding::EmbeddingInput::Array(texts) => {
                 json!(texts)
             }
         };
@@ -213,7 +213,7 @@ impl HuggingFaceEmbeddingHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::EmbeddingInput;
+    use crate::core::types::embedding::EmbeddingInput;
 
     fn create_test_handler() -> HuggingFaceEmbeddingHandler {
         HuggingFaceEmbeddingHandler::new(HuggingFaceConfig::new("test_token"))

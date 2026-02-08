@@ -5,7 +5,7 @@
 use super::*;
 use crate::core::types::{model::ProviderCapability, context::RequestContext};
 use crate::core::types::health::HealthStatus;
-use crate::core::types::EmbeddingRequest;
+use crate::core::types::embedding::EmbeddingRequest;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use super::streaming;
 
@@ -223,7 +223,7 @@ mod provider_tests {
             .embeddings(
                 EmbeddingRequest {
                     model: "test".to_string(),
-                    input: crate::core::types::EmbeddingInput::Single(
+                    input: crate::core::types::embedding::EmbeddingInput::Single(
                         "test".to_string(),
                     ),
                     encoding_format: None,
