@@ -42,17 +42,6 @@ where
         }
     }
 
-    /// Create a successful response with metadata
-    #[allow(dead_code)]
-    pub fn success_with_meta(data: T, meta: serde_json::Value) -> Self {
-        Self {
-            success: true,
-            data: Some(data),
-            error: None,
-            meta: Some(meta),
-        }
-    }
-
     /// Create an error response
     pub fn error(message: String) -> ApiResponse<()> {
         ApiResponse {
@@ -64,7 +53,6 @@ where
     }
 }
 
-#[allow(dead_code)]
 impl<T> ApiResponse<T> {
     /// Create an error response for any type
     pub fn error_for_type(message: String) -> ApiResponse<T> {
@@ -73,16 +61,6 @@ impl<T> ApiResponse<T> {
             data: None,
             error: Some(message),
             meta: None,
-        }
-    }
-
-    /// Create an error response with metadata
-    pub fn error_with_meta(message: String, meta: serde_json::Value) -> ApiResponse<()> {
-        ApiResponse {
-            success: false,
-            data: None,
-            error: Some(message),
-            meta: Some(meta),
         }
     }
 }
@@ -120,7 +98,6 @@ pub struct PaginationMeta {
     pub has_prev: bool,
 }
 
-#[allow(dead_code)]
 impl PaginationMeta {
     /// Create pagination metadata
     pub fn new(page: u32, limit: u32, total: u64) -> Self {
