@@ -8,12 +8,19 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::LazyLock;
 
+fn compile_pattern(pattern: &str) -> Regex {
+    Regex::new(pattern).unwrap_or_else(|_| {
+        Regex::new(r"$^")
+            .unwrap_or_else(|_| panic!("fallback regex should always compile for Vertex AI files"))
+    })
+}
+
 /// Regex for matching GCS URIs
-static GCS_PATTERN: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"gs://[^\s]+").unwrap());
+static GCS_PATTERN: LazyLock<Regex> = LazyLock::new(|| compile_pattern(r"gs://[^\s]+"));
 
 /// Regex for matching file IDs
 static FILE_PATTERN: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"files/[a-zA-Z0-9\-_]+").unwrap());
+    LazyLock::new(|| compile_pattern(r"files/[a-zA-Z0-9\-_]+"));
 
 /// File upload request
 #[derive(Debug, Clone, Serialize, Deserialize)]

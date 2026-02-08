@@ -6,42 +6,41 @@ use regex::Regex;
 use std::sync::LazyLock;
 
 // Pre-compiled regex patterns for PII detection
-// These patterns are validated at compile time to ensure they never fail
-// Note: unwrap() is used because these are static patterns that are known-good
-// If a pattern fails, it indicates a code error that should be caught in tests
+// If a pattern fails to compile, we fall back to a "never match" regex so
+// detection degrades safely instead of panicking at runtime.
+
+fn compile_or_never_match(pattern: &str, label: &str) -> Regex {
+    match Regex::new(pattern) {
+        Ok(regex) => regex,
+        Err(e) => {
+            tracing::error!("Failed to compile {} regex: {}", label, e);
+            // [^\s\S] matches "neither whitespace nor non-whitespace" = empty set
+            Regex::new(r"[^\s\S]").unwrap_or_else(|_| {
+                panic!("fallback regex should always compile for {}", label)
+            })
+        }
+    }
+}
 
 /// SSN pattern: XXX-XX-XXXX
-pub static SSN_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"\b\d{3}-\d{2}-\d{4}\b").unwrap_or_else(|e| {
-        tracing::error!("Failed to compile SSN regex: {}", e);
-        // Return a pattern that never matches as fallback
-        // [^\s\S] matches "neither whitespace nor non-whitespace" = empty set
-        Regex::new(r"[^\s\S]").unwrap()
-    })
-});
+pub static SSN_PATTERN: LazyLock<Regex> =
+    LazyLock::new(|| compile_or_never_match(r"\b\d{3}-\d{2}-\d{4}\b", "SSN"));
 
 /// Email pattern: local@domain.tld
 pub static EMAIL_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b").unwrap_or_else(|e| {
-        tracing::error!("Failed to compile email regex: {}", e);
-        Regex::new(r"[^\s\S]").unwrap()
-    })
+    compile_or_never_match(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", "email")
 });
 
 /// Phone pattern: XXX-XXX-XXXX
-pub static PHONE_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"\b\d{3}-\d{3}-\d{4}\b").unwrap_or_else(|e| {
-        tracing::error!("Failed to compile phone regex: {}", e);
-        Regex::new(r"[^\s\S]").unwrap()
-    })
-});
+pub static PHONE_PATTERN: LazyLock<Regex> =
+    LazyLock::new(|| compile_or_never_match(r"\b\d{3}-\d{3}-\d{4}\b", "phone"));
 
 /// Credit card pattern: XXXX-XXXX-XXXX-XXXX or XXXXXXXXXXXXXXXX
 pub static CREDIT_CARD_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b").unwrap_or_else(|e| {
-        tracing::error!("Failed to compile credit card regex: {}", e);
-        Regex::new(r"[^\s\S]").unwrap()
-    })
+    compile_or_never_match(
+        r"\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b",
+        "credit card",
+    )
 });
 
 #[cfg(test)]

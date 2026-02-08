@@ -147,7 +147,9 @@ impl PerformanceReport {
         for (func, times) in &self.execution_times {
             if !times.is_empty() {
                 let avg = times.iter().sum::<Duration>() / times.len() as u32;
-                let max = times.iter().max().unwrap();
+                let Some(max) = times.iter().max() else {
+                    continue;
+                };
                 info!(
                     "  {}: avg={:?}, max={:?}, calls={}",
                     func,

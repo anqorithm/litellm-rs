@@ -7,12 +7,19 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::sync::LazyLock;
 
+fn compile_pattern(pattern: &str) -> Regex {
+    Regex::new(pattern).unwrap_or_else(|_| {
+        Regex::new(r"$^")
+            .unwrap_or_else(|_| panic!("fallback regex should always compile for baseten"))
+    })
+}
+
 /// Default API base URL for Baseten Model API
 pub const BASETEN_API_BASE: &str = "https://inference.baseten.co/v1";
 
 /// Regex for matching dedicated deployment model IDs
 static DEDICATED_DEPLOYMENT_REGEX: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^[a-zA-Z0-9]{8}$").unwrap());
+    LazyLock::new(|| compile_pattern(r"^[a-zA-Z0-9]{8}$"));
 
 /// Baseten provider configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

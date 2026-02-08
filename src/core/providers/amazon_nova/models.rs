@@ -156,22 +156,18 @@ impl AmazonNovaModelRegistry {
         );
 
         // Also register simplified names
-        models.insert(
-            "nova-pro".to_string(),
-            models.get("amazon.nova-pro-v1:0").unwrap().clone(),
-        );
-        models.insert(
-            "nova-lite".to_string(),
-            models.get("amazon.nova-lite-v1:0").unwrap().clone(),
-        );
-        models.insert(
-            "nova-micro".to_string(),
-            models.get("amazon.nova-micro-v1:0").unwrap().clone(),
-        );
-        models.insert(
-            "nova-premier".to_string(),
-            models.get("amazon.nova-premier-v1:0").unwrap().clone(),
-        );
+        if let Some(model) = models.get("amazon.nova-pro-v1:0").cloned() {
+            models.insert("nova-pro".to_string(), model);
+        }
+        if let Some(model) = models.get("amazon.nova-lite-v1:0").cloned() {
+            models.insert("nova-lite".to_string(), model);
+        }
+        if let Some(model) = models.get("amazon.nova-micro-v1:0").cloned() {
+            models.insert("nova-micro".to_string(), model);
+        }
+        if let Some(model) = models.get("amazon.nova-premier-v1:0").cloned() {
+            models.insert("nova-premier".to_string(), model);
+        }
 
         Self { models }
     }
