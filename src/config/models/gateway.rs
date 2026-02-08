@@ -13,6 +13,188 @@ use super::server::ServerConfig;
 use super::storage::StorageConfig;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::env;
+
+const ENV_HOST: &str = "LITELLM_HOST";
+const ENV_PORT: &str = "LITELLM_PORT";
+const ENV_WORKERS: &str = "LITELLM_WORKERS";
+const ENV_TIMEOUT: &str = "LITELLM_TIMEOUT";
+const ENV_DATABASE_URL: &str = "LITELLM_DATABASE_URL";
+const ENV_DATABASE_MAX_CONNECTIONS: &str = "LITELLM_DATABASE_MAX_CONNECTIONS";
+const ENV_DATABASE_CONNECTION_TIMEOUT: &str = "LITELLM_DATABASE_CONNECTION_TIMEOUT";
+const ENV_DATABASE_SSL: &str = "LITELLM_DATABASE_SSL";
+const ENV_DATABASE_ENABLED: &str = "LITELLM_DATABASE_ENABLED";
+const ENV_REDIS_URL: &str = "LITELLM_REDIS_URL";
+const ENV_REDIS_ENABLED: &str = "LITELLM_REDIS_ENABLED";
+const ENV_REDIS_MAX_CONNECTIONS: &str = "LITELLM_REDIS_MAX_CONNECTIONS";
+const ENV_REDIS_CONNECTION_TIMEOUT: &str = "LITELLM_REDIS_CONNECTION_TIMEOUT";
+const ENV_REDIS_CLUSTER: &str = "LITELLM_REDIS_CLUSTER";
+const ENV_ENABLE_JWT: &str = "LITELLM_ENABLE_JWT";
+const ENV_ENABLE_API_KEY: &str = "LITELLM_ENABLE_API_KEY";
+const ENV_JWT_SECRET: &str = "LITELLM_JWT_SECRET";
+const ENV_JWT_EXPIRATION: &str = "LITELLM_JWT_EXPIRATION";
+const ENV_API_KEY_HEADER: &str = "LITELLM_API_KEY_HEADER";
+const ENV_PROVIDERS: &str = "LITELLM_PROVIDERS";
+
+fn env_var(key: &str) -> Option<String> {
+    env::var(key)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn parse_env<T>(key: &str) -> crate::utils::error::error::Result<Option<T>>
+where
+    T: std::str::FromStr,
+    T::Err: std::fmt::Display,
+{
+    let Some(raw) = env_var(key) else {
+        return Ok(None);
+    };
+
+    raw.parse::<T>().map(Some).map_err(|error| {
+        crate::utils::error::error::GatewayError::Config(format!(
+            "Invalid value for {}: {}",
+            key, error
+        ))
+    })
+}
+
+fn parse_env_bool(key: &str) -> crate::utils::error::error::Result<Option<bool>> {
+    let Some(raw) = env_var(key) else {
+        return Ok(None);
+    };
+
+    let value = match raw.to_ascii_lowercase().as_str() {
+        "true" | "1" | "yes" | "on" => true,
+        "false" | "0" | "no" | "off" => false,
+        _ => {
+            return Err(crate::utils::error::error::GatewayError::Config(format!(
+                "Invalid boolean value for {}: {}",
+                key, raw
+            )));
+        }
+    };
+    Ok(Some(value))
+}
+
+fn parse_env_list(key: &str) -> Option<Vec<String>> {
+    env_var(key).map(|raw| {
+        raw.split(',')
+            .map(str::trim)
+            .filter(|segment| !segment.is_empty())
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+    })
+}
+
+fn required_env(key: &str) -> crate::utils::error::error::Result<String> {
+    env_var(key).ok_or_else(|| {
+        crate::utils::error::error::GatewayError::Config(format!(
+            "Missing required env var: {}",
+            key
+        ))
+    })
+}
+
+fn provider_env_key(provider_name: &str) -> String {
+    provider_name
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() {
+                ch.to_ascii_uppercase()
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
+fn provider_env_name(provider_name: &str, field: &str) -> String {
+    format!(
+        "LITELLM_PROVIDER_{}_{}",
+        provider_env_key(provider_name),
+        field
+    )
+}
+
+fn load_providers_from_env() -> crate::utils::error::error::Result<Vec<ProviderConfig>> {
+    let provider_names = parse_env_list(ENV_PROVIDERS).ok_or_else(|| {
+        crate::utils::error::error::GatewayError::Config(format!(
+            "{} must be set with at least one provider name",
+            ENV_PROVIDERS
+        ))
+    })?;
+
+    if provider_names.is_empty() {
+        return Err(crate::utils::error::error::GatewayError::Config(format!(
+            "{} must contain at least one provider name",
+            ENV_PROVIDERS
+        )));
+    }
+
+    let mut providers = Vec::with_capacity(provider_names.len());
+
+    for name in provider_names {
+        let type_key = provider_env_name(&name, "TYPE");
+        let api_key_key = provider_env_name(&name, "API_KEY");
+
+        let mut provider = ProviderConfig {
+            name: name.clone(),
+            provider_type: required_env(&type_key)?,
+            api_key: required_env(&api_key_key)?,
+            ..ProviderConfig::default()
+        };
+
+        if let Some(base_url) = env_var(&provider_env_name(&name, "BASE_URL")) {
+            provider.base_url = Some(base_url);
+        }
+        if let Some(api_version) = env_var(&provider_env_name(&name, "API_VERSION")) {
+            provider.api_version = Some(api_version);
+        }
+        if let Some(organization) = env_var(&provider_env_name(&name, "ORGANIZATION")) {
+            provider.organization = Some(organization);
+        }
+        if let Some(project) = env_var(&provider_env_name(&name, "PROJECT")) {
+            provider.project = Some(project);
+        }
+
+        if let Some(weight) = parse_env::<f32>(&provider_env_name(&name, "WEIGHT"))? {
+            provider.weight = weight;
+        }
+        if let Some(rpm) = parse_env::<u32>(&provider_env_name(&name, "RPM"))? {
+            provider.rpm = rpm;
+        }
+        if let Some(tpm) = parse_env::<u32>(&provider_env_name(&name, "TPM"))? {
+            provider.tpm = tpm;
+        }
+        if let Some(max_concurrent_requests) =
+            parse_env::<u32>(&provider_env_name(&name, "MAX_CONCURRENT_REQUESTS"))?
+        {
+            provider.max_concurrent_requests = max_concurrent_requests;
+        }
+        if let Some(timeout) = parse_env::<u64>(&provider_env_name(&name, "TIMEOUT"))? {
+            provider.timeout = timeout;
+        }
+        if let Some(max_retries) = parse_env::<u32>(&provider_env_name(&name, "MAX_RETRIES"))? {
+            provider.max_retries = max_retries;
+        }
+
+        if let Some(enabled) = parse_env_bool(&provider_env_name(&name, "ENABLED"))? {
+            provider.enabled = enabled;
+        }
+        if let Some(models) = parse_env_list(&provider_env_name(&name, "MODELS")) {
+            provider.models = models;
+        }
+        if let Some(tags) = parse_env_list(&provider_env_name(&name, "TAGS")) {
+            provider.tags = tags;
+        }
+
+        providers.push(provider);
+    }
+
+    Ok(providers)
+}
 
 /// Main gateway configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -42,17 +224,77 @@ pub struct GatewayConfig {
 
 impl GatewayConfig {
     pub fn from_env() -> crate::utils::error::error::Result<Self> {
-        Ok(Self {
-            server: ServerConfig::default(),
-            providers: vec![],
-            router: RouterConfig::default(),
-            storage: StorageConfig::default(),
-            auth: AuthConfig::default(),
-            monitoring: MonitoringConfig::default(),
-            cache: CacheConfig::default(),
-            rate_limit: RateLimitConfig::default(),
-            enterprise: EnterpriseConfig::default(),
-        })
+        let mut config = Self::default();
+
+        if let Some(host) = env_var(ENV_HOST) {
+            config.server.host = host;
+        }
+        if let Some(port) = parse_env::<u16>(ENV_PORT)? {
+            config.server.port = port;
+        }
+        if let Some(workers) = parse_env::<usize>(ENV_WORKERS)? {
+            config.server.workers = Some(workers);
+        }
+        if let Some(timeout) = parse_env::<u64>(ENV_TIMEOUT)? {
+            config.server.timeout = timeout;
+        }
+
+        if let Some(database_url) = env_var(ENV_DATABASE_URL) {
+            config.storage.database.url = database_url;
+        }
+        if let Some(max_connections) = parse_env::<u32>(ENV_DATABASE_MAX_CONNECTIONS)? {
+            config.storage.database.max_connections = max_connections;
+        }
+        if let Some(connection_timeout) = parse_env::<u64>(ENV_DATABASE_CONNECTION_TIMEOUT)? {
+            config.storage.database.connection_timeout = connection_timeout;
+        }
+        if let Some(ssl) = parse_env_bool(ENV_DATABASE_SSL)? {
+            config.storage.database.ssl = ssl;
+        }
+        if let Some(enabled) = parse_env_bool(ENV_DATABASE_ENABLED)? {
+            config.storage.database.enabled = enabled;
+        }
+
+        if let Some(redis_url) = env_var(ENV_REDIS_URL) {
+            config.storage.redis.url = redis_url;
+        }
+        if let Some(enabled) = parse_env_bool(ENV_REDIS_ENABLED)? {
+            config.storage.redis.enabled = enabled;
+        }
+        if let Some(max_connections) = parse_env::<u32>(ENV_REDIS_MAX_CONNECTIONS)? {
+            config.storage.redis.max_connections = max_connections;
+        }
+        if let Some(connection_timeout) = parse_env::<u64>(ENV_REDIS_CONNECTION_TIMEOUT)? {
+            config.storage.redis.connection_timeout = connection_timeout;
+        }
+        if let Some(cluster) = parse_env_bool(ENV_REDIS_CLUSTER)? {
+            config.storage.redis.cluster = cluster;
+        }
+
+        if let Some(enable_jwt) = parse_env_bool(ENV_ENABLE_JWT)? {
+            config.auth.enable_jwt = enable_jwt;
+        }
+        if let Some(enable_api_key) = parse_env_bool(ENV_ENABLE_API_KEY)? {
+            config.auth.enable_api_key = enable_api_key;
+        }
+        if let Some(jwt_secret) = env_var(ENV_JWT_SECRET) {
+            config.auth.jwt_secret = jwt_secret;
+        } else if config.auth.enable_jwt {
+            return Err(crate::utils::error::error::GatewayError::Config(format!(
+                "{} is required when {} is enabled",
+                ENV_JWT_SECRET, ENV_ENABLE_JWT
+            )));
+        }
+        if let Some(jwt_expiration) = parse_env::<u64>(ENV_JWT_EXPIRATION)? {
+            config.auth.jwt_expiration = jwt_expiration;
+        }
+        if let Some(api_key_header) = env_var(ENV_API_KEY_HEADER) {
+            config.auth.api_key_header = api_key_header;
+        }
+
+        config.providers = load_providers_from_env()?;
+
+        Ok(config)
     }
 }
 
@@ -118,7 +360,7 @@ impl GatewayConfig {
         }
 
         // Validate auth config
-        if self.auth.jwt_secret.is_empty() {
+        if self.auth.enable_jwt && self.auth.jwt_secret.is_empty() {
             return Err("JWT secret is required".to_string());
         }
 
@@ -195,6 +437,36 @@ impl GatewayConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::models::enterprise::SsoConfig;
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    const TEST_ENV_KEYS: [&str; 17] = [
+        ENV_HOST,
+        ENV_PORT,
+        ENV_WORKERS,
+        ENV_TIMEOUT,
+        ENV_DATABASE_URL,
+        ENV_ENABLE_JWT,
+        ENV_ENABLE_API_KEY,
+        ENV_JWT_SECRET,
+        ENV_JWT_EXPIRATION,
+        ENV_API_KEY_HEADER,
+        ENV_PROVIDERS,
+        "LITELLM_PROVIDER_OPENAI_TYPE",
+        "LITELLM_PROVIDER_OPENAI_API_KEY",
+        "LITELLM_PROVIDER_OPENAI_BASE_URL",
+        "LITELLM_PROVIDER_OPENAI_MODELS",
+        "LITELLM_PROVIDER_OPENAI_TAGS",
+        "LITELLM_PROVIDER_OPENAI_MAX_RETRIES",
+    ];
+
+    fn clear_test_env() {
+        for key in TEST_ENV_KEYS {
+            unsafe { env::remove_var(key) };
+        }
+    }
 
     fn create_test_provider(name: &str) -> ProviderConfig {
         ProviderConfig {
@@ -226,8 +498,91 @@ mod tests {
 
     #[test]
     fn test_gateway_config_from_env() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        clear_test_env();
+        unsafe {
+            env::set_var(ENV_HOST, "127.0.0.1");
+            env::set_var(ENV_PORT, "18080");
+            env::set_var(
+                ENV_DATABASE_URL,
+                "postgresql://env-user:env-pass@localhost/env-db",
+            );
+            env::set_var(ENV_ENABLE_JWT, "true");
+            env::set_var(ENV_JWT_SECRET, "StrongJwtSecretWithMixedCaseAndNumbers1234");
+            env::set_var(ENV_PROVIDERS, "openai");
+            env::set_var("LITELLM_PROVIDER_OPENAI_TYPE", "openai");
+            env::set_var("LITELLM_PROVIDER_OPENAI_API_KEY", "sk-test-key");
+            env::set_var(
+                "LITELLM_PROVIDER_OPENAI_BASE_URL",
+                "https://api.openai.com/v1",
+            );
+            env::set_var("LITELLM_PROVIDER_OPENAI_MODELS", "gpt-4o,gpt-4.1");
+            env::set_var("LITELLM_PROVIDER_OPENAI_TAGS", "prod,primary");
+            env::set_var("LITELLM_PROVIDER_OPENAI_MAX_RETRIES", "5");
+        }
+
         let config = GatewayConfig::from_env().unwrap();
-        assert!(config.providers.is_empty());
+        assert_eq!(config.server.host, "127.0.0.1");
+        assert_eq!(config.server.port, 18080);
+        assert_eq!(
+            config.storage.database.url,
+            "postgresql://env-user:env-pass@localhost/env-db"
+        );
+        assert_eq!(config.providers.len(), 1);
+        assert_eq!(config.providers[0].name, "openai");
+        assert_eq!(config.providers[0].provider_type, "openai");
+        assert_eq!(config.providers[0].api_key, "sk-test-key");
+        assert_eq!(
+            config.providers[0].base_url,
+            Some("https://api.openai.com/v1".to_string())
+        );
+        assert_eq!(
+            config.providers[0].models,
+            vec!["gpt-4o".to_string(), "gpt-4.1".to_string()]
+        );
+        assert_eq!(
+            config.providers[0].tags,
+            vec!["prod".to_string(), "primary".to_string()]
+        );
+        assert_eq!(config.providers[0].max_retries, 5);
+
+        clear_test_env();
+    }
+
+    #[test]
+    fn test_gateway_config_from_env_requires_providers() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        clear_test_env();
+        unsafe {
+            env::set_var(ENV_ENABLE_JWT, "true");
+            env::set_var(ENV_JWT_SECRET, "StrongJwtSecretWithMixedCaseAndNumbers1234");
+        }
+
+        let result = GatewayConfig::from_env();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains(ENV_PROVIDERS));
+
+        clear_test_env();
+    }
+
+    #[test]
+    fn test_gateway_config_from_env_invalid_port() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        clear_test_env();
+        unsafe {
+            env::set_var(ENV_PORT, "invalid-port");
+            env::set_var(ENV_ENABLE_JWT, "true");
+            env::set_var(ENV_JWT_SECRET, "StrongJwtSecretWithMixedCaseAndNumbers1234");
+            env::set_var(ENV_PROVIDERS, "openai");
+            env::set_var("LITELLM_PROVIDER_OPENAI_TYPE", "openai");
+            env::set_var("LITELLM_PROVIDER_OPENAI_API_KEY", "sk-test-key");
+        }
+
+        let result = GatewayConfig::from_env();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains(ENV_PORT));
+
+        clear_test_env();
     }
 
     // ==================== GatewayConfig Validation Tests ====================
