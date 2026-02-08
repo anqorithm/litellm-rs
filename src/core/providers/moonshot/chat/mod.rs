@@ -11,15 +11,13 @@ pub use transformation::MoonshotChatTransformation;
 /// Moonshot chat handler
 #[derive(Debug, Clone)]
 pub struct MoonshotChatHandler {
-    config: MoonshotConfig,
     transformation: MoonshotChatTransformation,
 }
 
 impl MoonshotChatHandler {
     /// Create a new chat handler
-    pub fn new(config: MoonshotConfig) -> Result<Self, MoonshotError> {
+    pub fn new(_config: MoonshotConfig) -> Result<Self, MoonshotError> {
         Ok(Self {
-            config,
             transformation: MoonshotChatTransformation::new(),
         })
     }
