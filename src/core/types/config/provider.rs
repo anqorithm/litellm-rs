@@ -63,7 +63,7 @@ pub struct OpenAIProviderConfig {
     pub headers: HashMap<String, String>,
 }
 
-impl crate::core::traits::ProviderConfig for OpenAIProviderConfig {
+impl crate::core::traits::provider::ProviderConfig for OpenAIProviderConfig {
     fn validate(&self) -> Result<(), String> {
         if self.api_key.is_empty() {
             return Err("API key is required".to_string());
@@ -102,7 +102,7 @@ impl crate::core::traits::ProviderConfig for OpenAIProviderConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::traits::ProviderConfig;
+    use crate::core::traits::provider::ProviderConfig;
 
     // ==================== ProviderConfigEntry Tests ====================
 

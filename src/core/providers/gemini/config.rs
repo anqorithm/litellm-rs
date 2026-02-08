@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::traits::ProviderConfig;
+use crate::core::traits::provider::ProviderConfig;
 
 /// Configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

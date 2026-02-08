@@ -7,7 +7,7 @@
 //! 2. PAT (DATABRICKS_API_KEY) - Supported for development
 //! 3. Direct API key parameter
 
-use crate::core::traits::ProviderConfig;
+use crate::core::traits::provider::ProviderConfig;
 use crate::define_provider_config;
 
 // Use the define_provider_config macro to create DatabricksConfig

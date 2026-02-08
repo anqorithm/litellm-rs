@@ -14,7 +14,7 @@ use crate::core::providers::base::{GlobalPoolManager, HttpMethod, header_owned};
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::error_mapper::types::GenericErrorMapper;
 use crate::core::traits::{
-    ProviderConfig as _, provider::llm_provider::trait_definition::LLMProvider,
+    provider::ProviderConfig as _, provider::llm_provider::trait_definition::LLMProvider,
 };
 use crate::core::types::{
     chat::ChatMessage, chat::ChatRequest,

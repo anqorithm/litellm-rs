@@ -14,7 +14,7 @@ use tracing::{debug, error, warn};
 use super::config::{PROVIDER_NAME, WandbConfig};
 use crate::core::providers::base_provider::{BaseHttpClient, BaseProviderConfig, HeaderBuilder};
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::traits::ProviderConfig;
+use crate::core::traits::provider::ProviderConfig;
 
 /// LLM call log entry for W&B tracking
 #[derive(Debug, Clone, Serialize, Deserialize)]

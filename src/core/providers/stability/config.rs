@@ -2,7 +2,7 @@
 //!
 //! Configuration for Stability AI image generation provider.
 
-use crate::core::traits::ProviderConfig;
+use crate::core::traits::provider::ProviderConfig;
 use crate::define_provider_config;
 
 // Use the define_provider_config macro to create StabilityConfig

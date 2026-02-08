@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod tests {
     use super::super::*;
-    use crate::core::traits::ProviderConfig;
+    use crate::core::traits::provider::ProviderConfig;
     use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
     use crate::core::types::model::ProviderCapability;
 

@@ -13,7 +13,7 @@ use super::config::SnowflakeConfig;
 use super::error::SnowflakeError;
 use super::model_info::get_available_models;
 use crate::core::providers::base::GlobalPoolManager;
-use crate::core::traits::ProviderConfig as _;
+use crate::core::traits::provider::ProviderConfig as _;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use crate::core::types::health::HealthStatus;
 use crate::core::types::responses::{ChatChunk, ChatResponse, EmbeddingResponse};

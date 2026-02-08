@@ -25,7 +25,7 @@ use super::models::{get_available_models, get_model_info};
 use crate::core::providers::base::{
     GlobalPoolManager, HeaderPair, HttpMethod, header, header_owned,
 };
-use crate::core::traits::ProviderConfig as _;
+use crate::core::traits::provider::ProviderConfig as _;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use crate::core::types::{
     chat::ChatRequest,

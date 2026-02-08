@@ -2,7 +2,7 @@
 //!
 //! Configuration for Perplexity AI provider
 
-use crate::core::traits::ProviderConfig;
+use crate::core::traits::provider::ProviderConfig;
 use crate::define_provider_config;
 
 // Configuration using the macro

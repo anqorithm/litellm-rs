@@ -2,7 +2,7 @@
 //!
 //! Configuration for Oracle Cloud Infrastructure Generative AI access.
 
-use crate::core::traits::ProviderConfig;
+use crate::core::traits::provider::ProviderConfig;
 use serde::{Deserialize, Serialize};
 
 /// Default OCI Generative AI API base URL pattern

@@ -11,7 +11,7 @@ use super::error::DeepgramErrorMapper;
 use super::stt::{self, DeepgramResponse, OpenAITranscriptionResponse, TranscriptionRequest};
 use crate::core::providers::base::GlobalPoolManager;
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::traits::ProviderConfig as _;
+use crate::core::traits::provider::ProviderConfig as _;
 use crate::core::types::health::HealthStatus;
 use crate::core::types::{model::ModelInfo, model::ProviderCapability};
 

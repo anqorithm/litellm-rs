@@ -5,7 +5,7 @@ use super::models::{
 };
 use super::*;
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::traits::ProviderConfig;
+use crate::core::traits::provider::ProviderConfig;
 use crate::core::traits::error_mapper::trait_def::ErrorMapper;
 
 // ==================== Config Tests ====================

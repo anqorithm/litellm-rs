@@ -1,7 +1,7 @@
 //! Comprehensive unit tests for NVIDIA NIM provider
 
 use super::*;
-use crate::core::traits::ProviderConfig;
+use crate::core::traits::provider::ProviderConfig;
 
 // ==================== Config Tests ====================
 

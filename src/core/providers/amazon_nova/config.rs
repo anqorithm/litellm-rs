@@ -3,7 +3,7 @@
 //! Configuration for Amazon Nova multimodal provider
 
 use crate::core::providers::base::config::BaseConfig;
-use crate::core::traits::ProviderConfig;
+use crate::core::traits::provider::ProviderConfig;
 use serde::{Deserialize, Serialize};
 
 /// Default Amazon Nova API base URL

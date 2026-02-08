@@ -2,7 +2,7 @@
 
 use super::model_info::get_model_info;
 use super::*;
-use crate::core::traits::ProviderConfig;
+use crate::core::traits::provider::ProviderConfig;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 
 #[test]

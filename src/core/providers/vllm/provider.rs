@@ -15,7 +15,7 @@ use super::error::VLLMError;
 use super::model_info::{VLLMModelInfo, get_or_create_model_info};
 use crate::core::providers::base::{GlobalPoolManager, HttpMethod, header};
 use crate::core::traits::{
-    ProviderConfig as _, provider::llm_provider::trait_definition::LLMProvider,
+    provider::ProviderConfig as _, provider::llm_provider::trait_definition::LLMProvider,
 };
 use crate::core::types::{
     chat::ChatRequest,

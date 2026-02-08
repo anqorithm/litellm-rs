@@ -2,7 +2,7 @@
 //!
 //! Configuration for Voyage AI API access including authentication and embedding settings.
 
-use crate::core::traits::ProviderConfig;
+use crate::core::traits::provider::ProviderConfig;
 use serde::{Deserialize, Serialize};
 
 /// Voyage AI provider configuration

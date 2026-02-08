@@ -323,7 +323,7 @@ mod model_info_tests {
 #[cfg(test)]
 mod config_tests {
     use super::config::*;
-    use crate::core::traits::ProviderConfig;
+    use crate::core::traits::provider::ProviderConfig;
 
     #[test]
     fn test_config_default() {

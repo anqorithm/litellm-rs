@@ -2,7 +2,7 @@
 //!
 //! Configuration for ElevenLabs API access including authentication and endpoint settings.
 
-use crate::core::traits::ProviderConfig;
+use crate::core::traits::provider::ProviderConfig;
 use serde::{Deserialize, Serialize};
 
 /// ElevenLabs provider configuration

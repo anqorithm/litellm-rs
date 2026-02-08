@@ -281,7 +281,7 @@ mod tests {
 
     #[test]
     fn test_config_validation() {
-        use crate::core::traits::ProviderConfig;
+        use crate::core::traits::provider::ProviderConfig;
 
         // Valid config
         let valid_config = WatsonxConfig {

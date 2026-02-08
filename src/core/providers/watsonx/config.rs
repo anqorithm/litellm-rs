@@ -2,7 +2,7 @@
 //!
 //! Configuration for IBM Watsonx API access including authentication and project settings.
 
-use crate::core::traits::ProviderConfig;
+use crate::core::traits::provider::ProviderConfig;
 use serde::{Deserialize, Serialize};
 
 /// Default Watsonx API version

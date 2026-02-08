@@ -1,6 +1,6 @@
 //! Cloudflare Workers AI Configuration
 
-use crate::core::traits::ProviderConfig;
+use crate::core::traits::provider::ProviderConfig;
 use serde::{Deserialize, Serialize};
 
 /// Cloudflare Workers AI provider configuration

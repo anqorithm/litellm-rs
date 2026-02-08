@@ -2,7 +2,7 @@
 //!
 //! Configuration for Groq API access including authentication and model settings.
 
-use crate::core::traits::ProviderConfig;
+use crate::core::traits::provider::ProviderConfig;
 use serde::{Deserialize, Serialize};
 
 /// Groq provider configuration

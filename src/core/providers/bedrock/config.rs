@@ -3,7 +3,7 @@
 //! Configuration management for AWS Bedrock provider including
 //! AWS credentials, regions, and model-specific settings.
 
-use crate::core::traits::ProviderConfig;
+use crate::core::traits::provider::ProviderConfig;
 use serde::{Deserialize, Serialize};
 
 /// AWS Bedrock provider configuration

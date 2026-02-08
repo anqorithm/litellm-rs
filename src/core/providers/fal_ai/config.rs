@@ -3,7 +3,7 @@
 //! Configuration for Fal AI image generation provider
 
 use crate::core::providers::base::config::BaseConfig;
-use crate::core::traits::ProviderConfig;
+use crate::core::traits::provider::ProviderConfig;
 use serde::{Deserialize, Serialize};
 
 /// Default Fal AI API base URL

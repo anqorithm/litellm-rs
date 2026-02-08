@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::env;
 
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::traits::ProviderConfig;
+use crate::core::traits::provider::ProviderConfig;
 
 /// iFlytek Spark configuration
 #[derive(Debug, Clone)]

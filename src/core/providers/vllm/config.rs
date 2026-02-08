@@ -3,7 +3,7 @@
 //! Configuration for vLLM API access including authentication and model settings.
 //! vLLM is typically self-hosted, so API base URL is required.
 
-use crate::core::traits::ProviderConfig;
+use crate::core::traits::provider::ProviderConfig;
 use serde::{Deserialize, Serialize};
 
 /// vLLM provider configuration

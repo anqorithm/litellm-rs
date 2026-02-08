@@ -15,7 +15,7 @@ use super::error::{BedrockError, BedrockErrorMapper};
 use super::model_config::get_model_config;
 use super::transformation;
 use super::utils::{CostCalculator, validate_region};
-use crate::core::traits::ProviderConfig as _;
+use crate::core::traits::provider::ProviderConfig as _;
 
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;

@@ -2,7 +2,7 @@
 //!
 //! Configuration for GitHub Copilot API access including authentication and model settings.
 
-use crate::core::traits::ProviderConfig;
+use crate::core::traits::provider::ProviderConfig;
 use serde::{Deserialize, Serialize};
 
 /// Default API base URL for GitHub Copilot

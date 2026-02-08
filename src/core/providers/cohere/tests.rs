@@ -48,7 +48,7 @@ fn test_config_builder_pattern() {
 
 #[test]
 fn test_config_validation() {
-    use crate::core::traits::ProviderConfig;
+    use crate::core::traits::provider::ProviderConfig;
 
     // Valid config
     let config = CohereConfig::new("key");

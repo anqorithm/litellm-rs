@@ -3,7 +3,7 @@
 //! Configuration for AWS Sagemaker endpoints including AWS credentials,
 //! region settings, and endpoint-specific options.
 
-use crate::core::traits::ProviderConfig;
+use crate::core::traits::provider::ProviderConfig;
 use serde::{Deserialize, Serialize};
 
 /// AWS Sagemaker provider configuration

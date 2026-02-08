@@ -2,7 +2,7 @@
 //!
 //! Configuration management for OpenRouter API integration
 
-use crate::core::traits::ProviderConfig;
+use crate::core::traits::provider::ProviderConfig;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
