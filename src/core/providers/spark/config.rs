@@ -190,7 +190,9 @@ impl ProviderConfig for SparkConfig {
             return Err("Spark APP_ID is required".to_string());
         }
 
-        let app_id = self.app_id.as_ref().unwrap();
+        let Some(app_id) = self.app_id.as_ref() else {
+            return Err("Spark APP_ID is required".to_string());
+        };
         if app_id.is_empty() {
             return Err("Spark APP_ID cannot be empty".to_string());
         }
@@ -200,7 +202,9 @@ impl ProviderConfig for SparkConfig {
             return Err("Spark API key is required".to_string());
         }
 
-        let api_key = self.api_key.as_ref().unwrap();
+        let Some(api_key) = self.api_key.as_ref() else {
+            return Err("Spark API key is required".to_string());
+        };
         if api_key.is_empty() {
             return Err("Spark API key cannot be empty".to_string());
         }
@@ -210,7 +214,9 @@ impl ProviderConfig for SparkConfig {
             return Err("Spark API secret is required".to_string());
         }
 
-        let api_secret = self.api_secret.as_ref().unwrap();
+        let Some(api_secret) = self.api_secret.as_ref() else {
+            return Err("Spark API secret is required".to_string());
+        };
         if api_secret.is_empty() {
             return Err("Spark API secret cannot be empty".to_string());
         }
