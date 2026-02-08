@@ -3,8 +3,8 @@
 //! Model registry and information for Stability AI.
 
 use crate::core::types::{ModelInfo, ProviderCapability};
-use std::sync::LazyLock;
 use std::collections::HashMap;
+use std::sync::LazyLock;
 
 /// Stability AI model endpoints
 pub const STABILITY_ENDPOINTS: &[(&str, &str)] = &[

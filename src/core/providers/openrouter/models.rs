@@ -87,12 +87,9 @@ impl OpenRouterModelRegistry {
                 output_cost_per_1k_tokens: spec.completion_cost.map(|cost| cost / 1_000.0),
                 currency: "USD".to_string(),
                 capabilities: {
-                    let mut caps =
-                        vec![crate::core::types::ProviderCapability::ChatCompletion];
+                    let mut caps = vec![crate::core::types::ProviderCapability::ChatCompletion];
                     if spec.features.contains(&OpenRouterModelFeature::Streaming) {
-                        caps.push(
-                            crate::core::types::ProviderCapability::ChatCompletionStream,
-                        );
+                        caps.push(crate::core::types::ProviderCapability::ChatCompletionStream);
                     }
                     if spec
                         .features

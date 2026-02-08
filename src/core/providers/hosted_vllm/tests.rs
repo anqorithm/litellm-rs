@@ -197,16 +197,11 @@ mod provider_tests {
             .unwrap();
 
         let capabilities = provider.capabilities();
+        assert!(capabilities.contains(&crate::core::types::ProviderCapability::ChatCompletion));
         assert!(
-            capabilities.contains(&crate::core::types::ProviderCapability::ChatCompletion)
+            capabilities.contains(&crate::core::types::ProviderCapability::ChatCompletionStream)
         );
-        assert!(
-            capabilities
-                .contains(&crate::core::types::ProviderCapability::ChatCompletionStream)
-        );
-        assert!(
-            capabilities.contains(&crate::core::types::ProviderCapability::ToolCalling)
-        );
+        assert!(capabilities.contains(&crate::core::types::ProviderCapability::ToolCalling));
     }
 
     #[tokio::test]
@@ -248,8 +243,8 @@ mod provider_tests {
 #[cfg(test)]
 mod streaming_tests {
     use super::streaming::*;
-    use crate::core::types::{ChatMessage, MessageContent, MessageRole};
     use crate::core::types::responses::{ChatChoice, ChatResponse, FinishReason, Usage};
+    use crate::core::types::{ChatMessage, MessageContent, MessageRole};
 
     fn create_test_response() -> ChatResponse {
         ChatResponse {

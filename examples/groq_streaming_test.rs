@@ -2,8 +2,8 @@
 
 use futures::StreamExt;
 use litellm_rs::core::providers::groq::streaming::create_fake_stream;
-use litellm_rs::core::types::{ChatMessage, MessageContent, MessageRole};
 use litellm_rs::core::types::responses::{ChatChoice, ChatResponse};
+use litellm_rs::core::types::{ChatMessage, MessageContent, MessageRole};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

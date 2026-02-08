@@ -5,10 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::core::types::FinishReason;
-use crate::core::types::{
-    ChatRequest, MessageContent, MessageRole,
-    responses::ChatResponse,
-};
+use crate::core::types::{ChatRequest, MessageContent, MessageRole, responses::ChatResponse};
 
 /// Batch job for processing multiple requests
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -6,8 +6,7 @@ use tracing::{debug, warn};
 use crate::core::providers::dashscope::DashscopeError;
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::{
-    ChatMessage, FinishReason, MessageContent, MessageRole,
-    ChatRequest, FunctionCall, ToolCall,
+    ChatMessage, ChatRequest, FinishReason, FunctionCall, MessageContent, MessageRole, ToolCall,
     responses::{ChatChoice, ChatResponse, Usage},
 };
 

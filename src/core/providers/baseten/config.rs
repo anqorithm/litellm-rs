@@ -3,9 +3,9 @@
 //! Configuration for Baseten API access including authentication and model settings.
 
 use crate::core::traits::ProviderConfig;
-use std::sync::LazyLock;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use std::sync::LazyLock;
 
 /// Default API base URL for Baseten Model API
 pub const BASETEN_API_BASE: &str = "https://inference.baseten.co/v1";

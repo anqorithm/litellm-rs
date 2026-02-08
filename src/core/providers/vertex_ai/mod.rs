@@ -136,10 +136,10 @@ pub enum VertexAIModel {
     GeminiUltra, // gemini-ultra (deprecated)
 
     // Partner models - Claude
-    ClaudeOpus46, // claude-opus-4-6@20260114
-    ClaudeOpus45, // claude-opus-4-5@20251110
+    ClaudeOpus46,   // claude-opus-4-6@20260114
+    ClaudeOpus45,   // claude-opus-4-5@20251110
     ClaudeSonnet45, // claude-sonnet-4-5@20250929
-    ClaudeSonnet4, // claude-sonnet-4@20250514
+    ClaudeSonnet4,  // claude-sonnet-4@20250514
     Claude3Opus,
     Claude3Sonnet,
     Claude3Haiku,

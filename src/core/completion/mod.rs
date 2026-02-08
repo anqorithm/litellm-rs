@@ -32,13 +32,13 @@ mod tests;
 
 // Re-export main types
 pub use conversion::{convert_from_chat_completion_response, convert_to_chat_completion_request};
+pub use default_router::{DefaultRouter, ErrorRouter, acompletion, completion, completion_stream};
 pub use helpers::{
     assistant_message, convert_messages_to_chat_messages, system_message, user_message,
 };
 pub use router_trait::{Message, Router};
 pub use stream::{CompletionChunk, CompletionStream, StreamChoice, StreamDelta};
 pub use types::{Choice, CompletionOptions, CompletionResponse, FunctionCall, ToolCall};
-pub use default_router::{DefaultRouter, ErrorRouter, acompletion, completion, completion_stream};
 
 // Re-export types with proper paths
 pub use crate::core::types::{ContentPart, MessageContent, MessageRole};

@@ -901,9 +901,7 @@ mod tests {
         let registry = get_anthropic_registry();
 
         // Test latest flagship model
-        let opus_spec = registry
-            .get_model_spec("claude-opus-4-6")
-            .unwrap();
+        let opus_spec = registry.get_model_spec("claude-opus-4-6").unwrap();
         assert_eq!(opus_spec.family, AnthropicModelFamily::ClaudeOpus46);
         assert!(
             opus_spec

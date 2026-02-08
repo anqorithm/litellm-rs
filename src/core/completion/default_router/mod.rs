@@ -63,8 +63,8 @@ impl DefaultRouter {
         // Add OpenAI provider if API key is available
         if let Ok(api_key) = std::env::var("OPENAI_API_KEY") {
             use crate::core::providers::base::BaseConfig;
-            use crate::core::providers::openai::config::OpenAIConfig;
             use crate::core::providers::openai::OpenAIProvider;
+            use crate::core::providers::openai::config::OpenAIConfig;
 
             let config = OpenAIConfig {
                 base: BaseConfig {

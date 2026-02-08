@@ -2,11 +2,11 @@
 //!
 //! Shares model_prices_and_context_window.json data with Python version
 
-use std::sync::LazyLock;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
+use std::sync::LazyLock;
 use tracing::warn;
 
 /// Model

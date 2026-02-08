@@ -1,7 +1,7 @@
 //! ExaAi Client
 
-use crate::core::types::ModelInfo;
 use crate::core::types::ChatRequest;
+use crate::core::types::ModelInfo;
 use serde_json::Value;
 
 pub struct ExaAiClient;

@@ -8,8 +8,7 @@ use serde_json::{Value, json};
 use super::config::{AzureAIConfig, AzureAIEndpointType};
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::{
-    RequestContext,
-    EmbeddingRequest,
+    EmbeddingRequest, RequestContext,
     responses::{EmbeddingData, EmbeddingResponse},
 };
 use crate::utils::net::http::create_custom_client_with_headers;

@@ -8,8 +8,8 @@ use litellm_rs::core::providers::thinking::{
 };
 use litellm_rs::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use litellm_rs::core::types::RequestContext;
-use litellm_rs::core::types::{ChatMessage, ChatRequest, MessageContent, MessageRole};
 use litellm_rs::core::types::thinking::{ThinkingConfig, ThinkingContent, ThinkingEffort};
+use litellm_rs::core::types::{ChatMessage, ChatRequest, MessageContent, MessageRole};
 use std::env;
 
 #[tokio::main]

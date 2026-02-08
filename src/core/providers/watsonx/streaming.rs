@@ -6,8 +6,8 @@
 use super::error::WatsonxError;
 use crate::core::providers::base::sse::{OpenAICompatibleTransformer, UnifiedSSEStream};
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::types::{MessageContent, MessageRole};
 use crate::core::types::responses::{ChatChunk, ChatDelta, ChatResponse, ChatStreamChoice};
+use crate::core::types::{MessageContent, MessageRole};
 use bytes::Bytes;
 use futures::Stream;
 use std::pin::Pin;

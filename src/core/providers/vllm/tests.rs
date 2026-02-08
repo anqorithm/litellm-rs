@@ -317,8 +317,8 @@ mod tests {
 
     #[test]
     fn test_streaming_response_to_chunks() {
-        use crate::core::types::{ChatMessage, MessageContent};
         use crate::core::types::responses::{ChatChoice, ChatResponse, FinishReason, Usage};
+        use crate::core::types::{ChatMessage, MessageContent};
 
         let response = ChatResponse {
             id: "test-id".to_string(),

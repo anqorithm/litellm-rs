@@ -8,9 +8,7 @@ mod tests {
     use litellm_rs::core::providers::deepseek::DeepSeekProvider;
     use litellm_rs::core::traits::provider::llm_provider::trait_definition::LLMProvider;
     use litellm_rs::core::types::RequestContext;
-    use litellm_rs::core::types::{
-        ChatMessage, ChatRequest, MessageContent, MessageRole,
-    };
+    use litellm_rs::core::types::{ChatMessage, ChatRequest, MessageContent, MessageRole};
 
     /// Helper to create a simple chat request
     fn create_chat_request(model: &str, content: &str) -> ChatRequest {

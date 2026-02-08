@@ -20,9 +20,8 @@ use crate::core::traits::ProviderConfig as _;
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use crate::core::types::{
-    ChatMessage, MessageContent, MessageRole,
-    HealthStatus, ModelInfo, ProviderCapability, RequestContext,
-    ChatRequest, EmbeddingRequest,
+    ChatMessage, ChatRequest, EmbeddingRequest, HealthStatus, MessageContent, MessageRole,
+    ModelInfo, ProviderCapability, RequestContext,
     responses::{ChatChunk, ChatResponse, EmbeddingResponse},
 };
 

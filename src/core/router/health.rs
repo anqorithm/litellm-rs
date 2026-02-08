@@ -223,10 +223,7 @@ impl HealthChecker {
 
         match tokio::time::timeout(self.timeout, provider.health_check()).await {
             Ok(health_status) => {
-                if matches!(
-                    health_status,
-                    crate::core::types::HealthStatus::Healthy
-                ) {
+                if matches!(health_status, crate::core::types::HealthStatus::Healthy) {
                     let response_time = start_time.elapsed();
                     let mut statuses = self.statuses.write().await;
                     let status = statuses.entry(name.to_string()).or_default();

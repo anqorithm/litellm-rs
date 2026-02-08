@@ -120,12 +120,11 @@ mod tests {
 
             // Test with response_format and stream
             let mut request_with_format = request.clone();
-            request_with_format.response_format =
-                Some(crate::core::types::ResponseFormat {
-                    format_type: "json_object".to_string(),
-                    json_schema: None,
-                    response_type: None,
-                });
+            request_with_format.response_format = Some(crate::core::types::ResponseFormat {
+                format_type: "json_object".to_string(),
+                json_schema: None,
+                response_type: None,
+            });
             assert!(provider.should_fake_stream(&request_with_format));
 
             // Test with response_format but no stream

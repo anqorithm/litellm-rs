@@ -2,8 +2,8 @@
 //!
 //! Pre-compiled regex patterns for detecting personally identifiable information.
 
-use std::sync::LazyLock;
 use regex::Regex;
+use std::sync::LazyLock;
 
 // Pre-compiled regex patterns for PII detection
 // These patterns are validated at compile time to ensure they never fail

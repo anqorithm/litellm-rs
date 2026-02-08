@@ -3,8 +3,8 @@
 //! Model registry and information for Databricks Foundation Models.
 
 use crate::core::types::{ModelInfo, ProviderCapability};
-use std::sync::LazyLock;
 use std::collections::HashMap;
+use std::sync::LazyLock;
 
 /// Databricks model registry
 pub struct DatabricksModelRegistry {

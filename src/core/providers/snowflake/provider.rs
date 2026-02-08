@@ -15,9 +15,9 @@ use super::model_info::get_available_models;
 use crate::core::providers::base::GlobalPoolManager;
 use crate::core::traits::ProviderConfig as _;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
-use crate::core::types::{HealthStatus, ModelInfo, ProviderCapability, RequestContext};
-use crate::core::types::{ChatRequest, EmbeddingRequest};
 use crate::core::types::responses::{ChatChunk, ChatResponse, EmbeddingResponse};
+use crate::core::types::{ChatRequest, EmbeddingRequest};
+use crate::core::types::{HealthStatus, ModelInfo, ProviderCapability, RequestContext};
 
 /// Static capabilities for Snowflake provider
 const SNOWFLAKE_CAPABILITIES: &[ProviderCapability] = &[

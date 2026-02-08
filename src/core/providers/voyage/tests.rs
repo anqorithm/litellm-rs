@@ -6,10 +6,10 @@ use super::*;
 mod provider_tests {
     use super::*;
     use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
-    use crate::core::types::{ProviderCapability, RequestContext};
     use crate::core::types::{
         ChatMessage, ChatRequest, EmbeddingInput, EmbeddingRequest, MessageContent, MessageRole,
     };
+    use crate::core::types::{ProviderCapability, RequestContext};
 
     async fn create_test_provider() -> VoyageProvider {
         let config = VoyageConfig {

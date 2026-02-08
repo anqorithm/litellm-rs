@@ -18,8 +18,8 @@ use crate::core::traits::ProviderConfig;
 use crate::core::traits::error_mapper::trait_def::ErrorMapper;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use crate::core::types::{
-    chat::{ChatMessage, ChatRequest},
     HealthStatus, ModelInfo, ProviderCapability, RequestContext,
+    chat::{ChatMessage, ChatRequest},
     message::{MessageContent, MessageRole},
     responses::{ChatChoice, ChatChunk, ChatDelta, ChatResponse, ChatStreamChoice, Usage},
 };
