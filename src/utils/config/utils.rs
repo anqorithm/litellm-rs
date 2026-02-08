@@ -4,6 +4,10 @@ use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::path::Path;
+use std::sync::{LazyLock, RwLock};
+
+static CONFIG_ENV_OVERRIDES: LazyLock<RwLock<HashMap<String, String>>> =
+    LazyLock::new(|| RwLock::new(HashMap::new()));
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ConfigManager {
@@ -40,6 +44,13 @@ impl ConfigUtils {
     }
 
     pub fn get_env_var(key: &str) -> Option<String> {
+        let overrides = CONFIG_ENV_OVERRIDES
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some(value) = overrides.get(key) {
+            return (!value.is_empty()).then_some(value.clone());
+        }
+
         env::var(key).ok().filter(|v| !v.is_empty())
     }
 
@@ -48,9 +59,18 @@ impl ConfigUtils {
     }
 
     pub fn set_env_var(key: &str, value: &str) {
-        unsafe {
-            env::set_var(key, value);
-        }
+        let mut overrides = CONFIG_ENV_OVERRIDES
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        overrides.insert(key.to_string(), value.to_string());
+    }
+
+    #[cfg(test)]
+    fn clear_env_var_override(key: &str) {
+        let mut overrides = CONFIG_ENV_OVERRIDES
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        overrides.remove(key);
     }
 
     pub fn load_dotenv() -> Result<(), ProviderError> {
@@ -62,7 +82,7 @@ impl ConfigUtils {
     }
 
     pub fn get_bool_config(key: &str, default: bool) -> bool {
-        if let Ok(value) = env::var(key) {
+        if let Some(value) = Self::get_env_var(key) {
             match value.to_lowercase().as_str() {
                 "true" | "1" | "yes" | "on" => true,
                 "false" | "0" | "no" | "off" => false,
@@ -77,7 +97,7 @@ impl ConfigUtils {
     where
         T: std::str::FromStr + Clone,
     {
-        if let Ok(value) = env::var(key) {
+        if let Some(value) = Self::get_env_var(key) {
             value.parse().unwrap_or(default)
         } else {
             default
@@ -112,9 +132,7 @@ mod tests {
 
     #[test]
     fn test_get_env_var_with_default() {
-        unsafe {
-            env::set_var("TEST_VAR", "test_value");
-        }
+        ConfigUtils::set_env_var("TEST_VAR", "test_value");
         assert_eq!(
             ConfigUtils::get_env_var_with_default("TEST_VAR", "default"),
             "test_value"
@@ -123,28 +141,22 @@ mod tests {
             ConfigUtils::get_env_var_with_default("NONEXISTENT_VAR", "default"),
             "default"
         );
-        unsafe {
-            env::remove_var("TEST_VAR");
-        }
+        ConfigUtils::clear_env_var_override("TEST_VAR");
     }
 
     #[test]
     fn test_get_bool_config() {
-        unsafe {
-            env::set_var("BOOL_TRUE", "true");
-            env::set_var("BOOL_FALSE", "false");
-            env::set_var("BOOL_INVALID", "invalid");
-        }
+        ConfigUtils::set_env_var("BOOL_TRUE", "true");
+        ConfigUtils::set_env_var("BOOL_FALSE", "false");
+        ConfigUtils::set_env_var("BOOL_INVALID", "invalid");
 
         assert!(ConfigUtils::get_bool_config("BOOL_TRUE", false));
         assert!(!ConfigUtils::get_bool_config("BOOL_FALSE", true));
         assert!(ConfigUtils::get_bool_config("BOOL_INVALID", true));
         assert!(!ConfigUtils::get_bool_config("NONEXISTENT", false));
 
-        unsafe {
-            env::remove_var("BOOL_TRUE");
-            env::remove_var("BOOL_FALSE");
-            env::remove_var("BOOL_INVALID");
-        }
+        ConfigUtils::clear_env_var_override("BOOL_TRUE");
+        ConfigUtils::clear_env_var_override("BOOL_FALSE");
+        ConfigUtils::clear_env_var_override("BOOL_INVALID");
     }
 }
