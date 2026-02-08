@@ -2,7 +2,7 @@
 //!
 //! Unified transformation layer for converting between unified LiteLLM types and OpenAI-specific formats
 
-use crate::core::traits::Transform;
+use crate::core::traits::transformer::Transform;
 use crate::core::types::responses::{
     ChatChoice, ChatChunk, ChatDelta, ChatResponse, ChatStreamChoice, FinishReason, LogProbs,
     TokenLogProb, TopLogProb, Usage,
