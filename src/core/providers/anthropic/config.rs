@@ -211,11 +211,9 @@ impl AnthropicConfig {
 impl ProviderConfig for AnthropicConfig {
     fn validate(&self) -> Result<(), String> {
         // Validation
-        if self.api_key.is_none() {
+        let Some(api_key) = self.api_key.as_ref() else {
             return Err("API key is required".to_string());
-        }
-
-        let api_key = self.api_key.as_ref().unwrap();
+        };
         if api_key.is_empty() {
             return Err("API key cannot be empty".to_string());
         }

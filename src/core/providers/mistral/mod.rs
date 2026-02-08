@@ -326,7 +326,13 @@ impl LLMProvider for MistralProvider {
         // Mistral-specific adjustments
         if let Some(seed) = body.get("seed") {
             let seed_value = seed.clone();
-            body.as_object_mut().unwrap().remove("seed");
+            let body_obj = body.as_object_mut().ok_or_else(|| {
+                ProviderError::response_parsing(
+                    "mistral",
+                    "Transformed request body is not a JSON object".to_string(),
+                )
+            })?;
+            body_obj.remove("seed");
             body["random_seed"] = seed_value;
         }
 
