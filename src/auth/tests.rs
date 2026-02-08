@@ -1,7 +1,7 @@
 //! Tests for authentication module
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use crate::auth::types::{AuthMethod, AuthResult, AuthzResult};
     use crate::core::models::RequestContext;
 

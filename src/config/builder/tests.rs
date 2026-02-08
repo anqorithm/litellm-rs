@@ -1,7 +1,7 @@
 //! Tests for configuration builders
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use super::super::presets;
     use super::super::types::{ConfigBuilder, ProviderConfigBuilder};
 

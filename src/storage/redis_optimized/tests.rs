@@ -1,7 +1,7 @@
 //! Tests for optimized Redis storage
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use super::super::pool::OptimizedRedisPool;
     use super::super::types::{PoolConfig, PoolStats};
     use std::time::Duration;

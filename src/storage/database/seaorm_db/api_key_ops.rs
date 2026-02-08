@@ -310,8 +310,10 @@ mod tests {
 
     #[test]
     fn test_update_usage_stats_resets_daily() {
-        let mut stats = UsageStats::default();
-        stats.last_reset = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
+        let stats = UsageStats {
+            last_reset: Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
+            ..Default::default()
+        };
 
         let now = Utc.with_ymd_and_hms(2024, 1, 2, 0, 0, 0).unwrap();
         let updated = update_usage_stats(stats, 5, 100, 0.25, now);
@@ -323,8 +325,10 @@ mod tests {
 
     #[test]
     fn test_update_usage_stats_accumulates_same_day() {
-        let mut stats = UsageStats::default();
-        stats.last_reset = Utc.with_ymd_and_hms(2024, 1, 2, 0, 0, 0).unwrap();
+        let stats = UsageStats {
+            last_reset: Utc.with_ymd_and_hms(2024, 1, 2, 0, 0, 0).unwrap(),
+            ..Default::default()
+        };
 
         let now = Utc.with_ymd_and_hms(2024, 1, 2, 12, 0, 0).unwrap();
         let updated = update_usage_stats(stats, 2, 50, 0.10, now);

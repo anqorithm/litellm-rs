@@ -1,7 +1,7 @@
 //! Tests for batch processing
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use super::super::async_batch::*;
     use super::super::types::*;
     use crate::utils::error::error::GatewayError;

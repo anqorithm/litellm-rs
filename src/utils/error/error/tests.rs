@@ -1,7 +1,7 @@
 //! Tests for error handling
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use super::super::types::GatewayError;
     use crate::core::providers::unified_provider::ProviderError;
 

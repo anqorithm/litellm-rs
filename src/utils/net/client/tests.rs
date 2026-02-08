@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use super::super::types::{HttpClientConfig, RequestMetrics, RetryConfig};
     use super::super::utils::ClientUtils;
     use std::collections::HashMap;

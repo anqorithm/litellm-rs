@@ -1,7 +1,7 @@
 //! Tests for streaming functionality
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use crate::core::streaming::{handler::StreamingHandler, utils};
 
     #[test]

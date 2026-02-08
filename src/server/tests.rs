@@ -3,7 +3,7 @@
 //! This module contains all tests for the server components.
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use crate::server::HttpServer;
     use crate::server::builder::ServerBuilder;
     use crate::server::types::RequestMetrics;

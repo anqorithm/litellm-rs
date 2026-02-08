@@ -1,7 +1,7 @@
 //! Tests for analytics module
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use super::super::collector::MetricsCollector;
     use super::super::optimizer::CostOptimizer;
 

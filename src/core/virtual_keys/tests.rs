@@ -1,7 +1,7 @@
 //! Tests for virtual keys module
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use super::super::requests::CreateKeyRequest;
     use super::super::types::{KeyGenerationSettings, Permission, RateLimits, VirtualKey};
     use chrono::{Duration, Utc};

@@ -1,7 +1,7 @@
 //! Tests for error recovery and resilience utilities
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use super::super::{
         circuit_breaker::CircuitBreaker,
         resilience::{Bulkhead, TimeoutWrapper},

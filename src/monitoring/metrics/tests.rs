@@ -1,7 +1,7 @@
 //! Tests for metrics module
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use super::super::collector::MetricsCollector;
     use super::super::helpers::{calculate_average, calculate_percentile};
     use crate::config::models::monitoring::MonitoringConfig;

@@ -1,7 +1,7 @@
 //! Tests for observability module
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use super::super::histogram::{BoundedHistogram, HISTOGRAM_MAX_SAMPLES};
     use super::super::logging::LogAggregator;
     use super::super::metrics::MetricsCollector;

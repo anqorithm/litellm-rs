@@ -182,7 +182,7 @@ mod tests {
     fn test_agent_result_ok() {
         let result: AgentResult<i32> = Ok(42);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), 42);
+        assert!(matches!(result, Ok(42)));
     }
 
     #[test]

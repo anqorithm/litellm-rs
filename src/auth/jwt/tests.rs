@@ -1,7 +1,7 @@
 //! JWT module tests
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use crate::auth::jwt::types::{JwtHandler, TokenType};
     use crate::config::models::auth::AuthConfig;
     use uuid::Uuid;

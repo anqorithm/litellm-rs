@@ -1,7 +1,7 @@
 //! Tests for validation utilities
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use crate::core::models::openai::{ChatMessage, MessageContent, MessageRole};
     use crate::utils::data::validation::{ApiValidator, DataValidator, RequestValidator};
     use std::collections::HashMap;

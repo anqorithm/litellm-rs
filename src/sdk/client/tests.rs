@@ -1,7 +1,7 @@
 //! Tests for LLM client
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use super::super::llm_client::LLMClient;
     use crate::sdk::config::{ConfigBuilder, ProviderType};
     use crate::sdk::types::{ChatOptions, ChatRequest};

@@ -1,7 +1,7 @@
 //! Tests for token counter functionality
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use crate::core::models::openai::{ChatMessage, MessageContent, MessageRole};
     use crate::utils::ai::counter::token_counter::TokenCounter;
 

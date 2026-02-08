@@ -1,7 +1,7 @@
 //! Tests for RBAC functionality
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use crate::auth::rbac::RbacSystem;
     use crate::auth::rbac::types::{Permission, PermissionCheck, Role};
     use crate::config::models::auth::RbacConfig;

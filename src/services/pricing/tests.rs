@@ -1,7 +1,7 @@
 //! Tests for the pricing service
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use crate::services::pricing::{ModelInfo, PricingService};
     use std::collections::HashMap;
 

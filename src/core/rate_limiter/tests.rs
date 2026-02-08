@@ -1,7 +1,7 @@
 //! Tests for rate limiter
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use super::super::limiter::RateLimiter;
     use crate::config::models::rate_limit::{RateLimitConfig, RateLimitStrategy};
     use std::time::Duration;

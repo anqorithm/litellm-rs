@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use super::super::core::LoggingUtils;
     use super::super::file_logging::FileLogging;
     use super::super::logger::Logger;

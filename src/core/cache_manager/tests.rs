@@ -1,7 +1,7 @@
 //! Cache manager tests
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use crate::core::cache_manager::manager::CacheManager;
     use crate::core::cache_manager::types::{CacheConfig, CacheKey};
     use crate::core::models::openai::*;

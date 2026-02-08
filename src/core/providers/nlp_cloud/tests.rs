@@ -1,7 +1,7 @@
 //! Tests for NLP Cloud provider
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use super::super::*;
 
     #[tokio::test]

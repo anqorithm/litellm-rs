@@ -1,7 +1,7 @@
 //! Unit tests for Together AI provider
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use super::super::*;
     use crate::core::traits::provider::ProviderConfig;
     use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;

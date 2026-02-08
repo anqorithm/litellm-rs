@@ -1,7 +1,7 @@
 //! Tests for health monitoring system
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use crate::core::health::{
         monitor::{HealthMonitor, HealthMonitorConfig},
         provider::{ProviderHealth, SystemHealth},

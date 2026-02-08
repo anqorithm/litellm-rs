@@ -1,7 +1,7 @@
 //! Tests for logging module
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use crate::utils::logging::logging::async_logger::AsyncLogger;
     use crate::utils::logging::logging::sampler::LogSampler;
     use crate::utils::logging::logging::types::{AsyncLoggerConfig, LogEntry, RequestMetrics};

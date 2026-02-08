@@ -1,7 +1,7 @@
 //! Tests for monitoring module
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use super::super::types::*;
     use std::collections::HashMap;
 

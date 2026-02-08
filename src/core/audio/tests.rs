@@ -1,7 +1,7 @@
 //! Tests for audio module
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use super::super::transcription::parse_model_string;
     use super::super::types::{format_to_content_type, supported_audio_formats};
 

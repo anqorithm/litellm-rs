@@ -1,7 +1,7 @@
 //! Tests for user management module
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use super::super::roles::{TeamRole, UserRole};
     use super::super::settings::TeamSettings;
     use super::super::types::{Team, TeamMember};

@@ -1,7 +1,7 @@
 //! Alert system tests
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use super::super::channels::SlackChannel;
     use super::super::types::{AlertRule, AlertStats, ComparisonOperator};
     use crate::monitoring::types::AlertSeverity;

@@ -1,7 +1,7 @@
 //! Tests for Predibase provider
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use super::super::*;
 
     #[tokio::test]

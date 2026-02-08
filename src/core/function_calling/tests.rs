@@ -1,7 +1,7 @@
 //! Tests for function calling module
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use super::super::builtin::{CalculatorFunction, WeatherFunction};
     use super::super::executor::{FunctionCallingHandler, FunctionExecutor};
     use serde_json::json;

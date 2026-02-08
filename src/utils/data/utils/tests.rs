@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use crate::utils::data::utils::DataUtils;
     use serde_json::{Map, Value, json};
     use uuid::Uuid;

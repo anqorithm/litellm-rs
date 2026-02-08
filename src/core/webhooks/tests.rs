@@ -3,7 +3,7 @@
 //! This module contains unit tests for webhook functionality.
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use super::super::manager::WebhookManager;
     use super::super::types::{WebhookConfig, WebhookEventType, WebhookPayload};
     use std::collections::HashMap;

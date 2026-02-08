@@ -1,7 +1,7 @@
 //! Tests for rerank module
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use super::super::cache::RerankCache;
     use super::super::providers::{CohereRerankProvider, JinaRerankProvider};
     use super::super::service::{RerankProvider, RerankService};

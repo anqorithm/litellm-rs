@@ -3,7 +3,7 @@
 //! This module contains all tests for the validation logic.
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use super::super::ssrf::validate_url_against_ssrf;
     use super::super::trait_def::Validate;
     use crate::config::models::auth::AuthConfig;

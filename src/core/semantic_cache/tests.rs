@@ -1,7 +1,7 @@
 //! Tests for semantic caching
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use super::super::types::SemanticCacheConfig;
     use super::super::utils::extract_prompt_text;
     use super::super::validation::should_cache_request;

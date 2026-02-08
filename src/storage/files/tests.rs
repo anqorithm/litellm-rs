@@ -1,7 +1,7 @@
 //! Tests for file storage implementations
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use super::super::local::LocalStorage;
     use tempfile::TempDir;
 

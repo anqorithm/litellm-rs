@@ -3,7 +3,7 @@
 //! This module contains unit tests for API key management.
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use crate::auth::api_key::types::{ApiKeyVerification, CreateApiKeyRequest};
     use crate::core::models::{ApiKey, Metadata, RateLimits, UsageStats};
     use chrono::{Duration, Utc};

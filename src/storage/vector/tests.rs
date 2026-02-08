@@ -1,7 +1,7 @@
 //! Tests for vector store
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use super::super::types::{SearchResult, VectorPoint};
 
     #[test]
