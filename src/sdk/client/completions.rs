@@ -5,6 +5,12 @@ use crate::sdk::{errors::*, types::*};
 use std::time::SystemTime;
 use tracing::{debug, error, warn};
 
+fn unix_timestamp_secs(now: SystemTime) -> u64 {
+    now.duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
 impl LLMClient {
     /// Send chat message (using load balancing)
     pub async fn chat(&self, messages: Vec<Message>) -> Result<ChatResponse> {
@@ -289,10 +295,7 @@ impl LLMClient {
                 completion_tokens: 15,
                 total_tokens: 25,
             },
-            created: SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
+            created: unix_timestamp_secs(SystemTime::now()),
         })
     }
 
@@ -412,10 +415,27 @@ impl LLMClient {
                 finish_reason: Some("stop".to_string()),
             }],
             usage,
-            created: SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
+            created: unix_timestamp_secs(SystemTime::now()),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::unix_timestamp_secs;
+    use std::time::{Duration, SystemTime};
+
+    #[test]
+    fn unix_timestamp_secs_returns_zero_for_pre_epoch_times() {
+        let pre_epoch = SystemTime::UNIX_EPOCH
+            .checked_sub(Duration::from_secs(1))
+            .expect("valid pre-epoch time");
+        assert_eq!(unix_timestamp_secs(pre_epoch), 0);
+    }
+
+    #[test]
+    fn unix_timestamp_secs_returns_expected_seconds_after_epoch() {
+        let post_epoch = SystemTime::UNIX_EPOCH + Duration::from_secs(42);
+        assert_eq!(unix_timestamp_secs(post_epoch), 42);
     }
 }
