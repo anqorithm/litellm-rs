@@ -8,7 +8,6 @@ pub type Result<T> = std::result::Result<T, GatewayError>;
 
 /// Main error type for the Gateway
 #[derive(Error, Debug)]
-#[allow(dead_code)]
 pub enum GatewayError {
     /// Configuration errors
     #[error("Configuration error: {0}")]
