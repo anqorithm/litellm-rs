@@ -6,10 +6,8 @@ use tracing::Level;
 use uuid::Uuid;
 
 /// Security-aware logging utilities
-#[allow(dead_code)]
 pub struct SecurityLogger;
 
-#[allow(dead_code)]
 impl SecurityLogger {
     /// Log authentication events
     pub fn log_auth_event(
