@@ -3,8 +3,6 @@
 //! This module provides comprehensive authentication and authorization functionality
 //! including API key authentication, JWT tokens, RBAC, and OAuth 2.0 / SSO support.
 
-#![allow(dead_code)]
-
 // Public submodules
 pub mod api_key;
 pub mod jwt;
