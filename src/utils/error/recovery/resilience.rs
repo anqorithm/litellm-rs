@@ -6,12 +6,10 @@ use std::time::Duration;
 use tracing::debug;
 
 /// Timeout wrapper for async operations
-#[allow(dead_code)]
 pub struct TimeoutWrapper {
     timeout: Duration,
 }
 
-#[allow(dead_code)]
 impl TimeoutWrapper {
     /// Create a new timeout wrapper
     pub fn new(timeout: Duration) -> Self {
@@ -34,14 +32,12 @@ impl TimeoutWrapper {
 }
 
 /// Bulkhead pattern for resource isolation
-#[allow(dead_code)]
 pub struct Bulkhead {
     semaphore: Arc<tokio::sync::Semaphore>,
     name: String,
     max_concurrent: usize,
 }
 
-#[allow(dead_code)]
 impl Bulkhead {
     /// Create a new bulkhead
     pub fn new(name: String, max_concurrent: usize) -> Self {

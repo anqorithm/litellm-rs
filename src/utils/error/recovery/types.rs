@@ -4,7 +4,6 @@ use std::time::Duration;
 
 /// Circuit breaker state
 #[derive(Debug, Clone, PartialEq)]
-#[allow(dead_code)]
 pub enum CircuitState {
     /// Circuit is closed, requests flow normally
     Closed,
@@ -16,7 +15,6 @@ pub enum CircuitState {
 
 /// Circuit breaker configuration
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct CircuitBreakerConfig {
     /// Failure threshold to open circuit
     pub failure_threshold: u32,
@@ -44,7 +42,6 @@ impl Default for CircuitBreakerConfig {
 
 /// Circuit breaker metrics
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct CircuitBreakerMetrics {
     /// Current circuit breaker state
     pub state: CircuitState,
@@ -58,7 +55,6 @@ pub struct CircuitBreakerMetrics {
 
 /// Retry configuration
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct RetryConfig {
     /// Maximum number of retry attempts
     pub max_attempts: u32,

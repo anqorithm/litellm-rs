@@ -5,12 +5,10 @@ use std::time::Duration;
 use tracing::{debug, error};
 
 /// Retry mechanism with exponential backoff
-#[allow(dead_code)]
 pub struct RetryPolicy {
     config: RetryConfig,
 }
 
-#[allow(dead_code)]
 impl RetryPolicy {
     /// Create a new retry policy
     pub fn new(config: RetryConfig) -> Self {
