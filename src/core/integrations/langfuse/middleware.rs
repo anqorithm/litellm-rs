@@ -116,6 +116,7 @@ impl LangfuseTracing {
     }
 
     /// Check if path should be traced
+    #[cfg(test)]
     fn should_trace(&self, path: &str) -> bool {
         !self.exclude_paths.iter().any(|p| path.starts_with(p))
     }
@@ -199,6 +200,8 @@ where
         // Get request metadata
         let uri = req.uri().to_string();
         let query = req.query_string().to_string();
+        let include_request_body = self.include_request_body;
+        let include_response_body = self.include_response_body;
         let content_type = req
             .headers()
             .get("content-type")
@@ -214,7 +217,6 @@ where
         }
 
         let service_name = self.service_name.clone();
-        let _include_response = self.include_response_body;
 
         // Create span
         let span_id = super::types::generate_id();
@@ -226,6 +228,8 @@ where
                 "uri": uri,
                 "query": if query.is_empty() { None } else { Some(query) },
                 "content_type": content_type,
+                "include_request_body": include_request_body,
+                "include_response_body": include_response_body,
             }));
 
         span.id = span_id.clone();
