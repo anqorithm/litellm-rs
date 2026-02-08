@@ -433,7 +433,9 @@ where
             return Ok(0);
         }
 
-        let redis = self.redis.as_ref().unwrap();
+        let Some(redis) = self.redis.as_ref() else {
+            return Ok(0);
+        };
         let mut warmed = 0;
 
         for key in keys {
@@ -661,6 +663,15 @@ mod tests {
         // Warming again should not add duplicates
         let warmed_again = cache.warm_with_entries(&entries);
         assert_eq!(warmed_again, 0);
+    }
+
+    #[tokio::test]
+    async fn test_dual_cache_warm_from_redis_without_redis_returns_zero() {
+        let cache: DualCache<String> = DualCache::memory_only(DualCacheConfig::default());
+        let keys = vec![CacheKey::new("key1"), CacheKey::new("key2")];
+
+        let warmed = cache.warm_from_redis(&keys).await.unwrap();
+        assert_eq!(warmed, 0);
     }
 
     // ==================== Statistics Tests ====================
