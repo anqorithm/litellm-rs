@@ -1,6 +1,6 @@
 //! Role management methods
 
-use crate::core::models::TeamRole;
+use crate::core::models::team::TeamRole;
 use crate::core::models::user::types::UserRole;
 use crate::utils::error::{GatewayError, Result};
 

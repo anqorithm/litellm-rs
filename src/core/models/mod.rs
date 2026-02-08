@@ -10,10 +10,7 @@ pub mod response;
 pub mod team;
 pub mod user;
 
-// Re-export commonly used types
-
-pub use team::*;
-pub use user::*;
+// No top-level team/user re-exports: use explicit module paths from call sites.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
