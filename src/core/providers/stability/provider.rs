@@ -8,9 +8,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::pin::Pin;
-use std::sync::Arc;
 
-use crate::core::providers::base::{GlobalPoolManager, HeaderPair, get_pricing_db, header};
+use crate::core::providers::base::get_pricing_db;
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::{
     provider::ProviderConfig, error_mapper::trait_def::ErrorMapper,
@@ -63,38 +62,20 @@ pub struct StabilityImageResponse {
 #[derive(Debug, Clone)]
 pub struct StabilityProvider {
     config: StabilityConfig,
-    pool_manager: Arc<GlobalPoolManager>,
     supported_models: Vec<ModelInfo>,
 }
 
 impl StabilityProvider {
-    /// Generate headers for Stability AI API requests
-    fn get_request_headers(&self) -> Vec<HeaderPair> {
-        let mut headers = Vec::with_capacity(3);
-
-        if let Some(api_key) = &self.config.base.api_key {
-            headers.push(header("Authorization", format!("Bearer {}", api_key)));
-        }
-        headers.push(header("Accept", "application/json".to_string()));
-
-        headers
-    }
-
     /// Create a new Stability AI provider
     pub fn new(config: StabilityConfig) -> Result<Self, ProviderError> {
         config
             .validate()
             .map_err(|e| ProviderError::configuration("stability", e))?;
 
-        let pool_manager = Arc::new(
-            GlobalPoolManager::new()
-                .map_err(|e| ProviderError::configuration("stability", e.to_string()))?,
-        );
         let supported_models = get_stability_registry().models().to_vec();
 
         Ok(Self {
             config,
-            pool_manager,
             supported_models,
         })
     }
