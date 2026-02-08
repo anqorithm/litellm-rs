@@ -13,9 +13,10 @@ use crate::core::providers::base::{GlobalPoolManager, HeaderPair, HttpMethod, he
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::{ProviderConfig, provider::llm_provider::trait_definition::LLMProvider};
 use crate::core::types::{
-    ChatRequest, ImageGenerationRequest,
+    ChatRequest,
     context::RequestContext,
     health::HealthStatus,
+    image::ImageGenerationRequest,
     model::ModelInfo,
     model::ProviderCapability,
     responses::{ChatChunk, ChatResponse, ImageGenerationResponse},

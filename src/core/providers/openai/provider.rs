@@ -8,10 +8,11 @@ use std::pin::Pin;
 
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use crate::core::types::{
-    ChatRequest, ImageGenerationRequest,
+    ChatRequest,
     context::RequestContext,
     embedding::EmbeddingRequest,
     health::HealthStatus,
+    image::ImageGenerationRequest,
     model::ModelInfo,
     model::ProviderCapability,
     responses::{ChatChunk, ChatResponse, EmbeddingResponse, ImageGenerationResponse},

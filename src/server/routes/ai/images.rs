@@ -3,7 +3,7 @@
 use crate::core::models::RequestContext;
 use crate::core::models::openai::{ImageGenerationRequest, ImageGenerationResponse};
 use crate::core::providers::ProviderRegistry;
-use crate::core::types::ImageGenerationRequest as CoreImageRequest;
+use crate::core::types::image::ImageGenerationRequest as CoreImageRequest;
 use crate::core::types::model::ProviderCapability;
 use crate::server::routes::errors;
 use crate::server::state::AppState;

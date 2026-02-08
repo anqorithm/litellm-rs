@@ -12,10 +12,11 @@ use std::pin::Pin;
 use crate::core::traits::error_mapper::trait_def::ErrorMapper;
 use crate::core::types::errors::ProviderErrorTrait;
 use crate::core::types::{
-    ChatRequest, ImageGenerationRequest,
+    ChatRequest,
     context::RequestContext,
     embedding::EmbeddingRequest,
     health::HealthStatus,
+    image::ImageGenerationRequest,
     model::ModelInfo,
     model::ProviderCapability,
     responses::{ChatChunk, ChatResponse, EmbeddingResponse, ImageGenerationResponse},

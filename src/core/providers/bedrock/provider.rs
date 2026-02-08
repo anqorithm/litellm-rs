@@ -95,7 +95,7 @@ impl BedrockProvider {
     /// Generate images using Bedrock image models
     pub async fn generate_image(
         &self,
-        request: &crate::core::types::ImageGenerationRequest,
+        request: &crate::core::types::image::ImageGenerationRequest,
     ) -> Result<crate::core::types::responses::ImageGenerationResponse, BedrockError> {
         super::images::execute_image_generation(&self.client, request).await
     }

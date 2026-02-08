@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::types::CompletionRequest;
+use crate::core::types::image::CompletionRequest;
 use crate::core::types::responses::{
     CompletionChoice, CompletionResponse, FinishReason, LogProbs, Usage,
 };
