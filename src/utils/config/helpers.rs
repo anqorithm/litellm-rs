@@ -219,11 +219,13 @@ impl ConfigValidator {
 
     /// Validate email format
     pub fn validate_email(email: &str) -> Result<()> {
-        static EMAIL_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-            Regex::new(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$").unwrap()
-        });
+        static EMAIL_REGEX: LazyLock<std::result::Result<Regex, regex::Error>> =
+            LazyLock::new(|| Regex::new(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"));
+        let email_regex = EMAIL_REGEX
+            .as_ref()
+            .map_err(|e| GatewayError::Config(format!("Failed to compile email regex: {}", e)))?;
 
-        if !EMAIL_REGEX.is_match(email) {
+        if !email_regex.is_match(email) {
             return Err(GatewayError::Validation("Invalid email format".to_string()));
         }
         Ok(())
@@ -324,10 +326,13 @@ impl ConfigValidator {
 
     /// Validate duration string (e.g., "30s", "5m", "1h")
     pub fn validate_duration_string(value: &str) -> Result<std::time::Duration> {
-        static DURATION_REGEX: LazyLock<Regex> =
-            LazyLock::new(|| Regex::new(r"^(\d+)(s|m|h|d)$").unwrap());
+        static DURATION_REGEX: LazyLock<std::result::Result<Regex, regex::Error>> =
+            LazyLock::new(|| Regex::new(r"^(\d+)(s|m|h|d)$"));
+        let duration_regex = DURATION_REGEX.as_ref().map_err(|e| {
+            GatewayError::Config(format!("Failed to compile duration regex: {}", e))
+        })?;
 
-        if let Some(captures) = DURATION_REGEX.captures(value) {
+        if let Some(captures) = duration_regex.captures(value) {
             let number: u64 = captures[1]
                 .parse()
                 .map_err(|e| GatewayError::Validation(format!("Invalid duration number: {}", e)))?;
