@@ -10,5 +10,4 @@ pub mod provider;
 pub mod secret_manager;
 pub mod transformer;
 
-pub use error_mapper::*;
 pub use provider::*;
