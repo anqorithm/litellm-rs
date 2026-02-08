@@ -90,41 +90,58 @@ pub struct TokenPair {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde::{Serialize, de::DeserializeOwned};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn now_unix_secs() -> u64 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs()
+    }
+
+    fn to_json<T: Serialize>(value: &T) -> String {
+        serde_json::to_string(value).expect("test JSON serialization should succeed")
+    }
+
+    fn from_json<T: DeserializeOwned>(json: &str) -> T {
+        serde_json::from_str(json).expect("test JSON deserialization should succeed")
+    }
 
     // ==================== TokenType Tests ====================
 
     #[test]
     fn test_token_type_access() {
         let token_type = TokenType::Access;
-        let json = serde_json::to_string(&token_type).unwrap();
+        let json = to_json(&token_type);
         assert!(json.contains("access"));
     }
 
     #[test]
     fn test_token_type_refresh() {
         let token_type = TokenType::Refresh;
-        let json = serde_json::to_string(&token_type).unwrap();
+        let json = to_json(&token_type);
         assert!(json.contains("refresh"));
     }
 
     #[test]
     fn test_token_type_password_reset() {
         let token_type = TokenType::PasswordReset;
-        let json = serde_json::to_string(&token_type).unwrap();
+        let json = to_json(&token_type);
         assert!(json.contains("password_reset"));
     }
 
     #[test]
     fn test_token_type_email_verification() {
         let token_type = TokenType::EmailVerification;
-        let json = serde_json::to_string(&token_type).unwrap();
+        let json = to_json(&token_type);
         assert!(json.contains("email_verification"));
     }
 
     #[test]
     fn test_token_type_invitation() {
         let token_type = TokenType::Invitation;
-        let json = serde_json::to_string(&token_type).unwrap();
+        let json = to_json(&token_type);
         assert!(json.contains("invitation"));
     }
 
@@ -139,8 +156,8 @@ mod tests {
         ];
 
         for token_type in variants {
-            let json = serde_json::to_string(&token_type).unwrap();
-            let parsed: TokenType = serde_json::from_str(&json).unwrap();
+            let json = to_json(&token_type);
+            let parsed: TokenType = from_json(&json);
             // Compare debug strings since TokenType doesn't derive PartialEq
             assert_eq!(format!("{:?}", token_type), format!("{:?}", parsed));
         }
@@ -164,10 +181,7 @@ mod tests {
 
     #[test]
     fn test_claims_creation() {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
+        let now = now_unix_secs();
 
         let claims = Claims {
             sub: Uuid::new_v4(),
@@ -205,12 +219,12 @@ mod tests {
             token_type: TokenType::Access,
         };
 
-        let json = serde_json::to_string(&claims).unwrap();
+        let json = to_json(&claims);
         assert!(json.contains(&user_id.to_string()));
         assert!(json.contains("test_issuer"));
         assert!(json.contains("admin"));
 
-        let parsed: Claims = serde_json::from_str(&json).unwrap();
+        let parsed: Claims = from_json(&json);
         assert_eq!(parsed.sub, user_id);
         assert_eq!(parsed.role, "admin");
     }
@@ -231,8 +245,8 @@ mod tests {
             token_type: TokenType::Access,
         };
 
-        let json = serde_json::to_string(&claims).unwrap();
-        let parsed: Claims = serde_json::from_str(&json).unwrap();
+        let json = to_json(&claims);
+        let parsed: Claims = from_json(&json);
 
         assert!(parsed.team_id.is_none());
         assert!(parsed.session_id.is_none());
@@ -257,8 +271,8 @@ mod tests {
             token_type: TokenType::Access,
         };
 
-        let json = serde_json::to_string(&claims).unwrap();
-        let parsed: Claims = serde_json::from_str(&json).unwrap();
+        let json = to_json(&claims);
+        let parsed: Claims = from_json(&json);
 
         assert_eq!(parsed.sub, user_id);
         assert_eq!(parsed.team_id, Some(team_id));
@@ -290,10 +304,7 @@ mod tests {
 
     #[test]
     fn test_claims_expiration() {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
+        let now = now_unix_secs();
 
         let claims = Claims {
             sub: Uuid::new_v4(),
@@ -338,9 +349,9 @@ mod tests {
         reset_claims.token_type = TokenType::PasswordReset;
 
         // Serialize and verify token types
-        let access_json = serde_json::to_string(&base).unwrap();
-        let refresh_json = serde_json::to_string(&refresh_claims).unwrap();
-        let reset_json = serde_json::to_string(&reset_claims).unwrap();
+        let access_json = to_json(&base);
+        let refresh_json = to_json(&refresh_claims);
+        let reset_json = to_json(&reset_claims);
 
         assert!(access_json.contains("access"));
         assert!(refresh_json.contains("refresh"));
@@ -373,13 +384,13 @@ mod tests {
             expires_in: 7200,
         };
 
-        let json = serde_json::to_string(&pair).unwrap();
+        let json = to_json(&pair);
         assert!(json.contains("access_token_value"));
         assert!(json.contains("refresh_token_value"));
         assert!(json.contains("Bearer"));
         assert!(json.contains("7200"));
 
-        let parsed: TokenPair = serde_json::from_str(&json).unwrap();
+        let parsed: TokenPair = from_json(&json);
         assert_eq!(parsed.access_token, "access_token_value");
         assert_eq!(parsed.expires_in, 7200);
     }
@@ -528,10 +539,7 @@ mod tests {
     #[test]
     fn test_claims_for_access_token() {
         let user_id = Uuid::new_v4();
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
+        let now = now_unix_secs();
 
         let claims = Claims {
             sub: user_id,
@@ -548,7 +556,7 @@ mod tests {
         };
 
         // Verify access token characteristics
-        let json = serde_json::to_string(&claims).unwrap();
+        let json = to_json(&claims);
         assert!(json.contains("access"));
         assert!(json.contains("api:read"));
     }
@@ -556,10 +564,7 @@ mod tests {
     #[test]
     fn test_claims_for_refresh_token() {
         let user_id = Uuid::new_v4();
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
+        let now = now_unix_secs();
 
         let claims = Claims {
             sub: user_id,
@@ -583,10 +588,7 @@ mod tests {
     #[test]
     fn test_full_authentication_flow() {
         let user_id = Uuid::new_v4();
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
+        let now = now_unix_secs();
 
         // Create access claims
         let access_claims = Claims {
@@ -620,8 +622,8 @@ mod tests {
 
         // Create token pair
         let token_pair = TokenPair {
-            access_token: serde_json::to_string(&access_claims).unwrap(),
-            refresh_token: serde_json::to_string(&refresh_claims).unwrap(),
+            access_token: to_json(&access_claims),
+            refresh_token: to_json(&refresh_claims),
             token_type: "Bearer".to_string(),
             expires_in: 3600,
         };
