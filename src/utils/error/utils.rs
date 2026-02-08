@@ -73,7 +73,7 @@ impl ErrorUtils {
             if let Ok(timestamp) = reset.parse::<i64>() {
                 let now = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
+                    .unwrap_or_default()
                     .as_secs() as i64;
 
                 if timestamp > now {
@@ -509,7 +509,7 @@ mod tests {
         let mut headers = HashMap::new();
         let future_timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_secs()
             + 300; // 5 minutes in the future
         headers.insert(
@@ -529,7 +529,7 @@ mod tests {
         let mut headers = HashMap::new();
         let past_timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_secs()
             - 100; // 100 seconds in the past
         headers.insert("x-ratelimit-reset".to_string(), past_timestamp.to_string());
@@ -551,7 +551,7 @@ mod tests {
         headers.insert("retry-after".to_string(), "60".to_string());
         let future_timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_secs()
             + 120;
         headers.insert(

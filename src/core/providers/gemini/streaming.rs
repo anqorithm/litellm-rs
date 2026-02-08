@@ -282,7 +282,7 @@ impl GeminiStream {
                                         object: "chat.completion.chunk".to_string(),
                                         created: std::time::SystemTime::now()
                                             .duration_since(std::time::UNIX_EPOCH)
-                                            .unwrap()
+                                            .unwrap_or_default()
                                             .as_secs()
                                             as i64,
                                         model: model_cloned,
@@ -317,7 +317,7 @@ impl GeminiStream {
                                 object: "chat.completion.chunk".to_string(),
                                 created: std::time::SystemTime::now()
                                     .duration_since(std::time::UNIX_EPOCH)
-                                    .unwrap()
+                                    .unwrap_or_default()
                                     .as_secs() as i64,
                                 model: model_cloned,
                                 choices: vec![],
@@ -371,7 +371,7 @@ impl GeminiStream {
             "gemini-test-{}",
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .unwrap_or_default()
                 .as_nanos()
         );
 

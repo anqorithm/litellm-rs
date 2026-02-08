@@ -22,7 +22,7 @@ pub fn verify_webhook_signature(
     // Check timestamp is within acceptable range (e.g., 5 minutes)
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .unwrap()
+        .unwrap_or_default()
         .as_secs();
 
     if now.saturating_sub(timestamp) > 300 {
@@ -124,7 +124,7 @@ mod tests {
         let payload = r#"{"event": "order.created"}"#;
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_secs();
 
         let signature = generate_webhook_signature(secret, payload, now).unwrap();
@@ -139,7 +139,7 @@ mod tests {
         let payload = "test payload";
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_secs();
         let old_timestamp = now - 400; // 400 seconds ago (> 300 limit)
 
@@ -155,7 +155,7 @@ mod tests {
         let payload = "test payload";
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_secs();
 
         let signature = generate_webhook_signature("correct-secret", payload, now).unwrap();
@@ -169,7 +169,7 @@ mod tests {
         let secret = "test-secret";
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_secs();
 
         let signature = generate_webhook_signature(secret, "original payload", now).unwrap();
@@ -185,7 +185,7 @@ mod tests {
         let payload = "test payload";
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_secs();
 
         let is_valid = verify_webhook_signature(secret, payload, now, "invalid-signature").unwrap();

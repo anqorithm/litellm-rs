@@ -102,7 +102,7 @@ fn create_chat_chunk(text: &str) -> ChatChunk {
 
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .unwrap()
+        .unwrap_or_default()
         .as_secs() as i64;
 
     ChatChunk {

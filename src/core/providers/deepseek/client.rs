@@ -69,7 +69,7 @@ impl DeepSeekClient {
             use std::time::{SystemTime, UNIX_EPOCH};
             let timestamp = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .unwrap_or_default()
                 .as_millis();
             response_obj.insert(
                 "id".to_string(),
@@ -90,7 +90,7 @@ impl DeepSeekClient {
             use std::time::{SystemTime, UNIX_EPOCH};
             let timestamp = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .unwrap_or_default()
                 .as_secs();
             response_obj.insert(
                 "created".to_string(),
