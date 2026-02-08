@@ -2,8 +2,6 @@
 //!
 //! This module provides comprehensive validation functions for various data types and formats.
 
-#![allow(dead_code)]
-
 mod api_validator;
 mod data_validator;
 mod request_validator;
