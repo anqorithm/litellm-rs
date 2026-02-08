@@ -54,8 +54,7 @@ pub(super) struct PooledConnection {
     /// The actual Redis connection
     pub(super) connection: redis::aio::MultiplexedConnection,
     /// When this connection was created (for connection age tracking)
-    #[allow(dead_code)]
-    pub(super) created_at: Instant,
+    pub(super) _created_at: Instant,
     /// When this connection was last used
     pub(super) last_used: Instant,
     /// Number of requests processed by this connection
@@ -70,7 +69,7 @@ impl PooledConnection {
         let now = Instant::now();
         Self {
             connection,
-            created_at: now,
+            _created_at: now,
             last_used: now,
             request_count: 0,
             is_healthy: true,

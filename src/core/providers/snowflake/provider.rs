@@ -31,8 +31,7 @@ const SNOWFLAKE_CAPABILITIES: &[ProviderCapability] = &[
 #[derive(Debug, Clone)]
 pub struct SnowflakeProvider {
     config: SnowflakeConfig,
-    #[allow(dead_code)]
-    pool_manager: Arc<GlobalPoolManager>,
+    _pool_manager: Arc<GlobalPoolManager>,
     models: Vec<ModelInfo>,
 }
 
@@ -84,7 +83,7 @@ impl SnowflakeProvider {
 
         Ok(Self {
             config,
-            pool_manager,
+            _pool_manager: pool_manager,
             models,
         })
     }

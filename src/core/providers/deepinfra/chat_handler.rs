@@ -31,9 +31,10 @@ impl DeepInfraChatHandler {
         _request: ChatRequest,
         _context: RequestContext,
     ) -> Result<ChatResponse, ProviderError> {
+        let api_base = self.config.get_effective_api_base();
         Err(ProviderError::not_implemented(
             "deepinfra",
-            "Chat completion not yet implemented",
+            format!("Chat completion not yet implemented for endpoint {}", api_base),
         ))
     }
 
@@ -44,17 +45,10 @@ impl DeepInfraChatHandler {
         _context: RequestContext,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError>
     {
+        let api_base = self.config.get_effective_api_base();
         Err(ProviderError::not_implemented(
             "deepinfra",
-            "Chat streaming not yet implemented",
+            format!("Chat streaming not yet implemented for endpoint {}", api_base),
         ))
-    }
-}
-
-#[allow(dead_code)]
-impl DeepInfraChatHandler {
-    /// Get the config (used for testing)
-    fn get_config(&self) -> &DeepInfraConfig {
-        &self.config
     }
 }
