@@ -27,7 +27,6 @@ pub struct LogEntry {
 
 /// Async logger configuration
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct AsyncLoggerConfig {
     /// Buffer size for log entries
     pub buffer_size: usize,
