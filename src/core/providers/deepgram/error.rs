@@ -5,9 +5,6 @@
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::error_mapper::trait_def::ErrorMapper;
 
-/// Deepgram error type alias (uses unified ProviderError)
-pub type DeepgramError = ProviderError;
-
 /// Error mapper for Deepgram provider
 pub struct DeepgramErrorMapper;
 
