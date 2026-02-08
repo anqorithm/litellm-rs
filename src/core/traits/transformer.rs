@@ -59,6 +59,8 @@ impl<S, T> TransformStream<S, T> {
     }
 }
 
+impl<S, T> Unpin for TransformStream<S, T> where S: Unpin {}
+
 impl<S, T> Stream for TransformStream<S, T>
 where
     S: Stream + Unpin,
@@ -67,7 +69,7 @@ where
     type Item = S::Item;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let this = unsafe { self.get_unchecked_mut() };
+        let this = self.get_mut();
         Pin::new(&mut this.stream).poll_next(cx)
     }
 }
