@@ -137,11 +137,15 @@ impl AzureResponseHandler {
             self.processor.process_response(response)?
         };
 
-        let total_time = start_time.elapsed().as_millis() as u64;
-
-        // Add timing metrics
         let mut result = processed;
-        result.metrics.total_time_ms = total_time;
+        let transform_start = std::time::Instant::now();
+        if let Err(err) = self.transformation.transform_response(result.data.clone()) {
+            result
+                .warnings
+                .push(format!("Response transformation failed: {}", err));
+        }
+        result.metrics.transformation_time_ms = transform_start.elapsed().as_millis() as u64;
+        result.metrics.total_time_ms = start_time.elapsed().as_millis() as u64;
 
         Ok(result)
     }
