@@ -20,9 +20,6 @@ pub struct A2AGateway {
     /// Provider adapters cache
     adapters: RwLock<HashMap<AgentProvider, Arc<dyn A2AProviderAdapter>>>,
 
-    /// Gateway configuration
-    config: RwLock<A2AGatewayConfig>,
-
     /// Enable request logging
     enable_logging: bool,
 
@@ -42,7 +39,6 @@ impl A2AGateway {
         Self {
             registry: Arc::new(AgentRegistry::new()),
             adapters: RwLock::new(HashMap::new()),
-            config: RwLock::new(A2AGatewayConfig::default()),
             enable_logging: true,
             enable_cost_tracking: false,
         }
@@ -53,7 +49,6 @@ impl A2AGateway {
         let gateway = Self {
             registry: Arc::new(AgentRegistry::new()),
             adapters: RwLock::new(HashMap::new()),
-            config: RwLock::new(config.clone()),
             enable_logging: config.enable_logging,
             enable_cost_tracking: config.enable_cost_tracking,
         };
