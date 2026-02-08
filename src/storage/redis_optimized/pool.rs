@@ -22,13 +22,11 @@ pub struct OptimizedRedisPool {
     /// Connection pool manager
     pool: ConnectionPool,
     /// Redis configuration (stored for reconnection scenarios)
-    #[allow(dead_code)]
-    config: RedisConfig,
+    _config: RedisConfig,
     /// Pool statistics for monitoring
     stats: Arc<RwLock<PoolStats>>,
     /// Response time tracking per operation type
-    #[allow(dead_code)] // Reserved for detailed performance analytics
-    response_times: Arc<DashMap<String, Vec<Duration>>>,
+    _response_times: Arc<DashMap<String, Vec<Duration>>>,
 }
 
 impl OptimizedRedisPool {
@@ -51,9 +49,9 @@ impl OptimizedRedisPool {
 
         let redis_pool = Self {
             pool,
-            config: config.clone(),
+            _config: config.clone(),
             stats,
-            response_times,
+            _response_times: response_times,
         };
 
         // Initialize minimum connections

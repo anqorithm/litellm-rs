@@ -17,17 +17,15 @@ use super::types::FileMetadata;
 
 /// S3 file storage
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct S3Storage {
-    bucket: String,
-    region: String,
+    _bucket: String,
+    _region: String,
     #[cfg(feature = "s3")]
-    client: Option<aws_s3::Client>,
+    _client: Option<aws_s3::Client>,
     #[cfg(not(feature = "s3"))]
-    client: Option<()>, // Placeholder when S3 feature is disabled
+    _client: Option<()>, // Placeholder when S3 feature is disabled
 }
 
-#[allow(dead_code)]
 impl S3Storage {
     /// Create a new S3 storage instance
     pub async fn new(config: &S3Config) -> Result<Self> {
@@ -49,18 +47,18 @@ impl S3Storage {
             let client = aws_s3::Client::new(&aws_config);
 
             Ok(Self {
-                bucket: config.bucket.clone(),
-                region: config.region.clone(),
-                client: Some(client),
+                _bucket: config.bucket.clone(),
+                _region: config.region.clone(),
+                _client: Some(client),
             })
         }
 
         #[cfg(not(feature = "s3"))]
         {
             Ok(Self {
-                bucket: config.bucket.clone(),
-                region: config.region.clone(),
-                client: None,
+                _bucket: config.bucket.clone(),
+                _region: config.region.clone(),
+                _client: None,
             })
         }
     }
@@ -70,7 +68,7 @@ impl S3Storage {
     pub async fn store(&self, filename: &str, content: &[u8]) -> Result<String> {
         #[cfg(feature = "s3")]
         {
-            if let Some(client) = &self.client {
+            if let Some(client) = &self._client {
                 use aws_s3::primitives::ByteStream;
 
                 let file_id = Uuid::new_v4().to_string();
@@ -78,7 +76,7 @@ impl S3Storage {
 
                 client
                     .put_object()
-                    .bucket(&self.bucket)
+                    .bucket(&self._bucket)
                     .key(&key)
                     .body(ByteStream::from(content.to_vec()))
                     .send()
@@ -107,10 +105,10 @@ impl S3Storage {
     pub async fn get(&self, file_id: &str) -> Result<Vec<u8>> {
         #[cfg(feature = "s3")]
         {
-            if let Some(client) = &self.client {
+            if let Some(client) = &self._client {
                 let result = client
                     .get_object()
-                    .bucket(&self.bucket)
+                    .bucket(&self._bucket)
                     .key(file_id)
                     .send()
                     .await
@@ -141,10 +139,10 @@ impl S3Storage {
     pub async fn delete(&self, file_id: &str) -> Result<()> {
         #[cfg(feature = "s3")]
         {
-            if let Some(client) = &self.client {
+            if let Some(client) = &self._client {
                 client
                     .delete_object()
-                    .bucket(&self.bucket)
+                    .bucket(&self._bucket)
                     .key(file_id)
                     .send()
                     .await

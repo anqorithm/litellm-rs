@@ -106,20 +106,6 @@ impl SeaOrmDatabase {
         info!("Database migrations completed successfully");
         Ok(())
     }
-
-    /// Get the underlying database connection
-    #[allow(dead_code)] // Reserved for future direct database access
-    pub fn connection(&self) -> &DatabaseConnection {
-        &self.db
-    }
-
-    /// Close the database connection
-    #[allow(dead_code)] // Reserved for future connection cleanup
-    pub async fn close(self) -> Result<()> {
-        self.db.close().await.map_err(GatewayError::Database)?;
-        Ok(())
-    }
-
     /// Health check
     pub async fn health_check(&self) -> Result<()> {
         debug!("Performing database health check");
