@@ -7,7 +7,7 @@ use super::{
 };
 
 use crate::core::providers::{Provider, ProviderRegistry, ProviderType};
-use crate::core::types::{ChatRequest, RequestContext};
+use crate::core::types::{ChatRequest, context::RequestContext};
 use crate::utils::error::{GatewayError, Result};
 use async_trait::async_trait;
 use futures::stream::StreamExt;
@@ -63,8 +63,8 @@ impl DefaultRouter {
         // Add OpenAI provider if API key is available
         if let Ok(api_key) = std::env::var("OPENAI_API_KEY") {
             use crate::core::providers::base::BaseConfig;
-            use crate::core::providers::openai::config::OpenAIConfig;
             use crate::core::providers::openai::OpenAIProvider;
+            use crate::core::providers::openai::config::OpenAIConfig;
 
             let config = OpenAIConfig {
                 base: BaseConfig {

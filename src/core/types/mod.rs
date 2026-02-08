@@ -29,7 +29,6 @@ pub mod responses;
 // Re-export selected high-traffic modules only
 pub use chat::*;
 pub use content::*;
-pub use context::*;
 pub use embedding::*;
 pub use image::*;
 pub use message::*;

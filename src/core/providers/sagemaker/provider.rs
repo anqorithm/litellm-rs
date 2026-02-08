@@ -19,7 +19,7 @@ use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use crate::core::types::health::HealthStatus;
 use crate::core::types::responses::{ChatChunk, ChatResponse, EmbeddingResponse};
 use crate::core::types::{ChatRequest, EmbeddingRequest};
-use crate::core::types::{RequestContext, model::ModelInfo, model::ProviderCapability};
+use crate::core::types::{context::RequestContext, model::ModelInfo, model::ProviderCapability};
 
 /// Static capabilities for Sagemaker provider
 const SAGEMAKER_CAPABILITIES: &[ProviderCapability] = &[

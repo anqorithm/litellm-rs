@@ -383,7 +383,7 @@ async fn test_nvidia_nim_provider_transform_request() {
         ..Default::default()
     };
 
-    let context = crate::core::types::RequestContext::default();
+    let context = crate::core::types::context::RequestContext::default();
     let result = provider.transform_request(request, context).await;
     assert!(result.is_ok());
 

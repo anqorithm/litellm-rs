@@ -12,9 +12,8 @@ use crate::core::{
         provider::{LLMProvider, ProviderConfig},
     },
     types::{
-        ChatRequest, RequestContext, health::HealthStatus, model::ModelInfo,
-        model::ProviderCapability,
-        responses::ChatResponse,
+        ChatRequest, context::RequestContext, health::HealthStatus, model::ModelInfo,
+        model::ProviderCapability, responses::ChatResponse,
     },
 };
 use crate::utils::net::http::create_custom_client;

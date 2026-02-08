@@ -653,7 +653,7 @@ macro_rules! define_openai_compatible_provider {
             async fn transform_request(
                 &self,
                 request: $crate::core::types::ChatRequest,
-                _context: $crate::core::types::RequestContext,
+                _context: $crate::core::types::context::RequestContext,
             ) -> Result<serde_json::Value, Self::Error> {
                 let mut req = serde_json::json!({
                     "model": request.model,
@@ -745,7 +745,7 @@ macro_rules! define_openai_compatible_provider {
             async fn chat_completion(
                 &self,
                 request: $crate::core::types::ChatRequest,
-                context: $crate::core::types::RequestContext,
+                context: $crate::core::types::context::RequestContext,
             ) -> Result<$crate::core::types::responses::ChatResponse, Self::Error> {
                 let base_url = self
                     .config
@@ -817,7 +817,7 @@ macro_rules! define_openai_compatible_provider {
             async fn chat_completion_stream(
                 &self,
                 _request: $crate::core::types::ChatRequest,
-                _context: $crate::core::types::RequestContext,
+                _context: $crate::core::types::context::RequestContext,
             ) -> Result<
                 std::pin::Pin<
                     Box<
@@ -1075,7 +1075,7 @@ macro_rules! define_http_provider_with_hooks {
             async fn transform_request(
                 &self,
                 request: $crate::core::types::ChatRequest,
-                _context: $crate::core::types::RequestContext,
+                _context: $crate::core::types::context::RequestContext,
             ) -> Result<serde_json::Value, Self::Error> {
                 ($request_transform)(self, request)
             }
@@ -1096,7 +1096,7 @@ macro_rules! define_http_provider_with_hooks {
             async fn chat_completion(
                 &self,
                 request: $crate::core::types::ChatRequest,
-                context: $crate::core::types::RequestContext,
+                context: $crate::core::types::context::RequestContext,
             ) -> Result<$crate::core::types::responses::ChatResponse, Self::Error> {
                 let url = ($url_builder)(self);
 
@@ -1142,7 +1142,7 @@ macro_rules! define_http_provider_with_hooks {
             async fn chat_completion_stream(
                 &self,
                 _request: $crate::core::types::ChatRequest,
-                _context: $crate::core::types::RequestContext,
+                _context: $crate::core::types::context::RequestContext,
             ) -> Result<
                 std::pin::Pin<
                     Box<
@@ -1282,7 +1282,7 @@ macro_rules! define_pooled_http_provider_with_hooks {
             async fn transform_request(
                 &self,
                 request: $crate::core::types::ChatRequest,
-                _context: $crate::core::types::RequestContext,
+                _context: $crate::core::types::context::RequestContext,
             ) -> Result<serde_json::Value, Self::Error> {
                 ($request_transform)(self, request)
             }
@@ -1303,7 +1303,7 @@ macro_rules! define_pooled_http_provider_with_hooks {
             async fn chat_completion(
                 &self,
                 request: $crate::core::types::ChatRequest,
-                context: $crate::core::types::RequestContext,
+                context: $crate::core::types::context::RequestContext,
             ) -> Result<$crate::core::types::responses::ChatResponse, Self::Error> {
                 let url = ($url_builder)(self);
                 let body = self.transform_request(request.clone(), context.clone()).await?;
@@ -1337,7 +1337,7 @@ macro_rules! define_pooled_http_provider_with_hooks {
             async fn chat_completion_stream(
                 &self,
                 request: $crate::core::types::ChatRequest,
-                context: $crate::core::types::RequestContext,
+                context: $crate::core::types::context::RequestContext,
             ) -> Result<
                 std::pin::Pin<
                     Box<

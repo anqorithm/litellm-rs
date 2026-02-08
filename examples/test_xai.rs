@@ -3,8 +3,7 @@
 use litellm_rs::core::providers::xai::{XAIConfig, XAIProvider};
 use litellm_rs::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use litellm_rs::core::types::{
-    RequestContext,
-    ChatMessage, ChatRequest, MessageContent, MessageRole,
+    ChatMessage, ChatRequest, MessageContent, MessageRole, context::RequestContext,
 };
 
 #[tokio::main]

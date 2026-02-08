@@ -103,7 +103,7 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn test_groq_real_chat_completion() {
-        use litellm_rs::core::types::RequestContext;
+        use litellm_rs::core::types::context::RequestContext;
         use litellm_rs::core::types::{ChatMessage, ChatRequest, MessageContent, MessageRole};
 
         let api_key =

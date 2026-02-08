@@ -305,7 +305,7 @@ async fn test_transform_request_basic() {
         ..Default::default()
     };
 
-    let context = crate::core::types::RequestContext::default();
+    let context = crate::core::types::context::RequestContext::default();
     let result = provider.transform_request(request, context).await;
 
     assert!(result.is_ok());
@@ -331,7 +331,7 @@ async fn test_transform_request_with_params() {
         ..Default::default()
     };
 
-    let context = crate::core::types::RequestContext::default();
+    let context = crate::core::types::context::RequestContext::default();
     let body = provider.transform_request(request, context).await.unwrap();
 
     assert!((body["temperature"].as_f64().unwrap() - 0.7).abs() < 0.001);

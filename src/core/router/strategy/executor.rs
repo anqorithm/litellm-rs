@@ -2,7 +2,7 @@
 
 use super::selection::SelectionMethods;
 use super::types::{ProviderUsage, RoutingData, RoutingStrategy};
-use crate::core::types::RequestContext;
+use crate::core::types::context::RequestContext;
 use crate::utils::error::{GatewayError, Result};
 use parking_lot::RwLock;
 use std::sync::atomic::AtomicUsize;

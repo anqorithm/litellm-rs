@@ -6,7 +6,7 @@
 use std::marker::PhantomData;
 
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::types::RequestContext;
+use crate::core::types::context::RequestContext;
 use crate::core::types::model::ProviderCapability;
 use crate::core::types::responses::{ChatResponse, EmbeddingResponse, ImageGenerationResponse};
 use crate::core::types::{ChatRequest, EmbeddingRequest, ImageGenerationRequest};

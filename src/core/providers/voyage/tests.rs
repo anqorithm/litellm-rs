@@ -9,7 +9,7 @@ mod provider_tests {
     use crate::core::types::{
         ChatMessage, ChatRequest, EmbeddingInput, EmbeddingRequest, MessageContent, MessageRole,
     };
-    use crate::core::types::{RequestContext, model::ProviderCapability};
+    use crate::core::types::{context::RequestContext, model::ProviderCapability};
 
     async fn create_test_provider() -> VoyageProvider {
         let config = VoyageConfig {

@@ -19,8 +19,8 @@ use crate::core::traits::{
     ProviderConfig as _, provider::llm_provider::trait_definition::LLMProvider,
 };
 use crate::core::types::{
-    ChatMessage, ChatRequest, EmbeddingRequest, MessageContent, MessageRole, RequestContext,
-    ToolCall,
+    ChatMessage, ChatRequest, EmbeddingRequest, MessageContent, MessageRole, ToolCall,
+    context::RequestContext,
     health::HealthStatus,
     model::ModelInfo,
     model::ProviderCapability,

@@ -144,7 +144,7 @@ use crate::core::types::responses::{
     ChatChunk, ChatResponse, EmbeddingResponse, ImageGenerationResponse,
 };
 use crate::core::types::{ChatRequest, EmbeddingRequest, ImageGenerationRequest};
-use crate::core::types::{RequestContext, model::ProviderCapability};
+use crate::core::types::{context::RequestContext, model::ProviderCapability};
 use chrono::{DateTime, Utc};
 pub use contextual_error::ContextualError;
 pub use provider_registry::ProviderRegistry;

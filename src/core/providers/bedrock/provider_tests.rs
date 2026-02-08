@@ -365,7 +365,7 @@ async fn test_map_openai_params_multiple() {
 #[tokio::test]
 async fn test_transform_request_claude() {
     use crate::core::types::ChatRequest;
-    use crate::core::types::RequestContext;
+    use crate::core::types::context::RequestContext;
 
     let provider = create_test_provider();
 
@@ -395,7 +395,7 @@ async fn test_transform_request_claude() {
 #[tokio::test]
 async fn test_transform_request_titan() {
     use crate::core::types::ChatRequest;
-    use crate::core::types::RequestContext;
+    use crate::core::types::context::RequestContext;
 
     let provider = create_test_provider();
 
@@ -423,7 +423,7 @@ async fn test_transform_request_titan() {
 #[tokio::test]
 async fn test_transform_request_nova() {
     use crate::core::types::ChatRequest;
-    use crate::core::types::RequestContext;
+    use crate::core::types::context::RequestContext;
 
     let provider = create_test_provider();
 
@@ -451,7 +451,7 @@ async fn test_transform_request_nova() {
 #[tokio::test]
 async fn test_transform_request_llama() {
     use crate::core::types::ChatRequest;
-    use crate::core::types::RequestContext;
+    use crate::core::types::context::RequestContext;
 
     let provider = create_test_provider();
 
@@ -475,7 +475,7 @@ async fn test_transform_request_llama() {
 #[tokio::test]
 async fn test_transform_request_mistral() {
     use crate::core::types::ChatRequest;
-    use crate::core::types::RequestContext;
+    use crate::core::types::context::RequestContext;
 
     let provider = create_test_provider();
 
@@ -500,7 +500,7 @@ async fn test_transform_request_mistral() {
 #[tokio::test]
 async fn test_transform_request_ai21() {
     use crate::core::types::ChatRequest;
-    use crate::core::types::RequestContext;
+    use crate::core::types::context::RequestContext;
 
     let provider = create_test_provider();
 
@@ -526,7 +526,7 @@ async fn test_transform_request_ai21() {
 #[tokio::test]
 async fn test_transform_request_cohere() {
     use crate::core::types::ChatRequest;
-    use crate::core::types::RequestContext;
+    use crate::core::types::context::RequestContext;
 
     let provider = create_test_provider();
 
@@ -551,7 +551,7 @@ async fn test_transform_request_cohere() {
 #[tokio::test]
 async fn test_transform_request_embedding_model_error() {
     use crate::core::types::ChatRequest;
-    use crate::core::types::RequestContext;
+    use crate::core::types::context::RequestContext;
 
     let provider = create_test_provider();
 
@@ -574,7 +574,7 @@ async fn test_transform_request_embedding_model_error() {
 #[tokio::test]
 async fn test_transform_request_unknown_model() {
     use crate::core::types::ChatRequest;
-    use crate::core::types::RequestContext;
+    use crate::core::types::context::RequestContext;
 
     let provider = create_test_provider();
 
