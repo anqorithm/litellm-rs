@@ -2,8 +2,9 @@
 //!
 //! This module provides comprehensive error handling, recovery, and error context management.
 
-#[allow(clippy::module_inception)]
-pub mod error;
+#[path = "error/mod.rs"]
+pub mod gateway;
+pub use gateway as error;
 pub mod recovery;
 pub mod utils;
 
