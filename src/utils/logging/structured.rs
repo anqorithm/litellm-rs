@@ -44,49 +44,42 @@ impl LogContext {
     }
 
     /// Set request ID
-    #[allow(dead_code)] // Reserved for future logging context operations
     pub fn with_request_id(mut self, request_id: RequestId) -> Self {
         self.request_id = Some(request_id);
         self
     }
 
     /// Set user ID
-    #[allow(dead_code)] // Reserved for future logging context operations
     pub fn with_user_id(mut self, user_id: UserId) -> Self {
         self.user_id = Some(user_id);
         self
     }
 
     /// Set organization ID
-    #[allow(dead_code)] // Reserved for future logging context operations
     pub fn with_organization_id(mut self, org_id: Uuid) -> Self {
         self.organization_id = Some(org_id);
         self
     }
 
     /// Set API key (will be truncated for security)
-    #[allow(dead_code)] // Reserved for future logging context operations
     pub fn with_api_key(mut self, api_key: &ApiKey) -> Self {
         self.api_key = Some(api_key.as_display_str());
         self
     }
 
     /// Set model
-    #[allow(dead_code)] // Reserved for future logging context operations
     pub fn with_model(mut self, model: ModelName) -> Self {
         self.model = Some(model);
         self
     }
 
     /// Set provider
-    #[allow(dead_code)] // Reserved for future logging context operations
     pub fn with_provider(mut self, provider: String) -> Self {
         self.provider = Some(provider);
         self
     }
 
     /// Add custom field
-    #[allow(dead_code)] // Reserved for future logging context operations
     pub fn with_field<T: Serialize>(mut self, key: &str, value: T) -> Self {
         if let Ok(json_value) = serde_json::to_value(value) {
             self.extra.insert(key.to_string(), json_value);
@@ -95,7 +88,6 @@ impl LogContext {
     }
 
     /// Get context fields as a formatted string for logging
-    #[allow(dead_code)] // Reserved for future logging context operations
     pub fn context_fields(&self) -> String {
         let mut fields = Vec::new();
 
@@ -144,7 +136,6 @@ pub struct PerformanceMetrics {
 
 impl PerformanceMetrics {
     /// Create new performance metrics
-    #[allow(dead_code)] // Reserved for future performance monitoring
     pub fn new(duration: Duration) -> Self {
         Self {
             duration_ms: duration.as_millis() as u64,
@@ -158,21 +149,18 @@ impl PerformanceMetrics {
     }
 
     /// Set memory usage
-    #[allow(dead_code)] // Reserved for future performance monitoring
     pub fn with_memory(mut self, bytes: u64) -> Self {
         self.memory_bytes = Some(bytes);
         self
     }
 
     /// Set database query count
-    #[allow(dead_code)] // Reserved for future performance monitoring
     pub fn with_db_queries(mut self, count: u32) -> Self {
         self.db_queries = Some(count);
         self
     }
 
     /// Set cache statistics
-    #[allow(dead_code)] // Reserved for future performance monitoring
     pub fn with_cache_stats(mut self, hits: u32, misses: u32) -> Self {
         self.cache_hits = Some(hits);
         self.cache_misses = Some(misses);
@@ -180,14 +168,12 @@ impl PerformanceMetrics {
     }
 
     /// Set token usage
-    #[allow(dead_code)] // Reserved for future performance monitoring
     pub fn with_tokens(mut self, tokens: u32) -> Self {
         self.tokens_used = Some(tokens);
         self
     }
 
     /// Set cost
-    #[allow(dead_code)] // Reserved for future performance monitoring
     pub fn with_cost(mut self, cost: f64) -> Self {
         self.cost_usd = Some(cost);
         self
@@ -201,27 +187,23 @@ pub struct StructuredLogger {
 
 impl StructuredLogger {
     /// Create a new structured logger
-    #[allow(dead_code)] // Reserved for future structured logging
     pub fn new(context: LogContext) -> Self {
         Self { context }
     }
 
     /// Log an info message
-    #[allow(dead_code)] // Reserved for future structured logging
     pub fn info(&self, message: &str) {
         let context_str = self.context.context_fields();
         info!("{} | {}", message, context_str);
     }
 
     /// Log a warning message
-    #[allow(dead_code)] // Reserved for future structured logging
     pub fn warn(&self, message: &str) {
         let context_str = self.context.context_fields();
         warn!("{} | {}", message, context_str);
     }
 
     /// Log an error message
-    #[allow(dead_code)] // Reserved for future structured logging
     pub fn error(&self, message: &str, error: Option<&dyn std::error::Error>) {
         let context_str = self.context.context_fields();
         if let Some(err) = error {
@@ -232,14 +214,12 @@ impl StructuredLogger {
     }
 
     /// Log a debug message
-    #[allow(dead_code)] // Reserved for future structured logging
     pub fn debug(&self, message: &str) {
         let context_str = self.context.context_fields();
         debug!("{} | {}", message, context_str);
     }
 
     /// Log performance metrics
-    #[allow(dead_code)] // Reserved for future structured logging
     pub fn performance(&self, operation: &str, metrics: PerformanceMetrics) {
         let context_str = self.context.context_fields();
         info!(
@@ -249,7 +229,6 @@ impl StructuredLogger {
     }
 
     /// Log an API request
-    #[allow(dead_code)] // Reserved for future structured logging
     pub fn api_request(&self, method: &str, path: &str, status_code: u16, duration: Duration) {
         let context_str = self.context.context_fields();
         info!(
@@ -263,7 +242,6 @@ impl StructuredLogger {
     }
 
     /// Log a database operation
-    #[allow(dead_code)] // Reserved for future structured logging
     pub fn database_operation(
         &self,
         operation: &str,
@@ -283,7 +261,6 @@ impl StructuredLogger {
     }
 
     /// Log a cache operation
-    #[allow(dead_code)] // Reserved for future structured logging
     pub fn cache_operation(&self, operation: &str, key: &str, hit: bool, duration: Duration) {
         let context_str = self.context.context_fields();
         debug!(
@@ -297,7 +274,6 @@ impl StructuredLogger {
     }
 
     /// Log provider interaction
-    #[allow(dead_code)] // Reserved for future structured logging
     pub fn provider_interaction(
         &self,
         provider: &str,
@@ -328,7 +304,6 @@ pub struct Timer {
 
 impl Timer {
     /// Start a new timer
-    #[allow(dead_code)] // Reserved for future performance timing
     pub fn start(operation: String, logger: StructuredLogger) -> Self {
         Self {
             start: Instant::now(),
@@ -338,7 +313,6 @@ impl Timer {
     }
 
     /// Stop the timer and log the duration
-    #[allow(dead_code)] // Reserved for future performance timing
     pub fn stop(self) {
         let duration = self.start.elapsed();
         self.logger
@@ -346,7 +320,6 @@ impl Timer {
     }
 
     /// Stop the timer with additional metrics
-    #[allow(dead_code)] // Reserved for future performance timing
     pub fn stop_with_metrics(self, metrics: PerformanceMetrics) {
         self.logger.performance(&self.operation, metrics);
     }
