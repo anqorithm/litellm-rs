@@ -2,6 +2,7 @@
 //!
 //! This module provides structured logging, monitoring, and debugging utilities.
 
+#[allow(clippy::module_inception)]
 pub mod logging;
 pub mod structured;
 pub mod utils;

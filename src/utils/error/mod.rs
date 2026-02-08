@@ -2,6 +2,7 @@
 //!
 //! This module provides comprehensive error handling, recovery, and error context management.
 
+#[allow(clippy::module_inception)]
 pub mod error;
 pub mod recovery;
 pub mod utils;
