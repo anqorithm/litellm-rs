@@ -425,6 +425,7 @@ mod tests {
         let chunk: OllamaStreamChunk = serde_json::from_str(json).unwrap();
         assert_eq!(chunk.model, "llama3:8b");
         assert!(!chunk.done);
+        assert_eq!(chunk.created_at, Some("2024-01-01T00:00:00Z".to_string()));
         assert!(chunk.message.is_some());
         assert_eq!(chunk.message.unwrap().content, Some("Hello".to_string()));
     }
@@ -442,7 +443,8 @@ mod tests {
             "done_reason": "stop",
             "prompt_eval_count": 10,
             "eval_count": 50,
-            "total_duration": 1000000000
+            "total_duration": 1000000000,
+            "load_duration": 1000
         }"#;
 
         let chunk: OllamaStreamChunk = serde_json::from_str(json).unwrap();
@@ -450,6 +452,8 @@ mod tests {
         assert_eq!(chunk.done_reason, Some("stop".to_string()));
         assert_eq!(chunk.prompt_eval_count, Some(10));
         assert_eq!(chunk.eval_count, Some(50));
+        assert_eq!(chunk.total_duration, Some(1_000_000_000));
+        assert_eq!(chunk.load_duration, Some(1000));
     }
 
     #[test]
@@ -557,5 +561,59 @@ mod tests {
         let last = chunks.last().unwrap();
         assert!(last.choices[0].finish_reason.is_some());
         assert!(last.usage.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_create_fake_stream_emits_chunks() {
+        use crate::core::types::responses::ChatChoice;
+        use crate::core::types::{chat::ChatMessage, message::MessageContent};
+        use futures::StreamExt;
+
+        let response = ChatResponse {
+            id: "test-id".to_string(),
+            object: "chat.completion".to_string(),
+            created: 1234567890,
+            model: "ollama/llama3:8b".to_string(),
+            system_fingerprint: None,
+            choices: vec![ChatChoice {
+                index: 0,
+                message: ChatMessage {
+                    role: MessageRole::Assistant,
+                    content: Some(MessageContent::Text("Hello world".to_string())),
+                    thinking: None,
+                    tool_calls: None,
+                    function_call: None,
+                    name: None,
+                    tool_call_id: None,
+                },
+                finish_reason: Some(crate::core::types::responses::FinishReason::Stop),
+                logprobs: None,
+            }],
+            usage: Some(Usage {
+                prompt_tokens: 10,
+                completion_tokens: 2,
+                total_tokens: 12,
+                prompt_tokens_details: None,
+                completion_tokens_details: None,
+                thinking_usage: None,
+            }),
+        };
+
+        let mut stream = create_fake_stream(response).await.unwrap();
+        let mut chunks = Vec::new();
+        while let Some(chunk) = stream.next().await {
+            chunks.push(chunk.unwrap());
+        }
+
+        assert!(chunks.len() >= 3);
+        assert_eq!(chunks[0].choices[0].delta.role, Some(MessageRole::Assistant));
+        assert!(
+            chunks
+                .last()
+                .unwrap()
+                .choices
+                .first()
+                .is_some_and(|choice| choice.finish_reason.is_some())
+        );
     }
 }
