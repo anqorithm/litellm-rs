@@ -8,9 +8,6 @@ use serde::{Deserialize, Serialize};
 /// Default API base URL for GitHub Copilot
 pub const GITHUB_COPILOT_API_BASE: &str = "https://api.githubcopilot.com";
 
-/// Copilot version for headers
-pub const COPILOT_VERSION: &str = "0.26.7";
-
 /// Editor plugin version for headers
 pub const EDITOR_PLUGIN_VERSION: &str = "copilot-chat/0.26.7";
 
