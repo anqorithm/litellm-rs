@@ -654,4 +654,65 @@ mod tests {
                 .unwrap()
         );
     }
+
+    #[test]
+    fn test_cohere_chat_request_serialization() {
+        let req = CohereChatRequest {
+            model: "command-r-plus".to_string(),
+            messages: vec![json!({"role": "user", "content": "hello"})],
+            temperature: Some(0.3),
+            max_tokens: Some(128),
+            p: Some(0.95),
+            frequency_penalty: None,
+            presence_penalty: None,
+            stop_sequences: Some(vec!["END".to_string()]),
+            stream: Some(false),
+            tools: None,
+            seed: Some(42),
+            documents: None,
+            preamble: None,
+        };
+
+        let json = serde_json::to_value(req).unwrap();
+        assert_eq!(json["model"], "command-r-plus");
+        assert_eq!(json["max_tokens"], 128);
+    }
+
+    #[test]
+    fn test_cohere_chat_response_roundtrip() {
+        let response = CohereChatResponse {
+            id: "cohere-response-1".to_string(),
+            message: CohereMessage {
+                role: "assistant".to_string(),
+                content: Some(vec![CohereContent {
+                    content_type: "text".to_string(),
+                    text: Some("hello".to_string()),
+                }]),
+                tool_calls: None,
+                citations: Some(vec![CohereCitation {
+                    start: 0,
+                    end: 5,
+                    text: "hello".to_string(),
+                    sources: vec![CohereSource {
+                        source_type: "document".to_string(),
+                        id: Some("doc-1".to_string()),
+                        document: Some(json!({"title": "doc"})),
+                    }],
+                }]),
+            },
+            finish_reason: Some("stop".to_string()),
+            usage: CohereUsage {
+                tokens: CohereTokens {
+                    input_tokens: 3,
+                    output_tokens: 2,
+                },
+            },
+        };
+
+        let encoded = serde_json::to_value(&response).unwrap();
+        let decoded: CohereChatResponse = serde_json::from_value(encoded).unwrap();
+        assert_eq!(decoded.id, "cohere-response-1");
+        assert_eq!(decoded.usage.tokens.input_tokens, 3);
+        assert_eq!(decoded.usage.tokens.output_tokens, 2);
+    }
 }

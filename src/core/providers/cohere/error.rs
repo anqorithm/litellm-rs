@@ -129,4 +129,11 @@ mod tests {
         assert!(is_cohere_error(&err));
         assert_eq!(cohere_category(&err), "invalid_request");
     }
+
+    #[test]
+    fn test_cohere_configuration_error() {
+        let err = cohere_configuration("Missing config");
+        assert!(is_cohere_error(&err));
+        assert_eq!(cohere_category(&err), "configuration");
+    }
 }

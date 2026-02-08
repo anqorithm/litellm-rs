@@ -436,4 +436,68 @@ mod tests {
         assert!(params.contains(&"encoding_format"));
         assert!(params.contains(&"dimensions"));
     }
+
+    #[test]
+    fn test_cohere_embedding_request_serialization() {
+        let request = CohereEmbeddingRequest {
+            model: "embed-english-v3.0".to_string(),
+            texts: Some(vec!["hello".to_string()]),
+            images: None,
+            input_type: "search_document".to_string(),
+            embedding_types: Some(vec!["float".to_string()]),
+            truncate: Some("END".to_string()),
+            output_dimension: Some(1024),
+        };
+
+        let json = serde_json::to_value(request).unwrap();
+        assert_eq!(json["model"], "embed-english-v3.0");
+        assert_eq!(json["input_type"], "search_document");
+    }
+
+    #[test]
+    fn test_cohere_embedding_response_roundtrip() {
+        let response = CohereEmbeddingResponse {
+            id: "embed-resp-1".to_string(),
+            embeddings: CohereEmbeddings {
+                float: Some(vec![vec![0.1, 0.2, 0.3]]),
+                int8: None,
+                uint8: None,
+                binary: None,
+                ubinary: None,
+            },
+            texts: vec!["hello".to_string()],
+            meta: Some(CohereEmbeddingMeta {
+                api_version: Some(json!({"version": "2"})),
+                billed_units: Some(CohereBilledUnits {
+                    input_tokens: 12,
+                    images: None,
+                }),
+                warnings: vec!["none".to_string()],
+            }),
+        };
+
+        let encoded = serde_json::to_value(&response).unwrap();
+        let decoded: CohereEmbeddingResponse = serde_json::from_value(encoded).unwrap();
+        assert_eq!(decoded.id, "embed-resp-1");
+        assert_eq!(
+            decoded
+                .meta
+                .as_ref()
+                .and_then(|m| m.billed_units.as_ref())
+                .map(|b| b.input_tokens),
+            Some(12)
+        );
+    }
+
+    #[test]
+    fn test_get_max_input_length() {
+        assert_eq!(
+            CohereEmbeddingHandler::get_max_input_length("embed-english-v3.0"),
+            512
+        );
+        assert_eq!(
+            CohereEmbeddingHandler::get_max_input_length("embed-multilingual-v2.0"),
+            512
+        );
+    }
 }

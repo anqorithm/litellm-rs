@@ -435,4 +435,15 @@ mod tests {
         let body = CohereRerankHandler::transform_request(&request).unwrap();
         assert!(body["rank_fields"].as_array().is_some());
     }
+
+    #[test]
+    fn test_calculate_search_units() {
+        let documents = vec![
+            RerankDocument::Text("doc one".to_string()),
+            RerankDocument::Text("doc two".to_string()),
+            RerankDocument::Structured(json!({"text": "doc three"})),
+        ];
+
+        assert_eq!(CohereRerankHandler::calculate_search_units(&documents), 3);
+    }
 }
