@@ -6,10 +6,8 @@ use std::collections::HashMap;
 use tracing::Level;
 
 /// Performance logging utilities
-#[allow(dead_code)]
 pub struct PerformanceLogger;
 
-#[allow(dead_code)]
 impl PerformanceLogger {
     /// Log request performance metrics
     pub fn log_request_metrics(metrics: RequestMetrics) {
