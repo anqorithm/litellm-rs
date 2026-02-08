@@ -49,9 +49,6 @@ const MILVUS_CAPABILITIES: &[ProviderCapability] = &[ProviderCapability::Embeddi
 mod endpoints {
     pub const VECTOR_INSERT: &str = "/v1/vector/insert";
     pub const VECTOR_SEARCH: &str = "/v1/vector/search";
-    pub const VECTOR_QUERY: &str = "/v1/vector/query";
-    pub const VECTOR_DELETE: &str = "/v1/vector/delete";
-    pub const COLLECTION_LIST: &str = "/v1/vector/collections";
     pub const HEALTH: &str = "/v1/vector/collections";
 }
 
@@ -354,21 +351,6 @@ impl MilvusProvider {
         }
 
         Ok(milvus_response.data.unwrap_or_default())
-    }
-
-    /// Transform embedding request to create vectors from embedding input
-    /// Note: Milvus doesn't generate embeddings - it stores them
-    /// This method stores provided embeddings in Milvus
-    pub(crate) fn transform_embedding_request(
-        &self,
-        _request: &EmbeddingRequest,
-    ) -> Result<serde_json::Value, MilvusError> {
-        // Milvus doesn't generate embeddings, it stores them
-        // Return an error explaining this
-        Err(MilvusError::not_supported(
-            PROVIDER_NAME,
-            "Milvus is a vector database - use insert_vectors() to store embeddings, or use another provider (OpenAI, Voyage, etc.) to generate embeddings first",
-        ))
     }
 }
 
