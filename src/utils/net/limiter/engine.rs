@@ -8,15 +8,13 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
 
-use super::types::{RateLimitConfig, RateLimitKey, RateLimitResult, SlidingWindow, TokenBucket};
+use super::types::{RateLimitConfig, RateLimitKey, RateLimitResult, SlidingWindow};
 
 /// Rate limiter implementation
 #[derive(Debug, Clone)]
 pub struct RateLimiter {
     /// Rate limit configurations
     pub(super) configs: Arc<RwLock<HashMap<String, RateLimitConfig>>>,
-    /// Token buckets for rate limiting
-    pub(super) buckets: Arc<RwLock<HashMap<String, TokenBucket>>>,
     /// Sliding windows for request counting
     pub(super) windows: Arc<RwLock<HashMap<String, SlidingWindow>>>,
 }
@@ -26,7 +24,6 @@ impl RateLimiter {
     pub fn new() -> Self {
         Self {
             configs: Arc::new(RwLock::new(HashMap::new())),
-            buckets: Arc::new(RwLock::new(HashMap::new())),
             windows: Arc::new(RwLock::new(HashMap::new())),
         }
     }

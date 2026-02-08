@@ -2,8 +2,6 @@
 //!
 //! This module provides rate limiting functionality using token bucket and sliding window algorithms.
 
-#![allow(dead_code)]
-
 // Module declarations
 mod engine;
 mod types;
