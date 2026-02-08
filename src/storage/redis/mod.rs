@@ -13,8 +13,6 @@
 //! - `atomic` - Atomic operations and utilities
 //! - `tests` - Module tests
 
-#![allow(dead_code)]
-
 // Module declarations
 mod atomic;
 mod batch;

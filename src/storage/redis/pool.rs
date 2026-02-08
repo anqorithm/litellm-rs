@@ -11,11 +11,11 @@ use tracing::{debug, info};
 #[derive(Debug, Clone)]
 pub struct RedisPool {
     /// Redis client (None in no-op mode)
-    pub(crate) client: Option<Client>,
+    pub(crate) _client: Option<Client>,
     /// Connection manager (None in no-op mode)
     pub(crate) connection_manager: Option<MultiplexedConnection>,
     /// Configuration
-    pub(crate) config: RedisConfig,
+    pub(crate) _config: RedisConfig,
     /// Whether this is a no-op pool (Redis unavailable)
     pub(crate) noop_mode: bool,
 }
@@ -40,9 +40,9 @@ impl RedisPool {
 
         info!("Redis connection pool created successfully");
         Ok(Self {
-            client: Some(client),
+            _client: Some(client),
             connection_manager: Some(connection_manager),
-            config: config.clone(),
+            _config: config.clone(),
             noop_mode: false,
         })
     }
@@ -51,9 +51,9 @@ impl RedisPool {
     pub fn create_noop() -> Self {
         info!("Creating no-op Redis pool (Redis unavailable)");
         Self {
-            client: None,
+            _client: None,
             connection_manager: None,
-            config: RedisConfig {
+            _config: RedisConfig {
                 url: String::new(),
                 enabled: false,
                 max_connections: 0,
