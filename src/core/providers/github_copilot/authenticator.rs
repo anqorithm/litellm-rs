@@ -338,16 +338,29 @@ impl CopilotAuthenticator {
 
     /// Get standard GitHub headers
     fn get_github_headers(&self, access_token: Option<&str>) -> reqwest::header::HeaderMap {
-        let mut headers = reqwest::header::HeaderMap::new();
-        headers.insert("accept", "application/json".parse().unwrap());
-        headers.insert("content-type", "application/json".parse().unwrap());
-        headers.insert("editor-version", "vscode/1.85.1".parse().unwrap());
-        headers.insert("editor-plugin-version", "copilot/1.155.0".parse().unwrap());
-        headers.insert("user-agent", "GithubCopilot/1.155.0".parse().unwrap());
-        headers.insert("accept-encoding", "gzip,deflate,br".parse().unwrap());
+        use reqwest::header::{HeaderMap, HeaderValue};
+
+        let mut headers = HeaderMap::new();
+        headers.insert("accept", HeaderValue::from_static("application/json"));
+        headers.insert("content-type", HeaderValue::from_static("application/json"));
+        headers.insert("editor-version", HeaderValue::from_static("vscode/1.85.1"));
+        headers.insert(
+            "editor-plugin-version",
+            HeaderValue::from_static("copilot/1.155.0"),
+        );
+        headers.insert("user-agent", HeaderValue::from_static("GithubCopilot/1.155.0"));
+        headers.insert("accept-encoding", HeaderValue::from_static("gzip,deflate,br"));
 
         if let Some(token) = access_token {
-            headers.insert("authorization", format!("token {}", token).parse().unwrap());
+            let auth_value = format!("token {}", token);
+            match HeaderValue::from_str(&auth_value) {
+                Ok(header) => {
+                    headers.insert("authorization", header);
+                }
+                Err(_) => {
+                    warn!("Skipping invalid GitHub authorization header value");
+                }
+            }
         }
 
         headers
