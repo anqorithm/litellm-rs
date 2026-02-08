@@ -16,13 +16,8 @@ use crate::core::providers::unified_provider::ProviderError;
 pub struct PgVectorProvider {
     /// Configuration
     config: PgVectorConfig,
-    /// HTTP client for PostgreSQL REST API (when using PostgREST/Supabase)
-    /// or internal connection state
-    #[allow(dead_code)]
-    client: Arc<reqwest::Client>,
-    /// Connection URL for display/logging (without password)
-    #[allow(dead_code)]
-    safe_url: String,
+    /// HTTP client reserved for future PostgREST/Supabase integrations.
+    _client: Arc<reqwest::Client>,
 }
 
 impl PgVectorProvider {
@@ -39,13 +34,13 @@ impl PgVectorProvider {
 
         let provider = Self {
             config,
-            client,
-            safe_url,
+            _client: client,
         };
 
         info!(
-            "PgVector provider initialized for table: {}",
-            provider.config.full_table_name()
+            "PgVector provider initialized for table: {} (db: {})",
+            provider.config.full_table_name(),
+            safe_url
         );
 
         Ok(provider)
@@ -430,12 +425,6 @@ pub enum StatementParam {
     Text(String),
     /// JSON parameter (as string)
     Json(Option<String>),
-    /// Integer parameter
-    #[allow(dead_code)]
-    Int(i64),
-    /// Float parameter
-    #[allow(dead_code)]
-    Float(f64),
 }
 
 impl StatementParam {
@@ -445,8 +434,6 @@ impl StatementParam {
             StatementParam::Text(s) => format!("'{}'", s.replace('\'', "''")),
             StatementParam::Json(Some(s)) => format!("'{}'::jsonb", s.replace('\'', "''")),
             StatementParam::Json(None) => "NULL".to_string(),
-            StatementParam::Int(i) => i.to_string(),
-            StatementParam::Float(f) => f.to_string(),
         }
     }
 }
@@ -690,8 +677,6 @@ mod tests {
             r#"'{"key":"value"}'::jsonb"#
         );
         assert_eq!(StatementParam::Json(None).to_sql_string(), "NULL");
-        assert_eq!(StatementParam::Int(42).to_sql_string(), "42");
-        assert_eq!(StatementParam::Float(3.15).to_sql_string(), "3.15");
     }
 
     #[test]
