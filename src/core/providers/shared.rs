@@ -431,7 +431,7 @@ impl TokenCostCalculator {
 #[cfg(test)]
 pub mod test_utils {
     use super::*;
-    use crate::core::types::ChatMessage;
+    use crate::core::types::chat::ChatMessage;
 
     /// Create a mock ChatMessage for testing
     pub fn mock_message(role: MessageRole, content: &str) -> ChatMessage {

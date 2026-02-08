@@ -341,7 +341,7 @@ impl StreamUtils {
         }
 
         let final_content = content_parts.join("");
-        let message = crate::core::types::ChatMessage {
+        let message = crate::core::types::chat::ChatMessage {
             role: MessageRole::Assistant,
             content: if final_content.is_empty() {
                 None

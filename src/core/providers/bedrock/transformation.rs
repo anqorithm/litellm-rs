@@ -9,7 +9,7 @@ use super::error::BedrockError;
 use super::model_config::{BedrockModelFamily, get_model_config};
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::responses::{ChatChoice, ChatResponse, FinishReason, Usage};
-use crate::core::types::{ChatMessage, message::MessageContent, message::MessageRole};
+use crate::core::types::{chat::ChatMessage, message::MessageContent, message::MessageRole};
 
 /// Safely convert an f32 to a serde_json::Number, defaulting to 0 for NaN/Inf values
 fn safe_f64_to_number(value: f32) -> serde_json::Number {

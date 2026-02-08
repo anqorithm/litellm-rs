@@ -2,7 +2,7 @@
 
 use super::stream::CompletionStream;
 use super::types::{CompletionOptions, CompletionResponse};
-use crate::core::types::ChatMessage;
+use crate::core::types::chat::ChatMessage;
 use crate::utils::error::Result;
 use async_trait::async_trait;
 

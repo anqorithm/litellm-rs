@@ -1,7 +1,7 @@
 //! Completion types - Python LiteLLM compatible
 
 use crate::core::types::responses::{FinishReason, Usage};
-use crate::core::types::{ChatMessage, tools::Tool, tools::ToolChoice};
+use crate::core::types::{chat::ChatMessage, tools::Tool, tools::ToolChoice};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

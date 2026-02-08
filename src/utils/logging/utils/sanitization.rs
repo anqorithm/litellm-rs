@@ -1,5 +1,5 @@
-use std::sync::LazyLock;
 use regex::Regex;
+use std::sync::LazyLock;
 
 static SENSITIVE_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
     vec![

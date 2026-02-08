@@ -513,7 +513,7 @@ mod tests {
     #[test]
     fn test_response_to_chunks() {
         use crate::core::types::responses::ChatChoice;
-        use crate::core::types::{ChatMessage, message::MessageContent};
+        use crate::core::types::{chat::ChatMessage, message::MessageContent};
 
         let response = ChatResponse {
             id: "test-id".to_string(),

@@ -2,7 +2,7 @@
 
 use crate::core::providers::bedrock::model_config::ModelConfig;
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::types::ChatRequest;
+use crate::core::types::chat::ChatRequest;
 use serde_json::{Value, json};
 
 /// Transform request for Cohere models
@@ -133,7 +133,7 @@ fn transform_command_request(request: &ChatRequest) -> Result<Value, ProviderErr
 mod tests {
     use super::*;
     use crate::core::providers::bedrock::model_config::{BedrockApiType, BedrockModelFamily};
-    use crate::core::types::{ChatMessage, message::MessageContent, message::MessageRole};
+    use crate::core::types::{chat::ChatMessage, message::MessageContent, message::MessageRole};
 
     fn create_test_request(model: &str) -> ChatRequest {
         ChatRequest {

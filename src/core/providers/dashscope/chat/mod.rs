@@ -32,7 +32,7 @@ impl DashscopeChatHandler {
     /// Transform a standard chat request to Dashscope format
     pub fn transform_request(
         &self,
-        request: crate::core::types::ChatRequest,
+        request: crate::core::types::chat::ChatRequest,
     ) -> Result<Value, DashscopeError> {
         debug!("Transforming chat request for Dashscope");
 
@@ -60,7 +60,7 @@ impl DashscopeChatHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::{ChatMessage, message::MessageContent, message::MessageRole};
+    use crate::core::types::{chat::ChatMessage, message::MessageContent, message::MessageRole};
 
     fn create_test_config() -> DashscopeConfig {
         DashscopeConfig {
@@ -88,7 +88,7 @@ mod tests {
         let config = create_test_config();
         let handler = DashscopeChatHandler::new(config).unwrap();
 
-        let request = crate::core::types::ChatRequest {
+        let request = crate::core::types::chat::ChatRequest {
             model: "qwen-turbo".to_string(),
             messages: vec![ChatMessage {
                 role: MessageRole::User,

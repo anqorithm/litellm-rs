@@ -652,7 +652,7 @@ macro_rules! define_openai_compatible_provider {
 
             async fn transform_request(
                 &self,
-                request: $crate::core::types::ChatRequest,
+                request: $crate::core::types::chat::ChatRequest,
                 _context: $crate::core::types::context::RequestContext,
             ) -> Result<serde_json::Value, Self::Error> {
                 let mut req = serde_json::json!({
@@ -744,7 +744,7 @@ macro_rules! define_openai_compatible_provider {
 
             async fn chat_completion(
                 &self,
-                request: $crate::core::types::ChatRequest,
+                request: $crate::core::types::chat::ChatRequest,
                 context: $crate::core::types::context::RequestContext,
             ) -> Result<$crate::core::types::responses::ChatResponse, Self::Error> {
                 let base_url = self
@@ -816,7 +816,7 @@ macro_rules! define_openai_compatible_provider {
 
             async fn chat_completion_stream(
                 &self,
-                _request: $crate::core::types::ChatRequest,
+                _request: $crate::core::types::chat::ChatRequest,
                 _context: $crate::core::types::context::RequestContext,
             ) -> Result<
                 std::pin::Pin<
@@ -1074,7 +1074,7 @@ macro_rules! define_http_provider_with_hooks {
 
             async fn transform_request(
                 &self,
-                request: $crate::core::types::ChatRequest,
+                request: $crate::core::types::chat::ChatRequest,
                 _context: $crate::core::types::context::RequestContext,
             ) -> Result<serde_json::Value, Self::Error> {
                 ($request_transform)(self, request)
@@ -1095,7 +1095,7 @@ macro_rules! define_http_provider_with_hooks {
 
             async fn chat_completion(
                 &self,
-                request: $crate::core::types::ChatRequest,
+                request: $crate::core::types::chat::ChatRequest,
                 context: $crate::core::types::context::RequestContext,
             ) -> Result<$crate::core::types::responses::ChatResponse, Self::Error> {
                 let url = ($url_builder)(self);
@@ -1141,7 +1141,7 @@ macro_rules! define_http_provider_with_hooks {
 
             async fn chat_completion_stream(
                 &self,
-                _request: $crate::core::types::ChatRequest,
+                _request: $crate::core::types::chat::ChatRequest,
                 _context: $crate::core::types::context::RequestContext,
             ) -> Result<
                 std::pin::Pin<
@@ -1281,7 +1281,7 @@ macro_rules! define_pooled_http_provider_with_hooks {
 
             async fn transform_request(
                 &self,
-                request: $crate::core::types::ChatRequest,
+                request: $crate::core::types::chat::ChatRequest,
                 _context: $crate::core::types::context::RequestContext,
             ) -> Result<serde_json::Value, Self::Error> {
                 ($request_transform)(self, request)
@@ -1302,7 +1302,7 @@ macro_rules! define_pooled_http_provider_with_hooks {
 
             async fn chat_completion(
                 &self,
-                request: $crate::core::types::ChatRequest,
+                request: $crate::core::types::chat::ChatRequest,
                 context: $crate::core::types::context::RequestContext,
             ) -> Result<$crate::core::types::responses::ChatResponse, Self::Error> {
                 let url = ($url_builder)(self);
@@ -1336,7 +1336,7 @@ macro_rules! define_pooled_http_provider_with_hooks {
 
             async fn chat_completion_stream(
                 &self,
-                request: $crate::core::types::ChatRequest,
+                request: $crate::core::types::chat::ChatRequest,
                 context: $crate::core::types::context::RequestContext,
             ) -> Result<
                 std::pin::Pin<

@@ -9,7 +9,7 @@ use crate::core::types::responses::{
 };
 use crate::core::types::thinking::ThinkingContent;
 use crate::core::types::{
-    ChatMessage, ChatRequest, content::ContentPart, content::ImageUrl, message::MessageContent,
+    chat::ChatMessage, chat::ChatRequest, content::ContentPart, content::ImageUrl, message::MessageContent,
     message::MessageRole, tools::FunctionCall, tools::ResponseFormat, tools::Tool, tools::ToolCall,
     tools::ToolChoice,
 };

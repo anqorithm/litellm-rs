@@ -12,11 +12,11 @@ pub mod retry;
 pub mod routing;
 pub mod server;
 
-use serde::{Deserialize, Serialize};
 use self::{
     middleware::MiddlewareConfig, observability::ObservabilityConfig,
     provider::ProviderConfigEntry, routing::RoutingConfig, server::ServerConfig,
 };
+use serde::{Deserialize, Serialize};
 
 /// Main LiteLLM configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

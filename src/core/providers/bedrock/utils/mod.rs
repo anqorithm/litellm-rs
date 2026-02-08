@@ -51,9 +51,7 @@ mod tests {
     #[test]
     fn test_normalize_bedrock_model_id() {
         assert_eq!(
-            normalize_bedrock_model_id(
-                "bedrock/us.anthropic.claude-3-5-sonnet-20241022-v2:0"
-            ),
+            normalize_bedrock_model_id("bedrock/us.anthropic.claude-3-5-sonnet-20241022-v2:0"),
             "anthropic.claude-3-5-sonnet-20241022-v2:0"
         );
         assert_eq!(

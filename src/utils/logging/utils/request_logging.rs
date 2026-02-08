@@ -1,5 +1,5 @@
-use super::types::{LogEntry, LogLevel};
 use super::core::LoggingUtils;
+use super::types::{LogEntry, LogLevel};
 use crate::core::providers::unified_provider::ProviderError;
 use std::collections::HashMap;
 use tracing::{error, info};

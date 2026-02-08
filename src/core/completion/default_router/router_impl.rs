@@ -64,8 +64,8 @@ impl Router for DefaultRouter {
         // Check if user provided custom api_base (Python LiteLLM compatibility)
         if let Some(api_base) = &options.api_base {
             use crate::core::providers::base::BaseConfig;
-            use crate::core::providers::openai::config::OpenAIConfig;
             use crate::core::providers::openai::OpenAIProvider;
+            use crate::core::providers::openai::config::OpenAIConfig;
             use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 
             let api_key = options
@@ -141,9 +141,8 @@ impl Router for DefaultRouter {
         .or_else(|| {
             Self::select_provider_by_name(&providers, "bedrock", model, "bedrock/", &chat_request)
                 .map(|(provider, mut request)| {
-                    request.model = crate::core::providers::bedrock::normalize_bedrock_model_id(
-                        &request.model,
-                    );
+                    request.model =
+                        crate::core::providers::bedrock::normalize_bedrock_model_id(&request.model);
                     (provider, request)
                 })
         })
@@ -228,9 +227,8 @@ impl Router for DefaultRouter {
         .or_else(|| {
             Self::select_provider_by_name(&providers, "bedrock", model, "bedrock/", &chat_request)
                 .map(|(provider, mut request)| {
-                    request.model = crate::core::providers::bedrock::normalize_bedrock_model_id(
-                        &request.model,
-                    );
+                    request.model =
+                        crate::core::providers::bedrock::normalize_bedrock_model_id(&request.model);
                     (provider, request)
                 })
         })

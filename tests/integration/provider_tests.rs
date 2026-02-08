@@ -105,7 +105,7 @@ mod tests {
     async fn test_groq_real_chat_completion() {
         use litellm_rs::core::types::context::RequestContext;
         use litellm_rs::core::types::{
-            ChatMessage, ChatRequest, message::MessageContent, message::MessageRole,
+            chat::ChatMessage, chat::ChatRequest, message::MessageContent, message::MessageRole,
         };
 
         let api_key =

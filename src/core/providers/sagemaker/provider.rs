@@ -18,7 +18,7 @@ use crate::core::traits::ProviderConfig as _;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use crate::core::types::health::HealthStatus;
 use crate::core::types::responses::{ChatChunk, ChatResponse, EmbeddingResponse};
-use crate::core::types::{ChatRequest, embedding::EmbeddingRequest};
+use crate::core::types::{chat::ChatRequest, embedding::EmbeddingRequest};
 use crate::core::types::{context::RequestContext, model::ModelInfo, model::ProviderCapability};
 
 /// Static capabilities for Sagemaker provider
@@ -357,7 +357,7 @@ fn parse_tgi_response(response_bytes: &[u8], model: &str) -> Result<ChatResponse
         model: format!("sagemaker/{}", model),
         choices: vec![crate::core::types::responses::ChatChoice {
             index: 0,
-            message: crate::core::types::ChatMessage {
+            message: crate::core::types::chat::ChatMessage {
                 role: crate::core::types::message::MessageRole::Assistant,
                 content: Some(crate::core::types::message::MessageContent::Text(
                     generated_text.to_string(),
@@ -384,7 +384,7 @@ mod tests {
     fn test_format_messages_for_tgi() {
         let request = ChatRequest {
             model: "test".to_string(),
-            messages: vec![crate::core::types::ChatMessage {
+            messages: vec![crate::core::types::chat::ChatMessage {
                 role: crate::core::types::message::MessageRole::User,
                 content: Some(crate::core::types::message::MessageContent::Text(
                     "Hello".to_string(),

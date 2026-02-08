@@ -363,12 +363,12 @@ async fn test_nvidia_nim_provider_map_openai_params() {
 #[tokio::test]
 async fn test_nvidia_nim_provider_transform_request() {
     use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
-    use crate::core::types::ChatMessage;
+    use crate::core::types::chat::ChatMessage;
     use crate::core::types::message::MessageRole;
 
     let provider = NvidiaNimProvider::with_api_key("nvapi-test-key").await.unwrap();
 
-    let request = crate::core::types::ChatRequest {
+    let request = crate::core::types::chat::ChatRequest {
         model: "meta/llama3-70b-instruct".to_string(),
         messages: vec![ChatMessage {
             role: MessageRole::User,

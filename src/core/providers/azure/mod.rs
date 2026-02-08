@@ -51,7 +51,7 @@ use serde_json::Value;
 use std::pin::Pin;
 
 use crate::core::types::{
-    ChatRequest,
+    chat::ChatRequest,
     context::RequestContext,
     embedding::EmbeddingRequest,
     health::HealthStatus,

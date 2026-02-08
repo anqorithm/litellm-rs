@@ -117,8 +117,8 @@ pub fn format_duration(duration_ms: u64) -> String {
 /// Sanitize string for logging (remove sensitive information)
 #[allow(dead_code)]
 pub fn sanitize_for_logging(input: &str) -> String {
-    use std::sync::LazyLock;
     use regex::Regex;
+    use std::sync::LazyLock;
 
     static SANITIZE_PATTERNS: LazyLock<Vec<(Regex, &'static str)>> = LazyLock::new(|| {
         vec![

@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 
 use super::models::get_nscale_registry;
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::types::{ChatRequest, model::ModelInfo, responses::ChatResponse};
+use crate::core::types::{chat::ChatRequest, model::ModelInfo, responses::ChatResponse};
 
 /// Nscale API client logic
 pub struct NscaleClient;
@@ -140,7 +140,7 @@ impl NscaleClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::{ChatMessage, message::MessageContent, message::MessageRole};
+    use crate::core::types::{chat::ChatMessage, message::MessageContent, message::MessageRole};
     use std::collections::HashMap;
 
     #[test]

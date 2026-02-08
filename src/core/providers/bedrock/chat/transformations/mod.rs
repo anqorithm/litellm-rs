@@ -11,7 +11,7 @@ pub mod mistral;
 
 use crate::core::providers::bedrock::model_config::{BedrockModelFamily, ModelConfig};
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::types::ChatRequest;
+use crate::core::types::chat::ChatRequest;
 use serde_json::Value;
 
 /// Transform request based on model family
@@ -42,7 +42,7 @@ pub fn transform_for_model(
 }
 
 /// Common utility to convert messages to prompt format
-pub fn messages_to_prompt(messages: &[crate::core::types::ChatMessage]) -> String {
+pub fn messages_to_prompt(messages: &[crate::core::types::chat::ChatMessage]) -> String {
     use crate::core::types::{message::MessageContent, message::MessageRole};
 
     let mut prompt = String::new();
@@ -85,7 +85,7 @@ pub fn messages_to_prompt(messages: &[crate::core::types::ChatMessage]) -> Strin
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::{ChatMessage, message::MessageContent, message::MessageRole};
+    use crate::core::types::{chat::ChatMessage, message::MessageContent, message::MessageRole};
 
     fn create_user_message(text: &str) -> ChatMessage {
         ChatMessage {

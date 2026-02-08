@@ -5,7 +5,7 @@
 use crate::core::providers::deepinfra::DeepInfraConfig;
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::{
-    ChatRequest,
+    chat::ChatRequest,
     context::RequestContext,
     responses::{ChatChunk, ChatResponse},
 };

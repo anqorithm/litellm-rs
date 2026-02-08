@@ -10,7 +10,11 @@ use crate::core::providers::ProviderRegistry;
 use crate::core::streaming::types::{
     ChatCompletionChunk, ChatCompletionChunkChoice, ChatCompletionDelta, Event,
 };
-use crate::core::types::{self, model::ProviderCapability};
+use crate::core::types::{
+    self,
+    chat::{ChatMessage as CoreChatMessage, ChatRequest as CoreChatRequest},
+    model::ProviderCapability,
+};
 use crate::server::routes::errors;
 use crate::server::state::AppState;
 use crate::utils::data::validation::RequestValidator;
@@ -163,7 +167,7 @@ fn build_core_chat_request(
     request: ChatCompletionRequest,
     model: String,
     stream: bool,
-) -> Result<types::ChatRequest, GatewayError> {
+) -> Result<CoreChatRequest, GatewayError> {
     let tools = match request.tools {
         Some(tools) => {
             let mut converted = Vec::with_capacity(tools.len());
@@ -213,7 +217,7 @@ fn build_core_chat_request(
         extra_params.insert("audio".to_string(), json!(audio));
     }
 
-    Ok(types::ChatRequest {
+    Ok(CoreChatRequest {
         model,
         messages: request
             .messages
@@ -245,7 +249,7 @@ fn build_core_chat_request(
     })
 }
 
-fn convert_openai_message_to_core(message: ChatMessage) -> types::ChatMessage {
+fn convert_openai_message_to_core(message: ChatMessage) -> CoreChatMessage {
     let role = match message.role {
         MessageRole::System => types::message::MessageRole::System,
         MessageRole::User => types::message::MessageRole::User,
@@ -285,7 +289,7 @@ fn convert_openai_message_to_core(message: ChatMessage) -> types::ChatMessage {
         }
     });
 
-    let tool_calls = message.tool_calls.map(|calls| {
+    let tool_calls: Option<Vec<types::tools::ToolCall>> = message.tool_calls.map(|calls| {
         calls
             .into_iter()
             .map(|call| types::tools::ToolCall {
@@ -306,7 +310,7 @@ fn convert_openai_message_to_core(message: ChatMessage) -> types::ChatMessage {
             arguments: call.arguments,
         });
 
-    types::ChatMessage {
+    CoreChatMessage {
         role,
         content,
         thinking: None,
@@ -338,7 +342,7 @@ fn convert_core_chat_response(response: types::responses::ChatResponse) -> ChatC
     }
 }
 
-fn convert_core_message_to_openai(message: types::ChatMessage) -> ChatMessage {
+fn convert_core_message_to_openai(message: CoreChatMessage) -> ChatMessage {
     let role = match message.role {
         types::message::MessageRole::System => MessageRole::System,
         types::message::MessageRole::User => MessageRole::User,
@@ -349,7 +353,7 @@ fn convert_core_message_to_openai(message: types::ChatMessage) -> ChatMessage {
 
     let content = message.content.map(convert_core_content_to_openai);
 
-    let tool_calls = message.tool_calls.map(|calls| {
+    let tool_calls: Option<Vec<ToolCall>> = message.tool_calls.map(|calls| {
         calls
             .into_iter()
             .map(|call| ToolCall {
@@ -407,12 +411,14 @@ fn convert_core_content_part_to_openai(
                 },
             }
         }
-        types::content::ContentPart::Audio { audio } => crate::core::models::openai::ContentPart::Audio {
-            audio: crate::core::models::openai::AudioContent {
-                data: audio.data,
-                format: audio.format.unwrap_or_else(|| "unknown".to_string()),
-            },
-        },
+        types::content::ContentPart::Audio { audio } => {
+            crate::core::models::openai::ContentPart::Audio {
+                audio: crate::core::models::openai::AudioContent {
+                    data: audio.data,
+                    format: audio.format.unwrap_or_else(|| "unknown".to_string()),
+                },
+            }
+        }
         _ => crate::core::models::openai::ContentPart::Text {
             text: "[unsupported content part]".to_string(),
         },

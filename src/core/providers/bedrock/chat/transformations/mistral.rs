@@ -2,7 +2,7 @@
 
 use crate::core::providers::bedrock::model_config::ModelConfig;
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::types::ChatRequest;
+use crate::core::types::chat::ChatRequest;
 use serde_json::{Value, json};
 
 /// Transform request for Mistral models
@@ -33,7 +33,7 @@ pub fn transform_request(
 }
 
 /// Format messages for Mistral prompt format
-fn format_mistral_prompt(messages: &[crate::core::types::ChatMessage]) -> String {
+fn format_mistral_prompt(messages: &[crate::core::types::chat::ChatMessage]) -> String {
     use crate::core::types::{message::MessageContent, message::MessageRole};
 
     let mut prompt = String::new();
@@ -87,7 +87,7 @@ fn format_mistral_prompt(messages: &[crate::core::types::ChatMessage]) -> String
 mod tests {
     use super::*;
     use crate::core::providers::bedrock::model_config::{BedrockApiType, BedrockModelFamily};
-    use crate::core::types::{ChatMessage, message::MessageContent, message::MessageRole};
+    use crate::core::types::{chat::ChatMessage, message::MessageContent, message::MessageRole};
 
     fn create_test_request() -> ChatRequest {
         ChatRequest {

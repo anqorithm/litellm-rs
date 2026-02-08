@@ -3,7 +3,7 @@
 //! Modern unified API for chat completions in Bedrock
 
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::types::ChatRequest;
+use crate::core::types::chat::ChatRequest;
 use crate::core::types::{message::MessageContent, message::MessageRole};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -366,7 +366,7 @@ fn transform_to_converse(request: &ChatRequest) -> Result<ConverseRequest, Provi
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::{ChatMessage, message::MessageContent, message::MessageRole};
+    use crate::core::types::{chat::ChatMessage, message::MessageContent, message::MessageRole};
 
     // ==================== Data Structure Tests ====================
 

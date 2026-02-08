@@ -11,7 +11,7 @@ use tracing::debug;
 use crate::core::{
     traits::{error_mapper::trait_def::ErrorMapper, provider::LLMProvider},
     types::{
-        ChatRequest,
+        chat::ChatRequest,
         context::RequestContext,
         embedding::EmbeddingRequest,
         health::HealthStatus,
@@ -812,7 +812,7 @@ impl LLMProvider for VertexAIProvider {
             model: model.to_string(),
             choices: vec![crate::core::types::responses::ChatChoice {
                 index: 0,
-                message: crate::core::types::ChatMessage {
+                message: crate::core::types::chat::ChatMessage {
                     role: crate::core::types::message::MessageRole::Assistant,
                     content: Some(crate::core::types::message::MessageContent::Text(content)),
                     thinking: None,

@@ -20,7 +20,7 @@ use super::model_info::{
 use crate::ProviderError;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use crate::core::types::{
-    ChatMessage, ChatRequest,
+    chat::ChatMessage, chat::ChatRequest,
     context::RequestContext,
     embedding::EmbeddingRequest,
     health::HealthStatus,

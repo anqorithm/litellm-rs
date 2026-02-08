@@ -109,7 +109,7 @@ mod tests {
     #[test]
     fn test_should_handle_response_format() {
         use crate::core::types::{
-            ChatMessage, ChatRequest, message::MessageRole, tools::ResponseFormat,
+            chat::ChatMessage, chat::ChatRequest, message::MessageRole, tools::ResponseFormat,
         };
 
         tokio::runtime::Runtime::new().unwrap().block_on(async {

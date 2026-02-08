@@ -8,7 +8,7 @@ pub mod transformations;
 
 use super::model_config::{BedrockApiType, get_model_config};
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::types::ChatRequest;
+use crate::core::types::chat::ChatRequest;
 use serde_json::Value;
 
 /// Route a chat request to the appropriate API based on model capabilities

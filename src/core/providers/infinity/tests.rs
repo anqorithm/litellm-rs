@@ -130,7 +130,7 @@ mod tests {
     #[tokio::test]
     async fn test_chat_completion_not_supported() {
         use crate::core::types::{
-            ChatMessage, ChatRequest, message::MessageContent, message::MessageRole,
+            chat::ChatMessage, chat::ChatRequest, message::MessageContent, message::MessageRole,
         };
 
         let provider = InfinityProvider::with_api_base("http://localhost:8080")

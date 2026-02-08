@@ -164,7 +164,7 @@ mod tests {
     use crate::core::types::responses::{ChatChoice, FinishReason, Usage};
 
     fn create_test_response() -> ChatResponse {
-        use crate::core::types::ChatMessage;
+        use crate::core::types::chat::ChatMessage;
 
         ChatResponse {
             id: "test-id".to_string(),

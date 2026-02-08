@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 
 use super::models::get_ai21_registry;
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::types::{ChatRequest, model::ModelInfo, responses::ChatResponse};
+use crate::core::types::{chat::ChatRequest, model::ModelInfo, responses::ChatResponse};
 
 /// AI21 API client logic
 pub struct AI21Client;
@@ -139,7 +139,7 @@ impl AI21Client {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::{ChatMessage, message::MessageContent, message::MessageRole};
+    use crate::core::types::{chat::ChatMessage, message::MessageContent, message::MessageRole};
     use std::collections::HashMap;
 
     #[test]

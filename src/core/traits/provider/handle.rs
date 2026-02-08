@@ -3,7 +3,7 @@
 //! Provides a type-erased wrapper for LLMProvider instances used by the router
 
 use crate::core::types::health::HealthStatus;
-use crate::core::types::{ChatRequest, context::RequestContext, responses::ChatResponse};
+use crate::core::types::{chat::ChatRequest, context::RequestContext, responses::ChatResponse};
 
 use super::llm_provider::trait_definition::LLMProvider;
 

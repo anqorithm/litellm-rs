@@ -16,7 +16,7 @@ use crate::core::providers::base::{
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::{ProviderConfig, provider::llm_provider::trait_definition::LLMProvider};
 use crate::core::types::{
-    ChatRequest,
+    chat::ChatRequest,
     context::RequestContext,
     health::HealthStatus,
     model::ModelInfo,
@@ -295,7 +295,7 @@ impl LLMProvider for PerplexityProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::{ChatMessage, message::MessageContent, message::MessageRole};
+    use crate::core::types::{chat::ChatMessage, message::MessageContent, message::MessageRole};
 
     fn create_test_config() -> PerplexityConfig {
         let mut config = PerplexityConfig::new("perplexity");

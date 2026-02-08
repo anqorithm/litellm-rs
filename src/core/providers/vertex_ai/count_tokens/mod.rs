@@ -4,7 +4,7 @@ use crate::ProviderError;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::core::types::ChatMessage;
+use crate::core::types::chat::ChatMessage;
 
 /// Count tokens request
 #[derive(Debug, Clone, Serialize, Deserialize)]

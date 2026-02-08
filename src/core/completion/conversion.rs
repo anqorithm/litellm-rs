@@ -2,7 +2,7 @@
 
 use super::types::{Choice, CompletionOptions, CompletionResponse};
 use crate::core::types::responses::{ChatResponse, Usage};
-use crate::core::types::{ChatMessage, ChatRequest};
+use crate::core::types::{chat::ChatMessage, chat::ChatRequest};
 use crate::utils::error::Result;
 
 /// Convert to chat completion request

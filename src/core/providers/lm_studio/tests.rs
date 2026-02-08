@@ -3,7 +3,7 @@
 use super::*;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use crate::core::types::model::ProviderCapability;
-use crate::core::types::{ChatMessage, ChatRequest, message::MessageContent, message::MessageRole};
+use crate::core::types::{chat::ChatMessage, chat::ChatRequest, message::MessageContent, message::MessageRole};
 use crate::core::types::responses::FinishReason;
 
 #[test]

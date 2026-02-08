@@ -228,8 +228,8 @@ impl DefaultRouter {
         provider_name: &str,
     ) -> Result<CompletionResponse> {
         use crate::core::providers::base::BaseConfig;
-        use crate::core::providers::openai::config::OpenAIConfig;
         use crate::core::providers::openai::OpenAIProvider;
+        use crate::core::providers::openai::config::OpenAIConfig;
         use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 
         let config = OpenAIConfig {

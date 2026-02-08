@@ -66,7 +66,7 @@ crate::define_http_provider_with_hooks!(
         DeepLProvider::new(config)
     },
     request_transform: |provider: &DeepLProvider,
-                        request: crate::core::types::ChatRequest|
+                        request: crate::core::types::chat::ChatRequest|
      -> Result<serde_json::Value, crate::core::providers::unified_provider::ProviderError> {
         let (target_lang, source_lang, text) = provider.extract_translation_params(&request)?;
 
@@ -140,7 +140,7 @@ crate::define_http_provider_with_hooks!(
     error_map: |_provider: &DeepLProvider,
                 status: u16,
                 error_text: String,
-                _request: &crate::core::types::ChatRequest|
+                _request: &crate::core::types::chat::ChatRequest|
      -> crate::core::providers::unified_provider::ProviderError {
         match status {
             401 | 403 => crate::core::providers::unified_provider::ProviderError::authentication(
@@ -202,7 +202,7 @@ impl DeepLProvider {
     /// Or with source language: "Translate from {source_lang} to {target_lang}: {text}"
     fn extract_translation_params(
         &self,
-        request: &crate::core::types::ChatRequest,
+        request: &crate::core::types::chat::ChatRequest,
     ) -> Result<
         (String, Option<String>, String),
         crate::core::providers::unified_provider::ProviderError,

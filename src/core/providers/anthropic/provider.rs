@@ -13,7 +13,7 @@ use crate::core::providers::base::GlobalPoolManager;
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use crate::core::types::{
-    ChatRequest,
+    chat::ChatRequest,
     context::RequestContext,
     health::HealthStatus,
     model::ModelInfo,
@@ -320,7 +320,7 @@ impl LLMProvider for AnthropicProvider {
     async fn health_check(&self) -> HealthStatus {
         let test_request = ChatRequest {
             model: "claude-3-haiku-20240307".to_string(),
-            messages: vec![crate::core::types::ChatMessage {
+            messages: vec![crate::core::types::chat::ChatMessage {
                 role: crate::core::types::message::MessageRole::User,
                 content: Some(crate::core::types::message::MessageContent::Text(
                     "ping".to_string(),

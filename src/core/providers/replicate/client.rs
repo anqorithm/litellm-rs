@@ -9,7 +9,7 @@ use super::models::{ReplicateModelType, get_replicate_registry};
 use super::prediction::{CreatePredictionRequest, PredictionResponse, PredictionStatus};
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::{
-    ChatMessage, ChatRequest,
+    chat::ChatMessage, chat::ChatRequest,
     image::ImageGenerationRequest,
     message::MessageContent,
     message::MessageRole,
@@ -310,7 +310,7 @@ impl ReplicateClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::types::{ChatMessage, message::MessageContent, message::MessageRole};
+    use crate::core::types::{chat::ChatMessage, message::MessageContent, message::MessageRole};
 
     fn create_test_chat_request() -> ChatRequest {
         ChatRequest {

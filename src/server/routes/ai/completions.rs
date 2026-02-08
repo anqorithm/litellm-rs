@@ -7,7 +7,7 @@ use crate::core::models::RequestContext;
 use crate::core::models::openai::{CompletionRequest, CompletionResponse};
 use crate::core::providers::ProviderRegistry;
 use crate::core::types::{
-    ChatMessage, message::MessageContent, message::MessageRole, model::ProviderCapability,
+    chat::ChatMessage, message::MessageContent, message::MessageRole, model::ProviderCapability,
 };
 use crate::server::routes::errors;
 use crate::server::state::AppState;
@@ -65,7 +65,7 @@ pub async fn handle_completion_via_pool(
             .collect()
     });
 
-    let options = crate::core::types::ChatRequest {
+    let options = crate::core::types::chat::ChatRequest {
         model: selection.model,
         messages: vec![ChatMessage {
             role: MessageRole::User,
@@ -103,7 +103,7 @@ pub async fn handle_completion_via_pool(
         .choices
         .first()
         .and_then(|c| c.message.content.as_ref())
-        .map(|c| c.to_string())
+        .map(|c: &MessageContent| c.to_string())
         .unwrap_or_default();
 
     // Convert finish reason to string

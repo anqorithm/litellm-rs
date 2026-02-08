@@ -26,7 +26,4 @@ pub mod config;
 pub mod errors;
 pub mod responses;
 
-// Re-export selected high-traffic modules only
-pub use chat::*;
-
-// Re-export from remaining original files
+// No top-level type re-exports: use explicit module paths from call sites.

@@ -6,7 +6,7 @@
 #[cfg(test)]
 mod tests {
     use litellm_rs::core::types::{
-        ChatMessage, ChatRequest, message::MessageContent, message::MessageRole,
+        chat::ChatMessage, chat::ChatRequest, message::MessageContent, message::MessageRole,
     };
 
     /// Helper to extract text from MessageContent

@@ -2,11 +2,11 @@
 
 use crate::core::providers::bedrock::model_config::ModelConfig;
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::types::ChatRequest;
+use crate::core::types::chat::ChatRequest;
 use serde_json::{Value, json};
 
 #[cfg(test)]
-use crate::core::types::{ChatMessage, message::MessageContent, message::MessageRole};
+use crate::core::types::{chat::ChatMessage, message::MessageContent, message::MessageRole};
 
 /// Transform request for Amazon Titan models
 pub fn transform_titan_request(

@@ -19,7 +19,7 @@ use crate::core::traits::{
     ProviderConfig as _, provider::llm_provider::trait_definition::LLMProvider,
 };
 use crate::core::types::{
-    ChatRequest,
+    chat::ChatRequest,
     context::RequestContext,
     embedding::EmbeddingRequest,
     health::HealthStatus,
@@ -476,7 +476,7 @@ fn transform_oci_response(response: serde_json::Value) -> Result<ChatResponse, P
         model,
         choices: vec![crate::core::types::responses::ChatChoice {
             index: 0,
-            message: crate::core::types::ChatMessage {
+            message: crate::core::types::chat::ChatMessage {
                 role: crate::core::types::message::MessageRole::Assistant,
                 content: Some(crate::core::types::message::MessageContent::Text(text)),
                 thinking: None,

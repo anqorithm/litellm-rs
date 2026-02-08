@@ -98,7 +98,7 @@ mod tests {
 
     #[test]
     fn test_should_fake_stream() {
-        use crate::core::types::{ChatMessage, ChatRequest, message::MessageRole};
+        use crate::core::types::{chat::ChatMessage, chat::ChatRequest, message::MessageRole};
 
         tokio::runtime::Runtime::new().unwrap().block_on(async {
             let provider = GroqProvider::with_api_key("test-key").await.unwrap();

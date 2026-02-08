@@ -256,13 +256,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_transform_request() {
-        use crate::core::types::{ChatMessage, message::MessageContent, message::MessageRole};
+        use crate::core::types::{chat::ChatMessage, message::MessageContent, message::MessageRole};
 
         let provider = VLLMProvider::with_api_base("http://localhost:8000/v1")
             .await
             .unwrap();
 
-        let request = crate::core::types::ChatRequest {
+        let request = crate::core::types::chat::ChatRequest {
             model: "test-model".to_string(),
             messages: vec![ChatMessage {
                 role: MessageRole::User,
@@ -318,7 +318,7 @@ mod tests {
     #[test]
     fn test_streaming_response_to_chunks() {
         use crate::core::types::responses::{ChatChoice, ChatResponse, FinishReason, Usage};
-        use crate::core::types::{ChatMessage, message::MessageContent};
+        use crate::core::types::{chat::ChatMessage, message::MessageContent};
 
         let response = ChatResponse {
             id: "test-id".to_string(),

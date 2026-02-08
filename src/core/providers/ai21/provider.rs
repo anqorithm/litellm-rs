@@ -10,7 +10,7 @@ use std::pin::Pin;
 use crate::core::providers::base::{HeaderPair, HttpMethod, get_pricing_db, header, header_owned};
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::{
-    ChatRequest,
+    chat::ChatRequest,
     context::RequestContext,
     health::HealthStatus,
     model::ProviderCapability,

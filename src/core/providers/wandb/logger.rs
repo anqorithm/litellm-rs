@@ -592,7 +592,7 @@ impl WandbLogger {
 pub fn create_chat_log(
     provider: &str,
     model: &str,
-    request: &crate::core::types::ChatRequest,
+    request: &crate::core::types::chat::ChatRequest,
     response: Option<&crate::core::types::responses::ChatResponse>,
     latency_ms: u64,
     error: Option<&str>,
@@ -1017,7 +1017,7 @@ mod tests {
 
     #[test]
     fn test_create_chat_log() {
-        use crate::core::types::ChatRequest;
+        use crate::core::types::chat::ChatRequest;
 
         let request = ChatRequest {
             model: "gpt-4".to_string(),
@@ -1036,7 +1036,7 @@ mod tests {
 
     #[test]
     fn test_create_chat_log_with_error() {
-        use crate::core::types::ChatRequest;
+        use crate::core::types::chat::ChatRequest;
 
         let request = ChatRequest {
             model: "gpt-4".to_string(),

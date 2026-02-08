@@ -13,7 +13,7 @@ use crate::core::providers::base::{GlobalPoolManager, HeaderPair, HttpMethod, he
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::{ProviderConfig, provider::llm_provider::trait_definition::LLMProvider};
 use crate::core::types::{
-    ChatRequest,
+    chat::ChatRequest,
     context::RequestContext,
     health::HealthStatus,
     image::ImageGenerationRequest,
@@ -557,7 +557,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_transform_request() {
-        use crate::core::types::{ChatMessage, message::MessageContent, message::MessageRole};
+        use crate::core::types::{chat::ChatMessage, message::MessageContent, message::MessageRole};
 
         let config = ReplicateConfig::new("test-token");
         let provider = ReplicateProvider::new(config).unwrap();

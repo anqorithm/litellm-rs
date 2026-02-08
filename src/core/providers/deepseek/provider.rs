@@ -12,7 +12,7 @@ use crate::core::providers::base::{
 };
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::{
-    ChatRequest,
+    chat::ChatRequest,
     context::RequestContext,
     health::HealthStatus,
     model::ProviderCapability,

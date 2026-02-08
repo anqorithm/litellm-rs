@@ -7,7 +7,7 @@ use super::*;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use crate::core::types::model::ProviderCapability;
 use crate::core::types::{
-    ChatMessage, ChatRequest, embedding::EmbeddingInput, embedding::EmbeddingRequest,
+    chat::ChatMessage, chat::ChatRequest, embedding::EmbeddingInput, embedding::EmbeddingRequest,
     message::MessageContent, message::MessageRole,
 };
 use rerank::{RerankDocument, RerankRequest};

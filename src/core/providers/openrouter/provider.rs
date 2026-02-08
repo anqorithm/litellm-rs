@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::health::HealthStatus;
 use crate::core::types::{
-    ChatRequest, model::ModelInfo, model::ProviderCapability, responses::ChatResponse,
+    chat::ChatRequest, model::ModelInfo, model::ProviderCapability, responses::ChatResponse,
     thinking::ThinkingContent,
 };
 
@@ -316,7 +316,7 @@ impl OpenRouterProvider {
                     _ => crate::core::types::responses::FinishReason::Stop,
                 });
 
-            let mut chat_message: crate::core::types::ChatMessage =
+            let mut chat_message: crate::core::types::chat::ChatMessage =
                 serde_json::from_value(message.clone())
                     .map_err(|e| ProviderError::response_parsing(PROVIDER_NAME, e.to_string()))?;
 

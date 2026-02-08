@@ -17,7 +17,7 @@ use crate::core::traits::ProviderConfig as _;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use crate::core::types::health::HealthStatus;
 use crate::core::types::responses::{ChatChunk, ChatResponse, EmbeddingResponse};
-use crate::core::types::{ChatRequest, embedding::EmbeddingRequest};
+use crate::core::types::{chat::ChatRequest, embedding::EmbeddingRequest};
 use crate::core::types::{context::RequestContext, model::ModelInfo, model::ProviderCapability};
 
 /// Static capabilities for Snowflake provider
@@ -262,7 +262,7 @@ impl LLMProvider for SnowflakeProvider {
             model: format!("snowflake/{}", request.model),
             choices: vec![crate::core::types::responses::ChatChoice {
                 index: 0,
-                message: crate::core::types::ChatMessage {
+                message: crate::core::types::chat::ChatMessage {
                     role: crate::core::types::message::MessageRole::Assistant,
                     content: Some(crate::core::types::message::MessageContent::Text(
                         content.to_string(),

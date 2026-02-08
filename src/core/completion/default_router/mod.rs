@@ -7,7 +7,7 @@ use super::{
 };
 
 use crate::core::providers::{Provider, ProviderRegistry, ProviderType};
-use crate::core::types::{ChatRequest, context::RequestContext};
+use crate::core::types::{chat::ChatRequest, context::RequestContext};
 use crate::utils::error::{GatewayError, Result};
 use async_trait::async_trait;
 use futures::stream::StreamExt;

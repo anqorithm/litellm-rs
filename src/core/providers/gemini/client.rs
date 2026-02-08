@@ -14,7 +14,7 @@ use tokio::time::timeout;
 
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::{
-    ChatMessage, ChatRequest,
+    chat::ChatMessage, chat::ChatRequest,
     content::ContentPart,
     message::MessageContent,
     message::MessageRole,
@@ -481,7 +481,7 @@ impl GeminiClient {
 
             choices.push(ChatChoice {
                 index: index as u32,
-                message: crate::core::types::ChatMessage {
+                message: crate::core::types::chat::ChatMessage {
                     role: MessageRole::Assistant,
                     content: Some(MessageContent::Text(message_content)),
                     thinking: None,

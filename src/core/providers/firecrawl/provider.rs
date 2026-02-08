@@ -9,7 +9,7 @@ use crate::core::providers::base::{HeaderPair, HttpMethod, get_pricing_db, heade
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::error_mapper::trait_def::ErrorMapper;
 use crate::core::types::{
-    ChatRequest,
+    chat::ChatRequest,
     context::RequestContext,
     health::HealthStatus,
     model::ProviderCapability,

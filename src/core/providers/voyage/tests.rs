@@ -7,7 +7,7 @@ mod provider_tests {
     use super::*;
     use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
     use crate::core::types::{
-        ChatMessage, ChatRequest, embedding::EmbeddingInput, embedding::EmbeddingRequest,
+        chat::ChatMessage, chat::ChatRequest, embedding::EmbeddingInput, embedding::EmbeddingRequest,
         message::MessageContent, message::MessageRole,
     };
     use crate::core::types::{context::RequestContext, model::ProviderCapability};

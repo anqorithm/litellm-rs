@@ -3,9 +3,9 @@
 //! This module provides a full-featured LLM client with support for multiple providers,
 //! intelligent routing, load balancing, and comprehensive statistics tracking.
 
-mod llm_client;
 mod completions;
 mod embeddings;
+mod llm_client;
 mod routing;
 mod stats;
 mod types;

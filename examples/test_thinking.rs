@@ -10,7 +10,7 @@ use litellm_rs::core::traits::provider::llm_provider::trait_definition::LLMProvi
 use litellm_rs::core::types::context::RequestContext;
 use litellm_rs::core::types::thinking::{ThinkingConfig, ThinkingContent, ThinkingEffort};
 use litellm_rs::core::types::{
-    ChatMessage, ChatRequest, message::MessageContent, message::MessageRole,
+    chat::ChatMessage, chat::ChatRequest, message::MessageContent, message::MessageRole,
 };
 use std::env;
 

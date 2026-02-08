@@ -31,11 +31,7 @@ pub trait AgentCoordinator: Send + Sync {
     async fn spawn_boxed(&self, task: BoxedTask) -> AgentResult<AgentId>;
 
     /// Spawn a named agent with a boxed task
-    async fn spawn_named_boxed(
-        &self,
-        name: String,
-        task: BoxedTask,
-    ) -> AgentResult<AgentId>;
+    async fn spawn_named_boxed(&self, name: String, task: BoxedTask) -> AgentResult<AgentId>;
 
     /// Cancel a specific agent
     async fn cancel(&self, agent_id: AgentId) -> AgentResult<()>;
@@ -124,25 +120,29 @@ impl DefaultCoordinator {
         T: Send + 'static,
     {
         let id = AgentId::new();
-        self.spawn_internal(id, None, Box::pin(async move {
-            let _ = task.await;
-        }))
+        self.spawn_internal(
+            id,
+            None,
+            Box::pin(async move {
+                let _ = task.await;
+            }),
+        )
     }
 
     /// Spawn a named agent (generic version)
-    pub async fn spawn_named<F, T>(
-        &self,
-        name: impl Into<String>,
-        task: F,
-    ) -> AgentResult<AgentId>
+    pub async fn spawn_named<F, T>(&self, name: impl Into<String>, task: F) -> AgentResult<AgentId>
     where
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
     {
         let id = AgentId::new();
-        self.spawn_internal(id, Some(name.into()), Box::pin(async move {
-            let _ = task.await;
-        }))
+        self.spawn_internal(
+            id,
+            Some(name.into()),
+            Box::pin(async move {
+                let _ = task.await;
+            }),
+        )
     }
 
     /// Internal method to spawn an agent
@@ -219,11 +219,7 @@ impl AgentCoordinator for DefaultCoordinator {
         self.spawn_internal(id, None, task)
     }
 
-    async fn spawn_named_boxed(
-        &self,
-        name: String,
-        task: BoxedTask,
-    ) -> AgentResult<AgentId> {
+    async fn spawn_named_boxed(&self, name: String, task: BoxedTask) -> AgentResult<AgentId> {
         let id = AgentId::new();
         self.spawn_internal(id, Some(name), task)
     }
@@ -471,7 +467,7 @@ mod tests {
     async fn test_spawn_boxed() {
         let coord = DefaultCoordinator::new();
 
-        let task: BoxedTask = Box::pin(async { });
+        let task: BoxedTask = Box::pin(async {});
         let id = coord.spawn_boxed(task).await.unwrap();
 
         sleep(Duration::from_millis(50)).await;
@@ -803,7 +799,7 @@ mod tests {
     async fn test_coordinator_as_trait_object() {
         let coord: CoordinatorHandle = Arc::new(DefaultCoordinator::new());
 
-        let task: BoxedTask = Box::pin(async { });
+        let task: BoxedTask = Box::pin(async {});
         let id = coord.spawn_boxed(task).await.unwrap();
 
         sleep(Duration::from_millis(50)).await;

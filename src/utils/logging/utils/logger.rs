@@ -1,6 +1,6 @@
+use super::core::LoggingUtils;
 use super::file_logging::FileLogging;
 use super::types::LogLevel;
-use super::core::LoggingUtils;
 use crate::core::providers::unified_provider::ProviderError;
 use std::collections::HashMap;
 use std::fs::File;
