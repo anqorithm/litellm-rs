@@ -29,7 +29,7 @@ use crate::core::types::{
 use super::config::{HF_HUB_URL, HuggingFaceConfig};
 use super::embedding::HuggingFaceEmbeddingHandler;
 use super::error::{HuggingFaceError, parse_hf_error_response};
-use super::models::{get_default_models, parse_model_string};
+use super::models::{ProviderMapping, get_default_models, parse_model_string};
 
 // Static capabilities
 const HUGGINGFACE_CAPABILITIES: &[ProviderCapability] = &[
@@ -186,7 +186,7 @@ impl HuggingFaceProvider {
     async fn fetch_provider_mapping(
         &self,
         model: &str,
-    ) -> Result<HashMap<String, Value>, HuggingFaceError> {
+    ) -> Result<HashMap<String, ProviderMapping>, HuggingFaceError> {
         let url = format!("{}/api/models/{}", HF_HUB_URL, model);
 
         let headers = HeaderBuilder::new()
@@ -217,9 +217,8 @@ impl HuggingFaceProvider {
             .map_err(|e| HuggingFaceError::huggingface_response_parsing(e.to_string()))?;
 
         if let Some(mapping) = data.get("inferenceProviderMapping") {
-            if let Some(obj) = mapping.as_object() {
-                return Ok(obj.clone().into_iter().collect());
-            }
+            return serde_json::from_value(mapping.clone())
+                .map_err(|e| HuggingFaceError::huggingface_response_parsing(e.to_string()));
         }
 
         Ok(HashMap::new())
@@ -234,18 +233,14 @@ impl HuggingFaceProvider {
         let mapping = self.fetch_provider_mapping(model).await?;
 
         if let Some(provider_info) = mapping.get(provider) {
-            if let Some(status) = provider_info.get("status").and_then(|s| s.as_str()) {
-                if status == "staging" {
-                    warn!(
-                        "Model {} is in staging mode for provider {}. Meant for test purposes only.",
-                        model, provider
-                    );
-                }
+            if provider_info.status == "staging" {
+                warn!(
+                    "Model {} is in staging mode for provider {}. Meant for test purposes only.",
+                    model, provider
+                );
             }
 
-            if let Some(provider_id) = provider_info.get("providerId").and_then(|p| p.as_str()) {
-                return Ok(provider_id.to_string());
-            }
+            return Ok(provider_info.provider_id.clone());
         }
 
         // Check if provider is available
