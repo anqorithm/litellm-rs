@@ -23,59 +23,8 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
-        run: pip install aiohttp
-
       - name: Update model prices
-        run: python scripts/sync_models.py --output json > /tmp/openrouter_models.json
-
-      - name: Merge with existing data
-        run: |
-          python3 << 'EOF'
-          import json
-          from datetime import datetime
-
-          # Load existing data
-          try:
-              with open("data/model_prices.json") as f:
-                  existing = json.load(f)
-          except FileNotFoundError:
-              existing = {"_metadata": {}}
-
-          # Load new data from OpenRouter
-          with open("/tmp/openrouter_models.json") as f:
-              new_models = json.load(f)
-
-          # Update metadata
-          existing["_metadata"] = {
-              "version": "1.0.0",
-              "updated_at": datetime.utcnow().isoformat() + "Z",
-              "source": "https://openrouter.ai/api/v1/models"
-          }
-
-          # Merge models (update existing, add new)
-          for model in new_models:
-              provider = model.get("provider", "unknown")
-              name = model.get("name", "")
-              key = f"{provider}/{name}"
-
-              existing[key] = {
-                  "input_cost_per_token": model.get("input_cost_per_million", 0) / 1_000_000,
-                  "output_cost_per_token": model.get("output_cost_per_million", 0) / 1_000_000,
-                  "max_input_tokens": model.get("context_length", 0),
-                  "max_output_tokens": 16384,  # Default, OpenRouter doesn't always provide this
-                  "litellm_provider": provider,
-                  "mode": "chat",
-                  "supports_function_calling": model.get("supports_tools", False),
-                  "supports_vision": model.get("supports_vision", False)
-              }
-
-          # Write back
-          with open("data/model_prices.json", "w") as f:
-              json.dump(existing, f, indent=2, sort_keys=True)
-
-          print(f"Updated {len(new_models)} models")
-          EOF
+        run: python scripts/sync_models.py --output update
 
       - name: Check for changes
         id: check_changes

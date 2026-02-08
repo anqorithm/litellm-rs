@@ -75,7 +75,7 @@ impl HttpServer {
         }
 
         let pricing = Arc::new(PricingService::new(Some(
-            "config/model_prices_extended.json".to_string(),
+            "data/model_prices.json".to_string(),
         )));
         let _ = pricing.initialize().await;
         let pricing_clone: Arc<PricingService> = Arc::clone(&pricing);

@@ -10,6 +10,20 @@ use crate::core::cost::types::{
 };
 use crate::core::cost::utils::select_tiered_pricing;
 
+const SUPPORTED_COST_PROVIDERS: &[&str] = &[
+    "openai",
+    "anthropic",
+    "gemini",
+    "deepseek",
+    "moonshot",
+    "qwen",
+    "mistral",
+    "meta_llama",
+    "cohere",
+    "xai",
+    "amazon_nova",
+];
+
 /// Unified Cost Calculator Trait
 ///
 /// All providers should implement this trait by delegating to the generic functions
@@ -95,20 +109,51 @@ pub fn generic_cost_per_token(
 
 /// Get model pricing information
 pub fn get_model_pricing(model: &str, provider: &str) -> Result<ModelPricing, CostError> {
-    // This will be populated with actual pricing data
-    // For now, return a basic implementation
+    use chrono::Utc;
 
-    match provider.to_lowercase().as_str() {
-        "openai" => get_openai_pricing(model),
-        "anthropic" => get_anthropic_pricing(model),
-        "azure" => get_azure_pricing(model),
-        "vertex_ai" | "vertexai" => get_vertex_ai_pricing(model),
-        "deepseek" => get_deepseek_pricing(model),
-        "moonshot" => get_moonshot_pricing(model),
-        _ => Err(CostError::ProviderNotSupported {
+    if !SUPPORTED_COST_PROVIDERS.contains(&provider) {
+        return Err(CostError::ProviderNotSupported {
             provider: provider.to_string(),
-        }),
+        });
     }
+
+    if !model.contains('/') {
+        return Err(CostError::ModelNotSupported {
+            model: model.to_string(),
+            provider: provider.to_string(),
+        });
+    }
+
+    let pricing_db = crate::core::providers::base::get_pricing_db();
+    let pricing = pricing_db
+        .get_model_info(model)
+        .ok_or_else(|| CostError::MissingPricing {
+            model: model.to_string(),
+        })?;
+
+    if pricing.litellm_provider.as_deref() != Some(provider) {
+        return Err(CostError::ModelNotSupported {
+            model: model.to_string(),
+            provider: provider.to_string(),
+        });
+    }
+
+    Ok(ModelPricing {
+        model: model.to_string(),
+        input_cost_per_1k_tokens: pricing.input_cost_per_token * 1000.0,
+        output_cost_per_1k_tokens: pricing.output_cost_per_token * 1000.0,
+        cache_read_input_token_cost: None,
+        cache_creation_input_token_cost: None,
+        input_cost_per_audio_token: None,
+        output_cost_per_audio_token: None,
+        image_cost_per_token: None,
+        reasoning_cost_per_token: Some(pricing.output_cost_per_reasoning_token),
+        cost_per_second: None,
+        cost_per_image: None,
+        tiered_pricing: None,
+        currency: "USD".to_string(),
+        updated_at: Utc::now(),
+    })
 }
 
 /// Calculate input cost
@@ -227,399 +272,35 @@ pub fn compare_model_costs(
     comparisons
 }
 
-// Provider-specific pricing functions
-// These will be populated with actual pricing data from JSON or database
-
-fn get_openai_pricing(model: &str) -> Result<ModelPricing, CostError> {
-    use chrono::Utc;
-
-    let pricing = match model.to_lowercase().as_str() {
-        m if m.contains("gpt-5.2-pro") => ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.021,
-            output_cost_per_1k_tokens: 0.168,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        },
-        m if m.contains("gpt-5.2-codex") => ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.00175,
-            output_cost_per_1k_tokens: 0.014,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        },
-        m if m.contains("gpt-5-codex") => ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.00125,
-            output_cost_per_1k_tokens: 0.010,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        },
-        m if m.contains("gpt-5.2") => ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.00175,
-            output_cost_per_1k_tokens: 0.014,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        },
-        m if m.contains("gpt-5.1-thinking") => ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.0025,
-            output_cost_per_1k_tokens: 0.020,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        },
-        m if m.contains("gpt-5.1") => ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.00125,
-            output_cost_per_1k_tokens: 0.010,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        },
-        m if m.contains("gpt-5-mini") => ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.00025,
-            output_cost_per_1k_tokens: 0.002,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        },
-        m if m.contains("gpt-5-nano") => ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.00005,
-            output_cost_per_1k_tokens: 0.0004,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        },
-        m if m.contains("gpt-image-1-mini") => ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.0025,
-            output_cost_per_1k_tokens: 0.010,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        },
-        m if m.contains("gpt-image-1.5") || m.contains("chatgpt-image-latest") => ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.005,
-            output_cost_per_1k_tokens: 0.020,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        },
-        m if m.contains("gpt-image-1") => ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.005,
-            output_cost_per_1k_tokens: 0.020,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        },
-        m if m.contains("o3-pro") => ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.020,
-            output_cost_per_1k_tokens: 0.080,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        },
-        m if m.contains("o3-mini") || m.contains("o4-mini") => ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.0011,
-            output_cost_per_1k_tokens: 0.0044,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        },
-        m if m.contains("gpt-4.1") => ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.002,
-            output_cost_per_1k_tokens: 0.008,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        },
-        m if m.contains("gpt-4o-mini") => ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.00015,
-            output_cost_per_1k_tokens: 0.0006,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        },
-        m if m.contains("gpt-4o") => ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.005,
-            output_cost_per_1k_tokens: 0.015,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        },
-        m if m.contains("gpt-4-turbo") => ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.01,
-            output_cost_per_1k_tokens: 0.03,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        },
-        m if m.contains("gpt-3.5-turbo") => ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.0005,
-            output_cost_per_1k_tokens: 0.0015,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        },
-        _ => {
-            return Err(CostError::ModelNotSupported {
-                model: model.to_string(),
-                provider: "openai".to_string(),
-            });
-        }
-    };
-
-    Ok(pricing)
-}
-
-fn get_anthropic_pricing(model: &str) -> Result<ModelPricing, CostError> {
-    use chrono::Utc;
-
-    let pricing = match model.to_lowercase().as_str() {
-        m if m.contains("claude-opus-4-6") => ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.005,
-            output_cost_per_1k_tokens: 0.025,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        },
-        m if m.contains("claude-opus-4-5") => ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.005,
-            output_cost_per_1k_tokens: 0.025,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        },
-        m if m.contains("claude-sonnet-4-5") => ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.003,
-            output_cost_per_1k_tokens: 0.015,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        },
-        m if m.contains("claude-sonnet-4") => ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.003,
-            output_cost_per_1k_tokens: 0.015,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        },
-        m if m.contains("claude-3-5-sonnet") => ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.003,
-            output_cost_per_1k_tokens: 0.015,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        },
-        m if m.contains("claude-3-5-haiku") => ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.001,
-            output_cost_per_1k_tokens: 0.005,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        },
-        m if m.contains("claude-3-opus") => ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.015,
-            output_cost_per_1k_tokens: 0.075,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        },
-        m if m.contains("claude-3-sonnet") => ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.003,
-            output_cost_per_1k_tokens: 0.015,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        },
-        m if m.contains("claude-3-haiku") => ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.00025,
-            output_cost_per_1k_tokens: 0.00125,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        },
-        m if m.contains("claude-2.1") => ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.008,
-            output_cost_per_1k_tokens: 0.024,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        },
-        m if m.contains("claude-instant") => ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.0008,
-            output_cost_per_1k_tokens: 0.0024,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        },
-        _ => {
-            return Err(CostError::ModelNotSupported {
-                model: model.to_string(),
-                provider: "anthropic".to_string(),
-            });
-        }
-    };
-
-    Ok(pricing)
-}
-
-fn get_azure_pricing(model: &str) -> Result<ModelPricing, CostError> {
-    // Azure pricing is typically the same as OpenAI but may have regional differences
-    get_openai_pricing(model).map(|mut pricing| {
-        pricing.model = model.to_string();
-        pricing
-    })
-}
-
-fn get_vertex_ai_pricing(model: &str) -> Result<ModelPricing, CostError> {
-    use chrono::Utc;
-
-    let pricing = match model.to_lowercase().as_str() {
-        m if m.contains("gemini-pro") => ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.00125,
-            output_cost_per_1k_tokens: 0.00375,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        },
-        m if m.contains("gemini-flash") => ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.000075,
-            output_cost_per_1k_tokens: 0.0003,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        },
-        _ => {
-            return Err(CostError::ModelNotSupported {
-                model: model.to_string(),
-                provider: "vertex_ai".to_string(),
-            });
-        }
-    };
-
-    Ok(pricing)
-}
-
-fn get_deepseek_pricing(model: &str) -> Result<ModelPricing, CostError> {
-    use chrono::Utc;
-
-    let pricing = match model.to_lowercase().as_str() {
-        m if m.contains("deepseek-chat") => ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.00014,
-            output_cost_per_1k_tokens: 0.00028,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        },
-        _ => {
-            return Err(CostError::ModelNotSupported {
-                model: model.to_string(),
-                provider: "deepseek".to_string(),
-            });
-        }
-    };
-
-    Ok(pricing)
-}
-
-fn get_moonshot_pricing(model: &str) -> Result<ModelPricing, CostError> {
-    use chrono::Utc;
-
-    let pricing = match model.to_lowercase().as_str() {
-        "moonshot-v1-8k" => ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.01,
-            output_cost_per_1k_tokens: 0.02,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        },
-        "moonshot-v1-32k" => ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.02,
-            output_cost_per_1k_tokens: 0.04,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        },
-        "moonshot-v1-128k" => ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.03,
-            output_cost_per_1k_tokens: 0.06,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        },
-        _ => {
-            return Err(CostError::ModelNotSupported {
-                model: model.to_string(),
-                provider: "moonshot".to_string(),
-            });
-        }
-    };
-
-    Ok(pricing)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    // Helper function to create basic usage
     fn create_usage(prompt_tokens: u32, completion_tokens: u32) -> UsageTokens {
         UsageTokens::new(prompt_tokens, completion_tokens)
     }
 
-    // Tests for generic_cost_per_token
+    fn assert_approx_eq(actual: f64, expected: f64) {
+        assert!(
+            (actual - expected).abs() < 1e-10,
+            "expected {expected}, got {actual}"
+        );
+    }
+
     #[test]
     fn test_generic_cost_per_token_basic() {
         let usage = create_usage(1000, 500);
-        let result = generic_cost_per_token("gpt-4o-mini", &usage, "openai");
+        let result = generic_cost_per_token("openai/gpt-4o-mini", &usage, "openai");
 
         assert!(result.is_ok());
         let breakdown = result.unwrap();
-        assert_eq!(breakdown.model, "gpt-4o-mini");
+        assert_eq!(breakdown.model, "openai/gpt-4o-mini");
         assert_eq!(breakdown.provider, "openai");
         assert_eq!(breakdown.usage.prompt_tokens, 1000);
         assert_eq!(breakdown.usage.completion_tokens, 500);
-
-        // Expected: 1000 tokens * 0.00015 / 1k = 0.00015
-        // Expected: 500 tokens * 0.0006 / 1k = 0.0003
-        assert!((breakdown.input_cost - 0.00015).abs() < 1e-6);
-        assert!((breakdown.output_cost - 0.0003).abs() < 1e-6);
-        assert!((breakdown.total_cost - 0.00045).abs() < 1e-6);
+        assert_approx_eq(breakdown.input_cost, 0.00015);
+        assert_approx_eq(breakdown.output_cost, 0.0003);
+        assert_approx_eq(breakdown.total_cost, 0.00045);
     }
 
     #[test]
@@ -627,15 +308,12 @@ mod tests {
         let mut usage = create_usage(2000, 1000);
         usage.cached_tokens = Some(500);
 
-        let result = generic_cost_per_token("gpt-4o", &usage, "openai");
+        let result = generic_cost_per_token("openai/gpt-4o", &usage, "openai");
         assert!(result.is_ok());
         let breakdown = result.unwrap();
 
-        // Input cost should only be for non-cached tokens (2000 - 500 = 1500)
-        let expected_input = (1500.0 / 1000.0) * 0.005;
-        assert!((breakdown.input_cost - expected_input).abs() < 1e-6);
-        // Note: cache_cost may be 0 if pricing data doesn't include cache_read_input_token_cost
-        // The important thing is that input cost is calculated correctly excluding cached tokens
+        let expected_input = (1500.0 / 1000.0) * 0.0025;
+        assert_approx_eq(breakdown.input_cost, expected_input);
     }
 
     #[test]
@@ -643,18 +321,18 @@ mod tests {
         let mut usage = create_usage(1000, 500);
         usage.reasoning_tokens = Some(200);
 
-        // Create custom pricing with reasoning cost
-        let result = generic_cost_per_token("gpt-4o", &usage, "openai");
+        let result = generic_cost_per_token("openai/gpt-4o", &usage, "openai");
         assert!(result.is_ok());
-        // Reasoning cost should be calculated if pricing supports it
+
+        // Current canonical pricing file has no non-zero reasoning surcharge for this model.
+        assert_eq!(result.unwrap().reasoning_cost, 0.0);
     }
 
     #[test]
-    fn test_generic_cost_per_token_unsupported_model() {
+    fn test_generic_cost_per_token_requires_qualified_model() {
         let usage = create_usage(1000, 500);
         let result = generic_cost_per_token("unknown-model", &usage, "openai");
 
-        assert!(result.is_err());
         match result.unwrap_err() {
             CostError::ModelNotSupported { model, provider } => {
                 assert_eq!(model, "unknown-model");
@@ -667,9 +345,8 @@ mod tests {
     #[test]
     fn test_generic_cost_per_token_unsupported_provider() {
         let usage = create_usage(1000, 500);
-        let result = generic_cost_per_token("gpt-4o", &usage, "unknown-provider");
+        let result = generic_cost_per_token("openai/gpt-4o", &usage, "unknown-provider");
 
-        assert!(result.is_err());
         match result.unwrap_err() {
             CostError::ProviderNotSupported { provider } => {
                 assert_eq!(provider, "unknown-provider");
@@ -678,153 +355,165 @@ mod tests {
         }
     }
 
-    // Tests for get_model_pricing
+    #[test]
+    fn test_generic_cost_per_token_provider_mismatch() {
+        let usage = create_usage(1000, 500);
+        let result = generic_cost_per_token("openai/gpt-4o", &usage, "anthropic");
+
+        match result.unwrap_err() {
+            CostError::ModelNotSupported { model, provider } => {
+                assert_eq!(model, "openai/gpt-4o");
+                assert_eq!(provider, "anthropic");
+            }
+            _ => panic!("Expected ModelNotSupported error"),
+        }
+    }
+
     #[test]
     fn test_get_openai_pricing_gpt4o_mini() {
-        let pricing = get_model_pricing("gpt-4o-mini", "openai");
+        let pricing = get_model_pricing("openai/gpt-4o-mini", "openai");
         assert!(pricing.is_ok());
         let pricing = pricing.unwrap();
-        assert_eq!(pricing.input_cost_per_1k_tokens, 0.00015);
-        assert_eq!(pricing.output_cost_per_1k_tokens, 0.0006);
+        assert_approx_eq(pricing.input_cost_per_1k_tokens, 0.00015);
+        assert_approx_eq(pricing.output_cost_per_1k_tokens, 0.0006);
         assert_eq!(pricing.currency, "USD");
     }
 
     #[test]
     fn test_get_openai_pricing_gpt4o() {
-        let pricing = get_model_pricing("gpt-4o", "openai");
+        let pricing = get_model_pricing("openai/gpt-4o", "openai");
         assert!(pricing.is_ok());
         let pricing = pricing.unwrap();
-        assert_eq!(pricing.input_cost_per_1k_tokens, 0.005);
-        assert_eq!(pricing.output_cost_per_1k_tokens, 0.015);
+        assert_approx_eq(pricing.input_cost_per_1k_tokens, 0.0025);
+        assert_approx_eq(pricing.output_cost_per_1k_tokens, 0.01);
     }
 
     #[test]
     fn test_get_openai_pricing_gpt4_turbo() {
-        let pricing = get_model_pricing("gpt-4-turbo", "openai");
+        let pricing = get_model_pricing("openai/gpt-4-turbo", "openai");
         assert!(pricing.is_ok());
         let pricing = pricing.unwrap();
-        assert_eq!(pricing.input_cost_per_1k_tokens, 0.01);
-        assert_eq!(pricing.output_cost_per_1k_tokens, 0.03);
+        assert_approx_eq(pricing.input_cost_per_1k_tokens, 0.01);
+        assert_approx_eq(pricing.output_cost_per_1k_tokens, 0.03);
     }
 
     #[test]
     fn test_get_openai_pricing_gpt35_turbo() {
-        let pricing = get_model_pricing("gpt-3.5-turbo", "openai");
+        let pricing = get_model_pricing("openai/gpt-3.5-turbo", "openai");
         assert!(pricing.is_ok());
         let pricing = pricing.unwrap();
-        assert_eq!(pricing.input_cost_per_1k_tokens, 0.0005);
-        assert_eq!(pricing.output_cost_per_1k_tokens, 0.0015);
+        assert_approx_eq(pricing.input_cost_per_1k_tokens, 0.0005);
+        assert_approx_eq(pricing.output_cost_per_1k_tokens, 0.0015);
     }
 
     #[test]
     fn test_get_anthropic_pricing_claude35_sonnet() {
-        let pricing = get_model_pricing("claude-3-5-sonnet", "anthropic");
+        let pricing = get_model_pricing("anthropic/claude-3.5-sonnet", "anthropic");
         assert!(pricing.is_ok());
         let pricing = pricing.unwrap();
-        assert_eq!(pricing.input_cost_per_1k_tokens, 0.003);
-        assert_eq!(pricing.output_cost_per_1k_tokens, 0.015);
+        assert_approx_eq(pricing.input_cost_per_1k_tokens, 0.006);
+        assert_approx_eq(pricing.output_cost_per_1k_tokens, 0.03);
     }
 
     #[test]
-    fn test_get_anthropic_pricing_claude_opus_46() {
-        let pricing = get_model_pricing("claude-opus-4-6", "anthropic");
+    fn test_get_anthropic_pricing_claude_opus_45() {
+        let pricing = get_model_pricing("anthropic/claude-opus-4.5", "anthropic");
         assert!(pricing.is_ok());
         let pricing = pricing.unwrap();
-        assert_eq!(pricing.input_cost_per_1k_tokens, 0.005);
-        assert_eq!(pricing.output_cost_per_1k_tokens, 0.025);
+        assert_approx_eq(pricing.input_cost_per_1k_tokens, 0.005);
+        assert_approx_eq(pricing.output_cost_per_1k_tokens, 0.025);
     }
 
     #[test]
     fn test_get_anthropic_pricing_claude_sonnet_45() {
-        let pricing = get_model_pricing("claude-sonnet-4-5", "anthropic");
+        let pricing = get_model_pricing("anthropic/claude-sonnet-4.5", "anthropic");
         assert!(pricing.is_ok());
         let pricing = pricing.unwrap();
-        assert_eq!(pricing.input_cost_per_1k_tokens, 0.003);
-        assert_eq!(pricing.output_cost_per_1k_tokens, 0.015);
+        assert_approx_eq(pricing.input_cost_per_1k_tokens, 0.003);
+        assert_approx_eq(pricing.output_cost_per_1k_tokens, 0.015);
     }
 
     #[test]
     fn test_get_anthropic_pricing_claude35_haiku() {
-        let pricing = get_model_pricing("claude-3-5-haiku", "anthropic");
+        let pricing = get_model_pricing("anthropic/claude-3.5-haiku", "anthropic");
         assert!(pricing.is_ok());
         let pricing = pricing.unwrap();
-        assert_eq!(pricing.input_cost_per_1k_tokens, 0.001);
-        assert_eq!(pricing.output_cost_per_1k_tokens, 0.005);
+        assert_approx_eq(pricing.input_cost_per_1k_tokens, 0.0008);
+        assert_approx_eq(pricing.output_cost_per_1k_tokens, 0.004);
     }
 
     #[test]
     fn test_get_anthropic_pricing_claude3_haiku() {
-        let pricing = get_model_pricing("claude-3-haiku", "anthropic");
+        let pricing = get_model_pricing("anthropic/claude-3-haiku", "anthropic");
         assert!(pricing.is_ok());
         let pricing = pricing.unwrap();
-        assert_eq!(pricing.input_cost_per_1k_tokens, 0.00025);
-        assert_eq!(pricing.output_cost_per_1k_tokens, 0.00125);
+        assert_approx_eq(pricing.input_cost_per_1k_tokens, 0.00025);
+        assert_approx_eq(pricing.output_cost_per_1k_tokens, 0.00125);
     }
 
     #[test]
-    fn test_get_vertex_ai_pricing_gemini_pro() {
-        let pricing = get_model_pricing("gemini-pro", "vertex_ai");
+    fn test_get_gemini_pricing() {
+        let pricing = get_model_pricing("google/gemini-2.5-flash", "gemini");
         assert!(pricing.is_ok());
         let pricing = pricing.unwrap();
-        assert_eq!(pricing.input_cost_per_1k_tokens, 0.00125);
-        assert_eq!(pricing.output_cost_per_1k_tokens, 0.00375);
+        assert_approx_eq(pricing.input_cost_per_1k_tokens, 0.0003);
+        assert_approx_eq(pricing.output_cost_per_1k_tokens, 0.0025);
     }
 
     #[test]
-    fn test_get_vertex_ai_pricing_gemini_flash() {
-        let pricing = get_model_pricing("gemini-flash", "vertexai");
-        assert!(pricing.is_ok());
-        let pricing = pricing.unwrap();
-        assert_eq!(pricing.input_cost_per_1k_tokens, 0.000075);
-        assert_eq!(pricing.output_cost_per_1k_tokens, 0.0003);
+    fn test_get_gemini_wrong_key_fails() {
+        let pricing = get_model_pricing("gemini/gemini-2.5-flash", "gemini");
+        match pricing.unwrap_err() {
+            CostError::MissingPricing { model } => assert_eq!(model, "gemini/gemini-2.5-flash"),
+            _ => panic!("Expected MissingPricing error"),
+        }
     }
 
     #[test]
     fn test_get_deepseek_pricing() {
-        let pricing = get_model_pricing("deepseek-chat", "deepseek");
+        let pricing = get_model_pricing("deepseek/deepseek-chat", "deepseek");
         assert!(pricing.is_ok());
         let pricing = pricing.unwrap();
-        assert_eq!(pricing.input_cost_per_1k_tokens, 0.00014);
-        assert_eq!(pricing.output_cost_per_1k_tokens, 0.00028);
+        assert_approx_eq(pricing.input_cost_per_1k_tokens, 0.0003);
+        assert_approx_eq(pricing.output_cost_per_1k_tokens, 0.0012);
     }
 
     #[test]
-    fn test_get_moonshot_pricing_8k() {
-        let pricing = get_model_pricing("moonshot-v1-8k", "moonshot");
+    fn test_get_moonshot_pricing_kimi_k2() {
+        let pricing = get_model_pricing("moonshotai/kimi-k2", "moonshot");
         assert!(pricing.is_ok());
         let pricing = pricing.unwrap();
-        assert_eq!(pricing.input_cost_per_1k_tokens, 0.01);
-        assert_eq!(pricing.output_cost_per_1k_tokens, 0.02);
+        assert_approx_eq(pricing.input_cost_per_1k_tokens, 0.0005);
+        assert_approx_eq(pricing.output_cost_per_1k_tokens, 0.0024);
     }
 
     #[test]
-    fn test_get_moonshot_pricing_32k() {
-        let pricing = get_model_pricing("moonshot-v1-32k", "moonshot");
-        assert!(pricing.is_ok());
-        let pricing = pricing.unwrap();
-        assert_eq!(pricing.input_cost_per_1k_tokens, 0.02);
-        assert_eq!(pricing.output_cost_per_1k_tokens, 0.04);
+    fn test_get_model_pricing_requires_exact_provider_case() {
+        let pricing = get_model_pricing("openai/gpt-4o", "OpenAI");
+        match pricing.unwrap_err() {
+            CostError::ProviderNotSupported { provider } => assert_eq!(provider, "OpenAI"),
+            _ => panic!("Expected ProviderNotSupported error"),
+        }
     }
 
     #[test]
-    fn test_get_moonshot_pricing_128k() {
-        let pricing = get_model_pricing("moonshot-v1-128k", "moonshot");
-        assert!(pricing.is_ok());
-        let pricing = pricing.unwrap();
-        assert_eq!(pricing.input_cost_per_1k_tokens, 0.03);
-        assert_eq!(pricing.output_cost_per_1k_tokens, 0.06);
+    fn test_get_model_pricing_rejects_legacy_vertex_alias() {
+        let pricing = get_model_pricing("google/gemini-2.5-flash", "vertex_ai");
+        match pricing.unwrap_err() {
+            CostError::ProviderNotSupported { provider } => assert_eq!(provider, "vertex_ai"),
+            _ => panic!("Expected ProviderNotSupported error"),
+        }
     }
 
     #[test]
-    fn test_get_azure_pricing() {
-        let pricing = get_model_pricing("gpt-4o", "azure");
-        assert!(pricing.is_ok());
-        // Azure uses OpenAI pricing
-        let pricing = pricing.unwrap();
-        assert_eq!(pricing.input_cost_per_1k_tokens, 0.005);
+    fn test_get_model_pricing_rejects_legacy_azure_provider() {
+        let pricing = get_model_pricing("openai/gpt-4o", "azure");
+        match pricing.unwrap_err() {
+            CostError::ProviderNotSupported { provider } => assert_eq!(provider, "azure"),
+            _ => panic!("Expected ProviderNotSupported error"),
+        }
     }
 
-    // Tests for calculate_input_cost
     #[test]
     fn test_calculate_input_cost_no_cache() {
         let usage = create_usage(1000, 500);
@@ -837,7 +526,6 @@ mod tests {
         let mut usage = create_usage(2000, 500);
         usage.cached_tokens = Some(500);
         let cost = calculate_input_cost(&usage, 1.0);
-        // Should only charge for 1500 non-cached tokens
         assert_eq!(cost, 1.5);
     }
 
@@ -846,7 +534,6 @@ mod tests {
         let mut usage = create_usage(1000, 500);
         usage.cached_tokens = Some(1000);
         let cost = calculate_input_cost(&usage, 1.0);
-        // All tokens cached, should be 0
         assert_eq!(cost, 0.0);
     }
 
@@ -857,12 +544,11 @@ mod tests {
         assert_eq!(cost, 0.0);
     }
 
-    // Tests for calculate_output_cost
     #[test]
     fn test_calculate_output_cost_basic() {
         let usage = create_usage(1000, 500);
         let cost = calculate_output_cost(&usage, 2.0);
-        assert_eq!(cost, 1.0); // 500 / 1000 * 2.0
+        assert_eq!(cost, 1.0);
     }
 
     #[test]
@@ -872,11 +558,9 @@ mod tests {
         assert_eq!(cost, 0.0);
     }
 
-    // Tests for calculate_cache_cost
     #[test]
     fn test_calculate_cache_cost() {
         let cost = calculate_cache_cost(1000, 0.5, 0.1);
-        // Using read cost: 1000 / 1000 * 0.1 = 0.1
         assert_eq!(cost, 0.1);
     }
 
@@ -886,7 +570,6 @@ mod tests {
         assert_eq!(cost, 0.0);
     }
 
-    // Tests for calculate_audio_cost
     #[test]
     fn test_calculate_audio_cost_with_pricing() {
         use chrono::Utc;
@@ -901,7 +584,7 @@ mod tests {
         };
 
         let cost = calculate_audio_cost(&pricing, 1000);
-        assert_eq!(cost, 1.0); // 1000 * 0.001
+        assert_eq!(cost, 1.0);
     }
 
     #[test]
@@ -920,7 +603,6 @@ mod tests {
         assert_eq!(cost, 0.0);
     }
 
-    // Tests for calculate_image_cost
     #[test]
     fn test_calculate_image_cost_with_pricing() {
         use chrono::Utc;
@@ -935,7 +617,7 @@ mod tests {
         };
 
         let cost = calculate_image_cost(&pricing, 500);
-        assert_eq!(cost, 1.0); // 500 * 0.002
+        assert_eq!(cost, 1.0);
     }
 
     #[test]
@@ -954,7 +636,6 @@ mod tests {
         assert_eq!(cost, 0.0);
     }
 
-    // Tests for calculate_reasoning_cost
     #[test]
     fn test_calculate_reasoning_cost_with_pricing() {
         use chrono::Utc;
@@ -969,7 +650,7 @@ mod tests {
         };
 
         let cost = calculate_reasoning_cost(&pricing, 300);
-        assert_eq!(cost, 0.9); // 300 * 0.003
+        assert_eq!(cost, 0.9);
     }
 
     #[test]
@@ -988,32 +669,30 @@ mod tests {
         assert_eq!(cost, 0.0);
     }
 
-    // Tests for estimate_cost
     #[test]
     fn test_estimate_cost_basic() {
-        let result = estimate_cost("gpt-4o-mini", "openai", 1000, Some(500));
+        let result = estimate_cost("openai/gpt-4o-mini", "openai", 1000, Some(500));
         assert!(result.is_ok());
         let estimate = result.unwrap();
 
         let expected_input = (1000.0 / 1000.0) * 0.00015;
         let expected_output = (500.0 / 1000.0) * 0.0006;
 
-        assert!((estimate.input_cost - expected_input).abs() < 1e-6);
-        assert!((estimate.estimated_output_cost - expected_output).abs() < 1e-6);
-        assert_eq!(estimate.min_cost, expected_input);
-        assert!((estimate.max_cost - (expected_input + expected_output)).abs() < 1e-6);
+        assert_approx_eq(estimate.input_cost, expected_input);
+        assert_approx_eq(estimate.estimated_output_cost, expected_output);
+        assert_approx_eq(estimate.min_cost, expected_input);
+        assert_approx_eq(estimate.max_cost, expected_input + expected_output);
         assert_eq!(estimate.currency, "USD");
     }
 
     #[test]
     fn test_estimate_cost_no_max_output() {
-        let result = estimate_cost("gpt-4o", "openai", 1000, None);
+        let result = estimate_cost("openai/gpt-4o", "openai", 1000, None);
         assert!(result.is_ok());
         let estimate = result.unwrap();
 
-        // Should use default 100 tokens
-        let expected_output = (100.0 / 1000.0) * 0.015;
-        assert!((estimate.estimated_output_cost - expected_output).abs() < 1e-6);
+        let expected_output = (100.0 / 1000.0) * 0.01;
+        assert_approx_eq(estimate.estimated_output_cost, expected_output);
     }
 
     #[test]
@@ -1022,14 +701,13 @@ mod tests {
         assert!(result.is_err());
     }
 
-    // Tests for compare_model_costs
     #[test]
     fn test_compare_model_costs_single_model() {
-        let models = vec![("gpt-4o-mini".to_string(), "openai".to_string())];
+        let models = vec![("openai/gpt-4o-mini".to_string(), "openai".to_string())];
         let comparisons = compare_model_costs(&models, 1000, 500);
 
         assert_eq!(comparisons.len(), 1);
-        assert_eq!(comparisons[0].model, "gpt-4o-mini");
+        assert_eq!(comparisons[0].model, "openai/gpt-4o-mini");
         assert_eq!(comparisons[0].provider, "openai");
         assert!(comparisons[0].total_cost > 0.0);
         assert!(comparisons[0].cost_per_token > 0.0);
@@ -1039,36 +717,39 @@ mod tests {
     #[test]
     fn test_compare_model_costs_multiple_models() {
         let models = vec![
-            ("gpt-4o".to_string(), "openai".to_string()),
-            ("gpt-4o-mini".to_string(), "openai".to_string()),
-            ("claude-3-haiku".to_string(), "anthropic".to_string()),
+            ("openai/gpt-4o".to_string(), "openai".to_string()),
+            ("openai/gpt-4o-mini".to_string(), "openai".to_string()),
+            (
+                "anthropic/claude-3-haiku".to_string(),
+                "anthropic".to_string(),
+            ),
         ];
         let comparisons = compare_model_costs(&models, 1000, 500);
 
         assert_eq!(comparisons.len(), 3);
 
-        // Should be sorted by cost (lowest first)
         for i in 1..comparisons.len() {
             assert!(comparisons[i - 1].total_cost <= comparisons[i].total_cost);
         }
 
-        // Verify efficiency score calculation
         for comparison in &comparisons {
             let expected_efficiency = 1500.0 / comparison.total_cost;
-            assert!((comparison.efficiency_score - expected_efficiency).abs() < 1e-6);
+            assert_approx_eq(comparison.efficiency_score, expected_efficiency);
         }
     }
 
     #[test]
     fn test_compare_model_costs_with_invalid_model() {
         let models = vec![
-            ("gpt-4o-mini".to_string(), "openai".to_string()),
+            ("openai/gpt-4o-mini".to_string(), "openai".to_string()),
             ("invalid-model".to_string(), "openai".to_string()),
-            ("claude-3-haiku".to_string(), "anthropic".to_string()),
+            (
+                "anthropic/claude-3-haiku".to_string(),
+                "anthropic".to_string(),
+            ),
         ];
         let comparisons = compare_model_costs(&models, 1000, 500);
 
-        // Should only include valid models
         assert_eq!(comparisons.len(), 2);
     }
 
@@ -1081,15 +762,13 @@ mod tests {
 
     #[test]
     fn test_compare_model_costs_zero_tokens() {
-        let models = vec![("gpt-4o-mini".to_string(), "openai".to_string())];
+        let models = vec![("openai/gpt-4o-mini".to_string(), "openai".to_string())];
         let comparisons = compare_model_costs(&models, 0, 0);
 
-        // Should handle zero tokens gracefully
         assert_eq!(comparisons.len(), 1);
         assert_eq!(comparisons[0].total_cost, 0.0);
     }
 
-    // Tests for cost breakdown calculation with all features
     #[test]
     fn test_generic_cost_per_token_all_features() {
         let mut usage = create_usage(5000, 2000);
@@ -1098,11 +777,10 @@ mod tests {
         usage.image_tokens = Some(300);
         usage.reasoning_tokens = Some(200);
 
-        let result = generic_cost_per_token("gpt-4o", &usage, "openai");
+        let result = generic_cost_per_token("openai/gpt-4o", &usage, "openai");
         assert!(result.is_ok());
         let breakdown = result.unwrap();
 
-        // Verify total is sum of all components
         let calculated_total = breakdown.input_cost
             + breakdown.output_cost
             + breakdown.cache_cost
@@ -1113,94 +791,60 @@ mod tests {
         assert!((breakdown.total_cost - calculated_total).abs() < 1e-10);
     }
 
-    // Edge case tests
     #[test]
     fn test_large_token_counts() {
         let usage = create_usage(1_000_000, 500_000);
-        let result = generic_cost_per_token("gpt-4o", &usage, "openai");
+        let result = generic_cost_per_token("openai/gpt-4o", &usage, "openai");
         assert!(result.is_ok());
         let breakdown = result.unwrap();
         assert!(breakdown.total_cost > 0.0);
-        assert!(breakdown.total_cost < 1_000_000.0); // Sanity check
+        assert!(breakdown.total_cost < 1_000_000.0);
     }
 
     #[test]
-    fn test_case_insensitive_model_names() {
+    fn test_case_insensitive_model_names_are_rejected() {
         let usage = create_usage(1000, 500);
+        let result = generic_cost_per_token("openai/GPT-4O-MINI", &usage, "openai");
 
-        let result1 = generic_cost_per_token("GPT-4O-MINI", &usage, "openai");
-        let result2 = generic_cost_per_token("gpt-4o-mini", &usage, "openai");
-        let result3 = generic_cost_per_token("Gpt-4O-Mini", &usage, "openai");
-
-        assert!(result1.is_ok());
-        assert!(result2.is_ok());
-        assert!(result3.is_ok());
-
-        let cost1 = result1.unwrap().total_cost;
-        let cost2 = result2.unwrap().total_cost;
-        let cost3 = result3.unwrap().total_cost;
-
-        assert!((cost1 - cost2).abs() < 1e-10);
-        assert!((cost2 - cost3).abs() < 1e-10);
+        match result.unwrap_err() {
+            CostError::MissingPricing { model } => assert_eq!(model, "openai/GPT-4O-MINI"),
+            _ => panic!("Expected MissingPricing error"),
+        }
     }
 
     #[test]
-    fn test_case_insensitive_provider_names() {
-        let result1 = get_model_pricing("gpt-4o", "OpenAI");
-        let result2 = get_model_pricing("gpt-4o", "OPENAI");
-        let result3 = get_model_pricing("gpt-4o", "openai");
-
-        assert!(result1.is_ok());
-        assert!(result2.is_ok());
-        assert!(result3.is_ok());
-    }
-
-    #[test]
-    fn test_vertex_ai_provider_variants() {
-        let usage = create_usage(1000, 500);
-
-        let result1 = generic_cost_per_token("gemini-pro", &usage, "vertex_ai");
-        let result2 = generic_cost_per_token("gemini-pro", &usage, "vertexai");
-
-        assert!(result1.is_ok());
-        assert!(result2.is_ok());
-
-        let cost1 = result1.unwrap().total_cost;
-        let cost2 = result2.unwrap().total_cost;
-        assert!((cost1 - cost2).abs() < 1e-10);
+    fn test_case_insensitive_provider_names_are_rejected() {
+        let result = get_model_pricing("openai/gpt-4o", "OPENAI");
+        match result.unwrap_err() {
+            CostError::ProviderNotSupported { provider } => assert_eq!(provider, "OPENAI"),
+            _ => panic!("Expected ProviderNotSupported error"),
+        }
     }
 
     #[test]
     fn test_cached_tokens_exceed_prompt_tokens() {
-        // Edge case: cached tokens shouldn't exceed prompt tokens
         let mut usage = create_usage(1000, 500);
         usage.cached_tokens = Some(1500);
 
-        let result = generic_cost_per_token("gpt-4o", &usage, "openai");
+        let result = generic_cost_per_token("openai/gpt-4o", &usage, "openai");
         assert!(result.is_ok());
 
-        // Input cost should be 0 due to saturation
         let breakdown = result.unwrap();
         assert_eq!(breakdown.input_cost, 0.0);
     }
 
-    // Integration tests
     #[test]
     fn test_cost_calculation_workflow() {
-        // Simulate a complete workflow
         let usage = create_usage(2000, 1000);
 
-        // 1. Get pricing
-        let pricing = get_model_pricing("gpt-4o-mini", "openai");
+        let pricing = get_model_pricing("openai/gpt-4o-mini", "openai");
         assert!(pricing.is_ok());
 
-        // 2. Calculate cost
-        let breakdown = generic_cost_per_token("gpt-4o-mini", &usage, "openai");
+        let breakdown = generic_cost_per_token("openai/gpt-4o-mini", &usage, "openai");
         assert!(breakdown.is_ok());
         let breakdown = breakdown.unwrap();
 
-        // 3. Verify breakdown structure
-        assert_eq!(breakdown.model, "gpt-4o-mini");
+        assert_eq!(breakdown.model, "openai/gpt-4o-mini");
         assert_eq!(breakdown.provider, "openai");
         assert_eq!(breakdown.currency, "USD");
         assert!(breakdown.total_cost > 0.0);
@@ -1212,19 +856,16 @@ mod tests {
         let input_tokens = 1000;
         let output_tokens = 500;
 
-        // Estimate cost
-        let estimate = estimate_cost("gpt-4o", "openai", input_tokens, Some(output_tokens));
+        let estimate = estimate_cost("openai/gpt-4o", "openai", input_tokens, Some(output_tokens));
         assert!(estimate.is_ok());
         let estimate = estimate.unwrap();
 
-        // Calculate actual cost
         let usage = create_usage(input_tokens, output_tokens);
-        let breakdown = generic_cost_per_token("gpt-4o", &usage, "openai");
+        let breakdown = generic_cost_per_token("openai/gpt-4o", &usage, "openai");
         assert!(breakdown.is_ok());
         let breakdown = breakdown.unwrap();
 
-        // Actual cost should match estimate max_cost
-        assert!((breakdown.total_cost - estimate.max_cost).abs() < 1e-10);
-        assert!((breakdown.input_cost - estimate.input_cost).abs() < 1e-10);
+        assert_approx_eq(breakdown.total_cost, estimate.max_cost);
+        assert_approx_eq(breakdown.input_cost, estimate.input_cost);
     }
 }

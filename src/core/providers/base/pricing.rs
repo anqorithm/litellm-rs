@@ -1,6 +1,6 @@
 //! Unified pricing calculation system
 //!
-//! Shares model_prices_and_context_window.json data with Python version
+//! Uses `data/model_prices.json` as the single source of truth.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -8,6 +8,8 @@ use std::fs;
 use std::path::Path;
 use std::sync::LazyLock;
 use tracing::warn;
+
+pub const DEFAULT_PRICING_FILE: &str = "data/model_prices.json";
 
 /// Model
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -69,6 +71,12 @@ pub struct PricingDatabase {
 }
 
 impl PricingDatabase {
+    pub fn empty() -> Self {
+        Self {
+            models: HashMap::new(),
+        }
+    }
+
     /// Load pricing data from JSON file
     pub fn from_json_file<P: AsRef<Path>>(path: P) -> Result<Self, String> {
         let content =
@@ -103,42 +111,17 @@ impl PricingDatabase {
         Ok(Self { models })
     }
 
-    /// Load from Python JSON file (automatic search)
-    pub fn from_python_json() -> Result<Self, String> {
-        // Try multiple possible paths
-        let possible_paths = vec![
-            "model_prices_and_context_window.json",
-            "../model_prices_and_context_window.json",
-            "../../model_prices_and_context_window.json",
-            "../../../model_prices_and_context_window.json",
-            "/Users/vibercoder/Desktop/code/Work/Common/Lib/litellm/litellm/model_prices_and_context_window.json",
-        ];
-
-        for path in &possible_paths {
-            if Path::new(path).exists() {
-                return Self::from_json_file(path);
-            }
-        }
-
-        // Default
-        Ok(Self::default())
+    /// Load from the repository canonical pricing file.
+    pub fn from_default_file() -> Result<Self, String> {
+        Self::from_json_file(DEFAULT_PRICING_FILE)
     }
 
     /// Calculate cost
     pub fn calculate(&self, model: &str, usage: &Usage) -> f64 {
-        // Direct model lookup
         if let Some(pricing) = self.models.get(model) {
             return self.calculate_with_pricing(pricing, usage);
         }
 
-        // Handle
-        for (key, pricing) in &self.models {
-            if model.contains(key) || key.contains(model) {
-                return self.calculate_with_pricing(pricing, usage);
-            }
-        }
-
-        // Pricing information not found
         0.0
     }
 
@@ -179,14 +162,7 @@ impl PricingDatabase {
         self.models
             .iter()
             .filter_map(|(model_id, pricing)| {
-                if let Some(ref provider_name) = pricing.litellm_provider {
-                    if provider_name.to_lowercase() == provider.to_lowercase() {
-                        Some(model_id.clone())
-                    } else {
-                        None
-                    }
-                } else if model_id.to_lowercase().contains(&provider.to_lowercase()) {
-                    // If no explicit provider field, infer through model name
+                if pricing.litellm_provider.as_deref() == Some(provider) {
                     Some(model_id.clone())
                 } else {
                     None
@@ -208,7 +184,11 @@ impl PricingDatabase {
 
         Some(ModelInfo {
             id: model_id.to_string(),
-            name: model_id.replace(['-', '_'], " "), // Simple name transformation
+            name: model_id
+                .rsplit('/')
+                .next()
+                .unwrap_or(model_id)
+                .replace(['-', '_'], " "),
             provider: provider.to_string(),
             max_context_length: pricing
                 .max_input_tokens
@@ -365,12 +345,13 @@ impl Default for PricingDatabase {
 
 // Global pricing database (lazy loading)
 pub static GLOBAL_PRICING_DB: LazyLock<PricingDatabase> = LazyLock::new(|| {
-    PricingDatabase::from_python_json().unwrap_or_else(|e| {
+    PricingDatabase::from_default_file().unwrap_or_else(|e| {
         warn!(
             error = %e,
-            "Failed to load pricing data from file, using built-in defaults"
+            file = DEFAULT_PRICING_FILE,
+            "Failed to load pricing data from canonical file"
         );
-        PricingDatabase::default()
+        PricingDatabase::empty()
     })
 });
 
@@ -431,7 +412,7 @@ mod tests {
 
     #[test]
     fn test_quick_calculate() {
-        let cost = calculate_cost("gpt-3.5-turbo", 1000, 500);
+        let cost = calculate_cost("openai/gpt-3.5-turbo", 1000, 500);
         assert!(cost > 0.0);
     }
 }

@@ -38,9 +38,7 @@ impl PricingService {
                 last_updated: SystemTime::UNIX_EPOCH,
             })),
             http_client: reqwest::Client::new(),
-            pricing_url: pricing_url.unwrap_or_else(|| {
-                "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json".to_string()
-            }),
+            pricing_url: pricing_url.unwrap_or_else(|| "data/model_prices.json".to_string()),
             cache_ttl: Duration::from_secs(3600), // 1 hour
             event_sender,
         };
@@ -379,11 +377,7 @@ mod tests {
     #[test]
     fn test_pricing_service_new_default() {
         let service = PricingService::new(None);
-        assert!(
-            service
-                .pricing_url
-                .contains("model_prices_and_context_window.json")
-        );
+        assert_eq!(service.pricing_url, "data/model_prices.json");
         assert_eq!(service.cache_ttl, Duration::from_secs(3600));
     }
 
