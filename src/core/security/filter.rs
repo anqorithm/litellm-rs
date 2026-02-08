@@ -33,6 +33,11 @@ impl ContentFilter {
         }
     }
 
+    /// Register a custom regex-based filter rule.
+    pub fn add_custom_filter(&mut self, filter: CustomFilter) {
+        self.custom_filters.push(filter);
+    }
+
     /// Filter chat completion request
     pub async fn filter_chat_request(
         &self,
@@ -131,6 +136,38 @@ impl ContentFilter {
                 location: None,
                 confidence: 0.9,
             });
+        }
+
+        // Custom regex filtering
+        for custom_filter in &self.custom_filters {
+            if let Some(matched) = custom_filter.pattern.find(&modified_text) {
+                issues.push(ContentIssue {
+                    issue_type: format!("CUSTOM_{}", custom_filter.name),
+                    description: format!("Custom filter matched: {}", custom_filter.name),
+                    severity: ModerationSeverity::Medium,
+                    location: Some((matched.start(), matched.end())),
+                    confidence: 0.75,
+                });
+
+                match &custom_filter.action {
+                    ModerationAction::Block => blocked = true,
+                    ModerationAction::Warn => {
+                        warn!("Custom filter warning triggered: {}", custom_filter.name);
+                    }
+                    ModerationAction::Log => {
+                        warn!("Custom filter log match: {}", custom_filter.name);
+                    }
+                    ModerationAction::Modify => {
+                        modified_text = custom_filter
+                            .pattern
+                            .replace_all(&modified_text, "[FILTERED]")
+                            .to_string();
+                    }
+                    ModerationAction::HumanReview => {
+                        warn!("Custom filter requires human review: {}", custom_filter.name);
+                    }
+                }
+            }
         }
 
         let confidence = if issues.is_empty() {
@@ -280,6 +317,7 @@ mod tests {
         let filter = ContentFilter::new();
         assert_eq!(filter.pii_patterns.len(), 4); // SSN, Email, Phone, CreditCard
         assert_eq!(filter.moderation_rules.len(), 2); // HateSpeech, Violence
+        assert!(filter.custom_filters.is_empty());
     }
 
     #[test]
@@ -578,5 +616,28 @@ mod tests {
         assert!(result.blocked);
         assert!(result.issues.len() >= 2);
         assert!(result.modified_content.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_custom_filter_modify() {
+        let mut filter = ContentFilter::new();
+        filter.add_custom_filter(CustomFilter {
+            name: "SecretWord".to_string(),
+            pattern: regex::Regex::new("secret").unwrap(),
+            action: ModerationAction::Modify,
+        });
+
+        let result = filter.filter_text("this contains secret text").await.unwrap();
+
+        let custom_issues: Vec<_> = result
+            .issues
+            .iter()
+            .filter(|i| i.issue_type == "CUSTOM_SecretWord")
+            .collect();
+        assert!(!custom_issues.is_empty());
+        assert_eq!(
+            result.modified_content,
+            Some("this contains [FILTERED] text".to_string())
+        );
     }
 }

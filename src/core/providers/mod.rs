@@ -1128,7 +1128,6 @@ mod tests {
 
     #[test]
     fn test_provider_enum_is_send_sync() {
-        fn assert_send_sync<T: Send + Sync>() {}
         // This compile-time check ensures Provider is Send + Sync
         // which is important for async code
         // Note: Commenting out as Provider may not implement Send + Sync
