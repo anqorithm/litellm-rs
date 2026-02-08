@@ -129,6 +129,11 @@ impl SystemHealth {
         }
     }
 
+    /// Get when this snapshot was created.
+    pub fn last_updated(&self) -> chrono::DateTime<chrono::Utc> {
+        self.last_updated
+    }
+
     /// Get overall system health status
     pub fn overall_status(&self) -> HealthStatus {
         if self.provider_health.is_empty() {
@@ -398,6 +403,7 @@ mod tests {
         let system_health = SystemHealth::new(providers);
 
         assert!(system_health.provider_health.is_empty());
+        assert!(system_health.last_updated() <= chrono::Utc::now());
     }
 
     #[test]
