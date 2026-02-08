@@ -3,7 +3,6 @@
 //! This module provides OAuth 2.0 and Single Sign-On (SSO) authentication
 //! capabilities for enterprise environments.
 
-#![allow(dead_code)]
 #![allow(unused_imports)]
 
 pub mod client;

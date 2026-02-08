@@ -69,7 +69,7 @@
 
 // Public module exports
 #[cfg(feature = "storage")]
-mod auth;
+pub mod auth;
 // Core completion API moved to core::completion
 pub mod config;
 pub mod core;

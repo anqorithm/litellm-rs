@@ -77,7 +77,7 @@ impl OAuthMiddleware {
         self
     }
 
-    /// Check if a path should be excluded from authentication
+    #[cfg(test)]
     fn is_excluded(&self, path: &str) -> bool {
         self.exclude_paths.iter().any(|p| {
             if p.ends_with('*') {
@@ -87,6 +87,7 @@ impl OAuthMiddleware {
             }
         })
     }
+
 }
 
 impl std::fmt::Debug for OAuthMiddleware {
