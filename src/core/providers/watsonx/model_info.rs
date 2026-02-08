@@ -343,4 +343,12 @@ mod tests {
             assert!(model.max_output_length > 0);
         }
     }
+
+    #[test]
+    fn test_model_pattern_constants() {
+        assert_eq!(patterns::GRANITE_CHAT, "granite");
+        assert_eq!(patterns::IBM_MISTRAL, "mistralai");
+        assert_eq!(patterns::LLAMA3_INSTRUCT, "llama-3");
+        assert_eq!(patterns::GPT_OSS, "gpt");
+    }
 }

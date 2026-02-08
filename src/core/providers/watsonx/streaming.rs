@@ -162,3 +162,62 @@ fn response_to_chunks(response: ChatResponse) -> Vec<ChatChunk> {
 
     chunks
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::types::chat::ChatMessage;
+    use crate::core::types::responses::{ChatChoice, FinishReason, Usage};
+    use futures::StreamExt;
+
+    #[tokio::test]
+    async fn test_create_fake_stream_emits_chunks() {
+        let response = ChatResponse {
+            id: "chatcmpl-watsonx-test".to_string(),
+            object: "chat.completion".to_string(),
+            created: 1_726_000_000,
+            model: "ibm/granite-13b-chat-v2".to_string(),
+            choices: vec![ChatChoice {
+                index: 0,
+                message: ChatMessage {
+                    role: MessageRole::Assistant,
+                    content: Some(MessageContent::Text(
+                        "hello from watsonx stream".to_string(),
+                    )),
+                    thinking: None,
+                    name: None,
+                    tool_calls: None,
+                    tool_call_id: None,
+                    function_call: None,
+                },
+                finish_reason: Some(FinishReason::Stop),
+                logprobs: None,
+            }],
+            usage: Some(Usage {
+                prompt_tokens: 5,
+                completion_tokens: 4,
+                total_tokens: 9,
+                prompt_tokens_details: None,
+                completion_tokens_details: None,
+                thinking_usage: None,
+            }),
+            system_fingerprint: None,
+        };
+
+        let mut stream = create_fake_stream(response).await.unwrap();
+        let mut chunks = Vec::new();
+        while let Some(chunk) = stream.next().await {
+            chunks.push(chunk.unwrap());
+        }
+
+        assert!(chunks.len() >= 2);
+        assert_eq!(
+            chunks[0].choices[0].delta.role,
+            Some(MessageRole::Assistant)
+        );
+        assert_eq!(
+            chunks.last().unwrap().choices[0].finish_reason,
+            Some(FinishReason::Stop)
+        );
+    }
+}
