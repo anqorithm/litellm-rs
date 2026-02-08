@@ -8,7 +8,6 @@ pub mod models;
 pub mod tokens;
 
 // Re-export commonly used types and functions
-pub use cache::*;
 pub use models::capabilities::ModelCapabilities;
 pub use models::utils::ModelUtils;
 pub use tokens::{TokenUsage, TokenUtils, TokenizerType};
