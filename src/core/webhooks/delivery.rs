@@ -4,7 +4,7 @@
 
 use super::manager::WebhookManager;
 use super::types::{WebhookConfig, WebhookDelivery, WebhookDeliveryStatus, WebhookPayload};
-use crate::utils::error::{GatewayError, Result};
+use crate::utils::error::error::{GatewayError, Result};
 use std::time::Duration;
 use tracing::{debug, error};
 

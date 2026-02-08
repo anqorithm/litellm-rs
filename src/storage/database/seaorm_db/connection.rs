@@ -1,5 +1,5 @@
 use crate::config::DatabaseConfig;
-use crate::utils::error::{GatewayError, Result};
+use crate::utils::error::error::{GatewayError, Result};
 use sea_orm::*;
 use sea_orm_migration::MigratorTrait;
 use std::time::Duration;

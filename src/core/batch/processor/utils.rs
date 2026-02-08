@@ -2,7 +2,7 @@
 
 use super::super::types::*;
 use super::core::BatchProcessor;
-use crate::utils::error::Result;
+use crate::utils::error::error::Result;
 use chrono::Utc;
 
 impl BatchProcessor {

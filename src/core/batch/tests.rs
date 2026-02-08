@@ -4,7 +4,7 @@
 mod tests {
     use super::super::async_batch::*;
     use super::super::types::*;
-    use crate::utils::error::GatewayError;
+    use crate::utils::error::error::GatewayError;
     use std::time::Duration;
 
     #[tokio::test]

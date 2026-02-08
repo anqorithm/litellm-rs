@@ -9,7 +9,7 @@ use super::types::{
     AtomicCacheStats, CacheEntry, CacheKey, CacheMode, CacheStatsSnapshot, DualCacheConfig,
 };
 use crate::storage::redis::RedisPool;
-use crate::utils::error::Result;
+use crate::utils::error::error::Result;
 use serde::{Serialize, de::DeserializeOwned};
 use std::sync::Arc;
 use std::time::Duration;

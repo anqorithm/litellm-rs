@@ -5,7 +5,7 @@ use crate::config::{
     AuthConfig, Config, GatewayConfig, ProviderConfig, ServerConfig, StorageConfig,
 };
 use crate::utils::data::type_utils::Builder;
-use crate::utils::error::{GatewayError, Result};
+use crate::utils::error::error::{GatewayError, Result};
 use std::collections::HashMap;
 
 impl ConfigBuilder {

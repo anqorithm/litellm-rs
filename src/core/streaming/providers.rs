@@ -1,6 +1,6 @@
 //! Provider-specific streaming implementations
 
-use crate::utils::error::{GatewayError, Result};
+use crate::utils::error::error::{GatewayError, Result};
 use futures::stream::{BoxStream, StreamExt};
 
 /// Helper to convert bytes to UTF-8 string efficiently

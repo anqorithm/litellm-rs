@@ -1,7 +1,7 @@
 //! Health checking for providers
 
 use crate::core::providers::ProviderRegistry;
-use crate::utils::error::{GatewayError, Result};
+use crate::utils::error::error::{GatewayError, Result};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};

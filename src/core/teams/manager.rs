@@ -5,7 +5,7 @@
 
 use super::repository::TeamRepository;
 use crate::core::models::team::{Team, TeamMember, TeamRole, TeamSettings, TeamStatus};
-use crate::utils::error::{GatewayError, Result};
+use crate::utils::error::error::{GatewayError, Result};
 use std::sync::Arc;
 use tracing::{debug, info};
 use uuid::Uuid;

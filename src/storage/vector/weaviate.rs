@@ -1,7 +1,7 @@
 //! Weaviate vector store implementation (placeholder)
 
 use crate::config::VectorDbConfig;
-use crate::utils::error::{GatewayError, Result};
+use crate::utils::error::error::{GatewayError, Result};
 
 use super::types::{SearchResult, VectorPoint};
 

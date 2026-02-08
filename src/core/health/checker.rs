@@ -6,7 +6,7 @@
 use super::monitor::HealthMonitor;
 use super::provider::ProviderHealth;
 use super::types::HealthCheckResult;
-use crate::utils::error::{GatewayError, Result};
+use crate::utils::error::error::{GatewayError, Result};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use tracing::info;

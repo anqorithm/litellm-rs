@@ -7,7 +7,7 @@ use super::types::{
     AtomicCacheStats, CacheConfig, CacheEntry, CacheKey, CacheStats, SemanticCacheMap,
 };
 use crate::core::models::openai::ChatCompletionResponse;
-use crate::utils::error::Result;
+use crate::utils::error::error::Result;
 use dashmap::DashMap;
 use lru::LruCache;
 use parking_lot::RwLock;
@@ -37,7 +37,7 @@ impl CacheManager {
         let l1_capacity = NonZeroUsize::new(config.max_entries / 10)
             .or_else(|| NonZeroUsize::new(100))
             .ok_or_else(|| {
-                crate::utils::error::GatewayError::Config(
+                crate::utils::error::error::GatewayError::Config(
                     "Invalid cache configuration: max_entries must be greater than 0".to_string(),
                 )
             })?;

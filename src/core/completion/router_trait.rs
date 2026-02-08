@@ -3,7 +3,7 @@
 use super::stream::CompletionStream;
 use super::types::{CompletionOptions, CompletionResponse};
 use crate::core::types::chat::ChatMessage;
-use crate::utils::error::Result;
+use crate::utils::error::error::Result;
 use async_trait::async_trait;
 
 /// Unified message format (OpenAI compatible)

@@ -2,7 +2,7 @@
 
 use crate::core::providers::{Provider, ProviderRegistry};
 use crate::core::types::model::ProviderCapability;
-use crate::utils::error::GatewayError;
+use crate::utils::error::error::GatewayError;
 
 pub struct ProviderSelection<'a> {
     pub provider: &'a Provider,

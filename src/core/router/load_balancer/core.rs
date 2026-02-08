@@ -9,7 +9,7 @@ use crate::core::providers::Provider;
 use crate::core::router::health::HealthChecker;
 use crate::core::router::strategy::executor::StrategyExecutor;
 use crate::core::router::strategy::types::RoutingStrategy;
-use crate::utils::error::Result;
+use crate::utils::error::error::Result;
 use dashmap::DashMap;
 use std::sync::Arc;
 use tracing::info;

@@ -12,7 +12,7 @@ pub use validation::Validate;
 // pub use builder::*;  // Commented out until actually used
 // pub use loader::*;
 
-use crate::utils::error::{GatewayError, Result};
+use crate::utils::error::error::{GatewayError, Result};
 use std::path::Path;
 use tracing::{debug, info};
 

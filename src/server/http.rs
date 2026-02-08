@@ -8,7 +8,7 @@ use crate::server::middleware::{AuthMiddleware, RequestIdMiddleware};
 use crate::server::routes;
 use crate::server::state::AppState;
 use crate::services::pricing::PricingService;
-use crate::utils::error::{GatewayError, Result};
+use crate::utils::error::error::{GatewayError, Result};
 use actix_cors::Cors;
 use actix_web::{
     App, HttpServer as ActixHttpServer,

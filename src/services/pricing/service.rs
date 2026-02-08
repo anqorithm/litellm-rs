@@ -4,7 +4,7 @@ use super::types::{
     CostRange, CostResult, CostType, ModelInfo, PricingData, PricingEventType, PricingStatistics,
     PricingUpdateEvent,
 };
-use crate::utils::error::{GatewayError, Result};
+use crate::utils::error::error::{GatewayError, Result};
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;

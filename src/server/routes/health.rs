@@ -260,7 +260,7 @@ struct VersionInfo {
 /// Check provider health
 async fn check_provider_health(
     state: &AppState,
-) -> Result<ProviderHealthStatus, crate::utils::error::GatewayError> {
+) -> Result<ProviderHealthStatus, crate::utils::error::error::GatewayError> {
     let mut provider_details = Vec::new();
     let mut healthy_count = 0;
 

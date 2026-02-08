@@ -3,7 +3,7 @@
 //! Handles connection creation, pooling, and lifecycle management.
 
 use super::types::{PoolConfig, PooledConnection};
-use crate::utils::error::{GatewayError, Result};
+use crate::utils::error::error::{GatewayError, Result};
 use redis::{Client, aio::MultiplexedConnection};
 use std::sync::Arc;
 use std::time::Duration;

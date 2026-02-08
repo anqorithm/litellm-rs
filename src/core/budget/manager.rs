@@ -5,7 +5,7 @@
 
 use super::tracker::{BudgetTracker, SpendResult};
 use super::types::{Budget, BudgetCheckResult, BudgetConfig, BudgetScope, BudgetStatus};
-use crate::utils::error::{GatewayError, Result};
+use crate::utils::error::error::{GatewayError, Result};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};

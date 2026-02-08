@@ -2,7 +2,7 @@
 //!
 //! This module handles database schema migrations.
 
-use crate::utils::error::{GatewayError, Result};
+use crate::utils::error::error::{GatewayError, Result};
 use sqlx::{PgPool, Row};
 use tracing::{debug, info};
 

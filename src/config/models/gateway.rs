@@ -33,7 +33,7 @@ pub struct GatewayConfig {
 }
 
 impl GatewayConfig {
-    pub fn from_env() -> crate::utils::error::Result<Self> {
+    pub fn from_env() -> crate::utils::error::error::Result<Self> {
         Ok(Self {
             server: ServerConfig::default(),
             providers: vec![],

@@ -3,7 +3,7 @@
 //! This module provides Redis connectivity, connection pooling, and health checks.
 
 use crate::config::RedisConfig;
-use crate::utils::error::{GatewayError, Result};
+use crate::utils::error::error::{GatewayError, Result};
 use redis::{Client, aio::MultiplexedConnection};
 use tracing::{debug, info};
 

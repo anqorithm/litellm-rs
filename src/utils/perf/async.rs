@@ -5,7 +5,7 @@
 
 #![allow(dead_code)] // Tool module - functions may be used in the future
 
-use crate::utils::error::{GatewayError, Result};
+use crate::utils::error::error::{GatewayError, Result};
 use futures::{Future, StreamExt};
 use std::time::Duration;
 use tokio::time::{sleep, timeout};

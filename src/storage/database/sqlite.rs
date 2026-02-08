@@ -3,7 +3,7 @@
 //! This module provides SQLite database connectivity and operations.
 
 use crate::config::DatabaseConfig;
-use crate::utils::error::{GatewayError, Result};
+use crate::utils::error::error::{GatewayError, Result};
 use sqlx::{sqlite::SqlitePoolOptions, SqlitePool};
 use std::time::Duration;
 use tracing::{debug, info, warn};

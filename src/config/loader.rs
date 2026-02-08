@@ -3,7 +3,7 @@
 //! This module provides utilities for loading configuration from various sources.
 
 use super::models::*;
-use crate::utils::error::{GatewayError, Result};
+use crate::utils::error::error::{GatewayError, Result};
 use std::env;
 use std::collections::HashMap;
 use tracing::{debug, warn};

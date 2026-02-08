@@ -3,7 +3,7 @@
 //! This module provides HTTP endpoints for managing pricing data
 
 use crate::server::state::AppState;
-use crate::utils::error::Result;
+use crate::utils::error::error::Result;
 use actix_web::{HttpResponse, web};
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};

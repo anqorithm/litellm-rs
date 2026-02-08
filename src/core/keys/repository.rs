@@ -3,7 +3,7 @@
 //! This module provides the storage abstraction for API keys.
 
 use super::types::{KeyStatus, ManagedApiKey, UpdateKeyConfig};
-use crate::utils::error::{GatewayError, Result};
+use crate::utils::error::error::{GatewayError, Result};
 use async_trait::async_trait;
 use chrono::Utc;
 use dashmap::DashMap;

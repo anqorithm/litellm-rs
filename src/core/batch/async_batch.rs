@@ -3,7 +3,7 @@
 //! This module provides high-performance concurrent batch processing for
 //! chat completions, similar to Python LiteLLM's `abatch_completion()`.
 
-use crate::utils::error::GatewayError;
+use crate::utils::error::error::GatewayError;
 use futures::stream::{self, StreamExt};
 use std::time::Duration;
 
