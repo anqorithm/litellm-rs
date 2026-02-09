@@ -21,11 +21,11 @@ help: ## Show this help message
 
 start: ## Quick start (auto-loads config/gateway.yaml)
 	@echo "🚀 Starting Rust LiteLLM Gateway..."
-	cargo run
+	cargo run -p gateway
 
 dev: deps dev-services ## Start development environment
 	@echo "Starting development server..."
-	RUST_LOG=debug cargo run --bin gateway -- --config config/dev.yaml
+	RUST_LOG=debug GATEWAY_CONFIG=config/dev.yaml cargo run -p gateway
 
 dev-services: ## Start development services (PostgreSQL, Redis, etc.)
 	@echo "Starting development services..."
@@ -45,7 +45,13 @@ dev-logs: ## Show development services logs
 # =============================================================================
 
 build: ## Build debug version
-	cargo build --all-features
+	cargo build --workspace
+
+build-api: ## Build API workspace crate
+	cargo build -p litellm-api
+
+build-gateway: ## Build gateway runtime and app
+	cargo build -p litellm-gateway -p gateway
 
 build-release: ## Build optimized release version
 	cargo build --release --all-features
@@ -60,7 +66,13 @@ install: build-release ## Install binaries to system
 # =============================================================================
 
 test: ## Run all tests
-	cargo test --all-features
+	cargo test --workspace
+
+test-api: ## Run API crate tests
+	cargo test -p litellm-api
+
+test-gateway: ## Run gateway crate and app tests
+	cargo test -p litellm-gateway -p gateway
 
 test-unit: ## Run unit tests only
 	cargo test --lib --all-features
@@ -89,7 +101,7 @@ format-check: ## Check code formatting
 	cargo fmt --all -- --check
 
 check: ## Run cargo check
-	cargo check --all-features
+	cargo check --workspace
 
 audit: ## Run security audit
 	cargo audit
@@ -154,7 +166,7 @@ docker-tag: ## Tag image for registry (usage: make docker-tag TAG=v1.0.0)
 # =============================================================================
 
 db-migrate: ## Run database migrations
-	cargo run --bin gateway -- --config config/dev.yaml --migrate
+	@echo "Database migrations are not wired in the split workspace yet"
 
 db-reset: ## Reset development database
 	docker-compose -f docker-compose.dev.yml down postgres-dev
@@ -275,7 +287,7 @@ jaeger: ## Open Jaeger UI
 # =============================================================================
 
 config-validate: ## Validate configuration
-	cargo run --bin gateway -- --config config/dev.yaml --validate
+	GATEWAY_CONFIG=config/dev.yaml cargo run -p gateway
 
 config-example: ## Copy example configurations
 	cp config/gateway.yaml.example config/gateway.yaml

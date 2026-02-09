@@ -1,205 +1,28 @@
-[package]
-name = "litellm-rs"
-version = "0.3.1"
+[workspace]
+resolver = "2"
+members = [
+    "crates/litellm-contracts",
+    "crates/litellm-provider-core",
+    "crates/litellm-providers",
+    "crates/litellm-router",
+    "crates/litellm-api",
+    "crates/litellm-gateway",
+    "apps/gateway",
+    "apps/google-gateway",
+]
+
+[workspace.package]
 edition = "2024"
 rust-version = "1.87"
-authors = ["lifcc"]
-description = "A high-performance AI Gateway written in Rust, providing OpenAI-compatible APIs with intelligent routing, load balancing, and enterprise features"
-documentation = "https://docs.rs/litellm-rs"
-homepage = "https://github.com/majiayu000/litellm-rs"
-repository = "https://github.com/majiayu000/litellm-rs"
 license = "MIT"
-readme = "README.md"
-keywords = ["ai", "gateway", "llm", "openai", "anthropic"]
-categories = ["web-programming", "api-bindings", "network-programming"]
-include = [
-    "src/**/*",
-    "config/*.example",
-    "config/*.template",
-    "migrations/**/*",
-    "build.rs",
-    "Cargo.toml",
-    "README.md",
-    "LICENSE",
-    "LICENSE-LITELLM",
-    "CHANGELOG.md"
-]
-default-run = "gateway"
+authors = ["lifcc"]
+repository = "https://github.com/majiayu000/litellm-rs"
 
-# Binary files
-[[bin]]
-name = "gateway"
-path = "src/main.rs"
-required-features = ["storage"]
-
-[[bin]]
-name = "google-gateway"
-path = "src/bin/google_gateway.rs"
-required-features = ["storage"]
-
-[dependencies]
-# Web framework and async runtime
-actix-web = { version = "4.9", features = ["rustls-0_23"] }
-actix-cors = "0.7"
-actix-multipart = "0.7"
-tokio = { version = "1.35", features = ["full"] }
-tokio-stream = "0.1"
-futures = "0.3"
+[workspace.dependencies]
+anyhow = "1.0"
 async-trait = "0.1"
-async-stream = "0.3"
-pin-project-lite = "0.2"
-
-# HTTP client
-reqwest = { version = "0.11", features = ["json", "stream", "rustls-tls", "multipart"], default-features = false }
-hyper = { version = "0.14", features = ["full"] }
-
-# Serialization and deserialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-serde_yaml = "0.9"
-bincode = "1.3"
-
-# Database and storage
-# NOTE: default-features = false is critical to avoid pulling in sqlx-mysql and its vulnerable RSA dependency
-sea-orm = { version = "1.1", features = ["macros", "with-chrono", "with-uuid", "with-json"], default-features = false, optional = true }
-sea-orm-migration = { version = "1.1", default-features = false, optional = true }
-redis = { version = "0.27", features = ["tokio-comp", "cluster", "streams", "aio", "connection-manager"], optional = true }
-
-# Caching
-lru = "0.16"
-
-# Object storage (S3 compatible)
-object_store = { version = "0.11", features = ["aws", "gcp", "azure"], optional = true }
-aws-sdk-s3 = { version = "1.120", optional = true }
-aws-sdk-secretsmanager = { version = "1.70", optional = true }
-aws-config = { version = "1.5", optional = true }
-
-# Cloud secret managers
-google-cloud-secretmanager-v1 = { version = "1.4", optional = true }
-google-cloud-auth = { version = "1.5", optional = true }
-azure_security_keyvault_secrets = { version = "0.10", optional = true }
-azure_identity = { version = "0.31", optional = true }
-azure_core = { version = "0.31", optional = true }
-vaultrs = { version = "0.7", optional = true }
-
-# Vector database client
-qdrant-client = { version = "1.12", optional = true }
-
-# Authentication and security
-jsonwebtoken = "9.3"
-argon2 = "0.5"
-uuid = { version = "1.11", features = ["v4", "serde"] }
-sha2 = "0.10"
-hmac = "0.12"
-rand = "0.8"
-aes-gcm = "0.10"
-regex = "1.10"
-hex = "0.4"
-url = "2.5"
-base64 = "0.21"
-
-# Monitoring and tracing
-tracing = "0.1"
-tracing-subscriber = { version = "0.3.20", features = ["env-filter", "json"] }
-tracing-actix-web = "0.7"
-opentelemetry = { version = "0.21", optional = true }
-opentelemetry-jaeger = { version = "0.20", optional = true }
-prometheus = { version = "0.14", optional = true }
-sysinfo = { version = "0.32", optional = true }
-
-# Middleware and utilities
-bytes = "1.5"
-
-# Configuration management
-clap = { version = "4.4", features = ["derive", "env"] }
-dotenvy = "0.15"
-
-# Error handling
 thiserror = "1.0"
-
-# Time handling
-chrono = { version = "0.4", features = ["serde"] }
-
-# Concurrency and synchronization
-parking_lot = "0.12"
-arc-swap = "1.6"
-dashmap = "5.5"
-
-# Development dependencies
-[dev-dependencies]
-tokio-test = "0.4.4"
-mockall = "0.13.1"
-wiremock = "0.6.4"
-criterion = { version = "0.6.0", features = ["html_reports"] }
-tempfile = "3.20.0"
-
-# Library
-[lib]
-name = "litellm_rs"
-path = "src/lib.rs"
-
-# Build optimizations
-[profile.release]
-lto = true
-codegen-units = 1
-panic = "abort"
-strip = true
-
-[profile.dev]
-debug = true
-opt-level = 0
-
-# Feature flags
-[features]
-# Default: full gateway with SQLite storage
-default = ["sqlite", "redis", "metrics", "tracing"]
-
-# Lite mode: API-only, no storage (use with --no-default-features)
-# Example: cargo build --no-default-features --features "metrics,tracing"
-lite = ["metrics", "tracing"]
-
-# Storage backends
-storage = ["dep:sea-orm", "dep:sea-orm-migration"]
-postgres = ["storage", "sea-orm/sqlx-postgres", "sea-orm/runtime-tokio-rustls"]
-sqlite = ["storage", "sea-orm/sqlx-sqlite", "sea-orm/runtime-tokio-rustls"]
-redis = ["dep:redis"]
-s3 = ["dep:object_store", "dep:aws-sdk-s3", "dep:aws-config"]
-
-# Secret managers
-aws-secrets = ["dep:aws-sdk-secretsmanager", "dep:aws-config"]
-gcp-secrets = ["dep:google-cloud-secretmanager-v1", "dep:google-cloud-auth"]
-azure-secrets = ["dep:azure_security_keyvault_secrets", "dep:azure_identity", "dep:azure_core"]
-vault-secrets = ["dep:vaultrs"]
-cloud-secrets = ["aws-secrets", "gcp-secrets", "azure-secrets", "vault-secrets"]
-
-# Monitoring and observability
-metrics = ["dep:prometheus", "dep:sysinfo"]
-tracing = ["dep:opentelemetry", "dep:opentelemetry-jaeger"]
-
-# Advanced features
-vector-db = ["dep:qdrant-client"]
-websockets = []
-analytics = ["metrics"]
-enterprise = ["analytics", "vector-db"]
-
-# Full feature set
-full = ["postgres", "redis", "s3", "metrics", "tracing", "vector-db", "websockets", "analytics", "cloud-secrets"]
-
-# Metadata
-[package.metadata.docs.rs]
-# Exclude vector-db feature because qdrant-client fails on docs.rs read-only filesystem
-all-features = false
-features = ["postgres", "sqlite", "redis", "s3", "metrics", "tracing", "websockets", "analytics"]
-rustdoc-args = ["--cfg", "docsrs"]
-
-[package.metadata.playground]
-features = ["full"]
-
-# Benchmark configuration
-[[bench]]
-name = "performance_benchmarks"
-harness = false
-
-[[bench]]
-name = "e2e_benchmarks"
-harness = false
+tokio = { version = "1.35", features = ["macros", "rt-multi-thread", "time"] }
+tracing = "0.1"

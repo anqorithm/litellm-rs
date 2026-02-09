@@ -34,7 +34,10 @@ impl DeepInfraChatHandler {
         let api_base = self.config.get_effective_api_base();
         Err(ProviderError::not_implemented(
             "deepinfra",
-            format!("Chat completion not yet implemented for endpoint {}", api_base),
+            format!(
+                "Chat completion not yet implemented for endpoint {}",
+                api_base
+            ),
         ))
     }
 
@@ -48,7 +51,10 @@ impl DeepInfraChatHandler {
         let api_base = self.config.get_effective_api_base();
         Err(ProviderError::not_implemented(
             "deepinfra",
-            format!("Chat streaming not yet implemented for endpoint {}", api_base),
+            format!(
+                "Chat streaming not yet implemented for endpoint {}",
+                api_base
+            ),
         ))
     }
 }

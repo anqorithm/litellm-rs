@@ -93,7 +93,7 @@ jobs:
         brew install postgresql openssl pkg-config
 
     - name: Build release binary
-      run: cargo build --release --target ${{ matrix.target }} --all-features
+      run: cargo build --release --target ${{ matrix.target }} -p gateway -p google-gateway
 
     - name: Create archive (Unix)
       if: matrix.os != 'windows-latest'
@@ -180,9 +180,9 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
-  # Publish to crates.io
+  # Publish API crate to crates.io
   publish-crate:
-    name: Publish to crates.io
+    name: Publish litellm-api to crates.io
     needs: create-release
     runs-on: ubuntu-latest
     steps:
@@ -201,13 +201,8 @@ jobs:
           target
         key: ${{ runner.os }}-cargo-publish-${{ hashFiles('**/Cargo.lock') }}
 
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y libpq-dev pkg-config libssl-dev
-
-    - name: Publish to crates.io
-      run: cargo publish --token ${{ secrets.CRATES_IO_TOKEN }}
+    - name: Publish litellm-api to crates.io
+      run: cargo publish -p litellm-api --token ${{ secrets.CRATES_IO_TOKEN }}
 
   # Update Homebrew formula (for macOS users)
   homebrew-release:
