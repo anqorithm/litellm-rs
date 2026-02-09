@@ -75,7 +75,7 @@ fn parse_retry_after(response_body: &str) -> Option<u64> {
         let rest = &response_body[idx..];
         for word in rest.split_whitespace() {
             if let Ok(seconds) = word.trim_matches(|c: char| !c.is_numeric()).parse::<u64>() {
-                if seconds > 0 && seconds < 3600 {
+                if (1..3600).contains(&seconds) {
                     return Some(seconds);
                 }
             }
