@@ -2,8 +2,9 @@
 //!
 //! This module provides structured logging, monitoring, and debugging utilities.
 
-#[allow(clippy::module_inception)]
-pub mod logging;
+#[path = "logging/mod.rs"]
+pub mod logging_core;
+pub use logging_core as logging;
 pub mod structured;
 pub mod utils;
 
