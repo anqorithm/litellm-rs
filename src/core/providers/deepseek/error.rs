@@ -17,22 +17,12 @@ impl ErrorMapper<ProviderError> for DeepSeekErrorMapper {
             404 => ProviderError::model_not_found("deepseek", "Model not found"),
             429 => {
                 // Response
-                let retry_after = parse_retry_after(response_body);
+                let retry_after = crate::core::providers::shared::parse_retry_after_from_body(response_body);
                 ProviderError::rate_limit("deepseek", retry_after)
             }
             500..=599 => ProviderError::api_error("deepseek", status_code, response_body),
             _ => ProviderError::api_error("deepseek", status_code, response_body),
         }
-    }
-}
-
-/// Response
-fn parse_retry_after(response_body: &str) -> Option<u64> {
-    // Simple retry time parsing, can be improved based on DeepSeek's API format
-    if response_body.contains("rate limit") {
-        Some(60) // Default
-    } else {
-        None
     }
 }
 
@@ -98,19 +88,19 @@ mod tests {
 
     #[test]
     fn test_parse_retry_after_with_rate_limit() {
-        let result = parse_retry_after("rate limit exceeded");
+        let result = crate::core::providers::shared::parse_retry_after_from_body("rate limit exceeded");
         assert_eq!(result, Some(60));
     }
 
     #[test]
     fn test_parse_retry_after_without_rate_limit() {
-        let result = parse_retry_after("other error");
+        let result = crate::core::providers::shared::parse_retry_after_from_body("other error");
         assert_eq!(result, None);
     }
 
     #[test]
     fn test_parse_retry_after_empty() {
-        let result = parse_retry_after("");
+        let result = crate::core::providers::shared::parse_retry_after_from_body("");
         assert_eq!(result, None);
     }
 }

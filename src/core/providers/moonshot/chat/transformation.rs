@@ -117,8 +117,7 @@ impl MoonshotChatTransformation {
 
     /// Normalize model name for Moonshot API
     fn normalize_model_name(&self, model: &str) -> String {
-        // Remove common prefixes from model name
-        model.replace("moonshot/", "").replace("moonshotai/", "")
+        crate::core::providers::shared::strip_model_prefixes(model, &["moonshot/", "moonshotai/"])
     }
 
     /// Transform messages to Moonshot format

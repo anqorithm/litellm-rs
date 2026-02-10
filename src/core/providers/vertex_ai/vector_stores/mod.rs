@@ -262,42 +262,18 @@ impl VectorStoreHandler {
 impl VectorStoreHandler {
     /// Calculate cosine similarity between two vectors
     pub fn cosine_similarity(vec1: &[f32], vec2: &[f32]) -> f32 {
-        if vec1.len() != vec2.len() {
-            return 0.0;
-        }
-
-        let dot_product: f32 = vec1.iter().zip(vec2.iter()).map(|(a, b)| a * b).sum();
-        let norm1: f32 = vec1.iter().map(|x| x * x).sum::<f32>().sqrt();
-        let norm2: f32 = vec2.iter().map(|x| x * x).sum::<f32>().sqrt();
-
-        if norm1 == 0.0 || norm2 == 0.0 {
-            0.0
-        } else {
-            dot_product / (norm1 * norm2)
-        }
+        crate::core::embedding::cosine_similarity(vec1, vec2)
     }
 
     /// Calculate L2 distance between two vectors
     pub fn l2_distance(vec1: &[f32], vec2: &[f32]) -> f32 {
-        if vec1.len() != vec2.len() {
-            return f32::INFINITY;
-        }
-
-        vec1.iter()
-            .zip(vec2.iter())
-            .map(|(a, b)| (a - b).powi(2))
-            .sum::<f32>()
-            .sqrt()
+        crate::core::embedding::euclidean_distance(vec1, vec2)
     }
 
     /// Normalize vector to unit length
     pub fn normalize_vector(vector: &mut [f32]) {
-        let norm: f32 = vector.iter().map(|x| x * x).sum::<f32>().sqrt();
-        if norm > 0.0 {
-            for value in vector.iter_mut() {
-                *value /= norm;
-            }
-        }
+        let normalized = crate::core::embedding::normalize(vector);
+        vector.copy_from_slice(&normalized);
     }
 }
 

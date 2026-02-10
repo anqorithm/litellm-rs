@@ -306,7 +306,7 @@ impl Router for RateLimitAwareRouter {
     async fn select_provider(&self, _request: &ChatRequest) -> Option<Arc<dyn LLMProvider>> {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_secs();
 
         let healthy: Vec<_> = self.providers
@@ -331,7 +331,7 @@ impl Router for RateLimitAwareRouter {
     fn mark_rate_limited(&self, provider: &'static str, retry_after: u64) {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_secs();
 
         self.rate_limit_tracker

@@ -116,8 +116,7 @@ impl MistralChatTransformation {
 
     /// Normalize model name for Mistral API
     fn normalize_model_name(&self, model: &str) -> String {
-        // Remove common prefixes from model name
-        model.replace("mistral/", "").replace("mistralai/", "")
+        crate::core::providers::shared::strip_model_prefixes(model, &["mistral/", "mistralai/"])
     }
 
     /// Transform messages to Mistral format

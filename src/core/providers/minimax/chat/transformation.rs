@@ -118,8 +118,7 @@ impl MinimaxChatTransformation {
 
     /// Normalize model name for Minimax API
     fn normalize_model_name(&self, model: &str) -> String {
-        // Remove common prefixes from model name
-        model.replace("minimax/", "").replace("minimaxi/", "")
+        crate::core::providers::shared::strip_model_prefixes(model, &["minimax/", "minimaxi/"])
     }
 
     /// Transform messages to Minimax format

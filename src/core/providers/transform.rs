@@ -102,11 +102,7 @@ pub struct FunctionCallResponse {
     pub arguments: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ResponseFormat {
-    #[serde(rename = "type")]
-    pub format_type: String, // "text" or "json_object"
-}
+pub use crate::core::types::tools::ResponseFormat;
 
 /// Generic response types
 #[derive(Debug, Clone, Serialize, Deserialize)]

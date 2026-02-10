@@ -33,7 +33,7 @@ impl ErrorMapper<ProviderError> for StabilityErrorMapper {
             403 => ProviderError::authentication("stability", "Access denied or API key expired"),
             404 => ProviderError::model_not_found("stability", "Model or endpoint not found"),
             429 => {
-                let retry_after = parse_retry_after(response_body);
+                let retry_after = crate::core::providers::shared::parse_retry_after_from_body(response_body);
                 ProviderError::rate_limit("stability", retry_after)
             }
             500..=599 => ProviderError::provider_unavailable(
@@ -42,16 +42,6 @@ impl ErrorMapper<ProviderError> for StabilityErrorMapper {
             ),
             _ => ProviderError::api_error("stability", status_code, response_body),
         }
-    }
-}
-
-/// Parse retry-after header or body for rate limit errors
-fn parse_retry_after(response_body: &str) -> Option<u64> {
-    // Try to extract retry-after from response body
-    if response_body.contains("rate limit") || response_body.contains("too many requests") {
-        Some(60) // Default to 60 seconds
-    } else {
-        None
     }
 }
 
@@ -124,13 +114,13 @@ mod tests {
 
     #[test]
     fn test_parse_retry_after_with_rate_limit() {
-        let result = parse_retry_after("rate limit exceeded");
+        let result = crate::core::providers::shared::parse_retry_after_from_body("rate limit exceeded");
         assert_eq!(result, Some(60));
     }
 
     #[test]
     fn test_parse_retry_after_without_rate_limit() {
-        let result = parse_retry_after("other error");
+        let result = crate::core::providers::shared::parse_retry_after_from_body("other error");
         assert_eq!(result, None);
     }
 }

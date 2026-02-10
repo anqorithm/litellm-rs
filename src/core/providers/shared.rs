@@ -463,6 +463,103 @@ pub mod test_utils {
 }
 
 // ============================================================================
+// Shared Dedup Helpers
+// ============================================================================
+
+/// Format a Bearer authorization header value.
+///
+/// Replaces the common `format!("Bearer {}", api_key)` pattern.
+#[inline]
+pub fn bearer_auth(api_key: &str) -> String {
+    format!("Bearer {}", api_key)
+}
+
+/// Strip known provider prefixes from a model name.
+///
+/// Many providers accept model names like `"provider/model-name"` and need
+/// to strip the prefix before sending to the upstream API.
+pub fn strip_model_prefixes(model: &str, prefixes: &[&str]) -> String {
+    for prefix in prefixes {
+        if let Some(stripped) = model.strip_prefix(prefix) {
+            return stripped.to_string();
+        }
+    }
+    model.to_string()
+}
+
+/// Parse retry-after hint from a response body by looking for common keywords.
+///
+/// Returns `Some(60)` (default 60-second backoff) when the body contains
+/// rate-limit indicators, `None` otherwise.
+pub fn parse_retry_after_from_body(response_body: &str) -> Option<u64> {
+    let lower = response_body.to_lowercase();
+    if lower.contains("rate limit")
+        || lower.contains("rate_limit")
+        || lower.contains("too many requests")
+        || lower.contains("请求频率")
+    {
+        Some(60)
+    } else {
+        None
+    }
+}
+
+/// Generic error mapper that implements the standard HTTP-status → ProviderError
+/// mapping shared by many providers.
+pub struct GenericErrorMapper {
+    pub provider_name: &'static str,
+}
+
+impl GenericErrorMapper {
+    pub fn new(provider_name: &'static str) -> Self {
+        Self { provider_name }
+    }
+
+    pub fn map_http_error(&self, status_code: u16, response_body: &str) -> ProviderError {
+        match status_code {
+            401 | 403 => ProviderError::authentication(self.provider_name, response_body),
+            429 => ProviderError::rate_limit(self.provider_name, None),
+            404 => ProviderError::model_not_found(self.provider_name, response_body),
+            400 => ProviderError::invalid_request(self.provider_name, response_body),
+            402 => ProviderError::quota_exceeded(self.provider_name, response_body),
+            413 => ProviderError::context_length_exceeded(self.provider_name, 0, 0),
+            408 | 504 => ProviderError::timeout(self.provider_name, response_body),
+            500 => ProviderError::api_error(self.provider_name, status_code, response_body),
+            502 | 503 => ProviderError::provider_unavailable(self.provider_name, response_body),
+            _ => ProviderError::api_error(self.provider_name, status_code, response_body),
+        }
+    }
+}
+
+/// Macro to define a generic error mapper struct that delegates to
+/// `GenericErrorMapper` for the standard HTTP-status mapping.
+///
+/// Usage:
+/// ```ignore
+/// define_generic_error_mapper!(MyProviderErrorMapper, PROVIDER_NAME);
+/// ```
+#[macro_export]
+macro_rules! define_generic_error_mapper {
+    ($struct_name:ident, $provider_name:expr) => {
+        pub struct $struct_name;
+
+        impl $crate::core::traits::error_mapper::trait_def::ErrorMapper<
+            $crate::core::providers::unified_provider::ProviderError,
+        > for $struct_name
+        {
+            fn map_http_error(
+                &self,
+                status_code: u16,
+                response_body: &str,
+            ) -> $crate::core::providers::unified_provider::ProviderError {
+                $crate::core::providers::shared::GenericErrorMapper::new($provider_name)
+                    .map_http_error(status_code, response_body)
+            }
+        }
+    };
+}
+
+// ============================================================================
 // Tests
 // ============================================================================
 

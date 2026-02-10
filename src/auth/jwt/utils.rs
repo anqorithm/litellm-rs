@@ -58,7 +58,7 @@ mod tests {
     fn create_test_claims(exp_offset_secs: i64) -> Claims {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_secs();
 
         Claims {

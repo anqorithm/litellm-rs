@@ -123,11 +123,10 @@ impl DashscopeChatTransformation {
 
     /// Normalize model name for Dashscope API
     fn normalize_model_name(&self, model: &str) -> String {
-        // Remove common prefixes from model name
-        model
-            .replace("dashscope/", "")
-            .replace("alibaba/", "")
-            .replace("qwen/", "")
+        crate::core::providers::shared::strip_model_prefixes(
+            model,
+            &["dashscope/", "alibaba/", "qwen/"],
+        )
     }
 
     /// Transform messages to Dashscope format

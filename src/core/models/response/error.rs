@@ -1,27 +1,12 @@
 //! Error response types
+//!
+//! Re-exports the canonical error types from `core::types::responses::error`.
 
-use serde::{Deserialize, Serialize};
+pub use crate::core::types::responses::error::{ApiError, ErrorResponse};
 
-/// Error response
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ErrorResponse {
-    /// Error details
-    pub error: ErrorDetail,
-}
-
-/// Error detail
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ErrorDetail {
-    /// Error message
-    pub message: String,
-    /// Error type
-    #[serde(rename = "type")]
-    pub error_type: String,
-    /// Error code
-    pub code: Option<String>,
-    /// Parameter that caused the error
-    pub param: Option<String>,
-}
+/// Type alias for backward compatibility.
+/// `ErrorDetail` is the same as [`ApiError`].
+pub type ErrorDetail = ApiError;
 
 #[cfg(test)]
 mod tests {
@@ -109,7 +94,8 @@ mod tests {
         };
 
         let debug_str = format!("{:?}", detail);
-        assert!(debug_str.contains("ErrorDetail"));
+        // ErrorDetail is a type alias for ApiError, so Debug prints "ApiError"
+        assert!(debug_str.contains("ApiError"));
         assert!(debug_str.contains("Debug test"));
     }
 
@@ -126,7 +112,8 @@ mod tests {
         assert_eq!(json["message"], "Serialization test");
         assert_eq!(json["type"], "test_error"); // Note: renamed from error_type
         assert_eq!(json["code"], "test_code");
-        assert!(json["param"].is_null());
+        // With skip_serializing_if = "Option::is_none", None fields are omitted entirely
+        assert!(json.get("param").is_none());
     }
 
     #[test]
@@ -205,7 +192,8 @@ mod tests {
 
         let debug_str = format!("{:?}", response);
         assert!(debug_str.contains("ErrorResponse"));
-        assert!(debug_str.contains("ErrorDetail"));
+        // ErrorDetail is a type alias for ApiError, so Debug prints "ApiError"
+        assert!(debug_str.contains("ApiError"));
     }
 
     #[test]

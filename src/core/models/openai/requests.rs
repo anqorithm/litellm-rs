@@ -101,15 +101,7 @@ pub struct StreamOptions {
     pub include_usage: Option<bool>,
 }
 
-/// Response format
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ResponseFormat {
-    /// Format type
-    #[serde(rename = "type")]
-    pub format_type: String,
-    /// JSON schema (for structured outputs)
-    pub json_schema: Option<serde_json::Value>,
-}
+pub use crate::core::types::tools::ResponseFormat;
 
 /// Text completion request (legacy)
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -299,6 +291,7 @@ mod tests {
             response_format: Some(ResponseFormat {
                 format_type: "json_object".to_string(),
                 json_schema: None,
+                response_type: None,
             }),
             ..Default::default()
         };
@@ -417,6 +410,7 @@ mod tests {
         let format = ResponseFormat {
             format_type: "text".to_string(),
             json_schema: None,
+            response_type: None,
         };
 
         assert_eq!(format.format_type, "text");
@@ -428,6 +422,7 @@ mod tests {
         let format = ResponseFormat {
             format_type: "json_object".to_string(),
             json_schema: None,
+            response_type: None,
         };
 
         assert_eq!(format.format_type, "json_object");
@@ -446,6 +441,7 @@ mod tests {
         let format = ResponseFormat {
             format_type: "json_schema".to_string(),
             json_schema: Some(schema.clone()),
+            response_type: None,
         };
 
         assert_eq!(format.format_type, "json_schema");
@@ -457,6 +453,7 @@ mod tests {
         let format = ResponseFormat {
             format_type: "json_object".to_string(),
             json_schema: None,
+            response_type: None,
         };
 
         let json = serde_json::to_string(&format).unwrap();

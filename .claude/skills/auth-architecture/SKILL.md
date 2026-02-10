@@ -410,7 +410,7 @@ impl RateLimiter {
     pub fn check_rate_limit(&self, key: &str) -> Result<(), RateLimitError> {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_secs();
 
         let state = self.counters.entry(key.to_string()).or_insert_with(|| {
@@ -464,7 +464,7 @@ impl RateLimiter {
             .map(|state| {
                 let now = SystemTime::now()
                     .duration_since(UNIX_EPOCH)
-                    .unwrap()
+                    .unwrap_or_default()
                     .as_secs();
                 let window_start = state.window_start.load(Ordering::SeqCst);
                 let reset_at = window_start + self.config.window_size.as_secs();
