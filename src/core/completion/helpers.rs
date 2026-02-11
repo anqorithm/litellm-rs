@@ -35,6 +35,7 @@ pub fn assistant_message(content: impl Into<String>) -> ChatMessage {
 }
 
 /// Helper function to create assistant message with thinking
+#[cfg(test)]
 pub fn assistant_message_with_thinking(
     content: impl Into<String>,
     thinking: impl Into<String>,

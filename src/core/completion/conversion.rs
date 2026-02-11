@@ -1,9 +1,11 @@
 //! Type conversion functions
 
 use super::types::{Choice, CompletionOptions, CompletionResponse};
-use crate::core::types::responses::{ChatResponse, Usage};
+use crate::core::types::responses::ChatResponse;
 use crate::core::types::{chat::ChatMessage, chat::ChatRequest};
 use crate::utils::error::error::Result;
+#[cfg(test)]
+use crate::core::types::responses::Usage;
 
 /// Convert to chat completion request
 pub fn convert_to_chat_completion_request(
@@ -62,6 +64,7 @@ pub fn convert_from_chat_completion_response(response: ChatResponse) -> Result<C
 }
 
 /// Convert from usage response
+#[cfg(test)]
 pub fn convert_usage(usage: &crate::core::types::responses::Usage) -> Usage {
     Usage {
         prompt_tokens: usage.prompt_tokens,

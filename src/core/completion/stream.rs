@@ -1,8 +1,9 @@
 //! Completion streaming types
 
-use crate::core::streaming::types::ChatCompletionChunk;
 use crate::core::types::responses::FinishReason;
 use futures::stream::BoxStream;
+#[cfg(test)]
+use crate::core::streaming::types::ChatCompletionChunk;
 
 /// Streaming completion response
 pub type CompletionStream =
@@ -35,6 +36,7 @@ pub struct StreamDelta {
 }
 
 /// Convert internal stream chunk to completion chunk
+#[cfg(test)]
 pub fn convert_stream_chunk(chunk: ChatCompletionChunk) -> CompletionChunk {
     CompletionChunk {
         id: chunk.id,
@@ -58,6 +60,7 @@ pub fn convert_stream_chunk(chunk: ChatCompletionChunk) -> CompletionChunk {
 }
 
 /// Parse finish reason string to FinishReason enum
+#[cfg(test)]
 fn parse_finish_reason(s: &str) -> Option<FinishReason> {
     match s.to_lowercase().as_str() {
         "stop" => Some(FinishReason::Stop),
