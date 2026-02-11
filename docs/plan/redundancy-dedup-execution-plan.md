@@ -771,7 +771,7 @@
 
 ### Step F19 收敛 Bedrock 工具层未接线辅助定义
 
-- 状态: `in_progress`
+- 状态: `completed`
 - 目标: 清理 Bedrock `config/auth/region` 中仅测试使用或未接线的辅助定义，减少重复与冗余符号。
 - 预计改动文件:
   - `src/core/providers/bedrock/config.rs`
@@ -786,6 +786,24 @@
   - `cargo check --lib`
 - 完成判定:
   - 上述 Bedrock 冗余定义清理完成且测试/编译通过。
+
+### Step F20 去除 AzureAI 旧版重复实现与 Bedrock 冗余错误助手
+
+- 状态: `in_progress`
+- 目标: 删除 AzureAI 重复的旧 `chat_simple` 实现并清理 Bedrock 未接线错误助手，减少重复设计与死代码。
+- 预计改动文件:
+  - `src/core/providers/azure_ai/mod.rs`
+  - `src/core/providers/azure_ai/chat_simple.rs`（删除）
+  - `src/core/providers/bedrock/error.rs`
+- 详细改动:
+  - AzureAI: 移除未被引用且与 `chat.rs` 重复的 `chat_simple` 模块。
+  - Bedrock error: 删除未被调用的 `model_error/region_error/transform_error` helper。
+- 步骤级测试命令:
+  - `cargo test azure_ai --lib`
+  - `cargo test bedrock::error --lib`
+  - `cargo check --lib`
+- 完成判定:
+  - 重复实现与冗余 helper 移除完成，定向测试与编译通过。
 
 ---
 
@@ -1294,3 +1312,15 @@
       - `cargo test core::completion::helpers --lib` -> pass（`5 passed; 0 failed`）
       - `cargo test core::completion::stream --lib` -> pass（`25 passed; 0 failed`）
       - `cargo check --lib` -> pass（warning 总数 `103 -> 99`）
+  - Step F19: `completed`
+    - 修改文件:
+      - `src/core/providers/bedrock/config.rs`
+      - `src/core/providers/bedrock/utils/auth.rs`
+      - `src/core/providers/bedrock/utils/region.rs`
+    - 主要改动:
+      - 删除 `bedrock/config.rs` 中与 `model_config.rs` 重复且未接线的 `ModelConfig` 定义。
+      - 将 `BedrockAuthConfig`、`map_special_auth_params`、`extract_credentials_from_params` 限定为测试编译路径。
+      - 将 `get_model_regions/get_us_regions/get_eu_regions/get_ap_regions` 限定为测试编译路径。
+    - 执行测试:
+      - `cargo test bedrock --lib` -> pass（`261 passed; 0 failed`）
+      - `cargo check --lib` -> pass（warning 总数 `99 -> 91`）
