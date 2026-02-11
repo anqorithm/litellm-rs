@@ -3,8 +3,9 @@
 //! Handles embedding requests for Cohere embed models.
 //! Supports text and image embeddings with various input types.
 
+#[cfg(test)]
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::config::CohereConfig;
 use super::error::CohereError;
@@ -15,6 +16,7 @@ use crate::core::types::{embedding::EmbeddingInput, embedding::EmbeddingRequest}
 type ExtractedInputs = (Option<Vec<String>>, Option<Vec<String>>);
 
 /// Cohere embedding input types
+#[cfg(test)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[derive(Default)]
@@ -32,6 +34,7 @@ pub enum CohereEmbeddingInputType {
     Image,
 }
 
+#[cfg(test)]
 impl std::fmt::Display for CohereEmbeddingInputType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -45,6 +48,7 @@ impl std::fmt::Display for CohereEmbeddingInputType {
 }
 
 /// Cohere embedding request
+#[cfg(test)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CohereEmbeddingRequest {
     /// Model to use
@@ -75,6 +79,7 @@ pub struct CohereEmbeddingRequest {
 }
 
 /// Cohere embedding response
+#[cfg(test)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CohereEmbeddingResponse {
     /// Response ID
@@ -93,6 +98,7 @@ pub struct CohereEmbeddingResponse {
 }
 
 /// Cohere embeddings by type
+#[cfg(test)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CohereEmbeddings {
     /// Float embeddings
@@ -117,6 +123,7 @@ pub struct CohereEmbeddings {
 }
 
 /// Cohere embedding metadata
+#[cfg(test)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CohereEmbeddingMeta {
     /// API version
@@ -133,6 +140,7 @@ pub struct CohereEmbeddingMeta {
 }
 
 /// Cohere billed units
+#[cfg(test)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CohereBilledUnits {
     /// Input tokens
@@ -343,6 +351,7 @@ impl CohereEmbeddingHandler {
     }
 
     /// Get default dimensions for a model
+    #[cfg(test)]
     pub fn get_default_dimensions(model: &str) -> Option<u32> {
         match model {
             m if m.contains("embed-english-v3") => Some(1024),
@@ -354,6 +363,7 @@ impl CohereEmbeddingHandler {
     }
 
     /// Get maximum input length for a model
+    #[cfg(test)]
     pub fn get_max_input_length(model: &str) -> u32 {
         match model {
             m if m.contains("embed") && m.contains("v3") => 512,

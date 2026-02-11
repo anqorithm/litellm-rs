@@ -3,8 +3,9 @@
 //! Handles chat completion requests for Cohere Command models.
 //! Supports both v1 (legacy) and v2 (OpenAI-compatible) APIs.
 
+#[cfg(test)]
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::collections::HashMap;
 
 use super::config::{CohereApiVersion, CohereConfig};
@@ -15,6 +16,7 @@ use crate::core::types::tools::ToolCall;
 use crate::core::types::{chat::ChatRequest, message::MessageContent, message::MessageRole};
 
 /// Cohere v2 chat request (OpenAI-compatible)
+#[cfg(test)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CohereChatRequest {
     /// Model to use
@@ -69,6 +71,7 @@ pub struct CohereChatRequest {
 }
 
 /// Cohere v2 chat response
+#[cfg(test)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CohereChatResponse {
     /// Response ID
@@ -85,6 +88,7 @@ pub struct CohereChatResponse {
 }
 
 /// Cohere message structure
+#[cfg(test)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CohereMessage {
     /// Role of the message
@@ -104,6 +108,7 @@ pub struct CohereMessage {
 }
 
 /// Cohere content structure
+#[cfg(test)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CohereContent {
     /// Content type
@@ -116,6 +121,7 @@ pub struct CohereContent {
 }
 
 /// Cohere citation for RAG
+#[cfg(test)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CohereCitation {
     /// Start position in text
@@ -133,6 +139,7 @@ pub struct CohereCitation {
 }
 
 /// Cohere source document
+#[cfg(test)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CohereSource {
     /// Source type
@@ -149,6 +156,7 @@ pub struct CohereSource {
 }
 
 /// Cohere usage information
+#[cfg(test)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CohereUsage {
     /// Token usage
@@ -156,6 +164,7 @@ pub struct CohereUsage {
 }
 
 /// Cohere token counts
+#[cfg(test)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CohereTokens {
     /// Input tokens

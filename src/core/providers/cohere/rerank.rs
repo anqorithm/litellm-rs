@@ -245,6 +245,7 @@ impl CohereRerankHandler {
     }
 
     /// Get maximum documents supported by model
+    #[cfg(test)]
     pub fn get_max_documents(model: &str) -> u32 {
         match model {
             m if m.contains("-v3.5") => 1000,
@@ -255,6 +256,7 @@ impl CohereRerankHandler {
     }
 
     /// Get default top_n for model
+    #[cfg(test)]
     pub fn get_default_top_n(model: &str, num_documents: usize) -> u32 {
         let default = match model {
             m if m.contains("rerank") => 10,
@@ -265,11 +267,13 @@ impl CohereRerankHandler {
     }
 
     /// Calculate search units used
+    #[cfg(test)]
     pub fn calculate_search_units(documents: &[RerankDocument]) -> u32 {
         documents.len() as u32
     }
 
     /// Sort results by relevance score (descending)
+    #[cfg(test)]
     pub fn sort_results_by_score(results: &mut [RerankResult]) {
         results.sort_by(|a, b| {
             b.relevance_score

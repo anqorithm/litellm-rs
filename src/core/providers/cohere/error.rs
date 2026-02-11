@@ -7,16 +7,19 @@ use crate::core::providers::unified_provider::ProviderError;
 pub type CohereError = ProviderError;
 
 /// Create Cohere authentication error
+#[cfg(test)]
 pub fn cohere_authentication(message: impl Into<String>) -> CohereError {
     ProviderError::authentication("cohere", message)
 }
 
 /// Create Cohere rate limit error
+#[cfg(test)]
 pub fn cohere_rate_limit(retry_after: Option<u64>) -> CohereError {
     ProviderError::rate_limit("cohere", retry_after)
 }
 
 /// Create Cohere model not found error
+#[cfg(test)]
 pub fn cohere_model_not_found(model: impl Into<String>) -> CohereError {
     ProviderError::model_not_found("cohere", model)
 }
@@ -27,11 +30,13 @@ pub fn cohere_invalid_request(message: impl Into<String>) -> CohereError {
 }
 
 /// Create Cohere network error
+#[cfg(test)]
 pub fn cohere_network_error(message: impl Into<String>) -> CohereError {
     ProviderError::network("cohere", message)
 }
 
 /// Create Cohere timeout error
+#[cfg(test)]
 pub fn cohere_timeout(message: impl Into<String>) -> CohereError {
     ProviderError::Timeout {
         provider: "cohere",
@@ -45,11 +50,13 @@ pub fn cohere_response_parsing(message: impl Into<String>) -> CohereError {
 }
 
 /// Create Cohere configuration error
+#[cfg(test)]
 pub fn cohere_configuration(message: impl Into<String>) -> CohereError {
     ProviderError::configuration("cohere", message)
 }
 
 /// Create Cohere API error with status code
+#[cfg(test)]
 pub fn cohere_api_error(status: u16, message: impl Into<String>) -> CohereError {
     ProviderError::ApiError {
         provider: "cohere",
@@ -59,11 +66,13 @@ pub fn cohere_api_error(status: u16, message: impl Into<String>) -> CohereError 
 }
 
 /// Check if this is a Cohere-specific error
+#[cfg(test)]
 pub fn is_cohere_error(err: &CohereError) -> bool {
     err.provider() == "cohere"
 }
 
 /// Get Cohere error category for metrics
+#[cfg(test)]
 pub fn cohere_category(err: &CohereError) -> &'static str {
     match err {
         ProviderError::Authentication { .. } => "auth",

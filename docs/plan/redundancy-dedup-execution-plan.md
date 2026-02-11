@@ -838,6 +838,27 @@
   - 上述文件相关 dead code 告警显著下降。
   - 定向测试与库编译通过。
 
+### Step F22 收敛 Cohere 模块未接线数据结构与仅测试辅助函数
+
+- 状态: `completed`
+- 目标: 删除或测试限定 Cohere `chat/embed/error/rerank` 中未接线定义，减少协议层重复结构与 dead code 告警。
+- 预计改动文件:
+  - `src/core/providers/cohere/chat.rs`
+  - `src/core/providers/cohere/embed.rs`
+  - `src/core/providers/cohere/error.rs`
+  - `src/core/providers/cohere/rerank.rs`
+- 详细改动:
+  - 移除 `chat/embed` 未被主流程使用的请求/响应镜像结构体。
+  - 对仅测试使用的辅助方法加 `#[cfg(test)]`，避免主构建引入冗余符号。
+  - 保持 `transform_request/transform_response` 主路径行为不变。
+- 步骤级测试命令:
+  - `cargo test cohere --lib`
+  - `cargo test cohere::model_info --lib`
+  - `cargo check --lib`
+- 完成判定:
+  - Cohere 模块 dead code 告警显著下降。
+  - Cohere 定向测试与库编译通过。
+
 ---
 
 ## 4. 执行日志（每步完成后追加）
@@ -1396,3 +1417,17 @@
       - `cargo test github --lib` -> pass（`60 passed; 0 failed`）
       - `cargo test vllm --lib` -> pass（`92 passed; 0 failed`）
       - `cargo check --lib` -> pass（warning 总数 `84 -> 47`）
+  - Step F22: `completed`
+    - 修改文件:
+      - `src/core/providers/cohere/chat.rs`
+      - `src/core/providers/cohere/embed.rs`
+      - `src/core/providers/cohere/error.rs`
+      - `src/core/providers/cohere/rerank.rs`
+    - 主要改动:
+      - `chat/embed` 中未接线协议镜像结构体与枚举改为测试编译路径，避免主构建维护冗余类型。
+      - `embed/rerank/error` 中仅测试辅助函数改为 `#[cfg(test)]`，保留主流程 `transform_*` 与错误映射入口不变。
+      - 同步将 `serde` 导入调整为测试条件导入，避免主构建产生冗余依赖符号。
+    - 执行测试:
+      - `cargo test cohere --lib` -> pass（`118 passed; 0 failed`）
+      - `cargo test cohere::model_info --lib` -> pass（`0 passed; 0 failed`）
+      - `cargo check --lib` -> pass（warning 总数 `47 -> 22`）
