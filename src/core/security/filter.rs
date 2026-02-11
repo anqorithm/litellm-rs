@@ -18,8 +18,6 @@ pub struct ContentFilter {
     moderation_rules: Vec<ModerationRule>,
     /// Profanity filter
     profanity_filter: ProfanityFilter,
-    /// Custom filters
-    custom_filters: Vec<CustomFilter>,
 }
 
 impl ContentFilter {
@@ -29,7 +27,6 @@ impl ContentFilter {
             pii_patterns: Self::default_pii_patterns(),
             moderation_rules: Self::default_moderation_rules(),
             profanity_filter: ProfanityFilter::new(),
-            custom_filters: Vec::new(),
         }
     }
 

@@ -22,8 +22,6 @@ pub struct StreamingHandler {
     pub(crate) is_first_chunk: bool,
     /// Accumulated content for final usage calculation
     pub(crate) accumulated_content: String,
-    /// Start time for latency calculation
-    start_time: std::time::Instant,
 }
 
 impl StreamingHandler {
@@ -34,7 +32,6 @@ impl StreamingHandler {
             model,
             is_first_chunk: true,
             accumulated_content: String::new(),
-            start_time: std::time::Instant::now(),
         }
     }
 

@@ -100,10 +100,10 @@ where
             } else {
                 // Create next handler
                 let _next = Box::new(NextHandler {
-                    stack: self,
-                    index: index + 1,
-                    final_handler,
-                    request: request.clone(),
+                    _stack: self,
+                    _index: index + 1,
+                    _final_handler: final_handler,
+                    _request: request.clone(),
                 });
 
                 // TODO: Fix middleware execution with proper type constraints
@@ -127,38 +127,16 @@ where
     }
 }
 
-/// Middleware wrapper for type erasure
-struct MiddlewareWrapper<M>(M);
-
-#[async_trait]
-impl<M, Req, Resp> Middleware<Req, Resp> for MiddlewareWrapper<M>
-where
-    M: Middleware<Req, Resp> + Send + Sync,
-    M::Error: std::error::Error + Send + Sync + 'static,
-    Req: Send + Sync + 'static,
-    Resp: Send + Sync + 'static,
-{
-    type Error = M::Error;
-
-    async fn process(
-        &self,
-        request: Req,
-        next: Box<dyn MiddlewareNext<Req, Resp>>,
-    ) -> Result<Resp, Self::Error> {
-        self.0.process(request, next).await
-    }
-}
-
 /// Final handler wrapper
 struct FinalHandler<F, Fut, Req, Resp> {
-    handler: Option<F>,
+    _handler: Option<F>,
     _phantom: std::marker::PhantomData<(Fut, Req, Resp)>,
 }
 
 impl<F, Fut, Req, Resp> FinalHandler<F, Fut, Req, Resp> {
     fn new(handler: F) -> Self {
         Self {
-            handler: Some(handler),
+            _handler: Some(handler),
             _phantom: std::marker::PhantomData,
         }
     }
@@ -181,10 +159,10 @@ where
 
 /// Next handler wrapper
 struct NextHandler<'a, Req, Resp> {
-    stack: &'a MiddlewareStack<Req, Resp>,
-    index: usize,
-    final_handler: Box<dyn MiddlewareNext<Req, Resp>>,
-    request: Req,
+    _stack: &'a MiddlewareStack<Req, Resp>,
+    _index: usize,
+    _final_handler: Box<dyn MiddlewareNext<Req, Resp>>,
+    _request: Req,
 }
 
 #[async_trait]

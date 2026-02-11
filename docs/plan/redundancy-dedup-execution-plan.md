@@ -692,7 +692,7 @@
 
 ### Step F15 收敛 Shared/Security/Streaming 未读私有状态
 
-- 状态: `in_progress`
+- 状态: `completed`
 - 目标: 清理核心运行时中一组明确未读取的私有字段，减少噪音告警并保留现有行为与构造签名。
 - 预计改动文件:
   - `src/core/providers/shared.rs`
@@ -710,6 +710,44 @@
   - `cargo check --lib`
 - 完成判定:
   - 以上私有字段冗余已清理且定向测试/编译通过。
+
+### Step F16 收敛 Capabilities/Traits 适配层冗余状态
+
+- 状态: `completed`
+- 目标: 清理 provider capability builder 与 traits 适配层中的未读私有状态，保持行为与接口签名稳定。
+- 预计改动文件:
+  - `src/core/providers/capabilities.rs`
+  - `src/core/traits/provider/handle.rs`
+  - `src/core/traits/middleware.rs`
+- 详细改动:
+  - Capabilities: 删除 `TypedProviderBuilderResult` 的冗余 capability 存储字段，仅保留 `provider`。
+  - ProviderHandle: 将未读 provider 类型擦除字段改为占位字段。
+  - Middleware traits: 删除未接线 `MiddlewareWrapper` 实现，并将 `FinalHandler/NextHandler` 的未读状态改为占位字段。
+- 步骤级测试命令:
+  - `cargo test core::providers::capabilities --lib`
+  - `cargo test core::traits::provider::handle --lib`
+  - `cargo test core::traits::middleware --lib`
+  - `cargo check --lib`
+- 完成判定:
+  - 上述 traits/capabilities 冗余告警项收敛且定向测试/编译通过。
+
+### Step F17 收敛 Webhooks/Keys 未调用辅助入口
+
+- 状态: `in_progress`
+- 目标: 清理 webhooks 与 key route 中未被调用的辅助入口，降低死代码噪音并保持现有主流程。
+- 预计改动文件:
+  - `src/core/webhooks/delivery.rs`
+  - `src/core/webhooks/manager.rs`
+  - `src/server/routes/keys/types.rs`
+- 详细改动:
+  - Webhooks: 删除未被调用的 wrapper/helper 入口，保留已使用的队列分发与内部投递路径。
+  - Keys types: 清理未被调用的错误构造辅助方法，保留已使用错误构造入口。
+- 步骤级测试命令:
+  - `cargo test webhooks --lib`
+  - `cargo test routes::keys --lib`
+  - `cargo check --lib`
+- 完成判定:
+  - 目标方法清理完成，定向测试与编译通过。
 
 ---
 
@@ -1161,3 +1199,34 @@
       - `cargo test azure --lib` -> pass（`526 passed; 0 failed`）
       - `cargo test openai_moderation --lib` -> pass（`10 passed; 0 failed`）
       - `cargo check --lib` -> pass（warning 总数 `121 -> 116`）
+  - Step F15: `completed`
+    - 修改文件:
+      - `src/core/providers/shared.rs`
+      - `src/core/security/filter.rs`
+      - `src/core/security/profanity.rs`
+      - `src/core/streaming/handler.rs`
+    - 主要改动:
+      - `RequestExecutor` 删除未读 `client` 状态，构造签名保持不变。
+      - `RateLimiter` 删除未读 `requests_per_second` 存储并同步精简测试断言。
+      - `ContentFilter` 删除未读 `custom_filters` 字段。
+      - `ProfanityFilter` 删除未读 `fuzzy_matching` 字段并同步测试。
+      - `StreamingHandler` 删除未读 `start_time` 字段。
+    - 执行测试:
+      - `cargo test providers::shared --lib` -> pass（`55 passed; 0 failed`）
+      - `cargo test security --lib` -> pass（`188 passed; 0 failed`）
+      - `cargo test streaming --lib` -> pass（`347 passed; 0 failed`）
+      - `cargo check --lib` -> pass（warning 总数 `116 -> 111`）
+  - Step F16: `completed`
+    - 修改文件:
+      - `src/core/providers/capabilities.rs`
+      - `src/core/traits/provider/handle.rs`
+      - `src/core/traits/middleware.rs`
+    - 主要改动:
+      - `TypedProviderBuilderResult` 删除未读 `capabilities` 存储，`build()` 仅转交 provider。
+      - `ProviderHandle` 未读 provider 字段重命名为占位字段 `_provider`。
+      - 中间件 traits 适配层删除未接线 `MiddlewareWrapper`，并将 `FinalHandler/NextHandler` 未读状态改为占位字段。
+    - 执行测试:
+      - `cargo test core::providers::capabilities --lib` -> pass（`3 passed; 0 failed`）
+      - `cargo test core::traits::provider::handle --lib` -> pass（`6 passed; 0 failed`）
+      - `cargo test core::traits::middleware --lib` -> pass（`8 passed; 0 failed`）
+      - `cargo check --lib` -> pass（warning 总数 `111 -> 106`）

@@ -189,9 +189,9 @@ impl<P> TypedProviderBuilder<P> {
     pub fn build(self) -> impl BuildResult<P> {
         // This would use const generics or macros to generate the right type
         // based on self.capabilities
+        let _ = self.capabilities;
         TypedProviderBuilderResult {
             provider: self.provider,
-            capabilities: self.capabilities,
         }
     }
 }
@@ -203,7 +203,6 @@ pub trait BuildResult<P> {
 
 struct TypedProviderBuilderResult<P> {
     provider: P,
-    capabilities: Vec<ProviderCapability>,
 }
 
 impl<P> BuildResult<P> for TypedProviderBuilderResult<P> {
