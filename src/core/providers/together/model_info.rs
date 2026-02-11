@@ -573,6 +573,7 @@ pub fn is_function_calling_model(model_id: &str) -> bool {
 }
 
 /// Check if a model supports vision
+#[cfg(test)]
 pub fn is_vision_model(model_id: &str) -> bool {
     get_model_info(model_id)
         .map(|info| info.supports_multimodal)
@@ -580,6 +581,7 @@ pub fn is_vision_model(model_id: &str) -> bool {
 }
 
 /// Check if a model is an embedding model
+#[cfg(test)]
 pub fn is_embedding_model(model_id: &str) -> bool {
     get_model_info(model_id)
         .map(|info| info.is_embedding)
@@ -587,6 +589,7 @@ pub fn is_embedding_model(model_id: &str) -> bool {
 }
 
 /// Check if a model is a rerank model
+#[cfg(test)]
 pub fn is_rerank_model(model_id: &str) -> bool {
     get_model_info(model_id)
         .map(|info| info.is_rerank)
@@ -599,6 +602,7 @@ pub fn get_available_models() -> Vec<&'static str> {
 }
 
 /// Get all models that support tool/function calling
+#[cfg(test)]
 pub fn get_tool_capable_models() -> Vec<&'static str> {
     MODEL_CONFIGS
         .iter()
@@ -608,6 +612,7 @@ pub fn get_tool_capable_models() -> Vec<&'static str> {
 }
 
 /// Get all embedding models
+#[cfg(test)]
 pub fn get_embedding_models() -> Vec<&'static str> {
     MODEL_CONFIGS
         .iter()
@@ -617,6 +622,7 @@ pub fn get_embedding_models() -> Vec<&'static str> {
 }
 
 /// Get all rerank models
+#[cfg(test)]
 pub fn get_rerank_models() -> Vec<&'static str> {
     MODEL_CONFIGS
         .iter()
@@ -627,6 +633,7 @@ pub fn get_rerank_models() -> Vec<&'static str> {
 
 /// Get pricing category based on model size (for Together AI pricing tiers)
 /// Returns the pricing category string used for cost calculation
+#[cfg(test)]
 pub fn get_pricing_category(model_name: &str) -> Option<&'static str> {
     // Extract parameter count from model name (e.g., "70B", "8B")
     let model_lower = model_name.to_lowercase();

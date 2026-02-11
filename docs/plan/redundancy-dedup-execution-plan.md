@@ -805,6 +805,39 @@
 - 完成判定:
   - 重复实现与冗余 helper 移除完成，定向测试与编译通过。
 
+### Step F21 收敛多 Provider 的 model_info/工具层仅测试辅助函数
+
+- 状态: `completed`
+- 目标: 将仅被测试引用或长期未接线的模型检索/工具能力辅助函数限定为测试编译，减少重复维护面与 dead code 告警。
+- 预计改动文件:
+  - `src/core/providers/github/model_info.rs`
+  - `src/core/providers/github_copilot/config.rs`
+  - `src/core/providers/github_copilot/model_info.rs`
+  - `src/core/providers/groq/model_info.rs`
+  - `src/core/providers/hosted_vllm/models.rs`
+  - `src/core/providers/hyperbolic/model_info.rs`
+  - `src/core/providers/lambda_ai/model_info.rs`
+  - `src/core/providers/novita/model_info.rs`
+  - `src/core/providers/nvidia_nim/model_info.rs`
+  - `src/core/providers/oci/model_info.rs`
+  - `src/core/providers/snowflake/model_info.rs`
+  - `src/core/providers/together/model_info.rs`
+  - `src/core/providers/vllm/model_info.rs`
+  - `src/core/providers/voyage/model_info.rs`
+  - `src/core/providers/watsonx/model_info.rs`
+  - `src/core/providers/xai/model_info.rs`
+- 详细改动:
+  - 对上述文件中告警函数添加 `#[cfg(test)]`，仅在单测构建时保留。
+  - 清理未接线常量（例如 copilot 版本常量）或将其收敛到测试构建。
+- 步骤级测试命令:
+  - `cargo test model_info --lib`
+  - `cargo test github --lib`
+  - `cargo test vllm --lib`
+  - `cargo check --lib`
+- 完成判定:
+  - 上述文件相关 dead code 告警显著下降。
+  - 定向测试与库编译通过。
+
 ---
 
 ## 4. 执行日志（每步完成后追加）
@@ -1336,3 +1369,30 @@
       - `cargo test azure_ai --lib` -> pass（`84 passed; 0 failed`）
       - `cargo test bedrock::error --lib` -> pass（`2 passed; 0 failed`）
       - `cargo check --lib` -> pass（warning 总数 `91 -> 84`）
+  - Step F21: `completed`
+    - 修改文件:
+      - `src/core/providers/github/model_info.rs`
+      - `src/core/providers/github_copilot/config.rs`
+      - `src/core/providers/github_copilot/model_info.rs`
+      - `src/core/providers/groq/model_info.rs`
+      - `src/core/providers/hosted_vllm/models.rs`
+      - `src/core/providers/hyperbolic/model_info.rs`
+      - `src/core/providers/lambda_ai/model_info.rs`
+      - `src/core/providers/novita/model_info.rs`
+      - `src/core/providers/nvidia_nim/model_info.rs`
+      - `src/core/providers/oci/model_info.rs`
+      - `src/core/providers/snowflake/model_info.rs`
+      - `src/core/providers/together/model_info.rs`
+      - `src/core/providers/vllm/model_info.rs`
+      - `src/core/providers/voyage/model_info.rs`
+      - `src/core/providers/watsonx/model_info.rs`
+      - `src/core/providers/xai/model_info.rs`
+    - 主要改动:
+      - 将多 provider `model_info` 中仅测试使用的辅助函数限定为 `#[cfg(test)]`，减少主构建死代码面。
+      - 删除 `github_copilot/config.rs` 中未接线常量 `COPILOT_VERSION`。
+      - 将 `nvidia_nim/model_info.rs` 的 `HashMap` 导入同步限定到测试编译，避免主构建新增 unused import。
+    - 执行测试:
+      - `cargo test model_info --lib` -> pass（`298 passed; 0 failed`）
+      - `cargo test github --lib` -> pass（`60 passed; 0 failed`）
+      - `cargo test vllm --lib` -> pass（`92 passed; 0 failed`）
+      - `cargo check --lib` -> pass（warning 总数 `84 -> 47`）

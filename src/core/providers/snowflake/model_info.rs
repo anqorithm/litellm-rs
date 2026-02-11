@@ -216,6 +216,7 @@ pub fn get_available_models() -> &'static [SnowflakeModel] {
 }
 
 /// Get models by provider
+#[cfg(test)]
 pub fn get_models_by_provider(provider: &str) -> Vec<&'static SnowflakeModel> {
     SNOWFLAKE_MODELS
         .iter()
@@ -224,6 +225,7 @@ pub fn get_models_by_provider(provider: &str) -> Vec<&'static SnowflakeModel> {
 }
 
 /// Check if a model supports tool calling
+#[cfg(test)]
 pub fn supports_tools(model_id: &str) -> bool {
     get_model_info(model_id)
         .map(|m| m.supports_tools)
@@ -231,6 +233,7 @@ pub fn supports_tools(model_id: &str) -> bool {
 }
 
 /// Check if a model supports streaming
+#[cfg(test)]
 pub fn supports_streaming(model_id: &str) -> bool {
     get_model_info(model_id)
         .map(|m| m.supports_streaming)

@@ -327,11 +327,13 @@ pub fn get_or_create_model_info(model_id: &str) -> VLLMModelInfo {
 }
 
 /// Get all known model IDs
+#[cfg(test)]
 pub fn get_known_models() -> Vec<&'static str> {
     MODEL_CONFIGS.keys().copied().collect()
 }
 
 /// Get models by family
+#[cfg(test)]
 pub fn get_models_by_family(family: &str) -> Vec<&'static str> {
     MODEL_CONFIGS
         .iter()
@@ -341,6 +343,7 @@ pub fn get_models_by_family(family: &str) -> Vec<&'static str> {
 }
 
 /// Get models that support tools
+#[cfg(test)]
 pub fn get_tool_capable_models() -> Vec<&'static str> {
     MODEL_CONFIGS
         .iter()

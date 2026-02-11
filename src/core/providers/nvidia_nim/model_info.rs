@@ -2,6 +2,7 @@
 //!
 //! Contains model metadata and supported parameters for NVIDIA NIM models.
 
+#[cfg(test)]
 use std::collections::HashMap;
 
 /// NVIDIA NIM model information
@@ -309,6 +310,7 @@ pub fn supports_tools(model: &str) -> bool {
 }
 
 /// Get all models as a HashMap for quick lookup
+#[cfg(test)]
 pub fn get_models_map() -> HashMap<&'static str, NvidiaNimModel> {
     let mut map = HashMap::new();
     for model_id in get_available_models() {

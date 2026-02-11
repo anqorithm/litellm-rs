@@ -246,6 +246,7 @@ pub fn get_available_models() -> Vec<&'static str> {
 }
 
 /// Check if a model supports reasoning tokens
+#[cfg(test)]
 pub fn supports_reasoning_tokens(model_id: &str) -> bool {
     get_model_info(model_id)
         .map(|info| info.supports_reasoning)

@@ -127,11 +127,13 @@ fn normalize_model_id(model_id: &str) -> &str {
 }
 
 /// Get default embedding model
+#[cfg(test)]
 pub fn get_default_model() -> &'static str {
     "voyage-3"
 }
 
 /// Get model dimensions
+#[cfg(test)]
 pub fn get_model_dimensions(model_id: &str) -> Option<u32> {
     get_model_info(model_id).map(|m| m.embedding_dimensions)
 }

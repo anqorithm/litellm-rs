@@ -245,6 +245,7 @@ pub fn get_available_models() -> &'static [WatsonxModel] {
 }
 
 /// Get models by provider
+#[cfg(test)]
 pub fn get_models_by_provider(provider: &str) -> Vec<&'static WatsonxModel> {
     WATSONX_MODELS
         .iter()
@@ -253,6 +254,7 @@ pub fn get_models_by_provider(provider: &str) -> Vec<&'static WatsonxModel> {
 }
 
 /// Check if a model supports chat format
+#[cfg(test)]
 pub fn supports_chat(model_id: &str) -> bool {
     get_model_info(model_id)
         .map(|m| m.supports_chat)
@@ -267,6 +269,7 @@ pub fn supports_tools(model_id: &str) -> bool {
 }
 
 /// Model pattern identifiers for template matching
+#[cfg(test)]
 pub mod patterns {
     pub const GRANITE_CHAT: &str = "granite";
     pub const IBM_MISTRAL: &str = "mistralai";
