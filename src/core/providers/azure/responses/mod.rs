@@ -94,7 +94,7 @@ pub struct ResponseMetrics {
 /// Main Azure response handler
 pub struct AzureResponseHandler {
     processor: AzureResponseProcessor,
-    transformation: AzureResponseTransformation,
+    _transformation: AzureResponseTransformation,
     o_series_processor: OSeriesResponseProcessor,
 }
 
@@ -102,7 +102,7 @@ impl AzureResponseHandler {
     pub fn new() -> Self {
         Self {
             processor: AzureResponseProcessor::new(),
-            transformation: AzureResponseTransformation::new(),
+            _transformation: AzureResponseTransformation::new(),
             o_series_processor: OSeriesResponseProcessor::new(),
         }
     }
@@ -113,7 +113,7 @@ impl AzureResponseHandler {
     ) -> Self {
         Self {
             processor: AzureResponseProcessor::with_config(processing_config),
-            transformation: AzureResponseTransformation::with_config(transform_config),
+            _transformation: AzureResponseTransformation::with_config(transform_config),
             o_series_processor: OSeriesResponseProcessor::new(),
         }
     }

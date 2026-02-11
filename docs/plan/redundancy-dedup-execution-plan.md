@@ -668,6 +668,49 @@
   - 上述冗余项全部移除且行为保持兼容。
   - 定向测试与编译通过。
 
+### Step F14 清理 Langfuse/Azure/Moderation 孤立冗余定义
+
+- 状态: `completed`
+- 目标: 消除当前构建中一组孤立且低风险的冗余告警（未用私有方法、未读私有字段、反序列化未读字段）。
+- 预计改动文件:
+  - `src/core/integrations/langfuse/middleware.rs`
+  - `src/core/providers/azure/assistants.rs`
+  - `src/core/providers/azure/responses/mod.rs`
+  - `src/core/guardrails/openai_moderation.rs`
+- 详细改动:
+  - Langfuse: 将 `LangfuseTracing::should_trace` 收敛为 `#[cfg(test)]` 测试辅助方法，并将 middleware 的未读请求体标志改为占位字段。
+  - Azure assistants: 将仅测试使用的 `build_threads_url` 限定到测试编译。
+  - Azure responses: 将未读 transformation 成员标为占位字段，保留配置入口签名。
+  - OpenAI moderation: 将 `ModerationApiResponse` 中仅反序列化用途字段改为 `_id/_model`（保留 JSON 字段映射）。
+- 步骤级测试命令:
+  - `cargo test langfuse --lib`
+  - `cargo test azure --lib`
+  - `cargo test openai_moderation --lib`
+  - `cargo check --lib`
+- 完成判定:
+  - 以上冗余项全部收敛且测试通过。
+
+### Step F15 收敛 Shared/Security/Streaming 未读私有状态
+
+- 状态: `in_progress`
+- 目标: 清理核心运行时中一组明确未读取的私有字段，减少噪音告警并保留现有行为与构造签名。
+- 预计改动文件:
+  - `src/core/providers/shared.rs`
+  - `src/core/security/filter.rs`
+  - `src/core/security/profanity.rs`
+  - `src/core/streaming/handler.rs`
+- 详细改动:
+  - Shared: 收敛 `RequestExecutor` 与 `RateLimiter` 的未读取私有状态字段。
+  - Security: 收敛 `ContentFilter` 与 `ProfanityFilter` 的未读取私有字段。
+  - Streaming: 收敛 `StreamingHandler` 中未读取的启动时间缓存字段。
+- 步骤级测试命令:
+  - `cargo test providers::shared --lib`
+  - `cargo test security --lib`
+  - `cargo test streaming --lib`
+  - `cargo check --lib`
+- 完成判定:
+  - 以上私有字段冗余已清理且定向测试/编译通过。
+
 ---
 
 ## 4. 执行日志（每步完成后追加）
@@ -1101,3 +1144,20 @@
       - `cargo test observability --lib` -> pass
       - `cargo test health --lib` -> pass
       - `cargo check --lib` -> pass（warning 总数 `131 -> 121`）
+  - Step F14: `completed`
+    - 修改文件:
+      - `src/core/integrations/langfuse/middleware.rs`
+      - `src/core/providers/azure/assistants.rs`
+      - `src/core/providers/azure/responses/mod.rs`
+      - `src/core/guardrails/openai_moderation.rs`
+    - 主要改动:
+      - `LangfuseTracing::should_trace` 收敛为 `#[cfg(test)]` 测试辅助方法，避免主构建冗余告警。
+      - `LangfuseTracingMiddleware` 未读请求体字段改为 `_include_request_body` 占位字段。
+      - `AzureAssistantHandler::build_threads_url` 限定为测试编译路径。
+      - `AzureResponseHandler` 的未读转换器状态改为 `_transformation` 占位字段。
+      - `ModerationApiResponse` 中仅反序列化用途字段改为 `_id/_model` 并保留 serde rename。
+    - 执行测试:
+      - `cargo test langfuse --lib` -> pass（`58 passed; 0 failed`）
+      - `cargo test azure --lib` -> pass（`526 passed; 0 failed`）
+      - `cargo test openai_moderation --lib` -> pass（`10 passed; 0 failed`）
+      - `cargo check --lib` -> pass（warning 总数 `121 -> 116`）

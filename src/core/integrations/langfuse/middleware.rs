@@ -115,7 +115,7 @@ impl LangfuseTracing {
         self
     }
 
-    /// Check if path should be traced
+    #[cfg(test)]
     fn should_trace(&self, path: &str) -> bool {
         !self.exclude_paths.iter().any(|p| path.starts_with(p))
     }
@@ -137,7 +137,7 @@ where
         ok(LangfuseTracingMiddleware {
             service,
             client: self.client.clone(),
-            include_request_body: self.include_request_body,
+            _include_request_body: self.include_request_body,
             include_response_body: self.include_response_body,
             exclude_paths: self.exclude_paths.clone(),
             service_name: self.service_name.clone(),
@@ -149,7 +149,7 @@ where
 pub struct LangfuseTracingMiddleware<S> {
     service: S,
     client: Option<Arc<LangfuseClient>>,
-    include_request_body: bool,
+    _include_request_body: bool,
     include_response_body: bool,
     exclude_paths: Vec<String>,
     service_name: String,
