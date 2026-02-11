@@ -227,6 +227,7 @@ impl GeminiEmbeddingHandler {
     }
 
     /// Validate embedding request
+    #[cfg(test)]
     fn validate_request(&self, request: &GeminiEmbeddingRequest) -> Result<(), ProviderError> {
         // Check content length
         match &request.content {

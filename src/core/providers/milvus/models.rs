@@ -283,6 +283,7 @@ fn normalize_model_id(model_id: &str) -> &str {
 }
 
 /// Get default embedding model
+#[cfg(test)]
 pub fn get_default_model() -> &'static str {
     "text-embedding-ada-002"
 }

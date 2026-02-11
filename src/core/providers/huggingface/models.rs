@@ -142,17 +142,6 @@ impl std::fmt::Display for InferenceProvider {
     }
 }
 
-/// Provider mapping information from HuggingFace Hub API
-#[derive(Debug, Clone, Deserialize)]
-pub struct ProviderMapping {
-    /// Provider-specific model ID
-    #[serde(rename = "providerId")]
-    pub provider_id: String,
-
-    /// Status (live, staging, etc.)
-    pub status: String,
-}
-
 /// Parse model string to extract provider and model ID
 ///
 /// Model format: `huggingface/<provider>/<org>/<model>` or `huggingface/<org>/<model>`

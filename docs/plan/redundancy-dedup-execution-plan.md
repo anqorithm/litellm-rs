@@ -859,6 +859,34 @@
   - Cohere 模块 dead code 告警显著下降。
   - Cohere 定向测试与库编译通过。
 
+### Step F23 收敛 Milvus/Streaming/Observability 剩余冗余符号
+
+- 状态: `completed`
+- 目标: 清理主构建中未接线的别名、常量和测试辅助函数，继续收敛剩余 dead code 告警。
+- 预计改动文件:
+  - `src/core/fine_tuning/providers/openai.rs`
+  - `src/core/integrations/observability/arize.rs`
+  - `src/core/providers/deepgram/error.rs`
+  - `src/core/providers/huggingface/models.rs`
+  - `src/core/providers/milvus/models.rs`
+  - `src/core/providers/milvus/provider.rs`
+  - `src/core/providers/ollama/streaming.rs`
+  - `src/core/providers/snowflake/mod.rs`
+  - `src/core/providers/vertex_ai/gemini_embeddings/mod.rs`
+  - `src/core/providers/watsonx/streaming.rs`
+- 详细改动:
+  - 删除未使用枚举变体/类型别名与未接线结构体。
+  - 将仅测试用途辅助函数限定为 `#[cfg(test)]`。
+  - 移除 Milvus 未接线 endpoint 常量与孤立方法，保持主能力路径不变。
+- 步骤级测试命令:
+  - `cargo test milvus --lib`
+  - `cargo test streaming --lib`
+  - `cargo test deepgram --lib`
+  - `cargo check --lib`
+- 完成判定:
+  - 以上模块相关 dead code 告警继续下降。
+  - 定向测试与库编译通过。
+
 ---
 
 ## 4. 执行日志（每步完成后追加）
@@ -1431,3 +1459,26 @@
       - `cargo test cohere --lib` -> pass（`118 passed; 0 failed`）
       - `cargo test cohere::model_info --lib` -> pass（`0 passed; 0 failed`）
       - `cargo check --lib` -> pass（warning 总数 `47 -> 22`）
+  - Step F23: `completed`
+    - 修改文件:
+      - `src/core/fine_tuning/providers/openai.rs`
+      - `src/core/integrations/observability/arize.rs`
+      - `src/core/providers/deepgram/error.rs`
+      - `src/core/providers/huggingface/models.rs`
+      - `src/core/providers/milvus/models.rs`
+      - `src/core/providers/milvus/provider.rs`
+      - `src/core/providers/ollama/streaming.rs`
+      - `src/core/providers/snowflake/mod.rs`
+      - `src/core/providers/vertex_ai/gemini_embeddings/mod.rs`
+      - `src/core/providers/watsonx/streaming.rs`
+    - 主要改动:
+      - 移除 `OpenAIHyperparamValue::Auto` 与 `ArizeValue::Boolean` 未接线变体。
+      - 删除 `DeepgramError` 类型别名与 HuggingFace 未使用 `ProviderMapping`。
+      - Milvus 清理未接线 endpoint 常量与孤立方法，并把默认模型助手限定到测试编译。
+      - Ollama/Watsonx fake streaming 辅助限定为测试构建；Snowflake `streaming` 模块改为仅测试编译。
+      - Vertex Gemini Embeddings 未接线 `validate_request` 限定为测试构建。
+    - 执行测试:
+      - `cargo test milvus --lib` -> pass（`41 passed; 0 failed`）
+      - `cargo test streaming --lib` -> pass（`347 passed; 0 failed`）
+      - `cargo test deepgram --lib` -> pass（`46 passed; 0 failed`）
+      - `cargo check --lib` -> pass（warning 总数 `22 -> 0`）

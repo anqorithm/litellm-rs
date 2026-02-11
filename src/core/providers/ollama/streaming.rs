@@ -5,7 +5,9 @@
 
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::message::MessageRole;
-use crate::core::types::responses::{ChatChunk, ChatDelta, ChatResponse, ChatStreamChoice, Usage};
+use crate::core::types::responses::{ChatChunk, ChatDelta, ChatStreamChoice, Usage};
+#[cfg(test)]
+use crate::core::types::responses::ChatResponse;
 use bytes::Bytes;
 use futures::Stream;
 use std::pin::Pin;
@@ -16,10 +18,6 @@ use std::task::{Context, Poll};
 pub struct OllamaStreamChunk {
     /// Model name
     pub model: String,
-
-    /// Created timestamp
-    #[serde(default)]
-    pub created_at: Option<String>,
 
     /// Message content
     #[serde(default)]
@@ -41,13 +39,6 @@ pub struct OllamaStreamChunk {
     #[serde(default)]
     pub eval_count: Option<u32>,
 
-    /// Total duration in nanoseconds
-    #[serde(default)]
-    pub total_duration: Option<u64>,
-
-    /// Load duration in nanoseconds
-    #[serde(default)]
-    pub load_duration: Option<u64>,
 
     /// Error message (if any)
     #[serde(default)]
@@ -308,6 +299,7 @@ where
 }
 
 /// Create a fake stream from a complete response
+#[cfg(test)]
 pub async fn create_fake_stream(
     response: ChatResponse,
 ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError> {
@@ -317,6 +309,7 @@ pub async fn create_fake_stream(
 }
 
 /// Convert a complete ChatResponse to stream chunks
+#[cfg(test)]
 fn response_to_chunks(response: ChatResponse) -> Vec<ChatChunk> {
     let mut chunks = Vec::new();
 
