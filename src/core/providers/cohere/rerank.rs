@@ -266,12 +266,6 @@ impl CohereRerankHandler {
         std::cmp::min(default, num_documents as u32)
     }
 
-    /// Calculate search units used
-    #[cfg(test)]
-    pub fn calculate_search_units(documents: &[RerankDocument]) -> u32 {
-        documents.len() as u32
-    }
-
     /// Sort results by relevance score (descending)
     #[cfg(test)]
     pub fn sort_results_by_score(results: &mut [RerankResult]) {

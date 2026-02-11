@@ -49,12 +49,6 @@ pub fn cohere_response_parsing(message: impl Into<String>) -> CohereError {
     ProviderError::response_parsing("cohere", message)
 }
 
-/// Create Cohere configuration error
-#[cfg(test)]
-pub fn cohere_configuration(message: impl Into<String>) -> CohereError {
-    ProviderError::configuration("cohere", message)
-}
-
 /// Create Cohere API error with status code
 #[cfg(test)]
 pub fn cohere_api_error(status: u16, message: impl Into<String>) -> CohereError {

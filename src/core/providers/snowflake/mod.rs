@@ -16,8 +16,6 @@ mod config;
 mod error;
 mod model_info;
 mod provider;
-#[cfg(test)]
-mod streaming;
 
 // Re-export main types for external use
 pub use config::SnowflakeConfig;

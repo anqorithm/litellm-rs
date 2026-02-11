@@ -298,16 +298,6 @@ where
     }
 }
 
-/// Create a fake stream from a complete response
-#[cfg(test)]
-pub async fn create_fake_stream(
-    response: ChatResponse,
-) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError> {
-    let chunks = response_to_chunks(response);
-    let stream = futures::stream::iter(chunks.into_iter().map(Ok));
-    Ok(Box::pin(stream))
-}
-
 /// Convert a complete ChatResponse to stream chunks
 #[cfg(test)]
 fn response_to_chunks(response: ChatResponse) -> Vec<ChatChunk> {

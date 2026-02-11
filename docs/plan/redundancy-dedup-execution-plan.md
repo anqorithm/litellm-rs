@@ -887,6 +887,36 @@
   - 以上模块相关 dead code 告警继续下降。
   - 定向测试与库编译通过。
 
+### Step F24 清理测试构建残余未使用定义
+
+- 状态: `completed`
+- 目标: 删除仅在 `cargo test` 构建中仍无引用的遗留辅助定义，降低 `lib test` 噪声并继续收敛冗余。
+- 预计改动文件:
+  - `src/core/providers/bedrock/utils/auth.rs`
+  - `src/core/providers/bedrock/utils/region.rs`
+  - `src/core/providers/cohere/chat.rs`
+  - `src/core/providers/cohere/embed.rs`
+  - `src/core/providers/cohere/error.rs`
+  - `src/core/providers/cohere/rerank.rs`
+  - `src/core/providers/ollama/streaming.rs`
+  - `src/core/providers/snowflake/mod.rs`
+  - `src/core/providers/watsonx/model_info.rs`
+  - `src/core/providers/watsonx/streaming.rs`
+  - `src/core/providers/mod.rs`
+  - `src/core/semantic_cache/tests.rs`
+- 详细改动:
+  - 删除没有测试引用的临时结构体/辅助函数/常量块。
+  - 仅保留当前测试实际调用的最小定义集合。
+  - 不改动主流程 API 行为与路径。
+- 步骤级测试命令:
+  - `cargo test cohere --lib`
+  - `cargo test streaming --lib`
+  - `cargo test --lib`
+  - `cargo check --lib`
+- 完成判定:
+  - 测试构建残余 dead code 告警进一步下降。
+  - 全量 `cargo test --lib` 与 `cargo check --lib` 通过。
+
 ---
 
 ## 4. 执行日志（每步完成后追加）
@@ -1482,3 +1512,28 @@
       - `cargo test streaming --lib` -> pass（`347 passed; 0 failed`）
       - `cargo test deepgram --lib` -> pass（`46 passed; 0 failed`）
       - `cargo check --lib` -> pass（warning 总数 `22 -> 0`）
+  - Step F24: `completed`
+    - 修改文件:
+      - `src/core/providers/bedrock/utils/auth.rs`
+      - `src/core/providers/bedrock/utils/region.rs`
+      - `src/core/providers/cohere/chat.rs`
+      - `src/core/providers/cohere/embed.rs`
+      - `src/core/providers/cohere/error.rs`
+      - `src/core/providers/cohere/rerank.rs`
+      - `src/core/providers/ollama/streaming.rs`
+      - `src/core/providers/snowflake/mod.rs`
+      - `src/core/providers/snowflake/streaming.rs`（已删除）
+      - `src/core/providers/watsonx/model_info.rs`
+      - `src/core/providers/watsonx/streaming.rs`
+      - `src/core/providers/mod.rs`
+      - `src/core/semantic_cache/tests.rs`
+    - 主要改动:
+      - 删除测试构建中仍无引用的 Bedrock/Cohere/Watsonx/Ollama 辅助定义与常量块。
+      - 下线 `snowflake/streaming.rs` 及其模块接线，移除未接线整块实现。
+      - 清理 providers/semantic_cache 中未调用测试占位函数与结构体，减少测试噪声。
+    - 执行测试:
+      - `cargo test cohere --lib` -> pass（`118 passed; 0 failed`）
+      - `cargo test streaming --lib` -> pass（`347 passed; 0 failed`）
+      - `cargo test --lib` -> pass（`12363 passed; 0 failed`）
+      - `cargo test --lib 2>&1 | rg '^warning:' | wc -l` -> `0`
+      - `cargo check --lib` -> pass（warning 总数 `0 -> 0`）

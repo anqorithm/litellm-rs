@@ -268,15 +268,6 @@ pub fn supports_tools(model_id: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// Model pattern identifiers for template matching
-#[cfg(test)]
-pub mod patterns {
-    pub const GRANITE_CHAT: &str = "granite";
-    pub const IBM_MISTRAL: &str = "mistralai";
-    pub const LLAMA3_INSTRUCT: &str = "llama-3";
-    pub const GPT_OSS: &str = "gpt";
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

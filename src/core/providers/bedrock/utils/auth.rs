@@ -151,39 +151,6 @@ impl AwsAuth {
     }
 }
 
-/// Authentication configuration for special cases
-#[derive(Debug, Clone, Default)]
-#[cfg(test)]
-pub struct BedrockAuthConfig {
-    /// Enable cross-region access
-    pub cross_region_access: bool,
-    /// Custom endpoint URL
-    pub custom_endpoint: Option<String>,
-    /// Additional headers
-    pub additional_headers: HashMap<String, String>,
-}
-
-/// Map special authentication parameters
-#[cfg(test)]
-pub fn map_special_auth_params(
-    non_default_params: &HashMap<String, String>,
-    optional_params: &mut HashMap<String, String>,
-) {
-    let mappings = [
-        ("region_name", "aws_region_name"),
-        ("aws_region", "aws_region_name"),
-        ("access_key", "aws_access_key_id"),
-        ("secret_key", "aws_secret_access_key"),
-        ("session_token", "aws_session_token"),
-    ];
-
-    for (from_param, to_param) in &mappings {
-        if let Some(value) = non_default_params.get(*from_param) {
-            optional_params.insert(to_param.to_string(), value.clone());
-        }
-    }
-}
-
 /// Extract AWS credentials from various parameter formats
 #[cfg(test)]
 pub fn extract_credentials_from_params(

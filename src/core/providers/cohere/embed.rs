@@ -47,111 +47,6 @@ impl std::fmt::Display for CohereEmbeddingInputType {
     }
 }
 
-/// Cohere embedding request
-#[cfg(test)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CohereEmbeddingRequest {
-    /// Model to use
-    pub model: String,
-
-    /// Input texts
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub texts: Option<Vec<String>>,
-
-    /// Input images (base64 encoded)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub images: Option<Vec<String>>,
-
-    /// Input type
-    pub input_type: String,
-
-    /// Embedding types to return (float, int8, uint8, binary, ubinary)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub embedding_types: Option<Vec<String>>,
-
-    /// Truncate input if too long
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub truncate: Option<String>,
-
-    /// Output dimension (for dimensionality reduction)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub output_dimension: Option<u32>,
-}
-
-/// Cohere embedding response
-#[cfg(test)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CohereEmbeddingResponse {
-    /// Response ID
-    pub id: String,
-
-    /// Embeddings organized by type
-    pub embeddings: CohereEmbeddings,
-
-    /// Input texts
-    #[serde(default)]
-    pub texts: Vec<String>,
-
-    /// Metadata
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub meta: Option<CohereEmbeddingMeta>,
-}
-
-/// Cohere embeddings by type
-#[cfg(test)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CohereEmbeddings {
-    /// Float embeddings
-    #[serde(default)]
-    pub float: Option<Vec<Vec<f32>>>,
-
-    /// Int8 embeddings
-    #[serde(default)]
-    pub int8: Option<Vec<Vec<i8>>>,
-
-    /// Uint8 embeddings
-    #[serde(default)]
-    pub uint8: Option<Vec<Vec<u8>>>,
-
-    /// Binary embeddings
-    #[serde(default)]
-    pub binary: Option<Vec<Vec<i8>>>,
-
-    /// Unsigned binary embeddings
-    #[serde(default)]
-    pub ubinary: Option<Vec<Vec<u8>>>,
-}
-
-/// Cohere embedding metadata
-#[cfg(test)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CohereEmbeddingMeta {
-    /// API version
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub api_version: Option<Value>,
-
-    /// Billed units
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub billed_units: Option<CohereBilledUnits>,
-
-    /// Warnings
-    #[serde(default)]
-    pub warnings: Vec<String>,
-}
-
-/// Cohere billed units
-#[cfg(test)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CohereBilledUnits {
-    /// Input tokens
-    #[serde(default)]
-    pub input_tokens: u32,
-
-    /// Images
-    #[serde(default)]
-    pub images: Option<u32>,
-}
-
 /// Embedding handler utilities
 pub struct CohereEmbeddingHandler;
 
@@ -362,15 +257,6 @@ impl CohereEmbeddingHandler {
         }
     }
 
-    /// Get maximum input length for a model
-    #[cfg(test)]
-    pub fn get_max_input_length(model: &str) -> u32 {
-        match model {
-            m if m.contains("embed") && m.contains("v3") => 512,
-            m if m.contains("embed") && m.contains("v2") => 512,
-            _ => 512,
-        }
-    }
 }
 
 #[cfg(test)]

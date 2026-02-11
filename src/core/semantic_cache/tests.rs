@@ -2,15 +2,11 @@
 
 #[cfg(test)]
 mod tests {
-    use super::super::cache::SemanticCache;
-    use super::super::types::{EmbeddingProvider, SemanticCacheConfig};
+    use super::super::types::SemanticCacheConfig;
     use super::super::utils::extract_prompt_text;
     use super::super::validation::should_cache_request;
     use crate::core::models::openai::ChatCompletionRequest;
     use crate::core::models::openai::{ChatMessage, MessageContent, MessageRole};
-    use crate::storage::vector::VectorStore;
-    use crate::utils::error::error::Result;
-    use std::sync::Arc;
 
     #[test]
     fn test_semantic_cache_config_default() {
@@ -92,61 +88,5 @@ mod tests {
         request.temperature = Some(0.1);
         request.stream = Some(true);
         assert!(!should_cache_request(&config, &request));
-    }
-
-    async fn create_test_cache() -> SemanticCache {
-        // For testing purposes, create a dummy cache
-        let config = SemanticCacheConfig {
-            similarity_threshold: 0.85,
-            max_cache_size: 1000,
-            default_ttl_seconds: 3600,
-            embedding_model: "text-embedding-ada-002".to_string(),
-            enable_streaming_cache: false,
-            min_prompt_length: 10,
-            cache_hit_boost: 1.1,
-        };
-
-        // Create a simple test implementation
-        SemanticCache::new(
-            config,
-            Arc::new(TestVectorStore),
-            Arc::new(TestEmbeddingProvider),
-        )
-        .await
-        .unwrap()
-    }
-
-    // Simple test implementations
-    struct TestVectorStore;
-    struct TestEmbeddingProvider;
-
-    #[async_trait::async_trait]
-    impl VectorStore for TestVectorStore {
-        async fn search(
-            &self,
-            _vector: Vec<f32>,
-            _limit: usize,
-        ) -> Result<Vec<crate::storage::vector::SearchResult>> {
-            Ok(vec![])
-        }
-
-        async fn insert(&self, _vectors: Vec<crate::storage::vector::VectorData>) -> Result<()> {
-            Ok(())
-        }
-
-        async fn delete(&self, _ids: Vec<String>) -> Result<()> {
-            Ok(())
-        }
-    }
-
-    #[async_trait::async_trait]
-    impl EmbeddingProvider for TestEmbeddingProvider {
-        async fn generate_embedding(&self, _text: &str) -> Result<Vec<f32>> {
-            Ok(vec![0.1; 1536])
-        }
-
-        fn embedding_dimension(&self) -> usize {
-            1536
-        }
     }
 }
