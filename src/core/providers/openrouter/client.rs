@@ -38,8 +38,6 @@ use std::collections::HashMap;
 pub struct OpenRouterProvider {
     /// HTTP client
     client: Client,
-    /// Configuration
-    config: OpenRouterConfig,
     /// API base URL
     base_url: String,
     /// Model
@@ -137,7 +135,6 @@ impl OpenRouterProvider {
 
         Ok(Self {
             client,
-            config,
             base_url,
             models,
         })

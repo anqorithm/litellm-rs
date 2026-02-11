@@ -566,6 +566,31 @@
   - 两个 provider struct 不再包含未使用 `served_model` 字段。
   - 定向测试与编译通过。
 
+### Step F10 清理多 provider handler 未使用 `config` 状态
+
+- 状态: `completed`
+- 目标: 去除多个 handler/provider 中“仅构造阶段使用，运行期无读取”的 `config` 字段，降低结构体冗余。
+- 预计改动文件:
+  - `src/core/providers/openrouter/client.rs`
+  - `src/core/providers/mistral/chat/mod.rs`
+  - `src/core/providers/moonshot/chat/mod.rs`
+  - `src/core/providers/meta_llama/chat/mod.rs`
+  - `src/core/providers/huggingface/embedding.rs`
+- 详细改动:
+  - 删除上述结构体中的未使用 `config` 字段。
+  - `new(config: ...)` 构造签名保持不变，内部改为 `_config` 或直接不持有状态。
+  - 删除 `HuggingFaceEmbeddingHandler::config()` 未使用访问器（若无外部引用）。
+- 步骤级测试命令:
+  - `cargo test openrouter --lib`
+  - `cargo test mistral --lib`
+  - `cargo test moonshot --lib`
+  - `cargo test meta_llama --lib`
+  - `cargo test huggingface --lib`
+  - `cargo check --lib`
+- 完成判定:
+  - 以上 5 个文件不再含未使用 `config` 字段（和对应未使用访问器）。
+  - 定向测试与编译通过。
+
 ---
 
 ## 4. 执行日志（每步完成后追加）
@@ -925,3 +950,21 @@
       - `cargo test vllm --lib` -> pass（`92 passed; 0 failed`）
       - `cargo test hosted_vllm --lib` -> pass（`42 passed; 0 failed`）
       - `cargo check --lib` -> pass（warning 总数 `145 -> 143`）
+  - Step F10: `completed`
+    - 修改文件:
+      - `src/core/providers/openrouter/client.rs`
+      - `src/core/providers/mistral/chat/mod.rs`
+      - `src/core/providers/moonshot/chat/mod.rs`
+      - `src/core/providers/meta_llama/chat/mod.rs`
+      - `src/core/providers/huggingface/embedding.rs`
+    - 主要改动:
+      - 删除 5 个 provider/handler 中未使用的 `config` 状态字段。
+      - 保持 `new(config: ...)` 构造签名，内部改为不持有冗余状态（使用 `_config` 参数形式）。
+      - 删除未使用访问器 `HuggingFaceEmbeddingHandler::config()`。
+    - 执行测试:
+      - `cargo test openrouter --lib` -> pass（`144 passed; 0 failed`）
+      - `cargo test mistral --lib` -> pass（`88 passed; 0 failed`）
+      - `cargo test moonshot --lib` -> pass（`54 passed; 0 failed`）
+      - `cargo test meta_llama --lib` -> pass（`13 passed; 0 failed`）
+      - `cargo test huggingface --lib` -> pass（`68 passed; 0 failed`）
+      - `cargo check --lib` -> pass（warning 总数 `143 -> 137`）
