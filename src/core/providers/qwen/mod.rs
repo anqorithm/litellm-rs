@@ -4,7 +4,6 @@
 
 use async_trait::async_trait;
 use futures::Stream;
-use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
 use std::pin::Pin;
 
@@ -83,7 +82,6 @@ impl QwenConfig {
 #[derive(Debug, Clone)]
 pub struct QwenProvider {
     config: QwenConfig,
-    base_client: BaseHttpClient,
     models: Vec<ModelInfo>,
 }
 
@@ -100,33 +98,15 @@ impl QwenProvider {
             api_version: None,
         };
 
-        let base_client = BaseHttpClient::new(base_config)
+        let _base_client = BaseHttpClient::new(base_config)
             .map_err(|e| ProviderError::configuration(PROVIDER_NAME, e.to_string()))?;
 
         let models = Self::build_models();
 
         Ok(Self {
             config,
-            base_client,
             models,
         })
-    }
-
-    /// Build request headers
-    fn build_headers(&self) -> Result<HeaderMap, ProviderError> {
-        let mut headers = HeaderMap::new();
-
-        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-
-        if let Some(api_key) = &self.config.api_key {
-            let auth_value =
-                HeaderValue::from_str(&format!("Bearer {}", api_key)).map_err(|e| {
-                    ProviderError::configuration(PROVIDER_NAME, format!("Invalid API key: {}", e))
-                })?;
-            headers.insert(AUTHORIZATION, auth_value);
-        }
-
-        Ok(headers)
     }
 
     fn build_models() -> Vec<ModelInfo> {

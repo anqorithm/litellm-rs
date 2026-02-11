@@ -162,6 +162,8 @@ storage = ["dep:sea-orm", "dep:sea-orm-migration"]
 postgres = ["storage", "sea-orm/sqlx-postgres", "sea-orm/runtime-tokio-rustls"]
 sqlite = ["storage", "sea-orm/sqlx-sqlite", "sea-orm/runtime-tokio-rustls"]
 redis = ["dep:redis"]
+# Experimental optimized Redis implementation (kept out of default runtime path)
+redis-optimized = ["redis"]
 s3 = ["dep:object_store", "dep:aws-sdk-s3", "dep:aws-config"]
 
 # Secret managers

@@ -1,6 +1,10 @@
 //! Semantic caching for AI responses
 //!
 //! This module provides intelligent caching based on semantic similarity of prompts.
+//!
+//! Boundary:
+//! - `crate::core::cache` handles deterministic key-based cache.
+//! - This module handles vector-similarity semantic cache.
 
 mod cache;
 mod types;

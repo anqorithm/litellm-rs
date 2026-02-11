@@ -446,8 +446,9 @@ mod tests {
             providers: vec![create_test_provider("test-provider")],
             ..Default::default()
         };
+        config.storage.database.enabled = true;
         config.storage.database.url = "postgres://localhost/test".to_string();
-        config.auth.jwt_secret = "test-secret-key".to_string();
+        config.auth.jwt_secret = "StrongJwtSecretWithMixedCaseAndNumbers1234!".to_string();
         config
     }
 

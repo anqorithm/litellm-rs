@@ -7,6 +7,7 @@ use reqwest::Client;
 use serde_json;
 
 use crate::core::providers::unified_provider::ProviderError;
+use crate::utils::net::http::{HttpClientPoolConfig, create_custom_client_with_config};
 
 /// Type alias for HTTP headers using Cow to avoid allocations for static strings.
 ///
@@ -41,16 +42,24 @@ impl PoolConfig {
     pub const KEEPALIVE_SECS: u64 = 90;
 }
 
+#[inline]
+fn pool_http_config() -> HttpClientPoolConfig {
+    HttpClientPoolConfig {
+        pool_max_idle_per_host: PoolConfig::POOL_SIZE,
+        pool_idle_timeout: Duration::from_secs(PoolConfig::KEEPALIVE_SECS),
+        ..HttpClientPoolConfig::default()
+    }
+}
+
 /// Global HTTP client singleton
 ///
 /// This is the actual global singleton that holds the reqwest::Client.
 /// All providers share this single client instance for connection pooling efficiency.
 static GLOBAL_CLIENT: LazyLock<Arc<Client>> = LazyLock::new(|| {
-    let client = Client::builder()
-        .timeout(Duration::from_secs(PoolConfig::TIMEOUT_SECS))
-        .pool_idle_timeout(Duration::from_secs(PoolConfig::KEEPALIVE_SECS))
-        .pool_max_idle_per_host(PoolConfig::POOL_SIZE)
-        .build()
+    let client = create_custom_client_with_config(
+        Duration::from_secs(PoolConfig::TIMEOUT_SECS),
+        &pool_http_config(),
+    )
         .unwrap_or_else(|e| {
             tracing::error!("Failed to create global HTTP client: {}", e);
             // Fallback to a basic client
@@ -117,14 +126,11 @@ impl ConnectionPool {
     /// Most use cases should use `new()` which shares the global client.
     #[allow(dead_code)]
     pub fn new_isolated() -> Result<Self, ProviderError> {
-        let client = Client::builder()
-            .timeout(Duration::from_secs(PoolConfig::TIMEOUT_SECS))
-            .pool_idle_timeout(Duration::from_secs(PoolConfig::KEEPALIVE_SECS))
-            .pool_max_idle_per_host(PoolConfig::POOL_SIZE)
-            .build()
-            .map_err(|e| {
-                ProviderError::configuration("Failed to create HTTP client", e.to_string())
-            })?;
+        let client = create_custom_client_with_config(
+            Duration::from_secs(PoolConfig::TIMEOUT_SECS),
+            &pool_http_config(),
+        )
+        .map_err(|e| ProviderError::configuration("Failed to create HTTP client", e.to_string()))?;
 
         Ok(Self {
             client: Arc::new(client),

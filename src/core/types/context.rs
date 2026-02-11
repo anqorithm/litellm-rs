@@ -2,9 +2,13 @@
 
 use std::collections::HashMap;
 use std::time::{Duration, SystemTime};
+use uuid::Uuid;
+
+const TEAM_ID_METADATA_KEY: &str = "team_id";
+const API_KEY_ID_METADATA_KEY: &str = "api_key_id";
 
 /// Request context for tracking and metadata
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct RequestContext {
     /// Request ID
     pub request_id: String,
@@ -54,6 +58,23 @@ impl RequestContext {
         self
     }
 
+    /// Set user and optional team information.
+    pub fn with_user(mut self, user_id: Uuid, team_id: Option<Uuid>) -> Self {
+        self.user_id = Some(user_id.to_string());
+        if let Some(team_id) = team_id {
+            self.set_team_id(team_id);
+        } else {
+            self.clear_team_id();
+        }
+        self
+    }
+
+    /// Set API key information.
+    pub fn with_api_key(mut self, api_key_id: Uuid) -> Self {
+        self.set_api_key_id(api_key_id);
+        self
+    }
+
     /// Set client IP
     pub fn with_client_ip(mut self, client_ip: impl Into<String>) -> Self {
         self.client_ip = Some(client_ip.into());
@@ -66,8 +87,21 @@ impl RequestContext {
         self
     }
 
+    /// Set client information.
+    pub fn with_client_info(mut self, ip: Option<String>, user_agent: Option<String>) -> Self {
+        self.client_ip = ip;
+        self.user_agent = user_agent;
+        self
+    }
+
     /// Add header
     pub fn with_header(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.headers.insert(key.into(), value.into());
+        self
+    }
+
+    /// Add header (compat helper for legacy call sites).
+    pub fn add_header<K: Into<String>, V: Into<String>>(mut self, key: K, value: V) -> Self {
         self.headers.insert(key.into(), value.into());
         self
     }
@@ -82,6 +116,55 @@ impl RequestContext {
     pub fn with_trace_id(mut self, trace_id: impl Into<String>) -> Self {
         self.trace_id = Some(trace_id.into());
         self
+    }
+
+    /// Set trace/span IDs together.
+    pub fn with_tracing(mut self, trace_id: String, span_id: String) -> Self {
+        self.trace_id = Some(trace_id);
+        self.span_id = Some(span_id);
+        self
+    }
+
+    /// Set team ID in metadata.
+    pub fn set_team_id(&mut self, team_id: Uuid) {
+        self.metadata.insert(
+            TEAM_ID_METADATA_KEY.to_string(),
+            serde_json::json!(team_id.to_string()),
+        );
+    }
+
+    /// Get team ID from metadata.
+    pub fn team_id(&self) -> Option<Uuid> {
+        self.metadata
+            .get(TEAM_ID_METADATA_KEY)
+            .and_then(|value| value.as_str())
+            .and_then(|value| Uuid::parse_str(value).ok())
+    }
+
+    /// Remove team ID from metadata.
+    pub fn clear_team_id(&mut self) {
+        self.metadata.remove(TEAM_ID_METADATA_KEY);
+    }
+
+    /// Set API key ID in metadata.
+    pub fn set_api_key_id(&mut self, api_key_id: Uuid) {
+        self.metadata.insert(
+            API_KEY_ID_METADATA_KEY.to_string(),
+            serde_json::json!(api_key_id.to_string()),
+        );
+    }
+
+    /// Get API key ID from metadata.
+    pub fn api_key_id(&self) -> Option<Uuid> {
+        self.metadata
+            .get(API_KEY_ID_METADATA_KEY)
+            .and_then(|value| value.as_str())
+            .and_then(|value| Uuid::parse_str(value).ok())
+    }
+
+    /// Remove API key ID from metadata.
+    pub fn clear_api_key_id(&mut self) {
+        self.metadata.remove(API_KEY_ID_METADATA_KEY);
     }
 
     /// Get elapsed time
@@ -208,6 +291,39 @@ mod tests {
         let ctx = RequestContext::new().with_trace_id("trace-abc-123");
 
         assert_eq!(ctx.trace_id, Some("trace-abc-123".to_string()));
+    }
+
+    #[test]
+    fn test_with_user_and_team_metadata() {
+        let user_id = Uuid::new_v4();
+        let team_id = Uuid::new_v4();
+
+        let ctx = RequestContext::new().with_user(user_id, Some(team_id));
+
+        assert_eq!(ctx.user_id, Some(user_id.to_string()));
+        assert_eq!(ctx.team_id(), Some(team_id));
+    }
+
+    #[test]
+    fn test_with_api_key_metadata() {
+        let api_key_id = Uuid::new_v4();
+
+        let ctx = RequestContext::new().with_api_key(api_key_id);
+
+        assert_eq!(ctx.api_key_id(), Some(api_key_id));
+    }
+
+    #[test]
+    fn test_clear_team_and_api_key_metadata() {
+        let mut ctx = RequestContext::new()
+            .with_user(Uuid::new_v4(), Some(Uuid::new_v4()))
+            .with_api_key(Uuid::new_v4());
+
+        ctx.clear_team_id();
+        ctx.clear_api_key_id();
+
+        assert!(ctx.team_id().is_none());
+        assert!(ctx.api_key_id().is_none());
     }
 
     // ==================== Chaining Tests ====================

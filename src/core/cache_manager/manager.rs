@@ -1,7 +1,7 @@
-//! Cache manager implementation
+//! Legacy cache manager implementation.
 //!
-//! This module contains the main CacheManager implementation with multi-tier
-//! caching support including L1 LRU cache, L2 TTL cache, and semantic caching.
+//! This module is retained for compatibility. Prefer `core::cache` for key-based
+//! caching and `core::semantic_cache` for similarity-based caching.
 
 use super::types::{
     AtomicCacheStats, CacheConfig, CacheEntry, CacheKey, CacheStats, SemanticCacheMap,

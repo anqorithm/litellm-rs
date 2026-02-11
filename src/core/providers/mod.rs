@@ -121,7 +121,6 @@ pub mod zhipu;
 
 // Shared utilities and architecture
 pub mod capabilities;
-pub mod context;
 pub mod macros; // Macros for reducing boilerplate
 pub mod shared; // Shared utilities for all providers // Compile-time capability verification
 pub mod thinking; // Thinking/reasoning provider trait (modular)
@@ -508,6 +507,22 @@ impl Provider {
         }
     }
 
+    /// Single source of truth for factory branches currently wired in `from_config_async`.
+    pub fn factory_supported_provider_types() -> &'static [ProviderType] {
+        static SUPPORTED: &[ProviderType] = &[
+            ProviderType::OpenAI,
+            ProviderType::Anthropic,
+            ProviderType::Groq,
+            ProviderType::XAI,
+            ProviderType::OpenRouter,
+            ProviderType::Mistral,
+            ProviderType::DeepSeek,
+            ProviderType::Moonshot,
+            ProviderType::Cloudflare,
+        ];
+        SUPPORTED
+    }
+
     /// Check if provider supports a specific model
     pub fn supports_model(&self, model: &str) -> bool {
         use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
@@ -678,34 +693,79 @@ impl Provider {
 pub async fn create_provider(
     config: crate::config::models::provider::ProviderConfig,
 ) -> Result<Provider, ProviderError> {
-    // Determine provider type from config
-    let provider_type = match config.name.as_str() {
-        "openai" => ProviderType::OpenAI,
-        "anthropic" => ProviderType::Anthropic,
-        "azure" => ProviderType::Azure,
-        "mistral" => ProviderType::Mistral,
-        "deepseek" => ProviderType::DeepSeek,
-        "moonshot" => ProviderType::Moonshot,
-        "meta_llama" => ProviderType::MetaLlama,
-        "openrouter" => ProviderType::OpenRouter,
-        "vertex_ai" => ProviderType::VertexAI,
-        "v0" => ProviderType::V0,
-        name => {
-            return Err(ProviderError::not_implemented(
-                "unknown",
-                format!("Unknown provider: {}", name),
-            ));
-        }
-    };
+    use serde_json::Value;
 
-    // For now, return a placeholder error until all providers are properly configured
-    Err(ProviderError::not_implemented(
-        "unknown",
-        format!(
-            "Provider factory for {:?} not yet fully implemented",
-            provider_type
-        ),
-    ))
+    let crate::config::models::provider::ProviderConfig {
+        name,
+        provider_type,
+        api_key,
+        base_url,
+        api_version,
+        organization,
+        project,
+        settings,
+        ..
+    } = config;
+
+    let provider_selector = if provider_type.trim().is_empty() {
+        name.as_str()
+    } else {
+        provider_type.as_str()
+    };
+    let provider_type = ProviderType::from(provider_selector);
+
+    if let ProviderType::Custom(custom_name) = &provider_type {
+        return Err(ProviderError::not_implemented(
+            "unknown",
+            format!(
+                "Unknown provider type '{}' (name='{}'). Add a supported provider_type or implementation.",
+                custom_name, name
+            ),
+        ));
+    }
+    if !Provider::factory_supported_provider_types().contains(&provider_type) {
+        return Err(ProviderError::not_implemented(
+            "unknown",
+            format!("Factory for {:?} not yet implemented", provider_type),
+        ));
+    }
+
+    let mut factory_config = serde_json::Map::new();
+
+    if !api_key.is_empty() {
+        factory_config.insert("api_key".to_string(), Value::String(api_key.clone()));
+    }
+    if let Some(value) = base_url.filter(|v| !v.is_empty()) {
+        factory_config.insert("base_url".to_string(), Value::String(value));
+    }
+    if let Some(value) = api_version.filter(|v| !v.is_empty()) {
+        factory_config.insert("api_version".to_string(), Value::String(value));
+    }
+    if let Some(value) = organization.filter(|v| !v.is_empty()) {
+        factory_config.insert("organization".to_string(), Value::String(value.clone()));
+        // Cloudflare requires account_id; allow org as a compatibility fallback.
+        factory_config
+            .entry("account_id".to_string())
+            .or_insert(Value::String(value));
+    }
+    if let Some(value) = project.filter(|v| !v.is_empty()) {
+        factory_config.insert("project".to_string(), Value::String(value));
+    }
+
+    // Merge provider-specific settings while keeping explicit top-level fields authoritative.
+    for (key, value) in settings {
+        factory_config.entry(key).or_insert(value);
+    }
+
+    // Cloudflare requires api_token + account_id. If api_token is missing, fallback to api_key.
+    if matches!(provider_type, ProviderType::Cloudflare)
+        && !factory_config.contains_key("api_token")
+        && !api_key.is_empty()
+    {
+        factory_config.insert("api_token".to_string(), Value::String(api_key));
+    }
+
+    Provider::from_config_async(provider_type, Value::Object(factory_config)).await
 }
 
 // Provider factory functions
@@ -1088,10 +1148,8 @@ mod tests {
 
     // ==================== ProviderType From/To Consistency Tests ====================
 
-    #[test]
-    fn test_provider_type_from_display_consistency() {
-        // Test that Display output can be parsed back (for non-custom types)
-        let providers = vec![
+    fn all_non_custom_provider_types() -> Vec<ProviderType> {
+        vec![
             ProviderType::OpenAI,
             ProviderType::Anthropic,
             ProviderType::Bedrock,
@@ -1105,12 +1163,36 @@ mod tests {
             ProviderType::MetaLlama,
             ProviderType::Mistral,
             ProviderType::Moonshot,
+            ProviderType::Minimax,
+            ProviderType::Dashscope,
             ProviderType::Groq,
             ProviderType::XAI,
             ProviderType::Cloudflare,
-        ];
+            ProviderType::Perplexity,
+            ProviderType::Replicate,
+            ProviderType::FalAI,
+            ProviderType::AmazonNova,
+            ProviderType::GitHub,
+            ProviderType::GitHubCopilot,
+            ProviderType::Hyperbolic,
+            ProviderType::Infinity,
+            ProviderType::Novita,
+            ProviderType::Volcengine,
+            ProviderType::Nebius,
+            ProviderType::Nscale,
+            ProviderType::PydanticAI,
+            ProviderType::OpenAICompatible,
+        ]
+    }
 
-        for provider in providers {
+    fn supported_factory_provider_types() -> Vec<ProviderType> {
+        Provider::factory_supported_provider_types().to_vec()
+    }
+
+    #[test]
+    fn test_provider_type_from_display_consistency() {
+        // Test that Display output can be parsed back (for non-custom types)
+        for provider in all_non_custom_provider_types() {
             let display = format!("{}", provider);
             let parsed = ProviderType::from(display.as_str());
             assert_eq!(
@@ -1138,32 +1220,57 @@ mod tests {
     #[test]
     fn test_provider_type_all_variants_covered() {
         // This test ensures we don't forget to update tests when adding new providers
-        let all_known_providers = [
-            "openai",
-            "anthropic",
-            "bedrock",
-            "openrouter",
-            "vertex_ai",
-            "azure",
-            "azure_ai",
-            "deepseek",
-            "deepinfra",
-            "v0",
-            "meta_llama",
-            "mistral",
-            "moonshot",
-            "groq",
-            "xai",
-            "cloudflare",
-        ];
-
-        for provider_str in all_known_providers {
-            let provider_type = ProviderType::from(provider_str);
+        for provider in all_non_custom_provider_types() {
+            let provider_str = provider.to_string();
+            let provider_type = ProviderType::from(provider_str.as_str());
             // Should not be Custom for known providers
             assert!(
                 !matches!(provider_type, ProviderType::Custom(_)),
                 "Provider '{}' should not be Custom",
                 provider_str
+            );
+            assert_eq!(
+                provider_type, provider,
+                "Expected '{}' to map to {:?}, but got {:?}",
+                provider_str, provider, provider_type
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_from_config_async_supported_variants_do_not_fallthrough_to_not_implemented() {
+        // Supported branches should fail with config validation on empty config,
+        // not with a generic NotImplemented fallback.
+        for provider_type in supported_factory_provider_types() {
+            let err = Provider::from_config_async(provider_type.clone(), serde_json::json!({}))
+                .await
+                .expect_err("Expected empty config to fail");
+            assert!(
+                !matches!(err, ProviderError::NotImplemented { .. }),
+                "{:?} unexpectedly fell through to NotImplemented: {}",
+                provider_type,
+                err
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_from_config_async_unsupported_variants_return_not_implemented() {
+        let supported = supported_factory_provider_types();
+
+        for provider_type in all_non_custom_provider_types() {
+            if supported.contains(&provider_type) {
+                continue;
+            }
+
+            let err = Provider::from_config_async(provider_type.clone(), serde_json::json!({}))
+                .await
+                .expect_err("Expected unsupported provider to fail");
+            assert!(
+                matches!(err, ProviderError::NotImplemented { .. }),
+                "Expected NotImplemented for {:?}, got {}",
+                provider_type,
+                err
             );
         }
     }
@@ -1190,5 +1297,79 @@ mod tests {
                 input
             );
         }
+    }
+
+    #[tokio::test]
+    async fn test_create_provider_prefers_provider_type_over_name() {
+        let config = crate::config::models::provider::ProviderConfig {
+            // If name took precedence, this would resolve to a supported OpenAI branch.
+            name: "openai".to_string(),
+            // We intentionally set an unsupported branch to assert precedence.
+            provider_type: "perplexity".to_string(),
+            api_key: "test-key".to_string(),
+            ..Default::default()
+        };
+
+        let err = create_provider(config)
+            .await
+            .expect_err("Expected unsupported provider type to fail");
+        assert!(
+            matches!(err, ProviderError::NotImplemented { .. }),
+            "Expected NotImplemented error, got {}",
+            err
+        );
+        assert!(
+            err.to_string().contains("Perplexity"),
+            "Expected error to mention the selected provider type, got {}",
+            err
+        );
+    }
+
+    #[tokio::test]
+    async fn test_create_provider_falls_back_to_name_when_provider_type_empty() {
+        let config = crate::config::models::provider::ProviderConfig {
+            name: "perplexity".to_string(),
+            provider_type: "".to_string(),
+            api_key: "test-key".to_string(),
+            ..Default::default()
+        };
+
+        let err = create_provider(config)
+            .await
+            .expect_err("Expected unsupported provider name to fail");
+        assert!(
+            matches!(err, ProviderError::NotImplemented { .. }),
+            "Expected NotImplemented error, got {}",
+            err
+        );
+        assert!(
+            err.to_string().contains("Perplexity"),
+            "Expected fallback to name parsing, got {}",
+            err
+        );
+    }
+
+    #[tokio::test]
+    async fn test_create_provider_reports_unknown_custom_provider() {
+        let config = crate::config::models::provider::ProviderConfig {
+            name: "my-custom-provider".to_string(),
+            provider_type: "".to_string(),
+            api_key: "test-key".to_string(),
+            ..Default::default()
+        };
+
+        let err = create_provider(config)
+            .await
+            .expect_err("Expected unknown custom provider to fail");
+        assert!(
+            matches!(err, ProviderError::NotImplemented { .. }),
+            "Expected NotImplemented error, got {}",
+            err
+        );
+        assert!(
+            err.to_string().contains("my-custom-provider"),
+            "Expected custom provider name in error, got {}",
+            err
+        );
     }
 }

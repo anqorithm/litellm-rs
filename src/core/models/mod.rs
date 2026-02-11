@@ -183,87 +183,8 @@ pub enum ModelType {
     Rerank,
 }
 
-/// Request context information
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RequestContext {
-    /// Request ID
-    pub request_id: String,
-    /// User ID (if authenticated)
-    pub user_id: Option<Uuid>,
-    /// Team ID (if applicable)
-    pub team_id: Option<Uuid>,
-    /// API Key ID (if using API key auth)
-    pub api_key_id: Option<Uuid>,
-    /// Client IP address
-    pub client_ip: Option<String>,
-    /// User agent
-    pub user_agent: Option<String>,
-    /// Request timestamp
-    pub timestamp: chrono::DateTime<chrono::Utc>,
-    /// Additional headers
-    pub headers: HashMap<String, String>,
-    /// Trace ID for distributed tracing
-    pub trace_id: Option<String>,
-    /// Span ID for distributed tracing
-    pub span_id: Option<String>,
-}
-
-impl Default for RequestContext {
-    fn default() -> Self {
-        Self {
-            request_id: Uuid::new_v4().to_string(),
-            user_id: None,
-            team_id: None,
-            api_key_id: None,
-            client_ip: None,
-            user_agent: None,
-            timestamp: chrono::Utc::now(),
-            headers: HashMap::new(),
-            trace_id: None,
-            span_id: None,
-        }
-    }
-}
-
-impl RequestContext {
-    /// Create new request context
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Set user information
-    pub fn with_user(mut self, user_id: Uuid, team_id: Option<Uuid>) -> Self {
-        self.user_id = Some(user_id);
-        self.team_id = team_id;
-        self
-    }
-
-    /// Set API key information
-    pub fn with_api_key(mut self, api_key_id: Uuid) -> Self {
-        self.api_key_id = Some(api_key_id);
-        self
-    }
-
-    /// Set client information
-    pub fn with_client_info(mut self, ip: Option<String>, user_agent: Option<String>) -> Self {
-        self.client_ip = ip;
-        self.user_agent = user_agent;
-        self
-    }
-
-    /// Set tracing information
-    pub fn with_tracing(mut self, trace_id: String, span_id: String) -> Self {
-        self.trace_id = Some(trace_id);
-        self.span_id = Some(span_id);
-        self
-    }
-
-    /// Add header
-    pub fn add_header<K: Into<String>, V: Into<String>>(mut self, key: K, value: V) -> Self {
-        self.headers.insert(key.into(), value.into());
-        self
-    }
-}
+/// Canonical request context type used across the gateway.
+pub type RequestContext = crate::core::types::context::RequestContext;
 
 /// Provider health information
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -359,8 +280,8 @@ mod tests {
             )
             .add_header("X-Custom", "value");
 
-        assert_eq!(context.user_id, Some(user_id));
-        assert_eq!(context.team_id, Some(team_id));
+        assert_eq!(context.user_id, Some(user_id.to_string()));
+        assert_eq!(context.team_id(), Some(team_id));
         assert_eq!(context.client_ip, Some("127.0.0.1".to_string()));
         assert_eq!(context.headers.get("X-Custom"), Some(&"value".to_string()));
     }

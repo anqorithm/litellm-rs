@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod tests {
     use crate::auth::types::{AuthMethod, AuthResult, AuthzResult};
-    use crate::core::models::RequestContext;
+    use crate::core::types::context::RequestContext;
 
     #[test]
     fn test_auth_result_creation() {

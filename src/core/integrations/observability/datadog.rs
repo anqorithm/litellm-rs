@@ -199,7 +199,7 @@ struct MetricsPayload {
 
 /// DataDog log entry
 #[derive(Debug, Clone, Serialize)]
-struct LogEntry {
+struct DataDogLogRecord {
     ddsource: String,
     ddtags: String,
     hostname: String,
@@ -214,7 +214,7 @@ struct LogEntry {
 #[derive(Debug, Clone)]
 enum BufferedEvent {
     Metric(MetricSeries),
-    Log(LogEntry),
+    Log(DataDogLogRecord),
 }
 
 /// DataDog APM Integration
@@ -354,7 +354,7 @@ impl DataDogIntegration {
             .or_else(|_| std::env::var("HOST"))
             .unwrap_or_else(|_| "unknown".to_string());
 
-        let log = LogEntry {
+        let log = DataDogLogRecord {
             ddsource: "litellm-gateway".to_string(),
             ddtags: self.build_tags_string(tags),
             hostname,
@@ -401,7 +401,7 @@ impl DataDogIntegration {
     }
 
     /// Send logs to DataDog
-    async fn send_logs(&self, logs: Vec<LogEntry>) -> IntegrationResult<()> {
+    async fn send_logs(&self, logs: Vec<DataDogLogRecord>) -> IntegrationResult<()> {
         if logs.is_empty() {
             return Ok(());
         }

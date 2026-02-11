@@ -3,7 +3,7 @@
 //! Provides common functionality and patterns for all AI providers
 //! to reduce code duplication and ensure consistency.
 
-use reqwest::{Client, ClientBuilder};
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::borrow::Cow;
@@ -125,14 +125,10 @@ pub struct BaseHttpClient {
 impl BaseHttpClient {
     /// Create a new HTTP client with common configuration
     pub fn new(config: BaseProviderConfig) -> Result<Self, ProviderError> {
-        let timeout = config.timeout.unwrap_or(60);
+        let timeout = Duration::from_secs(config.timeout.unwrap_or(60));
 
-        let client = ClientBuilder::new()
-            .timeout(Duration::from_secs(timeout))
-            .connect_timeout(Duration::from_secs(10))
-            .pool_idle_timeout(Duration::from_secs(90))
-            .pool_max_idle_per_host(10)
-            .build()
+        let client = crate::utils::net::http::get_client_with_timeout_fallible(timeout)
+            .map(|shared_client| (*shared_client).clone())
             .map_err(|e| {
                 ProviderError::invalid_request(
                     "http_client",

@@ -29,6 +29,12 @@
 //! - **LLM-specific caching**: Specialized key generation for chat and embedding requests
 //! - **Cache statistics**: Comprehensive hit/miss tracking
 //!
+//! ## Boundary
+//!
+//! This module is the canonical deterministic cache subsystem.
+//! For semantic similarity caching, use `crate::core::semantic_cache`.
+//! Legacy `crate::core::cache_manager` is compatibility-only.
+//!
 //! ## Usage
 //!
 //! ### Basic DualCache Usage
@@ -80,8 +86,6 @@
 //! - [`dual`] - DualCache combining both layers
 //! - [`key_generator`] - Cache key generation utilities
 //! - [`llm_cache`] - LLM-specific caching for chat and embeddings
-
-#![allow(dead_code)]
 
 pub mod cloud;
 pub mod dual;

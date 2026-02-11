@@ -3,11 +3,11 @@
 //! This endpoint converts legacy text completions to chat completions format
 //! since most modern providers only support chat completions.
 
-use crate::core::models::RequestContext;
 use crate::core::models::openai::{CompletionRequest, CompletionResponse};
 use crate::core::providers::ProviderRegistry;
 use crate::core::types::{
-    chat::ChatMessage, message::MessageContent, message::MessageRole, model::ProviderCapability,
+    chat::ChatMessage, context::RequestContext, message::MessageContent, message::MessageRole,
+    model::ProviderCapability,
 };
 use crate::server::routes::errors;
 use crate::server::state::AppState;
@@ -15,7 +15,7 @@ use crate::utils::error::error::GatewayError;
 use actix_web::{HttpRequest, HttpResponse, Result as ActixResult, web};
 use tracing::{error, info};
 
-use super::context::{get_request_context, to_core_context};
+use super::context::get_request_context;
 use super::provider_selection::select_provider_for_model;
 
 /// Text completions endpoint (legacy)
@@ -91,10 +91,9 @@ pub async fn handle_completion_via_pool(
         ..Default::default()
     };
 
-    let core_context = to_core_context(&context);
     let response = selection
         .provider
-        .chat_completion(options, core_context)
+        .chat_completion(options, context)
         .await
         .map_err(|e| GatewayError::internal(format!("Completion error: {}", e)))?;
 

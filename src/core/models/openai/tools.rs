@@ -78,6 +78,44 @@ pub struct ToolCall {
     pub function: FunctionCall,
 }
 
+impl From<FunctionCall> for crate::core::types::tools::FunctionCall {
+    fn from(value: FunctionCall) -> Self {
+        Self {
+            name: value.name,
+            arguments: value.arguments,
+        }
+    }
+}
+
+impl From<crate::core::types::tools::FunctionCall> for FunctionCall {
+    fn from(value: crate::core::types::tools::FunctionCall) -> Self {
+        Self {
+            name: value.name,
+            arguments: value.arguments,
+        }
+    }
+}
+
+impl From<ToolCall> for crate::core::types::tools::ToolCall {
+    fn from(value: ToolCall) -> Self {
+        Self {
+            id: value.id,
+            tool_type: value.tool_type,
+            function: value.function.into(),
+        }
+    }
+}
+
+impl From<crate::core::types::tools::ToolCall> for ToolCall {
+    fn from(value: crate::core::types::tools::ToolCall) -> Self {
+        Self {
+            id: value.id,
+            tool_type: value.tool_type,
+            function: value.function.into(),
+        }
+    }
+}
+
 /// Function call delta (legacy)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FunctionCallDelta {

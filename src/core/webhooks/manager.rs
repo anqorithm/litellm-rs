@@ -6,7 +6,7 @@ use super::types::{
     WebhookConfig, WebhookData, WebhookDelivery, WebhookDeliveryStatus, WebhookEventType,
     WebhookPayload, WebhookStats,
 };
-use crate::core::models::RequestContext;
+use crate::core::types::context::RequestContext;
 use crate::utils::error::error::{GatewayError, Result};
 use crate::utils::net::http::create_custom_client;
 use reqwest::Client;

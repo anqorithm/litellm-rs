@@ -1,9 +1,9 @@
 //! Embeddings endpoint
 
-use crate::core::models::RequestContext;
 use crate::core::models::openai::{EmbeddingRequest, EmbeddingResponse};
 use crate::core::providers::ProviderRegistry;
 use crate::core::types::{
+    context::RequestContext,
     embedding::EmbeddingInput, embedding::EmbeddingRequest as CoreEmbeddingRequest,
     model::ProviderCapability,
 };
@@ -13,7 +13,7 @@ use crate::utils::error::error::GatewayError;
 use actix_web::{HttpRequest, HttpResponse, Result as ActixResult, web};
 use tracing::{error, info};
 
-use super::context::{get_request_context, to_core_context};
+use super::context::get_request_context;
 use super::provider_selection::select_provider_for_model;
 
 /// Embeddings endpoint
@@ -74,11 +74,9 @@ pub async fn handle_embedding_via_pool(
         task_type: None,
     };
 
-    let core_context = to_core_context(&context);
-
     let core_response = selection
         .provider
-        .create_embeddings(core_request, core_context)
+        .create_embeddings(core_request, context)
         .await
         .map_err(|e| GatewayError::internal(format!("Embedding error: {}", e)))?;
 

@@ -5,7 +5,7 @@ mod tests {
     use super::super::histogram::{BoundedHistogram, HISTOGRAM_MAX_SAMPLES};
     use super::super::logging::LogAggregator;
     use super::super::metrics::MetricsCollector;
-    use super::super::types::{LogEntry, LogLevel, TokenUsage};
+    use super::super::types::{LogEntry, TokenUsage};
     use chrono::Utc;
     use std::collections::HashMap;
     use std::time::Duration;
@@ -139,17 +139,11 @@ mod tests {
 
         let entry = LogEntry {
             timestamp: Utc::now(),
-            level: LogLevel::Info,
+            level: "INFO".to_string(),
             message: "Test log entry".to_string(),
+            module: Some("observability".to_string()),
             request_id: Some("req-123".to_string()),
-            user_id: Some("user-456".to_string()),
-            provider: Some("openai".to_string()),
-            model: Some("gpt-4".to_string()),
-            duration_ms: Some(500),
-            tokens: None,
-            cost: None,
-            error: None,
-            fields: HashMap::new(),
+            metadata: HashMap::new(),
         };
 
         aggregator.log(entry).await;

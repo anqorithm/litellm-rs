@@ -2,7 +2,7 @@
 
 use super::types::{AuthMethod, AuthResult, AuthzResult};
 use crate::config::models::auth::AuthConfig;
-use crate::core::models::RequestContext;
+use crate::core::types::context::RequestContext;
 use crate::core::models::user::types::{User, UserRole};
 use crate::storage::StorageLayer;
 use crate::utils::error::error::Result;
@@ -88,8 +88,12 @@ impl AuthSystem {
                 // Get user from database
                 if let Ok(Some(user)) = self.storage.db().find_user_by_id(claims.sub).await {
                     if user.is_active() {
-                        context.user_id = Some(user.id());
-                        context.team_id = user.team_ids.first().copied();
+                        context.user_id = Some(user.id().to_string());
+                        if let Some(team_id) = user.team_ids.first().copied() {
+                            context.set_team_id(team_id);
+                        } else {
+                            context.clear_team_id();
+                        }
 
                         Ok(AuthResult {
                             success: true,
@@ -139,9 +143,13 @@ impl AuthSystem {
     ) -> Result<AuthResult> {
         match self.api_key.verify_key(key).await {
             Ok(Some((api_key, user))) => {
-                context.api_key_id = Some(api_key.metadata.id);
-                context.user_id = api_key.user_id;
-                context.team_id = api_key.team_id;
+                context.set_api_key_id(api_key.metadata.id);
+                context.user_id = api_key.user_id.map(|id| id.to_string());
+                if let Some(team_id) = api_key.team_id {
+                    context.set_team_id(team_id);
+                } else {
+                    context.clear_team_id();
+                }
 
                 Ok(AuthResult {
                     success: true,
@@ -183,8 +191,12 @@ impl AuthSystem {
                 // Try to find user by ID from claims
                 match self.storage.db().find_user_by_id(claims.sub).await {
                     Ok(Some(user)) => {
-                        context.user_id = Some(user.id());
-                        context.team_id = user.team_ids.first().copied();
+                        context.user_id = Some(user.id().to_string());
+                        if let Some(team_id) = user.team_ids.first().copied() {
+                            context.set_team_id(team_id);
+                        } else {
+                            context.clear_team_id();
+                        }
 
                         Ok(AuthResult {
                             success: true,

@@ -1,6 +1,7 @@
 //! Configuration management for the Gateway
 //!
 //! This module handles loading, validation, and management of all gateway configuration.
+//! Canonical server-side models live under `crate::config::models::*`.
 
 pub mod builder;
 pub mod models;
@@ -18,6 +19,11 @@ use crate::config::models::storage::StorageConfig;
 use crate::utils::error::error::{GatewayError, Result};
 use std::path::Path;
 use tracing::{debug, info};
+
+/// Canonical alias for gateway server runtime configuration.
+pub type GatewayServerConfig = crate::config::models::server::ServerConfig;
+/// Canonical alias for gateway provider runtime configuration.
+pub type GatewayProviderConfig = crate::config::models::provider::ProviderConfig;
 
 /// Main configuration struct for the Gateway
 #[derive(Debug, Clone, Default)]

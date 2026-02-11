@@ -4,7 +4,6 @@
 
 use async_trait::async_trait;
 use futures::Stream;
-use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
 use std::pin::Pin;
 
@@ -78,7 +77,6 @@ pub type TopazError = ProviderError;
 #[derive(Debug, Clone)]
 pub struct TopazProvider {
     config: TopazConfig,
-    base_client: BaseHttpClient,
 }
 
 impl TopazProvider {
@@ -94,31 +92,12 @@ impl TopazProvider {
             api_version: None,
         };
 
-        let base_client = BaseHttpClient::new(base_config)
+        let _base_client = BaseHttpClient::new(base_config)
             .map_err(|e| ProviderError::configuration("topaz", e.to_string()))?;
 
-        Ok(Self {
-            config,
-            base_client,
-        })
+        Ok(Self { config })
     }
 
-    /// Build request headers
-    fn build_headers(&self) -> Result<HeaderMap, TopazError> {
-        let mut headers = HeaderMap::new();
-
-        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-
-        if let Some(api_key) = &self.config.api_key {
-            let auth_value =
-                HeaderValue::from_str(&format!("Bearer {}", api_key)).map_err(|e| {
-                    ProviderError::configuration("topaz", format!("Invalid API key: {}", e))
-                })?;
-            headers.insert(AUTHORIZATION, auth_value);
-        }
-
-        Ok(headers)
-    }
 }
 
 /// Topaz error mapper

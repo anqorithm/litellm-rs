@@ -13,8 +13,11 @@ pub mod audit; // Audit logging system
 #[cfg(feature = "storage")]
 pub mod batch;
 pub mod budget; // Budget management system
-// pub mod cache; // DualCache system (InMemory + Redis) - TODO: implement
-pub mod cache_manager;
+#[cfg(feature = "storage")]
+pub mod cache; // Canonical deterministic cache subsystem (DualCache / LLMCache)
+#[cfg(feature = "storage")]
+#[doc(hidden)]
+pub mod cache_manager; // Legacy cache manager (compatibility only)
 pub mod completion; // Core completion API
 pub mod cost; // Unified cost calculation system
 pub mod embedding; // Core embedding API (Python LiteLLM compatible)
@@ -36,7 +39,7 @@ pub mod router;
 pub mod secret_managers; // Secret management system
 pub mod security;
 #[cfg(feature = "storage")]
-pub mod semantic_cache;
+pub mod semantic_cache; // Semantic similarity cache (vector-based)
 pub mod streaming;
 pub mod teams; // Team management module
 pub mod traits;

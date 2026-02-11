@@ -1,15 +1,27 @@
-//! Configuration types module
+//! Legacy configuration types module.
 //!
-//! Split from the original config.rs for better maintainability
+//! This module is kept for compatibility only.
+//! Canonical configuration boundaries:
+//! - Gateway/server runtime config: `crate::config::models::*`
+//! - SDK/client config: `crate::sdk::config::*`
 
+#[doc(hidden)]
 pub mod defaults;
+#[doc(hidden)]
 pub mod health;
+#[doc(hidden)]
 pub mod middleware;
+#[doc(hidden)]
 pub mod observability;
+#[doc(hidden)]
 pub mod provider;
+#[doc(hidden)]
 pub mod rate_limit;
+#[doc(hidden)]
 pub mod retry;
+#[doc(hidden)]
 pub mod routing;
+#[doc(hidden)]
 pub mod server;
 
 use self::{
@@ -19,6 +31,9 @@ use self::{
 use serde::{Deserialize, Serialize};
 
 /// Main LiteLLM configuration
+#[deprecated(
+    note = "Use crate::config::models::gateway::GatewayConfig for server runtime config or crate::sdk::config::ClientConfig for SDK client config."
+)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LiteLLMConfig {
     /// Server configuration
@@ -32,6 +47,11 @@ pub struct LiteLLMConfig {
     /// Observability configuration
     pub observability: ObservabilityConfig,
 }
+
+/// Legacy compatibility alias to avoid semantic collision with gateway config types.
+pub type LegacyServerConfig = server::ServerConfig;
+/// Legacy compatibility alias to avoid semantic collision with gateway config types.
+pub type LegacyProviderConfigEntry = provider::ProviderConfigEntry;
 
 // Duration serialization module (shared across config types)
 pub mod duration_serde {

@@ -2,6 +2,7 @@
 //!
 //! This module provides enhanced Redis connectivity with improved performance
 //! through connection pooling, batch operations, and intelligent caching.
+//! It is experimental and only available with feature flag `redis-optimized`.
 //!
 //! # Usage
 //!

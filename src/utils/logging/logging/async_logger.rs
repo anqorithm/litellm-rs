@@ -1,6 +1,6 @@
 //! Async logger implementation for high-performance logging
 
-use crate::utils::logging::logging::types::{AsyncLoggerConfig, LogEntry};
+use crate::utils::logging::logging::types::{AsyncLoggerConfig, AsyncLogRecord};
 use std::collections::HashMap;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -11,7 +11,7 @@ use uuid::Uuid;
 /// Async logger for high-performance logging
 #[allow(dead_code)]
 pub struct AsyncLogger {
-    sender: mpsc::Sender<LogEntry>,
+    sender: mpsc::Sender<AsyncLogRecord>,
     config: AsyncLoggerConfig,
     sample_counter: AtomicU64,
 }
@@ -21,7 +21,7 @@ impl AsyncLogger {
     /// Create a new async logger with bounded channel to prevent memory leaks
     pub fn new(config: AsyncLoggerConfig) -> Self {
         // Use bounded channel with configured buffer size to prevent OOM
-        let (sender, mut receiver) = mpsc::channel::<LogEntry>(config.buffer_size);
+        let (sender, mut receiver) = mpsc::channel::<AsyncLogRecord>(config.buffer_size);
 
         // Spawn background task to process log entries
         tokio::spawn(async move {
@@ -38,7 +38,7 @@ impl AsyncLogger {
     }
 
     /// Try to send a log entry, handling backpressure
-    fn try_send(&self, entry: LogEntry) -> bool {
+    fn try_send(&self, entry: AsyncLogRecord) -> bool {
         match self.sender.try_send(entry) {
             Ok(()) => true,
             Err(mpsc::error::TrySendError::Full(_)) => {
@@ -86,7 +86,7 @@ impl AsyncLogger {
             message.to_string()
         };
 
-        let entry = LogEntry {
+        let entry = AsyncLogRecord {
             timestamp: chrono::Utc::now(),
             level: level.to_string(),
             logger: logger.to_string(),
@@ -119,7 +119,7 @@ impl AsyncLogger {
     }
 
     /// Process a log entry (background task)
-    async fn process_log_entry(entry: LogEntry) {
+    async fn process_log_entry(entry: AsyncLogRecord) {
         // In a real implementation, you might:
         // - Write to files
         // - Send to external logging services

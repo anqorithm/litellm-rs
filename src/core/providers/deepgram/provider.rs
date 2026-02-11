@@ -25,7 +25,6 @@ const DEEPGRAM_CAPABILITIES: &[ProviderCapability] = &[ProviderCapability::Audio
 #[derive(Debug, Clone)]
 pub struct DeepgramProvider {
     config: DeepgramConfig,
-    pool_manager: Arc<GlobalPoolManager>,
     models: Vec<ModelInfo>,
 }
 
@@ -38,7 +37,7 @@ impl DeepgramProvider {
             .map_err(|e| ProviderError::configuration(PROVIDER_NAME, e))?;
 
         // Create pool manager
-        let pool_manager = Arc::new(GlobalPoolManager::new().map_err(|e| {
+        let _pool_manager = Arc::new(GlobalPoolManager::new().map_err(|e| {
             ProviderError::configuration(
                 PROVIDER_NAME,
                 format!("Failed to create pool manager: {}", e),
@@ -50,7 +49,6 @@ impl DeepgramProvider {
 
         Ok(Self {
             config,
-            pool_manager,
             models,
         })
     }

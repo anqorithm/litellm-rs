@@ -1,10 +1,8 @@
 //! Chat completions endpoint
 
-use crate::core::models::RequestContext;
 use crate::core::models::openai::{
-    ChatChoice, ChatCompletionRequest, ChatCompletionResponse, ChatMessage, ContentLogprob,
-    FunctionCall, Logprobs, MessageContent, MessageRole, Tool, ToolCall, ToolChoice, TopLogprob,
-    Usage,
+    ChatChoice, ChatCompletionRequest, ChatCompletionResponse, ContentLogprob, Logprobs, Tool,
+    ToolChoice, TopLogprob, Usage,
 };
 use crate::core::providers::ProviderRegistry;
 use crate::core::streaming::types::{
@@ -12,7 +10,8 @@ use crate::core::streaming::types::{
 };
 use crate::core::types::{
     self,
-    chat::{ChatMessage as CoreChatMessage, ChatRequest as CoreChatRequest},
+    chat::ChatRequest as CoreChatRequest,
+    context::RequestContext,
     model::ProviderCapability,
 };
 use crate::server::routes::errors;
@@ -25,7 +24,7 @@ use futures::StreamExt;
 use serde_json::json;
 use tracing::{error, info, warn};
 
-use super::context::{get_request_context, to_core_context};
+use super::context::get_request_context;
 use super::provider_selection::select_provider_for_model;
 
 /// Chat completions endpoint
@@ -93,11 +92,9 @@ async fn handle_streaming_chat_completion(
         Err(e) => return Ok(errors::gateway_error_to_response(e)),
     };
 
-    let core_context = to_core_context(&context);
-
     match selection
         .provider
-        .chat_completion_stream(core_request, core_context)
+        .chat_completion_stream(core_request, context)
         .await
     {
         Ok(mut stream) => {
@@ -152,11 +149,9 @@ pub async fn handle_chat_completion_via_pool(
         select_provider_for_model(pool, &request.model, ProviderCapability::ChatCompletion)?;
 
     let core_request = build_core_chat_request(request, selection.model.clone(), false)?;
-    let core_context = to_core_context(&context);
-
     let core_response = selection
         .provider
-        .chat_completion(core_request, core_context)
+        .chat_completion(core_request, context)
         .await
         .map_err(|e| GatewayError::internal(format!("Chat completion error: {}", e)))?;
 
@@ -222,7 +217,7 @@ fn build_core_chat_request(
         messages: request
             .messages
             .into_iter()
-            .map(convert_openai_message_to_core)
+            .map(Into::into)
             .collect(),
         temperature: request.temperature,
         max_tokens: request.max_tokens,
@@ -249,78 +244,6 @@ fn build_core_chat_request(
     })
 }
 
-fn convert_openai_message_to_core(message: ChatMessage) -> CoreChatMessage {
-    let role = match message.role {
-        MessageRole::System => types::message::MessageRole::System,
-        MessageRole::User => types::message::MessageRole::User,
-        MessageRole::Assistant => types::message::MessageRole::Assistant,
-        MessageRole::Tool => types::message::MessageRole::Tool,
-        MessageRole::Function => types::message::MessageRole::Function,
-    };
-
-    let content = message.content.map(|content| match content {
-        MessageContent::Text(text) => types::message::MessageContent::Text(text),
-        MessageContent::Parts(parts) => {
-            let converted_parts = parts
-                .into_iter()
-                .map(|part| match part {
-                    crate::core::models::openai::ContentPart::Text { text } => {
-                        types::content::ContentPart::Text { text }
-                    }
-                    crate::core::models::openai::ContentPart::ImageUrl { image_url } => {
-                        types::content::ContentPart::ImageUrl {
-                            image_url: types::content::ImageUrl {
-                                url: image_url.url,
-                                detail: image_url.detail,
-                            },
-                        }
-                    }
-                    crate::core::models::openai::ContentPart::Audio { audio } => {
-                        types::content::ContentPart::Audio {
-                            audio: types::content::AudioData {
-                                data: audio.data,
-                                format: Some(audio.format),
-                            },
-                        }
-                    }
-                })
-                .collect();
-            types::message::MessageContent::Parts(converted_parts)
-        }
-    });
-
-    let tool_calls: Option<Vec<types::tools::ToolCall>> = message.tool_calls.map(|calls| {
-        calls
-            .into_iter()
-            .map(|call| types::tools::ToolCall {
-                id: call.id,
-                tool_type: call.tool_type,
-                function: types::tools::FunctionCall {
-                    name: call.function.name,
-                    arguments: call.function.arguments,
-                },
-            })
-            .collect()
-    });
-
-    let function_call = message
-        .function_call
-        .map(|call| types::tools::FunctionCall {
-            name: call.name,
-            arguments: call.arguments,
-        });
-
-    CoreChatMessage {
-        role,
-        content,
-        thinking: None,
-        name: message.name,
-        tool_calls,
-        tool_call_id: message.tool_call_id,
-        function_call,
-    }
-}
-
 fn convert_core_chat_response(response: types::responses::ChatResponse) -> ChatCompletionResponse {
     ChatCompletionResponse {
         id: response.id,
@@ -333,95 +256,12 @@ fn convert_core_chat_response(response: types::responses::ChatResponse) -> ChatC
             .into_iter()
             .map(|choice| ChatChoice {
                 index: choice.index,
-                message: convert_core_message_to_openai(choice.message),
+                message: choice.message.into(),
                 logprobs: choice.logprobs.map(convert_logprobs),
                 finish_reason: choice.finish_reason.map(convert_finish_reason),
             })
             .collect(),
         usage: response.usage.map(convert_usage),
-    }
-}
-
-fn convert_core_message_to_openai(message: CoreChatMessage) -> ChatMessage {
-    let role = match message.role {
-        types::message::MessageRole::System => MessageRole::System,
-        types::message::MessageRole::User => MessageRole::User,
-        types::message::MessageRole::Assistant => MessageRole::Assistant,
-        types::message::MessageRole::Tool => MessageRole::Tool,
-        types::message::MessageRole::Function => MessageRole::Function,
-    };
-
-    let content = message.content.map(convert_core_content_to_openai);
-
-    let tool_calls: Option<Vec<ToolCall>> = message.tool_calls.map(|calls| {
-        calls
-            .into_iter()
-            .map(|call| ToolCall {
-                id: call.id,
-                tool_type: call.tool_type,
-                function: FunctionCall {
-                    name: call.function.name,
-                    arguments: call.function.arguments,
-                },
-            })
-            .collect()
-    });
-
-    let function_call = message.function_call.map(|call| FunctionCall {
-        name: call.name,
-        arguments: call.arguments,
-    });
-
-    ChatMessage {
-        role,
-        content,
-        name: message.name,
-        function_call,
-        tool_calls,
-        tool_call_id: message.tool_call_id,
-        audio: None,
-    }
-}
-
-fn convert_core_content_to_openai(content: types::message::MessageContent) -> MessageContent {
-    match content {
-        types::message::MessageContent::Text(text) => MessageContent::Text(text),
-        types::message::MessageContent::Parts(parts) => {
-            let converted_parts = parts
-                .into_iter()
-                .map(convert_core_content_part_to_openai)
-                .collect();
-            MessageContent::Parts(converted_parts)
-        }
-    }
-}
-
-fn convert_core_content_part_to_openai(
-    part: types::content::ContentPart,
-) -> crate::core::models::openai::ContentPart {
-    match part {
-        types::content::ContentPart::Text { text } => {
-            crate::core::models::openai::ContentPart::Text { text }
-        }
-        types::content::ContentPart::ImageUrl { image_url } => {
-            crate::core::models::openai::ContentPart::ImageUrl {
-                image_url: crate::core::models::openai::ImageUrl {
-                    url: image_url.url,
-                    detail: image_url.detail,
-                },
-            }
-        }
-        types::content::ContentPart::Audio { audio } => {
-            crate::core::models::openai::ContentPart::Audio {
-                audio: crate::core::models::openai::AudioContent {
-                    data: audio.data,
-                    format: audio.format.unwrap_or_else(|| "unknown".to_string()),
-                },
-            }
-        }
-        _ => crate::core::models::openai::ContentPart::Text {
-            text: "[unsupported content part]".to_string(),
-        },
     }
 }
 
@@ -563,6 +403,7 @@ fn convert_tool_call_delta(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::models::openai::{ChatMessage, MessageContent, MessageRole};
 
     #[test]
     fn test_convert_finish_reason() {

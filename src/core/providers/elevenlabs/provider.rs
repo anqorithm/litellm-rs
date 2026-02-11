@@ -29,7 +29,6 @@ const ELEVENLABS_CAPABILITIES: &[ProviderCapability] = &[
 #[derive(Debug, Clone)]
 pub struct ElevenLabsProvider {
     config: ElevenLabsConfig,
-    pool_manager: Arc<GlobalPoolManager>,
     models: Vec<ModelInfo>,
 }
 
@@ -42,7 +41,7 @@ impl ElevenLabsProvider {
             .map_err(|e| ProviderError::configuration(PROVIDER_NAME, e))?;
 
         // Create pool manager
-        let pool_manager = Arc::new(GlobalPoolManager::new().map_err(|e| {
+        let _pool_manager = Arc::new(GlobalPoolManager::new().map_err(|e| {
             ProviderError::configuration(
                 PROVIDER_NAME,
                 format!("Failed to create pool manager: {}", e),
@@ -54,7 +53,6 @@ impl ElevenLabsProvider {
 
         Ok(Self {
             config,
-            pool_manager,
             models,
         })
     }

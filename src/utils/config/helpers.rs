@@ -2,8 +2,6 @@
 //!
 //! This module provides utilities for configuration management and environment handling.
 
-#![allow(dead_code)]
-
 use crate::utils::error::error::{GatewayError, Result};
 use regex::Regex;
 use std::collections::HashMap;

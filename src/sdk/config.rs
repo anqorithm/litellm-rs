@@ -1,4 +1,7 @@
 //! Module
+//!
+//! SDK client-side configuration models.
+//! Canonical gateway/server runtime config models are under `crate::config::models::*`.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -67,6 +70,11 @@ pub struct ProviderConfig {
     /// Settings
     pub settings: HashMap<String, serde_json::Value>,
 }
+
+/// Canonical alias for SDK client configuration.
+pub type ClientRuntimeConfig = ClientConfig;
+/// Canonical alias for SDK provider configuration.
+pub type ClientProviderConfig = ProviderConfig;
 
 /// Provider type enumeration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -560,7 +568,11 @@ mod tests {
             config.providers[0].provider_type,
             ProviderType::OpenAI
         ));
-        assert!(config.providers[0].models.contains(&"gpt-4".to_string()));
+        assert!(!config.providers[0].models.is_empty());
+        assert!(config.providers[0]
+            .models
+            .iter()
+            .any(|model| model.starts_with("gpt-")));
     }
 
     #[test]

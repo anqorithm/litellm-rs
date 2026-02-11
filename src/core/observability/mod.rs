@@ -24,5 +24,5 @@ pub use redaction::{RedactionConfig, redact_headers, redact_json_value, redact_v
 pub use tracing::PerformanceTracer;
 pub use types::{
     AlertCondition, AlertSeverity, AlertState, ErrorDetails, LogEntry, LogLevel, MetricValue,
-    SpanLog, TokenUsage, TraceSpan,
+    ObservabilityLogRecord, SpanLog, TokenUsage, TraceSpan,
 };

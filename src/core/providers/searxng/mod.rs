@@ -4,7 +4,6 @@
 
 use async_trait::async_trait;
 use futures::Stream;
-use reqwest::header::{CONTENT_TYPE, HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
 use std::pin::Pin;
 
@@ -78,7 +77,6 @@ pub type SearXNGError = ProviderError;
 #[derive(Debug, Clone)]
 pub struct SearXNGProvider {
     config: SearXNGConfig,
-    base_client: BaseHttpClient,
 }
 
 impl SearXNGProvider {
@@ -94,21 +92,12 @@ impl SearXNGProvider {
             api_version: None,
         };
 
-        let base_client = BaseHttpClient::new(base_config)
+        let _base_client = BaseHttpClient::new(base_config)
             .map_err(|e| ProviderError::configuration("searxng", e.to_string()))?;
 
-        Ok(Self {
-            config,
-            base_client,
-        })
+        Ok(Self { config })
     }
 
-    /// Build request headers
-    fn build_headers(&self) -> Result<HeaderMap, SearXNGError> {
-        let mut headers = HeaderMap::new();
-        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-        Ok(headers)
-    }
 }
 
 /// SearXNG error mapper

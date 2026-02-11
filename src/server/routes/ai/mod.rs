@@ -2,8 +2,6 @@
 //!
 //! This module provides OpenAI-compatible API endpoints for AI services.
 
-#![allow(dead_code)]
-
 // Module declarations
 mod audio;
 mod chat;
@@ -55,7 +53,7 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
 
 #[cfg(test)]
 mod tests {
-    use crate::core::models::RequestContext;
+    use crate::core::types::context::RequestContext;
 
     #[test]
     fn test_get_request_context() {

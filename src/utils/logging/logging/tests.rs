@@ -4,7 +4,7 @@
 mod tests {
     use crate::utils::logging::logging::async_logger::AsyncLogger;
     use crate::utils::logging::logging::sampler::LogSampler;
-    use crate::utils::logging::logging::types::{AsyncLoggerConfig, LogEntry, RequestMetrics};
+    use crate::utils::logging::logging::types::{AsyncLoggerConfig, AsyncLogRecord, RequestMetrics};
     use std::collections::HashMap;
     use tracing::Level;
     use uuid::Uuid;
@@ -149,7 +149,7 @@ mod tests {
         assert_eq!(cloned.max_message_length, config.max_message_length);
     }
 
-    // ==================== LogEntry Tests ====================
+    // ==================== AsyncLogRecord Tests ====================
 
     #[test]
     fn test_log_entry_creation() {
@@ -159,7 +159,7 @@ mod tests {
             serde_json::Value::String("value".to_string()),
         );
 
-        let entry = LogEntry {
+        let entry = AsyncLogRecord {
             timestamp: chrono::Utc::now(),
             level: "INFO".to_string(),
             logger: "test_logger".to_string(),
@@ -181,7 +181,7 @@ mod tests {
 
     #[test]
     fn test_log_entry_serialization() {
-        let entry = LogEntry {
+        let entry = AsyncLogRecord {
             timestamp: chrono::Utc::now(),
             level: "DEBUG".to_string(),
             logger: "test".to_string(),
@@ -199,7 +199,7 @@ mod tests {
 
     #[test]
     fn test_log_entry_clone() {
-        let entry = LogEntry {
+        let entry = AsyncLogRecord {
             timestamp: chrono::Utc::now(),
             level: "WARN".to_string(),
             logger: "test".to_string(),

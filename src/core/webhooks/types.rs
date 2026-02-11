@@ -2,7 +2,7 @@
 //!
 //! This module contains all webhook-related types, enums, and data structures.
 
-use crate::core::models::RequestContext;
+use crate::core::types::context::RequestContext;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

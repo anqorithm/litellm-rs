@@ -214,12 +214,14 @@ impl OpenAIModelRegistry {
 
     /// Detect model features based on model info
     fn detect_features(&self, model_info: &ModelInfo) -> Vec<OpenAIModelFeature> {
-        let mut features = vec![
-            OpenAIModelFeature::SystemMessages,
-            OpenAIModelFeature::StreamingSupport,
-        ];
+        let mut features = vec![OpenAIModelFeature::SystemMessages];
 
         let model_id = &model_info.id;
+
+        // Keep streaming feature aligned with create_config().
+        if !model_id.contains("embedding") && !model_id.starts_with("whisper") {
+            features.push(OpenAIModelFeature::StreamingSupport);
+        }
 
         // Chat models
         if model_id.starts_with("gpt-") {
@@ -1295,6 +1297,133 @@ pub struct OpenAIMessage {
     pub reasoning_content: Option<String>,
 }
 
+impl OpenAIMessage {
+    /// Convert from canonical OpenAI-compatible message model.
+    pub fn from_compatible_message(
+        message: crate::core::models::openai::ChatMessage,
+    ) -> Result<Self, String> {
+        let role = match message.role {
+            crate::core::models::openai::MessageRole::System => "system",
+            crate::core::models::openai::MessageRole::User => "user",
+            crate::core::models::openai::MessageRole::Assistant => "assistant",
+            crate::core::models::openai::MessageRole::Tool => "tool",
+            crate::core::models::openai::MessageRole::Function => "function",
+        }
+        .to_string();
+
+        let content = match message.content {
+            Some(crate::core::models::openai::MessageContent::Text(text)) => {
+                Some(serde_json::json!(text))
+            }
+            Some(crate::core::models::openai::MessageContent::Parts(parts)) => {
+                let provider_parts: Vec<OpenAIContentPart> = parts
+                    .into_iter()
+                    .map(OpenAIContentPart::from_compatible_part)
+                    .collect();
+                Some(serde_json::to_value(provider_parts).map_err(|e| {
+                    format!("Failed to serialize OpenAI content parts: {}", e)
+                })?)
+            }
+            None => None,
+        };
+
+        Ok(Self {
+            role,
+            content,
+            name: message.name,
+            tool_calls: message.tool_calls.map(|calls| {
+                calls
+                    .into_iter()
+                    .map(|call| OpenAIToolCall {
+                        id: call.id,
+                        tool_type: call.tool_type,
+                        function: OpenAIFunctionCall {
+                            name: call.function.name,
+                            arguments: call.function.arguments,
+                        },
+                    })
+                    .collect()
+            }),
+            tool_call_id: message.tool_call_id,
+            function_call: message.function_call.map(|call| OpenAIFunctionCall {
+                name: call.name,
+                arguments: call.arguments,
+            }),
+            reasoning: None,
+            reasoning_details: None,
+            reasoning_content: None,
+        })
+    }
+
+    /// Convert to canonical OpenAI-compatible message model.
+    pub fn into_compatible_message(
+        self,
+    ) -> Result<crate::core::models::openai::ChatMessage, String> {
+        let role = match self.role.as_str() {
+            "system" => crate::core::models::openai::MessageRole::System,
+            "user" => crate::core::models::openai::MessageRole::User,
+            "assistant" => crate::core::models::openai::MessageRole::Assistant,
+            "tool" => crate::core::models::openai::MessageRole::Tool,
+            "function" => crate::core::models::openai::MessageRole::Function,
+            _ => crate::core::models::openai::MessageRole::User,
+        };
+
+        let content = match self.content {
+            Some(value) if value.is_null() => None,
+            Some(value) => {
+                if let Some(text) = value.as_str() {
+                    if text.is_empty() {
+                        None
+                    } else {
+                        Some(crate::core::models::openai::MessageContent::Text(
+                            text.to_string(),
+                        ))
+                    }
+                } else if let Some(array) = value.as_array() {
+                    let parts: Vec<OpenAIContentPart> =
+                        serde_json::from_value(serde_json::Value::Array(array.clone())).map_err(
+                            |e| format!("Failed to parse OpenAI content parts: {}", e),
+                        )?;
+                    Some(crate::core::models::openai::MessageContent::Parts(
+                        parts
+                            .into_iter()
+                            .map(OpenAIContentPart::into_compatible_part)
+                            .collect(),
+                    ))
+                } else {
+                    None
+                }
+            }
+            None => None,
+        };
+
+        Ok(crate::core::models::openai::ChatMessage {
+            role,
+            content,
+            name: self.name,
+            function_call: self.function_call.map(|call| crate::core::models::openai::FunctionCall {
+                name: call.name,
+                arguments: call.arguments,
+            }),
+            tool_calls: self.tool_calls.map(|calls| {
+                calls
+                    .into_iter()
+                    .map(|call| crate::core::models::openai::ToolCall {
+                        id: call.id,
+                        tool_type: call.tool_type,
+                        function: crate::core::models::openai::FunctionCall {
+                            name: call.function.name,
+                            arguments: call.function.arguments,
+                        },
+                    })
+                    .collect()
+            }),
+            tool_call_id: self.tool_call_id,
+            audio: None,
+        })
+    }
+}
+
 /// OpenAI Tool
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OpenAITool {
@@ -1456,6 +1585,44 @@ pub enum OpenAIContentPart {
     ImageUrl { image_url: OpenAIImageUrl },
     #[serde(rename = "input_audio")]
     InputAudio { input_audio: OpenAIInputAudio },
+}
+
+impl OpenAIContentPart {
+    fn from_compatible_part(part: crate::core::models::openai::ContentPart) -> Self {
+        match part {
+            crate::core::models::openai::ContentPart::Text { text } => Self::Text { text },
+            crate::core::models::openai::ContentPart::ImageUrl { image_url } => Self::ImageUrl {
+                image_url: OpenAIImageUrl {
+                    url: image_url.url,
+                    detail: image_url.detail,
+                },
+            },
+            crate::core::models::openai::ContentPart::Audio { audio } => Self::InputAudio {
+                input_audio: OpenAIInputAudio {
+                    data: audio.data,
+                    format: audio.format,
+                },
+            },
+        }
+    }
+
+    fn into_compatible_part(self) -> crate::core::models::openai::ContentPart {
+        match self {
+            Self::Text { text } => crate::core::models::openai::ContentPart::Text { text },
+            Self::ImageUrl { image_url } => crate::core::models::openai::ContentPart::ImageUrl {
+                image_url: crate::core::models::openai::ImageUrl {
+                    url: image_url.url,
+                    detail: image_url.detail,
+                },
+            },
+            Self::InputAudio { input_audio } => crate::core::models::openai::ContentPart::Audio {
+                audio: crate::core::models::openai::AudioContent {
+                    data: input_audio.data,
+                    format: input_audio.format,
+                },
+            },
+        }
+    }
 }
 
 /// OpenAI Image URL

@@ -32,9 +32,7 @@ use super::streaming::GeminiStream;
 /// Gemini Provider - Unified implementation
 #[derive(Debug)]
 pub struct GeminiProvider {
-    config: GeminiConfig,
     client: GeminiClient,
-    pool_manager: Arc<GlobalPoolManager>,
     supported_models: Vec<ModelInfo>,
 }
 
@@ -50,7 +48,7 @@ impl GeminiProvider {
         let client = GeminiClient::new(config.clone())?;
 
         // Get
-        let pool_manager = Arc::new(GlobalPoolManager::new()?);
+        let _pool_manager = Arc::new(GlobalPoolManager::new()?);
 
         // Get
         let registry = get_gemini_registry();
@@ -61,9 +59,7 @@ impl GeminiProvider {
             .collect();
 
         Ok(Self {
-            config,
             client,
-            pool_manager,
             supported_models,
         })
     }

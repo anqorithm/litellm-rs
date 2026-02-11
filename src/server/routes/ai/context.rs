@@ -1,11 +1,9 @@
 //! Request context and authentication helpers
 
 use crate::core::models::ApiKey;
-use crate::core::models::RequestContext;
 use crate::core::models::user::types::User;
+use crate::core::types::context::RequestContext;
 use actix_web::{HttpMessage, HttpRequest, Result as ActixResult};
-use serde_json::json;
-use std::time::{Duration, UNIX_EPOCH};
 use tracing::debug;
 
 /// Get request context from headers and middleware extensions
@@ -59,36 +57,6 @@ pub async fn log_api_usage(context: &RequestContext, model: &str, tokens_used: u
         "API usage: user_id={:?}, model={}, tokens={}, cost={}",
         context.user_id, model, tokens_used, cost
     );
-}
-
-/// Convert API RequestContext to core context used by providers
-pub fn to_core_context(context: &RequestContext) -> crate::core::types::context::RequestContext {
-    let mut core_context = crate::core::types::context::RequestContext::new();
-    core_context.request_id = context.request_id.clone();
-    core_context.user_id = context.user_id.map(|id| id.to_string());
-    core_context.client_ip = context.client_ip.clone();
-    core_context.user_agent = context.user_agent.clone();
-    core_context.headers = context.headers.clone();
-    core_context.trace_id = context.trace_id.clone();
-    core_context.span_id = context.span_id.clone();
-
-    let ts_ms = context.timestamp.timestamp_millis();
-    if ts_ms >= 0 {
-        core_context.start_time = UNIX_EPOCH + Duration::from_millis(ts_ms as u64);
-    }
-
-    if let Some(team_id) = context.team_id {
-        core_context
-            .metadata
-            .insert("team_id".to_string(), json!(team_id.to_string()));
-    }
-    if let Some(api_key_id) = context.api_key_id {
-        core_context
-            .metadata
-            .insert("api_key_id".to_string(), json!(api_key_id.to_string()));
-    }
-
-    core_context
 }
 
 #[cfg(test)]
@@ -205,7 +173,7 @@ mod tests {
     #[tokio::test]
     async fn test_log_api_usage_with_user_id() {
         let mut context = RequestContext::new();
-        context.user_id = Some(uuid::Uuid::new_v4());
+        context.user_id = Some(uuid::Uuid::new_v4().to_string());
         log_api_usage(&context, "gpt-4", 100, 0.002).await;
     }
 

@@ -1,6 +1,7 @@
 use super::types::{HttpClientConfig, RetryConfig};
 use crate::core::providers::unified_provider::ProviderError;
-use reqwest::{Client, ClientBuilder, Proxy};
+use crate::utils::net::http::create_client_builder;
+use reqwest::{Client, Proxy};
 use std::collections::HashMap;
 use std::env;
 use std::time::Duration;
@@ -12,8 +13,7 @@ pub struct ClientUtils;
 impl ClientUtils {
     /// Creates an HTTP client with the specified configuration
     pub fn create_http_client(config: &HttpClientConfig) -> Result<Client, ProviderError> {
-        let mut client_builder = ClientBuilder::new()
-            .timeout(config.timeout)
+        let mut client_builder = create_client_builder(config.timeout)
             .user_agent(&config.user_agent);
 
         if let Some(proxy_url) = &config.proxy {
@@ -24,9 +24,10 @@ impl ClientUtils {
             client_builder = client_builder.proxy(proxy);
         }
 
-        for (key, value) in &config.default_headers {
-            client_builder = client_builder.default_headers({
-                let mut headers = reqwest::header::HeaderMap::new();
+        if !config.default_headers.is_empty() {
+            let mut headers = reqwest::header::HeaderMap::new();
+
+            for (key, value) in &config.default_headers {
                 headers.insert(
                     reqwest::header::HeaderName::from_bytes(key.as_bytes()).map_err(|e| {
                         ProviderError::InvalidRequest {
@@ -41,8 +42,9 @@ impl ClientUtils {
                         }
                     })?,
                 );
-                headers
-            });
+            }
+
+            client_builder = client_builder.default_headers(headers);
         }
 
         let client = client_builder
@@ -290,8 +292,7 @@ impl ClientUtils {
     ) -> Result<bool, ProviderError> {
         Self::validate_url(url)?;
 
-        let client = ClientBuilder::new()
-            .timeout(timeout.unwrap_or(Duration::from_secs(10)))
+        let client = create_client_builder(timeout.unwrap_or(Duration::from_secs(10)))
             .build()
             .map_err(|e| ProviderError::Network {
                 provider: "unknown",

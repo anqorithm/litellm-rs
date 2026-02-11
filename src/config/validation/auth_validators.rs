@@ -111,7 +111,7 @@ mod tests {
 
         let result = validate_config(&config);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("greater than 0"));
+        assert!(result.unwrap_err().contains("at least 5 minutes"));
     }
 
     #[test]

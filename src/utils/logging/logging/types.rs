@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 /// Log entry for async processing
 #[derive(Debug, Clone, Serialize)]
-pub struct LogEntry {
+pub struct AsyncLogRecord {
     /// Timestamp
     pub timestamp: chrono::DateTime<chrono::Utc>,
     /// Log level
@@ -76,11 +76,11 @@ mod tests {
     use super::*;
     use chrono::Utc;
 
-    // ==================== LogEntry Tests ====================
+    // ==================== AsyncLogRecord Tests ====================
 
     #[test]
     fn test_log_entry_creation() {
-        let entry = LogEntry {
+        let entry = AsyncLogRecord {
             timestamp: Utc::now(),
             level: "INFO".to_string(),
             logger: "gateway".to_string(),
@@ -98,7 +98,7 @@ mod tests {
 
     #[test]
     fn test_log_entry_minimal() {
-        let entry = LogEntry {
+        let entry = AsyncLogRecord {
             timestamp: Utc::now(),
             level: "DEBUG".to_string(),
             logger: "app".to_string(),
@@ -121,7 +121,7 @@ mod tests {
         fields.insert("ip_address".to_string(), serde_json::json!("192.168.1.1"));
         fields.insert("response_time".to_string(), serde_json::json!(150));
 
-        let entry = LogEntry {
+        let entry = AsyncLogRecord {
             timestamp: Utc::now(),
             level: "INFO".to_string(),
             logger: "http".to_string(),
@@ -138,7 +138,7 @@ mod tests {
 
     #[test]
     fn test_log_entry_clone() {
-        let entry = LogEntry {
+        let entry = AsyncLogRecord {
             timestamp: Utc::now(),
             level: "ERROR".to_string(),
             logger: "error_handler".to_string(),
@@ -156,7 +156,7 @@ mod tests {
 
     #[test]
     fn test_log_entry_debug() {
-        let entry = LogEntry {
+        let entry = AsyncLogRecord {
             timestamp: Utc::now(),
             level: "WARN".to_string(),
             logger: "test".to_string(),
@@ -168,13 +168,13 @@ mod tests {
         };
 
         let debug_str = format!("{:?}", entry);
-        assert!(debug_str.contains("LogEntry"));
+        assert!(debug_str.contains("AsyncLogRecord"));
         assert!(debug_str.contains("WARN"));
     }
 
     #[test]
     fn test_log_entry_serialization() {
-        let entry = LogEntry {
+        let entry = AsyncLogRecord {
             timestamp: Utc::now(),
             level: "INFO".to_string(),
             logger: "api".to_string(),
@@ -195,7 +195,7 @@ mod tests {
         let levels = vec!["TRACE", "DEBUG", "INFO", "WARN", "ERROR", "FATAL"];
 
         for level in levels {
-            let entry = LogEntry {
+            let entry = AsyncLogRecord {
                 timestamp: Utc::now(),
                 level: level.to_string(),
                 logger: "test".to_string(),
@@ -410,7 +410,7 @@ mod tests {
         let request_id = "req-12345";
         let user_id = Uuid::new_v4();
 
-        let entry = LogEntry {
+        let entry = AsyncLogRecord {
             timestamp: Utc::now(),
             level: "INFO".to_string(),
             logger: "http".to_string(),

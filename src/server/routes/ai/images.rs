@@ -1,8 +1,8 @@
 //! Image generation endpoint
 
-use crate::core::models::RequestContext;
 use crate::core::models::openai::{ImageGenerationRequest, ImageGenerationResponse};
 use crate::core::providers::ProviderRegistry;
+use crate::core::types::context::RequestContext;
 use crate::core::types::image::ImageGenerationRequest as CoreImageRequest;
 use crate::core::types::model::ProviderCapability;
 use crate::server::routes::errors;
@@ -11,7 +11,7 @@ use crate::utils::error::error::GatewayError;
 use actix_web::{HttpRequest, HttpResponse, Result as ActixResult, web};
 use tracing::{error, info};
 
-use super::context::{get_request_context, to_core_context};
+use super::context::get_request_context;
 use super::provider_selection::select_provider_for_optional_model;
 
 /// Image generation endpoint
@@ -60,11 +60,9 @@ pub async fn handle_image_generation_via_pool(
         style: None,
     };
 
-    let core_context = to_core_context(&context);
-
     let core_response = selection
         .0
-        .create_images(core_request, core_context)
+        .create_images(core_request, context)
         .await
         .map_err(|e| GatewayError::internal(format!("Image generation error: {}", e)))?;
 

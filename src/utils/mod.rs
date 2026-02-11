@@ -56,13 +56,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
 /// Generate a unique request ID
-#[allow(dead_code)]
 pub fn generate_request_id() -> String {
     Uuid::new_v4().to_string()
 }
 
 /// Get current timestamp in seconds
-#[allow(dead_code)]
 pub fn current_timestamp() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -71,7 +69,6 @@ pub fn current_timestamp() -> u64 {
 }
 
 /// Get current timestamp in milliseconds
-#[allow(dead_code)]
 pub fn current_timestamp_millis() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -80,7 +77,6 @@ pub fn current_timestamp_millis() -> u64 {
 }
 
 /// Format bytes as human readable string
-#[allow(dead_code)]
 pub fn format_bytes(bytes: u64) -> String {
     const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
     const THRESHOLD: u64 = 1024;
@@ -101,7 +97,6 @@ pub fn format_bytes(bytes: u64) -> String {
 }
 
 /// Format duration as human readable string
-#[allow(dead_code)]
 pub fn format_duration(duration_ms: u64) -> String {
     if duration_ms < 1000 {
         format!("{}ms", duration_ms)
@@ -115,7 +110,6 @@ pub fn format_duration(duration_ms: u64) -> String {
 }
 
 /// Sanitize string for logging (remove sensitive information)
-#[allow(dead_code)]
 pub fn sanitize_for_logging(input: &str) -> String {
     use regex::Regex;
     use std::sync::LazyLock;
@@ -150,7 +144,6 @@ pub fn sanitize_for_logging(input: &str) -> String {
 }
 
 /// Truncate string to specified length with ellipsis
-#[allow(dead_code)]
 pub fn truncate_string(s: &str, max_len: usize) -> String {
     if s.len() <= max_len {
         s.to_string()
@@ -160,13 +153,11 @@ pub fn truncate_string(s: &str, max_len: usize) -> String {
 }
 
 /// Check if a string is a valid URL
-#[allow(dead_code)]
 pub fn is_valid_url(url: &str) -> bool {
     url::Url::parse(url).is_ok()
 }
 
 /// Check if a string is a valid email
-#[allow(dead_code)]
 pub fn is_valid_email(email: &str) -> bool {
     // Simple email validation regex
     let email_regex =
@@ -175,7 +166,6 @@ pub fn is_valid_email(email: &str) -> bool {
 }
 
 /// Normalize model name (remove provider prefix if present)
-#[allow(dead_code)]
 pub fn normalize_model_name(model: &str) -> String {
     // Remove common provider prefixes
     let prefixes = ["openai/", "anthropic/", "azure/", "google/", "bedrock/"];
@@ -190,7 +180,6 @@ pub fn normalize_model_name(model: &str) -> String {
 }
 
 /// Extract provider from model name
-#[allow(dead_code)]
 pub fn extract_provider_from_model(model: &str) -> Option<String> {
     model
         .find('/')
@@ -198,7 +187,6 @@ pub fn extract_provider_from_model(model: &str) -> Option<String> {
 }
 
 /// Merge two JSON values
-#[allow(dead_code)]
 pub fn merge_json_values(base: &mut serde_json::Value, overlay: &serde_json::Value) {
     match (base, overlay) {
         (serde_json::Value::Object(base_map), serde_json::Value::Object(overlay_map)) => {

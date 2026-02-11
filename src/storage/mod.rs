@@ -8,7 +8,8 @@ pub mod database;
 pub mod files;
 /// Redis cache module
 pub mod redis;
-/// Optimized Redis cache module
+/// Optimized Redis cache module (experimental, feature-gated)
+#[cfg(feature = "redis-optimized")]
 pub mod redis_optimized;
 /// Vector storage module
 pub mod vector;

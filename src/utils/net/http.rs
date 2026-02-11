@@ -61,6 +61,30 @@ static SHARED_HTTP_CLIENT: OnceLock<Client> = OnceLock::new();
 /// Timeout-specific client cache (keyed by milliseconds)
 static TIMEOUT_CLIENT_CACHE: OnceLock<DashMap<u64, Arc<Client>>> = OnceLock::new();
 
+/// Create a reqwest client builder with unified pool/timeout defaults.
+pub fn create_client_builder_with_config(
+    timeout: Duration,
+    config: &HttpClientPoolConfig,
+) -> ClientBuilder {
+    ClientBuilder::new()
+        // Connection pool settings
+        .pool_max_idle_per_host(config.pool_max_idle_per_host)
+        .pool_idle_timeout(config.pool_idle_timeout)
+        // Request timeouts
+        .timeout(timeout)
+        .connect_timeout(config.connect_timeout)
+        // TCP optimizations
+        .tcp_keepalive(config.tcp_keepalive)
+        .tcp_nodelay(true)
+        // User agent
+        .user_agent(config.user_agent)
+}
+
+/// Create a reqwest client builder with default pool configuration.
+pub fn create_client_builder(timeout: Duration) -> ClientBuilder {
+    create_client_builder_with_config(timeout, &HttpClientPoolConfig::default())
+}
+
 /// Get the shared HTTP client instance
 ///
 /// This client uses a default timeout of 30 seconds. For custom timeouts,
@@ -109,19 +133,7 @@ pub fn get_client_with_timeout_fallible(timeout: Duration) -> Result<Arc<Client>
 fn create_optimized_client(timeout: Duration) -> Client {
     let config = HttpClientPoolConfig::default();
 
-    ClientBuilder::new()
-        // Connection pool settings - increased for high throughput
-        .pool_max_idle_per_host(config.pool_max_idle_per_host)
-        .pool_idle_timeout(config.pool_idle_timeout)
-        // Request timeouts
-        .timeout(timeout)
-        .connect_timeout(config.connect_timeout)
-        // TCP optimizations
-        .tcp_keepalive(config.tcp_keepalive)
-        .tcp_nodelay(true)
-        // User agent
-        .user_agent(config.user_agent)
-        // Build with error handling
+    create_client_builder_with_config(timeout, &config)
         .build()
         .unwrap_or_else(|e| {
             warn!(
@@ -132,22 +144,20 @@ fn create_optimized_client(timeout: Duration) -> Client {
         })
 }
 
+/// Create a custom HTTP client with specific timeout and pool configuration.
+pub fn create_custom_client_with_config(
+    timeout: Duration,
+    config: &HttpClientPoolConfig,
+) -> Result<Client, reqwest::Error> {
+    create_client_builder_with_config(timeout, config).build()
+}
+
 /// Create a custom HTTP client with specific timeout
 ///
 /// Use this when you need a one-off client that won't be reused.
 /// For reusable clients, prefer `get_client_with_timeout`.
 pub fn create_custom_client(timeout: Duration) -> Result<Client, reqwest::Error> {
-    let config = HttpClientPoolConfig::default();
-
-    ClientBuilder::new()
-        .pool_max_idle_per_host(config.pool_max_idle_per_host)
-        .pool_idle_timeout(config.pool_idle_timeout)
-        .timeout(timeout)
-        .connect_timeout(config.connect_timeout)
-        .tcp_keepalive(config.tcp_keepalive)
-        .tcp_nodelay(true)
-        .user_agent(config.user_agent)
-        .build()
+    create_custom_client_with_config(timeout, &HttpClientPoolConfig::default())
 }
 
 /// Create a custom HTTP client with specific timeout and default headers
@@ -155,16 +165,7 @@ pub fn create_custom_client_with_headers(
     timeout: Duration,
     default_headers: reqwest::header::HeaderMap,
 ) -> Result<Client, reqwest::Error> {
-    let config = HttpClientPoolConfig::default();
-
-    ClientBuilder::new()
-        .pool_max_idle_per_host(config.pool_max_idle_per_host)
-        .pool_idle_timeout(config.pool_idle_timeout)
-        .timeout(timeout)
-        .connect_timeout(config.connect_timeout)
-        .tcp_keepalive(config.tcp_keepalive)
-        .tcp_nodelay(true)
-        .user_agent(config.user_agent)
+    create_client_builder(timeout)
         .default_headers(default_headers)
         .build()
 }

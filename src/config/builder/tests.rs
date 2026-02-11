@@ -2,6 +2,7 @@
 
 #[cfg(test)]
 mod tests {
+    use crate::config::models::auth::{AuthConfig, RbacConfig};
     use super::super::presets;
     use super::super::types::{ConfigBuilder, ProviderConfigBuilder};
 
@@ -9,6 +10,14 @@ mod tests {
     fn test_config_builder() {
         let config = ConfigBuilder::new()
             .with_server(presets::dev_server().build())
+            .with_auth(AuthConfig {
+                enable_jwt: true,
+                enable_api_key: true,
+                jwt_secret: "StrongJwtSecretWithMixedCaseAndNumbers1234!".to_string(),
+                jwt_expiration: 3600,
+                api_key_header: "X-API-Key".to_string(),
+                rbac: RbacConfig::default(),
+            })
             .add_provider(
                 presets::openai_provider("openai", "test-key")
                     .unwrap()

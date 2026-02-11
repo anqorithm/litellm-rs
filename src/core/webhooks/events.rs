@@ -3,7 +3,7 @@
 //! This module provides convenience functions for building common webhook events.
 
 use super::types::WebhookEventType;
-use crate::core::models::RequestContext;
+use crate::core::types::context::RequestContext;
 
 /// Build request started event
 pub fn request_started(
