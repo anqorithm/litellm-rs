@@ -285,20 +285,6 @@ impl KeyErrorResponse {
         Self::new(message, "INTERNAL_ERROR")
     }
 
-    /// Create an unauthorized error
-    pub fn unauthorized(message: impl Into<String>) -> Self {
-        Self::new(message, "UNAUTHORIZED")
-    }
-
-    /// Create a forbidden error
-    pub fn forbidden(message: impl Into<String>) -> Self {
-        Self::new(message, "FORBIDDEN")
-    }
-
-    /// Create a rate limit error
-    pub fn rate_limit(message: impl Into<String>) -> Self {
-        Self::new(message, "RATE_LIMITED")
-    }
 }
 
 #[cfg(test)]

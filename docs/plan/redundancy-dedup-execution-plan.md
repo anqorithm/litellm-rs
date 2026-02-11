@@ -733,7 +733,7 @@
 
 ### Step F17 收敛 Webhooks/Keys 未调用辅助入口
 
-- 状态: `in_progress`
+- 状态: `completed`
 - 目标: 清理 webhooks 与 key route 中未被调用的辅助入口，降低死代码噪音并保持现有主流程。
 - 预计改动文件:
   - `src/core/webhooks/delivery.rs`
@@ -748,6 +748,26 @@
   - `cargo check --lib`
 - 完成判定:
   - 目标方法清理完成，定向测试与编译通过。
+
+### Step F18 收敛 Completion 模块仅测试使用转换辅助
+
+- 状态: `in_progress`
+- 目标: 将 completion 模块中仅被单测使用的辅助函数限定为测试编译，减少主构建冗余告警。
+- 预计改动文件:
+  - `src/core/completion/conversion.rs`
+  - `src/core/completion/helpers.rs`
+  - `src/core/completion/stream.rs`
+- 详细改动:
+  - `conversion`: 将 `convert_usage` 限定为 `#[cfg(test)]`。
+  - `helpers`: 将 `assistant_message_with_thinking` 限定为 `#[cfg(test)]`。
+  - `stream`: 将 `convert_stream_chunk` / `parse_finish_reason` 限定为 `#[cfg(test)]`。
+- 步骤级测试命令:
+  - `cargo test core::completion::conversion --lib`
+  - `cargo test core::completion::helpers --lib`
+  - `cargo test core::completion::stream --lib`
+  - `cargo check --lib`
+- 完成判定:
+  - completion 仅测试辅助函数不再参与主构建且测试通过。
 
 ---
 
@@ -1230,3 +1250,16 @@
       - `cargo test core::traits::provider::handle --lib` -> pass（`6 passed; 0 failed`）
       - `cargo test core::traits::middleware --lib` -> pass（`8 passed; 0 failed`）
       - `cargo check --lib` -> pass（warning 总数 `111 -> 106`）
+  - Step F17: `completed`
+    - 修改文件:
+      - `src/core/webhooks/delivery.rs`
+      - `src/core/webhooks/manager.rs`
+      - `src/server/routes/keys/types.rs`
+    - 主要改动:
+      - 删除 `WebhookManager` 中未被调用的 `deliver_webhook` wrapper 与 `get_webhook_config` 辅助入口。
+      - 保留现有 `deliver_webhook_internal` 与队列处理主流程不变。
+      - 删除 `KeyErrorResponse` 中未被调用的 `unauthorized` / `forbidden` / `rate_limit` 构造辅助方法。
+    - 执行测试:
+      - `cargo test webhooks --lib` -> pass（`56 passed; 0 failed`）
+      - `cargo test routes::keys --lib` -> pass（`9 passed; 0 failed`）
+      - `cargo check --lib` -> pass（warning 总数 `106 -> 103`）
