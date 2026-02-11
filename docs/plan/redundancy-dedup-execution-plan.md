@@ -617,6 +617,23 @@
   - 上述 5 个 handler 不再持有未使用定位字段。
   - 定向测试与编译通过。
 
+### Step F12 清理 VertexAIProvider 未使用健康状态缓存字段
+
+- 状态: `completed`
+- 目标: 去除 `VertexAIProvider` 内未被读取的 `health_status` 冗余状态，保留现有 `health_check()` 行为。
+- 预计改动文件:
+  - `src/core/providers/vertex_ai/client.rs`
+- 详细改动:
+  - 删除 `VertexAIProvider` 结构体中的 `health_status` 字段。
+  - 删除构造函数中对应初始化逻辑。
+  - 清理未使用 import（`tokio::sync::RwLock`）。
+- 步骤级测试命令:
+  - `cargo test vertex_ai --lib`
+  - `cargo check --lib`
+- 完成判定:
+  - `VertexAIProvider` 不再持有未使用 `health_status` 字段。
+  - 定向测试与编译通过。
+
 ---
 
 ## 4. 执行日志（每步完成后追加）
@@ -1013,3 +1030,13 @@
       - `cargo test vertex_ai::image_generation --lib` -> pass（`3 passed; 0 failed`）
       - `cargo test vertex_ai::text_to_speech --lib` -> pass（`3 passed; 0 failed`）
       - `cargo check --lib` -> pass（warning 总数 `137 -> 132`）
+  - Step F12: `completed`
+    - 修改文件:
+      - `src/core/providers/vertex_ai/client.rs`
+    - 主要改动:
+      - 删除 `VertexAIProvider` 中未读取 `health_status` 字段。
+      - 删除对应构造期初始化逻辑，清理 `tokio::sync::RwLock` 冗余 import。
+      - 保持 `health_check()` 走实时 `check_health()` 逻辑，不改变对外行为。
+    - 执行测试:
+      - `cargo test vertex_ai --lib` -> pass（`226 passed; 0 failed`）
+      - `cargo check --lib` -> pass（warning 总数 `132 -> 131`）

@@ -5,7 +5,6 @@ use reqwest::{Client, Response};
 use serde_json::Value;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::RwLock;
 use tracing::debug;
 
 use crate::core::{
@@ -107,7 +106,6 @@ pub struct VertexAIProvider {
     auth: Arc<VertexAuth>,
     http_client: Client,
     // Cost calculation integrated internally
-    health_status: Arc<RwLock<HealthStatus>>,
     gemini_transformer: GeminiTransformer,
     partner_transformer: PartnerModelTransformer,
 }
@@ -120,14 +118,10 @@ impl VertexAIProvider {
         let http_client = create_custom_client(Duration::from_secs(config.timeout_seconds))
             .map_err(|e| ProviderError::configuration("vertex_ai", e.to_string()))?;
 
-        // Cost calculation integrated in provider implementation
-        let health_status = Arc::new(RwLock::new(HealthStatus::Healthy));
-
         Ok(Self {
             config,
             auth,
             http_client,
-            health_status,
             gemini_transformer: GeminiTransformer::new(),
             partner_transformer: PartnerModelTransformer::new(),
         })
