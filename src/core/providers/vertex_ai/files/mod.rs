@@ -92,18 +92,12 @@ pub struct ListFilesResponse {
 }
 
 /// File handler for managing uploads and operations
-pub struct FileHandler {
-    project_id: String,
-    location: String,
-}
+pub struct FileHandler;
 
 impl FileHandler {
     /// Create new file handler
-    pub fn new(project_id: String, location: String) -> Self {
-        Self {
-            project_id,
-            location,
-        }
+    pub fn new(_project_id: String, _location: String) -> Self {
+        Self
     }
 
     /// Upload a file to Vertex AI

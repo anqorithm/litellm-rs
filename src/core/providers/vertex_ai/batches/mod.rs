@@ -130,18 +130,12 @@ pub struct CreateBatchJobRequest {
 }
 
 /// Batch handler for managing batch jobs
-pub struct BatchHandler {
-    project_id: String,
-    location: String,
-}
+pub struct BatchHandler;
 
 impl BatchHandler {
     /// Create a new batch handler
-    pub fn new(project_id: String, location: String) -> Self {
-        Self {
-            project_id,
-            location,
-        }
+    pub fn new(_project_id: String, _location: String) -> Self {
+        Self
     }
 
     /// Create a batch job

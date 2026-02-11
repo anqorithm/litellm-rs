@@ -75,18 +75,12 @@ pub struct ContentEmbedding {
 /// Gemini embedding handler
 pub struct GeminiEmbeddingHandler {
     model: VertexEmbeddingModel,
-    project_id: String,
-    location: String,
 }
 
 impl GeminiEmbeddingHandler {
     /// Create new Gemini embedding handler
-    pub fn new(model: VertexEmbeddingModel, project_id: String, location: String) -> Self {
-        Self {
-            model,
-            project_id,
-            location,
-        }
+    pub fn new(model: VertexEmbeddingModel, _project_id: String, _location: String) -> Self {
+        Self { model }
     }
 
     /// Generate embedding for single content

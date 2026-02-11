@@ -591,6 +591,32 @@
   - 以上 5 个文件不再含未使用 `config` 字段（和对应未使用访问器）。
   - 定向测试与编译通过。
 
+### Step F11 清理 Vertex AI 子处理器未使用定位字段
+
+- 状态: `completed`
+- 目标: 删除 Vertex AI 子处理器中未使用的 `project_id/location` 等状态字段，保留 API 签名兼容。
+- 预计改动文件:
+  - `src/core/providers/vertex_ai/batches/mod.rs`
+  - `src/core/providers/vertex_ai/files/mod.rs`
+  - `src/core/providers/vertex_ai/gemini_embeddings/mod.rs`
+  - `src/core/providers/vertex_ai/image_generation/mod.rs`
+  - `src/core/providers/vertex_ai/text_to_speech/mod.rs`
+- 详细改动:
+  - 删除上述 handler struct 的冗余字段（`project_id` / `location`）。
+  - 构造函数参数保留，改为 `_project_id` / `_location` 占位，避免外部调用断裂。
+  - 不更改现有 TODO/stub 行为。
+- 步骤级测试命令:
+  - `cargo test vertex_ai --lib`
+  - `cargo test vertex_ai::batches --lib`
+  - `cargo test vertex_ai::files --lib`
+  - `cargo test vertex_ai::gemini_embeddings --lib`
+  - `cargo test vertex_ai::image_generation --lib`
+  - `cargo test vertex_ai::text_to_speech --lib`
+  - `cargo check --lib`
+- 完成判定:
+  - 上述 5 个 handler 不再持有未使用定位字段。
+  - 定向测试与编译通过。
+
 ---
 
 ## 4. 执行日志（每步完成后追加）
@@ -968,3 +994,22 @@
       - `cargo test meta_llama --lib` -> pass（`13 passed; 0 failed`）
       - `cargo test huggingface --lib` -> pass（`68 passed; 0 failed`）
       - `cargo check --lib` -> pass（warning 总数 `143 -> 137`）
+  - Step F11: `completed`
+    - 修改文件:
+      - `src/core/providers/vertex_ai/batches/mod.rs`
+      - `src/core/providers/vertex_ai/files/mod.rs`
+      - `src/core/providers/vertex_ai/gemini_embeddings/mod.rs`
+      - `src/core/providers/vertex_ai/image_generation/mod.rs`
+      - `src/core/providers/vertex_ai/text_to_speech/mod.rs`
+    - 主要改动:
+      - 删除 5 个 Vertex AI 子处理器的未使用定位字段（`project_id` / `location`）。
+      - 构造函数签名保持兼容，改为 `_project_id` / `_location` 占位参数，不影响外部调用。
+      - 保留现有 stub/TODO 路径行为不变。
+    - 执行测试:
+      - `cargo test vertex_ai --lib` -> pass（`226 passed; 0 failed`）
+      - `cargo test vertex_ai::batches --lib` -> pass（`0 passed; 0 failed`）
+      - `cargo test vertex_ai::files --lib` -> pass（`3 passed; 0 failed`）
+      - `cargo test vertex_ai::gemini_embeddings --lib` -> pass（`2 passed; 0 failed`）
+      - `cargo test vertex_ai::image_generation --lib` -> pass（`3 passed; 0 failed`）
+      - `cargo test vertex_ai::text_to_speech --lib` -> pass（`3 passed; 0 failed`）
+      - `cargo check --lib` -> pass（warning 总数 `137 -> 132`）

@@ -83,18 +83,12 @@ impl ImageGenerationModel {
 }
 
 /// Image generation handler
-pub struct ImageGenerationHandler {
-    project_id: String,
-    location: String,
-}
+pub struct ImageGenerationHandler;
 
 impl ImageGenerationHandler {
     /// Create new image generation handler
-    pub fn new(project_id: String, location: String) -> Self {
-        Self {
-            project_id,
-            location,
-        }
+    pub fn new(_project_id: String, _location: String) -> Self {
+        Self
     }
 
     /// Generate images from text prompt
