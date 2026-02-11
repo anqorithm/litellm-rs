@@ -27,8 +27,6 @@ struct AlertState {
     soft_limit_alerted: bool,
     /// Whether exceeded alert has been sent
     exceeded_alerted: bool,
-    /// Last reset time for this tracking period
-    last_reset_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 impl Default for BudgetTracker {
@@ -195,7 +193,6 @@ impl BudgetTracker {
                     *state = AlertState {
                         soft_limit_alerted: false,
                         exceeded_alerted: false,
-                        last_reset_at: Some(chrono::Utc::now()),
                     };
                 }
             }
@@ -220,7 +217,6 @@ impl BudgetTracker {
                 *state = AlertState {
                     soft_limit_alerted: false,
                     exceeded_alerted: false,
-                    last_reset_at: Some(chrono::Utc::now()),
                 };
             }
 

@@ -210,8 +210,6 @@ pub struct ArizeIntegration {
 /// Pending request tracking
 #[derive(Debug, Clone)]
 struct PendingRequest {
-    model: String,
-    provider: String,
     start_time: u64,
     features: HashMap<String, ArizeValue>,
 }
@@ -348,8 +346,6 @@ impl Integration for ArizeIntegration {
         let features = self.build_features(&event.model, &provider);
 
         let pending = PendingRequest {
-            model: event.model.clone(),
-            provider,
             start_time: Self::current_timestamp_ms(),
             features,
         };
@@ -505,8 +501,6 @@ impl Integration for ArizeIntegration {
         );
 
         let pending = PendingRequest {
-            model: event.model.clone(),
-            provider,
             start_time: Self::current_timestamp_ms(),
             features,
         };

@@ -634,6 +634,40 @@
   - `VertexAIProvider` 不再持有未使用 `health_status` 字段。
   - 定向测试与编译通过。
 
+### Step F13 收敛核心观测与网关层低风险冗余状态
+
+- 状态: `completed`
+- 目标: 清理核心模块中一批低风险冗余（未读私有字段、未用私有方法、仅测试使用的误导入）。
+- 预计改动文件:
+  - `src/core/providers/openai/transformer.rs`
+  - `src/core/a2a/gateway.rs`
+  - `src/core/budget/tracker.rs`
+  - `src/core/integrations/observability/arize.rs`
+  - `src/core/integrations/observability/helicone.rs`
+  - `src/core/integrations/observability/opentelemetry.rs`
+  - `src/core/integrations/observability/prometheus.rs`
+  - `src/core/observability/metrics.rs`
+  - `src/core/health/provider.rs`
+- 详细改动:
+  - OpenAI transformer: 将仅测试使用的类型导入改为 `#[cfg(test)]`，消除主构建无用 import。
+  - A2A Gateway: 删除未使用 `config` 字段，保持构造与行为语义不变。
+  - Budget tracker: 删除 `AlertState.last_reset_at` 未读字段。
+  - Arize/Helicone: 删除 `PendingRequest` 中未读取 `model/provider` 字段。
+  - OpenTelemetry: 删除 `ActiveSpan.request` 未读字段与 `SpanBatch::is_empty` 未用方法。
+  - Prometheus integration: 删除 `Gauge::set` 未用方法。
+  - Metrics collector: 删除 `custom_metrics` 未用存储字段。
+  - Health provider: 删除 `SystemHealth.last_updated` 未读字段。
+- 步骤级测试命令:
+  - `cargo test openai --lib`
+  - `cargo test a2a --lib`
+  - `cargo test budget --lib`
+  - `cargo test observability --lib`
+  - `cargo test health --lib`
+  - `cargo check --lib`
+- 完成判定:
+  - 上述冗余项全部移除且行为保持兼容。
+  - 定向测试与编译通过。
+
 ---
 
 ## 4. 执行日志（每步完成后追加）
@@ -1040,3 +1074,30 @@
     - 执行测试:
       - `cargo test vertex_ai --lib` -> pass（`226 passed; 0 failed`）
       - `cargo check --lib` -> pass（warning 总数 `132 -> 131`）
+  - Step F13: `completed`
+    - 修改文件:
+      - `src/core/providers/openai/transformer.rs`
+      - `src/core/a2a/gateway.rs`
+      - `src/core/budget/tracker.rs`
+      - `src/core/integrations/observability/arize.rs`
+      - `src/core/integrations/observability/helicone.rs`
+      - `src/core/integrations/observability/opentelemetry.rs`
+      - `src/core/integrations/observability/prometheus.rs`
+      - `src/core/observability/metrics.rs`
+      - `src/core/health/provider.rs`
+    - 主要改动:
+      - OpenAI transformer 将仅测试使用导入改为 `#[cfg(test)]`，消除主构建无用 import。
+      - `A2AGateway` 删除未使用 `config` 状态字段，保留构造流程与对外行为。
+      - `BudgetTracker::AlertState` 删除未读 `last_reset_at` 字段。
+      - Arize/Helicone `PendingRequest` 删除未读取 `model/provider` 字段。
+      - OpenTelemetry 删除 `ActiveSpan.request` 与未用 `SpanBatch::is_empty`。
+      - Prometheus integration 删除未用 `Gauge::set`。
+      - `MetricsCollector` 删除未使用 `custom_metrics` 存储。
+      - `SystemHealth` 删除未读取 `last_updated` 字段。
+    - 执行测试:
+      - `cargo test openai --lib` -> pass
+      - `cargo test a2a --lib` -> pass
+      - `cargo test budget --lib` -> pass
+      - `cargo test observability --lib` -> pass
+      - `cargo test health --lib` -> pass
+      - `cargo check --lib` -> pass（warning 总数 `131 -> 121`）

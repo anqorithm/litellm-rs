@@ -9,14 +9,16 @@ use crate::core::types::responses::{
 };
 use crate::core::types::thinking::ThinkingContent;
 use crate::core::types::{
-    chat::ChatMessage, chat::ChatRequest, content::ContentPart, content::ImageUrl, message::MessageContent,
-    message::MessageRole, tools::FunctionCall, tools::ResponseFormat, tools::Tool, tools::ToolCall,
-    tools::ToolChoice,
+    chat::ChatMessage, chat::ChatRequest, content::ContentPart, message::MessageContent,
+    message::MessageRole, tools::ResponseFormat, tools::Tool, tools::ToolChoice,
 };
 use serde_json;
 
 use super::error::OpenAIError;
 use super::models::*;
+
+#[cfg(test)]
+use crate::core::types::{content::ImageUrl, tools::FunctionCall, tools::ToolCall};
 
 /// OpenAI Request Transformer
 pub struct OpenAIRequestTransformer;

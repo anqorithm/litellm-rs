@@ -111,10 +111,6 @@ struct Gauge {
 }
 
 impl Gauge {
-    fn set(&self, v: f64) {
-        self.value.store(v.to_bits(), Ordering::Relaxed);
-    }
-
     fn inc(&self) {
         let current = f64::from_bits(self.value.load(Ordering::Relaxed));
         self.value

@@ -117,16 +117,12 @@ impl ProviderHealth {
 /// System health aggregator
 pub struct SystemHealth {
     provider_health: HashMap<String, ProviderHealth>,
-    last_updated: chrono::DateTime<chrono::Utc>,
 }
 
 impl SystemHealth {
     /// Create system health snapshot
     pub fn new(provider_health: HashMap<String, ProviderHealth>) -> Self {
-        Self {
-            provider_health,
-            last_updated: chrono::Utc::now(),
-        }
+        Self { provider_health }
     }
 
     /// Get overall system health status

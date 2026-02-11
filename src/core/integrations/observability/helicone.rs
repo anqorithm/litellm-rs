@@ -189,8 +189,6 @@ pub struct HeliconeIntegration {
 /// Pending request tracking
 #[derive(Debug, Clone)]
 struct PendingRequest {
-    model: String,
-    provider: String,
     start_time: u64,
     properties: HashMap<String, String>,
 }
@@ -300,11 +298,6 @@ impl Integration for HeliconeIntegration {
         debug!("Helicone: LLM request started - {}", event.request_id);
 
         let pending = PendingRequest {
-            model: event.model.clone(),
-            provider: event
-                .provider
-                .clone()
-                .unwrap_or_else(|| "unknown".to_string()),
             start_time: Self::current_timestamp_ms(),
             properties: self.build_properties(&[]),
         };
@@ -412,11 +405,6 @@ impl Integration for HeliconeIntegration {
 
     async fn on_embedding_start(&self, event: &EmbeddingStartEvent) -> IntegrationResult<()> {
         let pending = PendingRequest {
-            model: event.model.clone(),
-            provider: event
-                .provider
-                .clone()
-                .unwrap_or_else(|| "unknown".to_string()),
             start_time: Self::current_timestamp_ms(),
             properties: self.build_properties(&[("type", "embedding")]),
         };

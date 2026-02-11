@@ -1,7 +1,7 @@
 //! Metrics collection and export
 
 use super::histogram::BoundedHistogram;
-use super::types::{MetricValue, TokenUsage};
+use super::types::TokenUsage;
 use crate::utils::error::error::Result;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -63,8 +63,6 @@ pub struct MetricsCollector {
     datadog_client: Option<DataDogClient>,
     /// OpenTelemetry exporter
     otel_exporter: Option<OtelExporter>,
-    /// Custom metrics storage
-    custom_metrics: Arc<RwLock<HashMap<String, MetricValue>>>,
 }
 
 impl Default for MetricsCollector {
@@ -80,7 +78,6 @@ impl MetricsCollector {
             prometheus_metrics: Arc::new(RwLock::new(PrometheusMetrics::default())),
             datadog_client: None,
             otel_exporter: None,
-            custom_metrics: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
