@@ -101,24 +101,6 @@ impl ErrorMapper<BedrockError> for BedrockErrorMapper {
     }
 }
 
-/// Create a model-specific error
-pub fn model_error(model_id: &str, message: &str) -> BedrockError {
-    ProviderError::model_not_found("bedrock", format!("{}: {}", model_id, message))
-}
-
-/// Create a region-specific error
-pub fn region_error(region: &str, message: &str) -> BedrockError {
-    ProviderError::configuration("bedrock", format!("Region {}: {}", region, message))
-}
-
-/// Create a transform-specific error
-pub fn transform_error(transform_type: &str, message: &str) -> BedrockError {
-    ProviderError::serialization(
-        "bedrock",
-        format!("{} transformation error: {}", transform_type, message),
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

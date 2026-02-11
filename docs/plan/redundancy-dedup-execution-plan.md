@@ -789,7 +789,7 @@
 
 ### Step F20 去除 AzureAI 旧版重复实现与 Bedrock 冗余错误助手
 
-- 状态: `in_progress`
+- 状态: `completed`
 - 目标: 删除 AzureAI 重复的旧 `chat_simple` 实现并清理 Bedrock 未接线错误助手，减少重复设计与死代码。
 - 预计改动文件:
   - `src/core/providers/azure_ai/mod.rs`
@@ -1324,3 +1324,15 @@
     - 执行测试:
       - `cargo test bedrock --lib` -> pass（`261 passed; 0 failed`）
       - `cargo check --lib` -> pass（warning 总数 `99 -> 91`）
+  - Step F20: `completed`
+    - 修改文件:
+      - `src/core/providers/azure_ai/mod.rs`
+      - `src/core/providers/azure_ai/chat_simple.rs`（已删除）
+      - `src/core/providers/bedrock/error.rs`
+    - 主要改动:
+      - 删除 AzureAI 未接线且与 `chat.rs` 重复的 `chat_simple` 旧实现模块，并移除 `mod chat_simple;` 声明。
+      - 删除 Bedrock error 中未被调用的 `model_error`、`region_error`、`transform_error` 辅助函数。
+    - 执行测试:
+      - `cargo test azure_ai --lib` -> pass（`84 passed; 0 failed`）
+      - `cargo test bedrock::error --lib` -> pass（`2 passed; 0 failed`）
+      - `cargo check --lib` -> pass（warning 总数 `91 -> 84`）

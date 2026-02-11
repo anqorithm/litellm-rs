@@ -11,9 +11,6 @@ pub mod image_generation;
 pub mod models;
 pub mod rerank;
 
-// Keep simplified chat for backward compatibility during transition
-mod chat_simple;
-
 // Re-export main components
 pub use chat::{AzureAIChatHandler, AzureAIChatUtils};
 pub use config::{AzureAIConfig, AzureAIEndpointType};
