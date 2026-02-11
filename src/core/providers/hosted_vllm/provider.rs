@@ -43,7 +43,6 @@ pub struct HostedVLLMProvider {
     config: HostedVLLMConfig,
     pool_manager: Arc<GlobalPoolManager>,
     models: Vec<ModelInfo>,
-    served_model: Option<HostedVLLMModelInfo>,
 }
 
 impl HostedVLLMProvider {
@@ -76,7 +75,6 @@ impl HostedVLLMProvider {
             config,
             pool_manager,
             models,
-            served_model,
         })
     }
 

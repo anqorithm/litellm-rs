@@ -40,7 +40,6 @@ pub struct VLLMProvider {
     config: VLLMConfig,
     pool_manager: Arc<GlobalPoolManager>,
     models: Vec<ModelInfo>,
-    served_model: Option<VLLMModelInfo>,
 }
 
 impl VLLMProvider {
@@ -70,7 +69,6 @@ impl VLLMProvider {
             config,
             pool_manager,
             models,
-            served_model,
         })
     }
 

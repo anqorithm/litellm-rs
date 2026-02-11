@@ -548,6 +548,24 @@
   - `anthropic/provider.rs` 不再包含上述未使用字段与方法。
   - 定向测试与编译通过。
 
+### Step F9 清理 VLLM/HostedVLLM 未使用 `served_model` 字段
+
+- 状态: `completed`
+- 目标: 去除两个 vLLM provider struct 中仅在构造期使用、运行期未读取的冗余状态字段。
+- 预计改动文件:
+  - `src/core/providers/vllm/provider.rs`
+  - `src/core/providers/hosted_vllm/provider.rs`
+- 详细改动:
+  - 删除 `VLLMProvider` 与 `HostedVLLMProvider` 的 `served_model` 字段。
+  - 保留构造时 `served_model` 局部变量用于生成初始 `models`，不改变现有行为。
+- 步骤级测试命令:
+  - `cargo test vllm --lib`
+  - `cargo test hosted_vllm --lib`
+  - `cargo check --lib`
+- 完成判定:
+  - 两个 provider struct 不再包含未使用 `served_model` 字段。
+  - 定向测试与编译通过。
+
 ---
 
 ## 4. 执行日志（每步完成后追加）
@@ -896,3 +914,14 @@
     - 执行测试:
       - `cargo test anthropic --lib` -> pass（`208 passed; 0 failed`）
       - `cargo check --lib` -> pass（warning 总数 `146 -> 145`）
+  - Step F9: `completed`
+    - 修改文件:
+      - `src/core/providers/vllm/provider.rs`
+      - `src/core/providers/hosted_vllm/provider.rs`
+    - 主要改动:
+      - 删除 `VLLMProvider` 与 `HostedVLLMProvider` 的未使用 `served_model` 字段。
+      - 保留构造阶段 `served_model` 局部变量用于初始化 `models`，不改变对外行为。
+    - 执行测试:
+      - `cargo test vllm --lib` -> pass（`92 passed; 0 failed`）
+      - `cargo test hosted_vllm --lib` -> pass（`42 passed; 0 failed`）
+      - `cargo check --lib` -> pass（warning 总数 `145 -> 143`）
