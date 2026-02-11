@@ -514,6 +514,40 @@
   - 上述 provider 不再保留未使用状态字段。
   - 定向测试与编译通过。
 
+### Step F7 清理 StabilityProvider 未使用字段与方法
+
+- 状态: `completed`
+- 目标: 移除 `stability` provider 内未使用状态与冗余辅助方法，进一步降低 dead code 噪音。
+- 预计改动文件:
+  - `src/core/providers/stability/provider.rs`
+- 详细改动:
+  - 删除 `StabilityProvider` 中未使用 `pool_manager` 字段。
+  - 删除未使用私有方法 `get_request_headers`。
+  - 保留 `GlobalPoolManager::new()` 构造调用为局部 `_pool_manager`，维持初始化错误语义。
+- 步骤级测试命令:
+  - `cargo test stability --lib`
+  - `cargo check --lib`
+- 完成判定:
+  - `stability/provider.rs` 不再包含上述未使用字段和方法。
+  - 定向测试与编译通过。
+
+### Step F8 清理 AnthropicProvider 未使用状态与私有方法
+
+- 状态: `completed`
+- 目标: 移除 `anthropic` provider 中当前未被调用的内部状态和冗余私有方法。
+- 预计改动文件:
+  - `src/core/providers/anthropic/provider.rs`
+- 详细改动:
+  - 删除 `AnthropicProvider` 未使用字段：`config`、`pool_manager`。
+  - 删除未使用私有方法：`generate_headers`、`calculate_cost(&ChatRequest, &ChatResponse)`。
+  - 保留 `GlobalPoolManager::new()` 初始化为局部 `_pool_manager`，维持初始化失败语义。
+- 步骤级测试命令:
+  - `cargo test anthropic --lib`
+  - `cargo check --lib`
+- 完成判定:
+  - `anthropic/provider.rs` 不再包含上述未使用字段与方法。
+  - 定向测试与编译通过。
+
 ---
 
 ## 4. 执行日志（每步完成后追加）
@@ -841,3 +875,24 @@
       - `cargo test gemini --lib` -> pass
       - `cargo check --lib` -> pass（warning 总数 `151 -> 148`）
       - `cargo test --lib` -> pass（`12363 passed; 0 failed`）
+  - Step F7: `completed`
+    - 修改文件:
+      - `src/core/providers/stability/provider.rs`
+    - 主要改动:
+      - 删除 `StabilityProvider` 的未使用 `pool_manager` 字段。
+      - 删除未使用私有方法 `get_request_headers`，并清理相关 import。
+      - 保留 `GlobalPoolManager::new()` 初始化为局部 `_pool_manager`，维持初始化错误语义。
+    - 执行测试:
+      - `cargo test stability --lib` -> pass
+      - `cargo check --lib` -> pass（warning 总数 `148 -> 146`）
+      - `cargo test --lib` -> pass（`12363 passed; 0 failed`）
+  - Step F8: `completed`
+    - 修改文件:
+      - `src/core/providers/anthropic/provider.rs`
+    - 主要改动:
+      - 删除 `AnthropicProvider` 的未使用字段：`config`、`pool_manager`。
+      - 删除未使用私有方法 `generate_headers`、`calculate_cost(&ChatRequest, &ChatResponse)`。
+      - 保留 `GlobalPoolManager::new()` 初始化为局部 `_pool_manager`，维持初始化失败语义。
+    - 执行测试:
+      - `cargo test anthropic --lib` -> pass（`208 passed; 0 failed`）
+      - `cargo check --lib` -> pass（warning 总数 `146 -> 145`）
