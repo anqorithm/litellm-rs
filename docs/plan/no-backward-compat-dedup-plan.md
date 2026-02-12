@@ -75,7 +75,7 @@
 
 ## Step 2 - 删除 legacy cache_manager（仅保留 core/cache）
 
-- 状态: `pending`
+- 状态: `completed`
 - 目标:
   - 移除 `core/cache_manager` 兼容层，统一到 `core/cache`
 - 预计改动文件:
@@ -219,9 +219,17 @@
 ### Step 2
 
 - 状态变更: `pending -> in_progress -> completed`
-- 实际改动文件: (待执行后回填)
-- 测试命令: (待回填)
-- 结果: (待回填)
+- 实际改动文件:
+  - `src/core/mod.rs`
+  - `src/core/cache_manager/mod.rs` (deleted)
+  - `src/core/cache_manager/manager.rs` (deleted)
+  - `src/core/cache_manager/types.rs` (deleted)
+  - `src/core/cache_manager/tests.rs` (deleted)
+  - `benches/performance_benchmarks.rs`
+- 测试命令:
+  - `cargo check` ✅
+  - `cargo test --lib core::cache` ✅ (126 passed)
+- 结果: 完成，`cache_manager` 已彻底下线，缓存主路径仅保留 `core/cache`
 
 ### Step 3
 

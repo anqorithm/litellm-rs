@@ -14,9 +14,6 @@ pub mod batch;
 pub mod budget; // Budget management system
 #[cfg(feature = "storage")]
 pub mod cache; // Canonical deterministic cache subsystem (DualCache / LLMCache)
-#[cfg(feature = "storage")]
-#[doc(hidden)]
-pub mod cache_manager; // Legacy cache manager (compatibility only)
 pub mod completion; // Core completion API
 pub mod cost; // Unified cost calculation system
 pub mod embedding; // Core embedding API (Python LiteLLM compatible)

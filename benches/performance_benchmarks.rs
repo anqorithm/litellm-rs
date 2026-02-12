@@ -4,8 +4,6 @@
 //! of various components in the litellm-rs system.
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
-use litellm_rs::core::cache_manager::manager::CacheManager;
-use litellm_rs::core::cache_manager::types::{CacheConfig, CacheKey};
 use litellm_rs::core::models::openai::*;
 use litellm_rs::core::providers::Provider;
 use litellm_rs::core::providers::openai::OpenAIProvider;
@@ -18,74 +16,7 @@ use std::hint::black_box;
 
 use litellm_rs::utils::string_pool::{StringPool, intern_string};
 use std::sync::Arc;
-use std::time::Duration;
 use tokio::runtime::Runtime;
-
-/// Benchmark cache operations
-fn bench_cache_operations(c: &mut Criterion) {
-    let rt = Runtime::new().unwrap();
-
-    let mut group = c.benchmark_group("cache_operations");
-
-    // Test different cache sizes
-    for cache_size in [100, 1000, 10000].iter() {
-        let config = CacheConfig {
-            max_entries: *cache_size,
-            default_ttl: Duration::from_secs(3600),
-            enable_semantic: false,
-            similarity_threshold: 0.95,
-            min_prompt_length: 10,
-            enable_compression: false,
-        };
-
-        group.bench_with_input(
-            BenchmarkId::new("cache_get", cache_size),
-            cache_size,
-            |b, &_size| {
-                let cache = rt.block_on(async { CacheManager::new(config.clone()).unwrap() });
-                let key = CacheKey {
-                    model: intern_string("gpt-4"),
-                    request_hash: 12345,
-                    user_id: None,
-                };
-
-                b.iter(|| rt.block_on(async { black_box(cache.get(&key).await.unwrap()) }));
-            },
-        );
-
-        group.bench_with_input(
-            BenchmarkId::new("cache_put", cache_size),
-            cache_size,
-            |b, &_size| {
-                let cache = rt.block_on(async { CacheManager::new(config.clone()).unwrap() });
-
-                b.iter(|| {
-                    let key = CacheKey {
-                        model: intern_string("gpt-4"),
-                        request_hash: rand::random::<u64>(),
-                        user_id: None,
-                    };
-                    let response = ChatCompletionResponse {
-                        id: "test".to_string(),
-                        object: "chat.completion".to_string(),
-                        created: 1234567890,
-                        model: "gpt-4".to_string(),
-                        choices: vec![],
-                        usage: None,
-                        system_fingerprint: None,
-                    };
-
-                    rt.block_on(async {
-                        cache.put(key, response).await.unwrap();
-                        black_box(())
-                    })
-                });
-            },
-        );
-    }
-
-    group.finish();
-}
 
 /// Benchmark string pool operations
 fn bench_string_pool(c: &mut Criterion) {
@@ -485,43 +416,6 @@ fn bench_concurrent_operations(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
     let mut group = c.benchmark_group("concurrent_operations");
 
-    // Test concurrent cache operations
-    for num_tasks in [10, 50, 100].iter() {
-        group.bench_with_input(
-            BenchmarkId::new("concurrent_cache_ops", num_tasks),
-            num_tasks,
-            |b, &num_tasks| {
-                let config = CacheConfig::default();
-                let cache = rt.block_on(async { Arc::new(CacheManager::new(config).unwrap()) });
-
-                b.iter(|| {
-                    let cache = cache.clone();
-                    rt.block_on(async move {
-                        let mut handles = Vec::new();
-
-                        for i in 0..num_tasks {
-                            let cache = cache.clone();
-                            let handle = tokio::spawn(async move {
-                                let key = CacheKey {
-                                    model: intern_string("gpt-4"),
-                                    request_hash: i as u64,
-                                    user_id: None,
-                                };
-                                cache.get(&key).await.unwrap()
-                            });
-                            handles.push(handle);
-                        }
-
-                        for handle in handles {
-                            handle.await.unwrap();
-                        }
-                        black_box(());
-                    })
-                });
-            },
-        );
-    }
-
     group.finish();
 }
 
@@ -565,7 +459,6 @@ fn bench_memory_usage(c: &mut Criterion) {
 
 criterion_group!(
     benches,
-    bench_cache_operations,
     bench_string_pool,
     bench_load_balancer,
     bench_unified_router,
