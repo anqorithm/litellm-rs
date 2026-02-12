@@ -169,7 +169,7 @@
 
 ## Step 5 - 最终回归与计划归档
 
-- 状态: `pending`
+- 状态: `blocked`
 - 目标:
   - 运行全量验证并回写计划状态与每步结果
 - 预计改动文件:
@@ -284,7 +284,21 @@
 
 ### Step 5
 
-- 状态变更: `pending -> in_progress -> completed`
-- 实际改动文件: (待执行后回填)
-- 测试命令: (待回填)
-- 结果: (待回填)
+- 状态变更: `pending -> in_progress -> blocked`
+- 实际改动文件:
+  - `docs/plan/no-backward-compat-dedup-plan.md`
+- 测试命令:
+  - `cargo check` ✅
+  - `cargo test --lib` ✅ (11917 passed)
+  - `cargo test --tests` ❌ (集成测试入口 `tests/lib.rs` 在编译阶段失败)
+- 阻塞详情:
+  - `tests/common/database.rs:7` 导入 `litellm_rs::config::DatabaseConfig` 失败
+  - `tests/integration/config_validation_tests.rs:10` 导入 `litellm_rs::config::models::{CorsConfig, GatewayConfig, HealthCheckConfig, ProviderConfig, RetryConfig, ServerConfig, TlsConfig}` 失败
+  - `tests/integration/database_tests.rs:8` 导入 `litellm_rs::config::DatabaseConfig` 失败
+  - `tests/integration/error_handling_tests.rs:10` 导入 `litellm_rs::utils::error::GatewayError` 失败
+- Breaking changes（按模块）:
+  - Alerting: 删除 `src/core/alerting/*` 与 `src/core/observability/alerting.rs`，统一到 `monitoring/alerts`
+  - Cache: 删除 `src/core/cache_manager/*`，统一到 `src/core/cache/*`
+  - Router: 删除 `src/core/router/load_balancer/*`、`src/core/router/strategy/*`、`src/core/router/{health,metrics}.rs`，统一到 `UnifiedRouter`
+  - Models: 删除 `src/core/models/request.rs` 与 `src/core/models/response/*`，统一到 `core/types` 与 `core/models/openai`
+- 结果: 最终验证流程已执行完成，但因仓库既有集成测试导入错误，Step 5 标记为 `blocked`；库级回归全部通过。
