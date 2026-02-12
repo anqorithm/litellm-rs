@@ -6,10 +6,9 @@
 
 #[cfg(test)]
 mod tests {
-    use litellm_rs::config::models::{
-        CorsConfig, GatewayConfig, HealthCheckConfig, ProviderConfig, RetryConfig, ServerConfig,
-        TlsConfig,
-    };
+    use litellm_rs::config::models::gateway::GatewayConfig;
+    use litellm_rs::config::models::provider::{HealthCheckConfig, ProviderConfig, RetryConfig};
+    use litellm_rs::config::models::server::{CorsConfig, ServerConfig, TlsConfig};
 
     // ==================== GatewayConfig Validation ====================
 
@@ -80,6 +79,7 @@ mod tests {
     #[test]
     fn test_gateway_config_empty_database_url() {
         let mut config = create_valid_gateway_config();
+        config.storage.database.enabled = true;
         config.storage.database.url = String::new();
 
         let result = config.validate();

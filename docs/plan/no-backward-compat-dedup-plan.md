@@ -204,7 +204,7 @@
 
 ## Step 7 - 修复配置校验集成测试导入路径（config::models 子模块）
 
-- 状态: `pending`
+- 状态: `completed`
 - 目标:
   - 将配置校验测试改为从各自子模块导入类型
 - 预计改动文件:
@@ -383,10 +383,13 @@
 
 ### Step 7
 
-- 状态变更: `pending`
-- 实际改动文件: (待回填)
-- 测试命令: (待回填)
-- 结果: (待回填)
+- 状态变更: `pending -> in_progress -> completed`
+- 实际改动文件:
+  - `tests/integration/config_validation_tests.rs`
+- 测试命令:
+  - `cargo test --test lib integration::config_validation_tests` ❌（首次受 Step 8 未完成导致 `tests/lib.rs` 编译失败）
+  - `cargo test --test lib integration::config_validation_tests` ✅（31 passed）
+- 结果: 完成，配置类型导入路径已改为子模块路径，并修正 `empty_database_url` 用例（仅在 `database.enabled = true` 时断言报错）
 
 ### Step 8
 
