@@ -7,7 +7,7 @@
 mod tests {
     use actix_web::ResponseError;
     use litellm_rs::core::providers::unified_provider::ProviderError;
-    use litellm_rs::utils::error::GatewayError;
+    use litellm_rs::GatewayError;
 
     // ==================== ProviderError to GatewayError Conversion ====================
 

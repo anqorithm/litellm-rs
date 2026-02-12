@@ -222,7 +222,7 @@
 
 ## Step 8 - 修复错误处理集成测试导入路径（GatewayError）
 
-- 状态: `pending`
+- 状态: `completed`
 - 目标:
   - 使用当前公开导出路径导入 `GatewayError`
 - 预计改动文件:
@@ -393,10 +393,12 @@
 
 ### Step 8
 
-- 状态变更: `pending`
-- 实际改动文件: (待回填)
-- 测试命令: (待回填)
-- 结果: (待回填)
+- 状态变更: `pending -> in_progress -> completed`
+- 实际改动文件:
+  - `tests/integration/error_handling_tests.rs`
+- 测试命令:
+  - `cargo test --test lib integration::error_handling_tests` ✅（14 passed）
+- 结果: 完成，`GatewayError` 导入统一为 crate 根导出路径 `litellm_rs::GatewayError`
 
 ### Step 9
 
