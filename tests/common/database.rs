@@ -4,7 +4,7 @@
 //! Provides in-memory SQLite database for testing without external dependencies.
 //! Each test gets an isolated database instance using SeaORM.
 
-use litellm_rs::config::DatabaseConfig;
+use litellm_rs::config::models::storage::DatabaseConfig;
 use litellm_rs::storage::database::Database;
 use std::sync::Arc;
 

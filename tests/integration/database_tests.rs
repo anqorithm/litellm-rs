@@ -5,7 +5,7 @@
 
 #[cfg(test)]
 mod tests {
-    use litellm_rs::config::DatabaseConfig;
+    use litellm_rs::config::models::storage::DatabaseConfig;
     use litellm_rs::storage::database::Database;
 
     /// Test basic database connection and health check

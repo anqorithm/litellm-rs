@@ -186,6 +186,73 @@
   - 三条命令全部通过（若失败需记录失败点和阻塞原因）
   - 计划文档完整闭环
 
+## Step 6 - 修复数据库集成测试导入路径（storage）
+
+- 状态: `completed`
+- 目标:
+  - 将数据库相关集成测试导入切换到当前 canonical 配置模型路径
+- 预计改动文件:
+  - `tests/common/database.rs`
+  - `tests/integration/database_tests.rs`
+- 具体调整:
+  - `use litellm_rs::config::DatabaseConfig;` -> `use litellm_rs::config::models::storage::DatabaseConfig;`
+- 步骤测试:
+  - `cargo test --test lib integration::database_tests`
+- 完成标准:
+  - 数据库集成测试模块可编译执行
+  - 不再出现 `config::DatabaseConfig` unresolved import
+
+## Step 7 - 修复配置校验集成测试导入路径（config::models 子模块）
+
+- 状态: `pending`
+- 目标:
+  - 将配置校验测试改为从各自子模块导入类型
+- 预计改动文件:
+  - `tests/integration/config_validation_tests.rs`
+- 具体调整:
+  - 从 `config::models` 根导入改为:
+    - `gateway::GatewayConfig`
+    - `provider::{HealthCheckConfig, ProviderConfig, RetryConfig}`
+    - `server::{CorsConfig, ServerConfig, TlsConfig}`
+- 步骤测试:
+  - `cargo test --test lib integration::config_validation_tests`
+- 完成标准:
+  - 配置校验模块可编译执行
+  - 不再出现 `config::models::*` unresolved imports
+
+## Step 8 - 修复错误处理集成测试导入路径（GatewayError）
+
+- 状态: `pending`
+- 目标:
+  - 使用当前公开导出路径导入 `GatewayError`
+- 预计改动文件:
+  - `tests/integration/error_handling_tests.rs`
+- 具体调整:
+  - `use litellm_rs::utils::error::GatewayError;` -> `use litellm_rs::GatewayError;`
+- 步骤测试:
+  - `cargo test --test lib integration::error_handling_tests`
+- 完成标准:
+  - 错误处理模块可编译执行
+  - 不再出现 `utils::error::GatewayError` unresolved import
+
+## Step 9 - 全量回归并闭环计划状态
+
+- 状态: `pending`
+- 目标:
+  - 完成全量回归并把 Step 5 从 blocked 闭环到最终状态
+- 预计改动文件:
+  - `docs/plan/no-backward-compat-dedup-plan.md`
+- 具体调整:
+  - 追加 Step 6-9 执行日志
+  - 记录最终验证结果与剩余风险（如有）
+- 步骤测试:
+  - `cargo check`
+  - `cargo test --lib`
+  - `cargo test --tests`
+- 完成标准:
+  - 三条命令全部通过
+  - 计划文档执行日志完整闭环
+
 ---
 
 ## 2. 执行日志（每步完成后追加）
@@ -300,5 +367,37 @@
   - Alerting: 删除 `src/core/alerting/*` 与 `src/core/observability/alerting.rs`，统一到 `monitoring/alerts`
   - Cache: 删除 `src/core/cache_manager/*`，统一到 `src/core/cache/*`
   - Router: 删除 `src/core/router/load_balancer/*`、`src/core/router/strategy/*`、`src/core/router/{health,metrics}.rs`，统一到 `UnifiedRouter`
-  - Models: 删除 `src/core/models/request.rs` 与 `src/core/models/response/*`，统一到 `core/types` 与 `core/models/openai`
+- Models: 删除 `src/core/models/request.rs` 与 `src/core/models/response/*`，统一到 `core/types` 与 `core/models/openai`
 - 结果: 最终验证流程已执行完成，但因仓库既有集成测试导入错误，Step 5 标记为 `blocked`；库级回归全部通过。
+
+### Step 6
+
+- 状态变更: `pending -> in_progress -> completed`
+- 实际改动文件:
+  - `tests/common/database.rs`
+  - `tests/integration/database_tests.rs`
+- 测试命令:
+  - `cargo test --test lib integration::database_tests` ❌（首次受 Step 7/8 未完成导致 `tests/lib.rs` 编译失败）
+  - `cargo test --test lib integration::database_tests` ✅（5 passed）
+- 结果: 完成，数据库集成测试导入已切换到 `config::models::storage::DatabaseConfig`
+
+### Step 7
+
+- 状态变更: `pending`
+- 实际改动文件: (待回填)
+- 测试命令: (待回填)
+- 结果: (待回填)
+
+### Step 8
+
+- 状态变更: `pending`
+- 实际改动文件: (待回填)
+- 测试命令: (待回填)
+- 结果: (待回填)
+
+### Step 9
+
+- 状态变更: `pending`
+- 实际改动文件: (待回填)
+- 测试命令: (待回填)
+- 结果: (待回填)
