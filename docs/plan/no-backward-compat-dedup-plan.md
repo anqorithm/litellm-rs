@@ -141,7 +141,7 @@
 
 ## Step 4 - 删除重复请求/响应模型层（移除 core/models/request + core/models/response）
 
-- 状态: `pending`
+- 状态: `completed`
 - 目标:
   - 删除未被业务使用的重复模型层，统一使用 `core/types/*` 与 `core/models/openai/*`
 - 预计改动文件:
@@ -264,9 +264,23 @@
 ### Step 4
 
 - 状态变更: `pending -> in_progress -> completed`
-- 实际改动文件: (待执行后回填)
-- 测试命令: (待回填)
-- 结果: (待回填)
+- 实际改动文件:
+  - `src/core/models/mod.rs`
+  - `src/core/models/request.rs` (deleted)
+  - `src/core/models/response/mod.rs` (deleted)
+  - `src/core/models/response/completion.rs` (deleted)
+  - `src/core/models/response/embedding.rs` (deleted)
+  - `src/core/models/response/error.rs` (deleted)
+  - `src/core/models/response/media.rs` (deleted)
+  - `src/core/models/response/metadata.rs` (deleted)
+  - `src/core/models/response/moderation.rs` (deleted)
+  - `src/core/models/response/rerank.rs` (deleted)
+  - `src/core/models/response/types.rs` (deleted)
+- 测试命令:
+  - `cargo check` ✅
+  - `cargo test --lib core::models` ✅ (586 passed)
+  - `rg -n \"core::models::request|core::models::response\" src tests benches examples` ✅ (0 命中)
+- 结果: 完成，重复 request/response 层已删除，模型路径收敛到 `core/types` 与 `core/models/openai`
 
 ### Step 5
 

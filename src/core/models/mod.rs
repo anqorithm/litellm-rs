@@ -5,8 +5,6 @@
 pub mod deployment;
 pub mod metrics;
 pub mod openai;
-pub mod request;
-pub mod response;
 pub mod team;
 pub mod user;
 
