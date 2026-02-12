@@ -4,7 +4,6 @@
 
 pub mod a2a; // A2A (Agent-to-Agent) Protocol Gateway
 pub mod agent; // Agent Coordinator for managing agent lifecycles
-pub mod alerting; // Alerting system (Slack, webhooks)
 #[cfg(feature = "storage")]
 pub mod analytics;
 pub mod audio; // Audio API (transcription, translation, speech)

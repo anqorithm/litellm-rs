@@ -2,7 +2,6 @@
 //!
 //! This module provides comprehensive monitoring, logging, and alerting capabilities.
 
-mod alerting;
 mod destinations;
 mod histogram;
 mod logging;
@@ -15,7 +14,6 @@ mod types;
 mod tests;
 
 // Re-export all public types
-pub use alerting::AlertManager;
 pub use destinations::{AlertChannel, AlertRule, LogDestination, TraceExporter};
 pub use histogram::{BoundedHistogram, HISTOGRAM_MAX_SAMPLES};
 pub use logging::LogAggregator;
