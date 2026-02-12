@@ -7,8 +7,6 @@ use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_m
 use litellm_rs::core::models::openai::*;
 use litellm_rs::core::providers::Provider;
 use litellm_rs::core::providers::openai::OpenAIProvider;
-use litellm_rs::core::router::load_balancer::LoadBalancer;
-use litellm_rs::core::router::strategy::types::RoutingStrategy;
 use litellm_rs::core::router::{
     Deployment, DeploymentConfig, RouterConfig, UnifiedRouter, UnifiedRoutingStrategy,
 };
@@ -51,27 +49,6 @@ fn bench_string_pool(c: &mut Criterion) {
         b.iter(|| {
             let s = format!("global_test_{}", rand::random::<u32>());
             black_box(intern_string(&s))
-        });
-    });
-
-    group.finish();
-}
-
-/// Benchmark load balancer operations
-fn bench_load_balancer(c: &mut Criterion) {
-    let mut group = c.benchmark_group("load_balancer");
-
-    group.bench_function("provider_creation", |b| {
-        let rt = Runtime::new().unwrap();
-
-        b.iter(|| {
-            rt.block_on(async {
-                black_box(
-                    LoadBalancer::new(RoutingStrategy::RoundRobin)
-                        .await
-                        .unwrap(),
-                )
-            })
         });
     });
 
@@ -460,7 +437,6 @@ fn bench_memory_usage(c: &mut Criterion) {
 criterion_group!(
     benches,
     bench_string_pool,
-    bench_load_balancer,
     bench_unified_router,
     bench_concurrent_router,
     bench_serialization,

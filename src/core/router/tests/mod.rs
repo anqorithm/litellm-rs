@@ -11,5 +11,3 @@ mod strategy_tests;
 
 // Legacy module tests (moved from embedded tests)
 mod deployment_tests;
-mod load_balancer_tests;
-mod strategy_executor_tests;

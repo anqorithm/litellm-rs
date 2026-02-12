@@ -31,16 +31,6 @@ pub mod selection;
 pub mod strategy_impl;
 pub mod unified;
 
-// Legacy modules (kept for backwards compatibility)
-#[doc(hidden)]
-pub mod health;
-#[doc(hidden)]
-pub mod load_balancer;
-#[doc(hidden)]
-pub mod metrics;
-#[doc(hidden)]
-pub mod strategy;
-
 #[cfg(test)]
 mod tests;
 

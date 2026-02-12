@@ -98,7 +98,7 @@
 
 ## Step 3 - 删除 legacy router 栈（保留 UnifiedRouter）
 
-- 状态: `pending`
+- 状态: `completed`
 - 目标:
   - 移除 `core/router/load_balancer` 与 `core/router/strategy` 及其配套 legacy 模块
 - 预计改动文件:
@@ -234,9 +234,32 @@
 ### Step 3
 
 - 状态变更: `pending -> in_progress -> completed`
-- 实际改动文件: (待执行后回填)
-- 测试命令: (待回填)
-- 结果: (待回填)
+- 实际改动文件:
+  - `src/core/router/mod.rs`
+  - `src/core/router/tests/mod.rs`
+  - `src/core/router/health.rs` (deleted)
+  - `src/core/router/metrics.rs` (deleted)
+  - `src/core/router/load_balancer/mod.rs` (deleted)
+  - `src/core/router/load_balancer/core.rs` (deleted)
+  - `src/core/router/load_balancer/deployment_info.rs` (deleted)
+  - `src/core/router/load_balancer/fallback_config.rs` (deleted)
+  - `src/core/router/load_balancer/fallback_selection.rs` (deleted)
+  - `src/core/router/load_balancer/selection.rs` (deleted)
+  - `src/core/router/load_balancer/tag_routing.rs` (deleted)
+  - `src/core/router/strategy/mod.rs` (deleted)
+  - `src/core/router/strategy/types.rs` (deleted)
+  - `src/core/router/strategy/executor.rs` (deleted)
+  - `src/core/router/strategy/selection.rs` (deleted)
+  - `src/core/router/tests/load_balancer_tests.rs` (deleted)
+  - `src/core/router/tests/strategy_executor_tests.rs` (deleted)
+  - `tests/integration/router_tests.rs`
+  - `benches/performance_benchmarks.rs`
+- 测试命令:
+  - `cargo check` ✅
+  - `cargo test --lib core::router::tests` ✅ (88 passed)
+  - `cargo test --test router_tests` ❌ (`no test target named router_tests`，仓库集成测试入口为 `tests/lib.rs` 聚合)
+  - 补充执行: `rg \"router::load_balancer|router::strategy::\" src tests benches examples` ✅ (0 命中)
+- 结果: 完成，legacy router 栈已物理删除，运行路径统一为 `UnifiedRouter`
 
 ### Step 4
 
