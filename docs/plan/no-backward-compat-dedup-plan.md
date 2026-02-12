@@ -169,7 +169,7 @@
 
 ## Step 5 - 最终回归与计划归档
 
-- 状态: `blocked`
+- 状态: `completed`
 - 目标:
   - 运行全量验证并回写计划状态与每步结果
 - 预计改动文件:
@@ -237,7 +237,7 @@
 
 ## Step 9 - 全量回归并闭环计划状态
 
-- 状态: `pending`
+- 状态: `completed`
 - 目标:
   - 完成全量回归并把 Step 5 从 blocked 闭环到最终状态
 - 预计改动文件:
@@ -351,7 +351,7 @@
 
 ### Step 5
 
-- 状态变更: `pending -> in_progress -> blocked`
+- 状态变更: `pending -> in_progress -> blocked -> completed`
 - 实际改动文件:
   - `docs/plan/no-backward-compat-dedup-plan.md`
 - 测试命令:
@@ -368,7 +368,7 @@
   - Cache: 删除 `src/core/cache_manager/*`，统一到 `src/core/cache/*`
   - Router: 删除 `src/core/router/load_balancer/*`、`src/core/router/strategy/*`、`src/core/router/{health,metrics}.rs`，统一到 `UnifiedRouter`
 - Models: 删除 `src/core/models/request.rs` 与 `src/core/models/response/*`，统一到 `core/types` 与 `core/models/openai`
-- 结果: 最终验证流程已执行完成，但因仓库既有集成测试导入错误，Step 5 标记为 `blocked`；库级回归全部通过。
+- 结果: 初次收尾时因集成测试导入错误被阻塞；该阻塞已在 Step 6-9 中解除并完成闭环。
 
 ### Step 6
 
@@ -402,7 +402,11 @@
 
 ### Step 9
 
-- 状态变更: `pending`
-- 实际改动文件: (待回填)
-- 测试命令: (待回填)
-- 结果: (待回填)
+- 状态变更: `pending -> in_progress -> completed`
+- 实际改动文件:
+  - `docs/plan/no-backward-compat-dedup-plan.md`
+- 测试命令:
+  - `cargo check` ✅
+  - `cargo test --lib` ✅（11917 passed）
+  - `cargo test --tests` ✅（integration suite: 131 passed, 15 ignored）
+- 结果: 完成，最终回归全绿，计划文档执行状态已完整闭环。
