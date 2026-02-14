@@ -403,72 +403,627 @@ impl SSETransformer for OpenAICompatibleTransformer {
     }
 }
 
-/// Provider-specific transformers can extend the base
+/// Anthropic SSE Transformer
+///
+/// Handles Anthropic's event-based SSE format with message_start, content_block_delta,
+/// message_delta, and message_stop events.
 #[derive(Debug, Clone)]
-pub struct AnthropicTransformer;
+pub struct AnthropicTransformer {
+    model: String,
+}
+
+impl AnthropicTransformer {
+    pub fn new(model: impl Into<String>) -> Self {
+        Self {
+            model: model.into(),
+        }
+    }
+
+    fn parse_anthropic_finish_reason(reason: &str) -> FinishReason {
+        match reason {
+            "end_turn" => FinishReason::Stop,
+            "max_tokens" => FinishReason::Length,
+            "tool_use" => FinishReason::ToolCalls,
+            _ => FinishReason::Stop,
+        }
+    }
+}
 
 impl SSETransformer for AnthropicTransformer {
     fn provider_name(&self) -> &'static str {
         "anthropic"
     }
 
-    fn is_end_marker(&self, data: &str) -> bool {
-        // Anthropic uses different end markers
-        data.contains("event: message_stop") || data.trim() == "data: {\"type\": \"message_stop\"}"
-    }
-
     fn transform_chunk(&self, data: &str) -> Result<Option<ChatChunk>, ProviderError> {
-        // Anthropic-specific transformation logic
-        let json_value: Value = serde_json::from_str(data).map_err(|e| {
+        let json: Value = serde_json::from_str(data).map_err(|e| {
             ProviderError::response_parsing(
                 "anthropic",
                 format!("Failed to parse Anthropic SSE: {}", e),
             )
         })?;
 
-        // Handle Anthropic's event types
-        let event_type = json_value
+        let event_type = json
             .get("type")
             .and_then(|v| v.as_str())
             .unwrap_or("");
 
+        let created = chrono::Utc::now().timestamp();
+
         match event_type {
+            "message_start" => {
+                let message_id = json
+                    .get("message")
+                    .and_then(|m| m.get("id"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("anthropic-stream")
+                    .to_string();
+
+                Ok(Some(ChatChunk {
+                    id: message_id,
+                    object: "chat.completion.chunk".to_string(),
+                    created,
+                    model: self.model.clone(),
+                    choices: vec![ChatStreamChoice {
+                        index: 0,
+                        delta: ChatDelta {
+                            role: Some(crate::core::types::message::MessageRole::Assistant),
+                            content: None,
+                            thinking: None,
+                            tool_calls: None,
+                            function_call: None,
+                        },
+                        finish_reason: None,
+                        logprobs: None,
+                    }],
+                    usage: None,
+                    system_fingerprint: None,
+                }))
+            }
             "content_block_delta" => {
-                // Extract text delta
-                let text = json_value
+                let text = json
                     .get("delta")
                     .and_then(|d| d.get("text"))
                     .and_then(|t| t.as_str())
                     .unwrap_or("");
 
-                let delta = ChatDelta {
-                    role: None,
-                    content: Some(text.to_string()),
-                    thinking: None,
-                    tool_calls: None,
-                    function_call: None,
-                };
-
-                let choice = ChatStreamChoice {
-                    index: 0,
-                    delta,
-                    finish_reason: None,
-                    logprobs: None,
-                };
-
                 Ok(Some(ChatChunk {
-                    id: "anthropic-stream".to_string(),
+                    id: String::new(),
                     object: "chat.completion.chunk".to_string(),
-                    created: chrono::Utc::now().timestamp(),
-                    model: "claude".to_string(),
-                    choices: vec![choice],
+                    created,
+                    model: self.model.clone(),
+                    choices: vec![ChatStreamChoice {
+                        index: 0,
+                        delta: ChatDelta {
+                            role: None,
+                            content: Some(text.to_string()),
+                            thinking: None,
+                            tool_calls: None,
+                            function_call: None,
+                        },
+                        finish_reason: None,
+                        logprobs: None,
+                    }],
                     usage: None,
                     system_fingerprint: None,
                 }))
             }
-            "message_stop" => Ok(None),
+            "message_delta" => {
+                let finish_reason = json
+                    .get("delta")
+                    .and_then(|d| d.get("stop_reason"))
+                    .and_then(|r| r.as_str())
+                    .map(Self::parse_anthropic_finish_reason);
+
+                let usage = json.get("usage").map(|u| {
+                    let input = u.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                    let output = u.get("output_tokens").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                    crate::core::types::responses::Usage {
+                        prompt_tokens: input,
+                        completion_tokens: output,
+                        total_tokens: input + output,
+                        completion_tokens_details: None,
+                        prompt_tokens_details: None,
+                        thinking_usage: None,
+                    }
+                });
+
+                Ok(Some(ChatChunk {
+                    id: String::new(),
+                    object: "chat.completion.chunk".to_string(),
+                    created,
+                    model: self.model.clone(),
+                    choices: vec![ChatStreamChoice {
+                        index: 0,
+                        delta: ChatDelta {
+                            role: None,
+                            content: None,
+                            thinking: None,
+                            tool_calls: None,
+                            function_call: None,
+                        },
+                        finish_reason,
+                        logprobs: None,
+                    }],
+                    usage,
+                    system_fingerprint: None,
+                }))
+            }
+            "message_stop" => {
+                Ok(Some(ChatChunk {
+                    id: String::new(),
+                    object: "chat.completion.chunk".to_string(),
+                    created,
+                    model: self.model.clone(),
+                    choices: vec![],
+                    usage: None,
+                    system_fingerprint: None,
+                }))
+            }
+            "error" => {
+                let msg = json
+                    .get("error")
+                    .and_then(|e| e.get("message"))
+                    .and_then(|m| m.as_str())
+                    .unwrap_or("Unknown streaming error");
+                Err(ProviderError::streaming_error(
+                    "anthropic", "chat", None, None, msg.to_string(),
+                ))
+            }
+            // content_block_start, content_block_stop, ping — skip
             _ => Ok(None),
         }
+    }
+}
+
+/// Gemini SSE Transformer
+///
+/// Handles Gemini's streaming format with candidates/parts structure.
+#[derive(Debug, Clone)]
+pub struct GeminiTransformer {
+    model: String,
+    chunk_id: String,
+}
+
+impl GeminiTransformer {
+    pub fn new(model: impl Into<String>) -> Self {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        Self {
+            model: model.into(),
+            chunk_id: format!("gemini-stream-{}", nanos),
+        }
+    }
+}
+
+impl SSETransformer for GeminiTransformer {
+    fn provider_name(&self) -> &'static str {
+        "gemini"
+    }
+
+    fn transform_chunk(&self, data: &str) -> Result<Option<ChatChunk>, ProviderError> {
+        let json: Value = serde_json::from_str(data).map_err(|e| {
+            ProviderError::response_parsing(
+                "gemini",
+                format!("Failed to parse Gemini SSE: {}", e),
+            )
+        })?;
+
+        // Error response
+        if let Some(error) = json.get("error") {
+            let msg = error
+                .get("message")
+                .and_then(|m| m.as_str())
+                .unwrap_or("Unknown Gemini error");
+            return Err(ProviderError::api_error(
+                "gemini",
+                error.get("code").and_then(|c| c.as_u64()).unwrap_or(500) as u16,
+                msg.to_string(),
+            ));
+        }
+
+        let empty_arr = vec![];
+        let candidates = json
+            .get("candidates")
+            .and_then(|c| c.as_array())
+            .unwrap_or(&empty_arr);
+
+        if candidates.is_empty() {
+            // Usage-only chunk
+            let usage = json.get("usageMetadata").map(|u| {
+                let prompt = u.get("promptTokenCount").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                let completion = u.get("candidatesTokenCount").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                let total = u.get("totalTokenCount").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                crate::core::types::responses::Usage {
+                    prompt_tokens: prompt,
+                    completion_tokens: completion,
+                    total_tokens: total,
+                    prompt_tokens_details: None,
+                    completion_tokens_details: None,
+                    thinking_usage: None,
+                }
+            });
+            if usage.is_some() {
+                return Ok(Some(ChatChunk {
+                    id: self.chunk_id.clone(),
+                    object: "chat.completion.chunk".to_string(),
+                    created: chrono::Utc::now().timestamp(),
+                    model: self.model.clone(),
+                    choices: vec![],
+                    usage,
+                    system_fingerprint: None,
+                }));
+            }
+            return Ok(None);
+        }
+
+        let mut choices = Vec::new();
+        for (index, candidate) in candidates.iter().enumerate() {
+            let empty_parts = vec![];
+            let parts = candidate
+                .get("content")
+                .and_then(|c| c.get("parts"))
+                .and_then(|p| p.as_array())
+                .unwrap_or(&empty_parts);
+
+            let mut text_parts = Vec::new();
+            for part in parts {
+                if let Some(text) = part.get("text").and_then(|t| t.as_str()) {
+                    text_parts.push(text);
+                }
+            }
+            let delta_content = text_parts.join("");
+
+            let finish_reason = candidate
+                .get("finishReason")
+                .and_then(|r| r.as_str())
+                .map(|r| match r {
+                    "STOP" => FinishReason::Stop,
+                    "MAX_TOKENS" => FinishReason::Length,
+                    "SAFETY" | "RECITATION" => FinishReason::ContentFilter,
+                    _ => FinishReason::Stop,
+                });
+
+            choices.push(ChatStreamChoice {
+                index: index as u32,
+                delta: ChatDelta {
+                    role: if !delta_content.is_empty() || finish_reason.is_some() {
+                        Some(crate::core::types::message::MessageRole::Assistant)
+                    } else {
+                        None
+                    },
+                    content: if delta_content.is_empty() { None } else { Some(delta_content) },
+                    thinking: None,
+                    function_call: None,
+                    tool_calls: None,
+                },
+                finish_reason,
+                logprobs: None,
+            });
+        }
+
+        let usage = json.get("usageMetadata").map(|u| {
+            let prompt = u.get("promptTokenCount").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+            let completion = u.get("candidatesTokenCount").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+            let total = u.get("totalTokenCount").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+            crate::core::types::responses::Usage {
+                prompt_tokens: prompt,
+                completion_tokens: completion,
+                total_tokens: total,
+                prompt_tokens_details: None,
+                completion_tokens_details: None,
+                thinking_usage: None,
+            }
+        });
+
+        if choices.is_empty() && usage.is_none() {
+            return Ok(None);
+        }
+
+        Ok(Some(ChatChunk {
+            id: self.chunk_id.clone(),
+            object: "chat.completion.chunk".to_string(),
+            created: chrono::Utc::now().timestamp(),
+            model: self.model.clone(),
+            choices,
+            usage,
+            system_fingerprint: None,
+        }))
+    }
+}
+
+/// Cohere SSE Transformer
+///
+/// Handles Cohere's streaming format with v1/v2 API version support.
+#[derive(Debug, Clone)]
+pub struct CohereTransformer {
+    model: String,
+    response_id: String,
+    /// true = v2, false = v1
+    use_v2: bool,
+}
+
+impl CohereTransformer {
+    pub fn new(model: impl Into<String>, use_v2: bool) -> Self {
+        Self {
+            model: model.into(),
+            response_id: format!("chatcmpl-{}", uuid::Uuid::new_v4()),
+            use_v2,
+        }
+    }
+
+    fn parse_cohere_finish_reason(reason: &str) -> FinishReason {
+        match reason.to_lowercase().as_str() {
+            "stop" | "complete" | "end_turn" => FinishReason::Stop,
+            "length" | "max_tokens" => FinishReason::Length,
+            "tool_calls" | "tool_use" => FinishReason::ToolCalls,
+            "content_filter" => FinishReason::ContentFilter,
+            _ => FinishReason::Stop,
+        }
+    }
+}
+
+impl SSETransformer for CohereTransformer {
+    fn provider_name(&self) -> &'static str {
+        "cohere"
+    }
+
+    fn transform_chunk(&self, data: &str) -> Result<Option<ChatChunk>, ProviderError> {
+        let json: Value = serde_json::from_str(data).map_err(|e| {
+            ProviderError::response_parsing(
+                "cohere",
+                format!("Failed to parse Cohere SSE: {}", e),
+            )
+        })?;
+
+        let event_type = json
+            .get("type")
+            .or_else(|| json.get("event"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+
+        let created = chrono::Utc::now().timestamp();
+
+        if self.use_v2 {
+            match event_type {
+                "content-delta" => {
+                    let text = json
+                        .get("delta")
+                        .and_then(|d| d.get("message"))
+                        .and_then(|m| m.get("content"))
+                        .and_then(|c| {
+                            c.get("text").and_then(|t| t.as_str())
+                                .or_else(|| c.as_str())
+                        })
+                        .unwrap_or("");
+
+                    if text.is_empty() {
+                        return Ok(None);
+                    }
+
+                    Ok(Some(ChatChunk {
+                        id: self.response_id.clone(),
+                        object: "chat.completion.chunk".to_string(),
+                        created,
+                        model: self.model.clone(),
+                        choices: vec![ChatStreamChoice {
+                            index: 0,
+                            delta: ChatDelta {
+                                role: None,
+                                content: Some(text.to_string()),
+                                thinking: None,
+                                tool_calls: None,
+                                function_call: None,
+                            },
+                            finish_reason: None,
+                            logprobs: None,
+                        }],
+                        usage: None,
+                        system_fingerprint: None,
+                    }))
+                }
+                "message-end" => {
+                    let data_field = json.get("data").or(json.get("delta"));
+                    let finish_reason = data_field
+                        .and_then(|d| d.get("delta"))
+                        .and_then(|d| d.get("finish_reason"))
+                        .and_then(|f| f.as_str())
+                        .unwrap_or("stop");
+
+                    let usage = data_field
+                        .and_then(|d| d.get("delta"))
+                        .and_then(|d| d.get("usage"))
+                        .and_then(|u| u.get("tokens"))
+                        .map(|tokens| {
+                            let prompt = tokens.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                            let completion = tokens.get("output_tokens").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                            crate::core::types::responses::Usage {
+                                prompt_tokens: prompt,
+                                completion_tokens: completion,
+                                total_tokens: prompt + completion,
+                                prompt_tokens_details: None,
+                                completion_tokens_details: None,
+                                thinking_usage: None,
+                            }
+                        });
+
+                    Ok(Some(ChatChunk {
+                        id: self.response_id.clone(),
+                        object: "chat.completion.chunk".to_string(),
+                        created,
+                        model: self.model.clone(),
+                        choices: vec![ChatStreamChoice {
+                            index: 0,
+                            delta: ChatDelta {
+                                role: None,
+                                content: None,
+                                thinking: None,
+                                tool_calls: None,
+                                function_call: None,
+                            },
+                            finish_reason: Some(Self::parse_cohere_finish_reason(finish_reason)),
+                            logprobs: None,
+                        }],
+                        usage,
+                        system_fingerprint: None,
+                    }))
+                }
+                // message-start, content-start, content-end, tool-call-*, citation-* — skip
+                _ => Ok(None),
+            }
+        } else {
+            // v1 format
+            match event_type {
+                "text-generation" => {
+                    let text = json.get("text").and_then(|t| t.as_str()).unwrap_or("");
+                    Ok(Some(ChatChunk {
+                        id: self.response_id.clone(),
+                        object: "chat.completion.chunk".to_string(),
+                        created,
+                        model: self.model.clone(),
+                        choices: vec![ChatStreamChoice {
+                            index: 0,
+                            delta: ChatDelta {
+                                role: None,
+                                content: Some(text.to_string()),
+                                thinking: None,
+                                tool_calls: None,
+                                function_call: None,
+                            },
+                            finish_reason: None,
+                            logprobs: None,
+                        }],
+                        usage: None,
+                        system_fingerprint: None,
+                    }))
+                }
+                "stream-end" => {
+                    let finish_reason = json
+                        .get("finish_reason")
+                        .and_then(|f| f.as_str())
+                        .unwrap_or("stop");
+                    Ok(Some(ChatChunk {
+                        id: self.response_id.clone(),
+                        object: "chat.completion.chunk".to_string(),
+                        created,
+                        model: self.model.clone(),
+                        choices: vec![ChatStreamChoice {
+                            index: 0,
+                            delta: ChatDelta {
+                                role: None,
+                                content: None,
+                                thinking: None,
+                                tool_calls: None,
+                                function_call: None,
+                            },
+                            finish_reason: Some(Self::parse_cohere_finish_reason(finish_reason)),
+                            logprobs: None,
+                        }],
+                        usage: None,
+                        system_fingerprint: None,
+                    }))
+                }
+                // stream-start, citation-generation, tool-calls-generation — skip
+                _ => Ok(None),
+            }
+        }
+    }
+}
+
+/// Databricks SSE Transformer
+///
+/// OpenAI-compatible format with additional support for array content (Claude-style).
+#[derive(Debug, Clone)]
+pub struct DatabricksTransformer;
+
+impl SSETransformer for DatabricksTransformer {
+    fn provider_name(&self) -> &'static str {
+        "databricks"
+    }
+
+    fn transform_chunk(&self, data: &str) -> Result<Option<ChatChunk>, ProviderError> {
+        let json: Value = serde_json::from_str(data).map_err(|e| {
+            ProviderError::response_parsing(
+                "databricks",
+                format!("Failed to parse SSE JSON: {}", e),
+            )
+        })?;
+
+        let id = json.get("id").and_then(|v| v.as_str()).unwrap_or("chunk").to_string();
+        let created = json.get("created").and_then(|v| v.as_i64())
+            .unwrap_or_else(|| chrono::Utc::now().timestamp());
+        let model = json.get("model").and_then(|v| v.as_str()).unwrap_or("").to_string();
+
+        let mut choices = Vec::new();
+        if let Some(choices_arr) = json.get("choices").and_then(|v| v.as_array()) {
+            for choice in choices_arr {
+                let index = choice.get("index").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+
+                let delta = if let Some(delta_obj) = choice.get("delta") {
+                    let role = delta_obj
+                        .get("role")
+                        .and_then(|v| v.as_str())
+                        .and_then(|r| match r {
+                            "assistant" => Some(crate::core::types::message::MessageRole::Assistant),
+                            "user" => Some(crate::core::types::message::MessageRole::User),
+                            "system" => Some(crate::core::types::message::MessageRole::System),
+                            "tool" => Some(crate::core::types::message::MessageRole::Tool),
+                            _ => None,
+                        });
+
+                    // Handle content — could be string or array (Claude reasoning)
+                    let content = match delta_obj.get("content") {
+                        Some(Value::String(s)) => Some(s.clone()),
+                        Some(Value::Array(arr)) => {
+                            let mut text = String::new();
+                            for item in arr {
+                                if let Some(t) = item.get("text").and_then(|v| v.as_str()) {
+                                    text.push_str(t);
+                                }
+                            }
+                            if text.is_empty() { None } else { Some(text) }
+                        }
+                        _ => None,
+                    };
+
+                    ChatDelta {
+                        role,
+                        content,
+                        thinking: None,
+                        tool_calls: None,
+                        function_call: None,
+                    }
+                } else {
+                    ChatDelta {
+                        role: None, content: None, thinking: None,
+                        tool_calls: None, function_call: None,
+                    }
+                };
+
+                let finish_reason = choice
+                    .get("finish_reason")
+                    .and_then(|v| v.as_str())
+                    .and_then(|r| self.parse_finish_reason(r));
+
+                choices.push(ChatStreamChoice {
+                    index,
+                    delta,
+                    finish_reason,
+                    logprobs: None,
+                });
+            }
+        }
+
+        Ok(Some(ChatChunk {
+            id,
+            object: "chat.completion.chunk".to_string(),
+            created,
+            model,
+            choices,
+            usage: None,
+            system_fingerprint: None,
+        }))
     }
 }
 

@@ -16,6 +16,7 @@ pub use connection_pool::{
 pub use http::create_http_client;
 pub use pricing::{PricingDatabase, get_pricing_db};
 pub use sse::{
-    AnthropicTransformer, OpenAICompatibleTransformer, SSEEvent, SSEEventType, SSETransformer,
-    UnifiedSSEParser, UnifiedSSEStream,
+    AnthropicTransformer, CohereTransformer, DatabricksTransformer, GeminiTransformer,
+    OpenAICompatibleTransformer, SSEEvent, SSEEventType, SSETransformer, UnifiedSSEParser,
+    UnifiedSSEStream,
 };

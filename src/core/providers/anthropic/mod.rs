@@ -29,7 +29,7 @@ pub use provider::{
     AnthropicProvider, AnthropicProviderBuilder, create_anthropic_provider,
     create_anthropic_provider_from_env,
 };
-pub use streaming::{AnthropicStream, SSEEvent, SSEParser, StreamUtils};
+pub use streaming::AnthropicStream;
 
 // Convenient type aliases
 pub type Error = error::AnthropicError;

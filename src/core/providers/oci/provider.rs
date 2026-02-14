@@ -389,7 +389,7 @@ impl LLMProvider for OciProvider {
             return Err(mapper.map_http_error(status, &body.unwrap_or_default()));
         }
 
-        let stream = super::streaming::OciStream::new(response.bytes_stream());
+        let stream = super::streaming::create_oci_stream(response.bytes_stream());
         Ok(Box::pin(stream))
     }
 

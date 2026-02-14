@@ -16,7 +16,7 @@ use super::chat::CohereChatHandler;
 use super::config::CohereConfig;
 use super::embed::CohereEmbeddingHandler;
 use super::rerank::{CohereRerankHandler, RerankRequest, RerankResponse};
-use super::streaming::CohereStreamParser;
+use super::streaming::create_cohere_stream;
 use crate::core::providers::base_provider::{
     BaseHttpClient, BaseProviderConfig, CostCalculator, HeaderBuilder, HttpErrorMapper,
 };
@@ -494,44 +494,9 @@ impl LLMProvider for CohereProvider {
             return Err(ProviderError::api_error("cohere", status, body));
         }
 
-        // Create stream parser
-        let api_version = self.config.api_version;
-        let model = request.model.clone();
-
-        use futures::StreamExt;
-
-        let byte_stream = response.bytes_stream();
-        let stream = byte_stream
-            .scan(
-                (CohereStreamParser::new(api_version, &model), String::new()),
-                |(parser, buffer), bytes_result| {
-                    futures::future::ready(match bytes_result {
-                        Ok(bytes) => {
-                            buffer.push_str(&String::from_utf8_lossy(&bytes));
-
-                            let mut chunks = Vec::new();
-
-                            // Process complete lines
-                            while let Some(pos) = buffer.find('\n') {
-                                let line = buffer[..pos].to_string();
-                                *buffer = buffer[pos + 1..].to_string();
-
-                                if !line.trim().is_empty() {
-                                    match parser.parse_chunk(&line) {
-                                        Ok(Some(chunk)) => chunks.push(Ok(chunk)),
-                                        Ok(None) => {}
-                                        Err(e) => chunks.push(Err(e)),
-                                    }
-                                }
-                            }
-
-                            Some(chunks)
-                        }
-                        Err(e) => Some(vec![Err(ProviderError::network("cohere", e.to_string()))]),
-                    })
-                },
-            )
-            .flat_map(futures::stream::iter);
+        // Create stream using unified SSE infrastructure
+        let use_v2 = matches!(self.config.api_version, super::config::CohereApiVersion::V2);
+        let stream = create_cohere_stream(response.bytes_stream(), &request.model, use_v2);
 
         Ok(Box::pin(stream))
     }

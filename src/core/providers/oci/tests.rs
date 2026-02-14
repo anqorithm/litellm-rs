@@ -253,7 +253,7 @@ mod streaming_tests {
         ];
 
         let mock_stream = futures::stream::iter(test_data);
-        let mut oci_stream = streaming::OciStream::new(mock_stream);
+        let mut oci_stream = streaming::create_oci_stream(mock_stream);
 
         let chunk = oci_stream.next().await;
         assert!(chunk.is_some());
@@ -279,7 +279,7 @@ mod streaming_tests {
         ];
 
         let mock_stream = futures::stream::iter(test_data);
-        let mut oci_stream = streaming::OciStream::new(mock_stream);
+        let mut oci_stream = streaming::create_oci_stream(mock_stream);
 
         // Role chunk
         let chunk1 = oci_stream.next().await.unwrap().unwrap();
