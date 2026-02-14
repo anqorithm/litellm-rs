@@ -408,7 +408,7 @@ fn test_deepgram_response_to_openai_simple() {
         },
     };
 
-    let openai_response: stt::OpenAITranscriptionResponse = deepgram_response.into();
+    let openai_response: stt::OpenAITranscriptionResponse = deepgram_response.try_into().unwrap();
     assert_eq!(openai_response.text, "Hello world");
     assert_eq!(openai_response.task, "transcribe");
     assert_eq!(openai_response.language, "en");
@@ -465,7 +465,7 @@ fn test_deepgram_response_to_openai_with_diarization() {
         },
     };
 
-    let openai_response: stt::OpenAITranscriptionResponse = deepgram_response.into();
+    let openai_response: stt::OpenAITranscriptionResponse = deepgram_response.try_into().unwrap();
     // With diarization but no paragraphs, should reconstruct transcript
     assert!(openai_response.text.contains("Speaker 0"));
     assert!(openai_response.text.contains("Speaker 1"));

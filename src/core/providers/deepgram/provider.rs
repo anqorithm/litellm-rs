@@ -267,7 +267,7 @@ impl DeepgramProvider {
                 )
             })?;
 
-        Ok(deepgram_response.into())
+        deepgram_response.try_into()
     }
 
     /// Transcribe audio with simple parameters (convenience method)

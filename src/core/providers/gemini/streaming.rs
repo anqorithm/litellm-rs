@@ -477,7 +477,7 @@ mod tests {
         assert_eq!(chunk.model, "gemini-pro");
         assert_eq!(chunk.choices.len(), 1);
         assert_eq!(
-            chunk.choices[0].delta.content.as_ref().unwrap(),
+            chunk.choices.first().unwrap().delta.content.as_ref().unwrap(),
             "Hello, world!"
         );
         assert!(chunk.usage.is_some());
@@ -505,10 +505,10 @@ mod tests {
         let chunk2 = chunks[1].as_ref().unwrap();
         let chunk3 = chunks[2].as_ref().unwrap();
 
-        assert_eq!(chunk1.choices[0].delta.content.as_ref().unwrap(), "Hello");
-        assert_eq!(chunk2.choices[0].delta.content.as_ref().unwrap(), " world!");
+        assert_eq!(chunk1.choices.first().unwrap().delta.content.as_ref().unwrap(), "Hello");
+        assert_eq!(chunk2.choices.first().unwrap().delta.content.as_ref().unwrap(), " world!");
         assert_eq!(
-            chunk3.choices[0].finish_reason.as_ref().unwrap(),
+            chunk3.choices.first().unwrap().finish_reason.as_ref().unwrap(),
             &crate::core::types::responses::FinishReason::Stop
         );
     }
@@ -571,7 +571,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            chunk.choices[0].finish_reason.as_ref().unwrap(),
+            chunk.choices.first().unwrap().finish_reason.as_ref().unwrap(),
             &crate::core::types::responses::FinishReason::Stop
         );
     }
@@ -593,7 +593,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            chunk.choices[0].finish_reason.as_ref().unwrap(),
+            chunk.choices.first().unwrap().finish_reason.as_ref().unwrap(),
             &crate::core::types::responses::FinishReason::Length
         );
     }
@@ -615,7 +615,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            chunk.choices[0].finish_reason.as_ref().unwrap(),
+            chunk.choices.first().unwrap().finish_reason.as_ref().unwrap(),
             &crate::core::types::responses::FinishReason::ContentFilter
         );
     }
@@ -637,7 +637,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            chunk.choices[0].finish_reason.as_ref().unwrap(),
+            chunk.choices.first().unwrap().finish_reason.as_ref().unwrap(),
             &crate::core::types::responses::FinishReason::ContentFilter
         );
     }
@@ -667,7 +667,7 @@ mod tests {
 
         assert_eq!(chunk.choices.len(), 1);
         assert_eq!(
-            chunk.choices[0].finish_reason.as_ref().unwrap(),
+            chunk.choices.first().unwrap().finish_reason.as_ref().unwrap(),
             &crate::core::types::responses::FinishReason::Stop
         );
     }
@@ -704,7 +704,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            chunk.choices[0].delta.content.as_ref().unwrap(),
+            chunk.choices.first().unwrap().delta.content.as_ref().unwrap(),
             "Hello world"
         );
     }
@@ -732,10 +732,10 @@ mod tests {
             .unwrap();
 
         assert_eq!(chunk.choices.len(), 2);
-        assert_eq!(chunk.choices[0].index, 0);
+        assert_eq!(chunk.choices.first().unwrap().index, 0);
         assert_eq!(chunk.choices[1].index, 1);
         assert_eq!(
-            chunk.choices[0].delta.content.as_ref().unwrap(),
+            chunk.choices.first().unwrap().delta.content.as_ref().unwrap(),
             "Response 1"
         );
         assert_eq!(

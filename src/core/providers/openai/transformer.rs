@@ -381,7 +381,7 @@ mod tests {
         let openai_request = result.unwrap();
         assert_eq!(openai_request.model, "gpt-4");
         assert_eq!(openai_request.messages.len(), 1);
-        assert_eq!(openai_request.messages[0].role, "user");
+        assert_eq!(openai_request.messages.first().unwrap().role, "user");
     }
 
     #[test]
@@ -434,7 +434,7 @@ mod tests {
         };
 
         let result = OpenAIRequestTransformer::transform(request).unwrap();
-        assert_eq!(result.messages[0].role, "system");
+        assert_eq!(result.messages.first().unwrap().role, "system");
         assert_eq!(result.messages[1].role, "user");
         assert_eq!(result.messages[2].role, "assistant");
         assert_eq!(result.messages[3].role, "tool");
@@ -455,7 +455,7 @@ mod tests {
         };
 
         let result = OpenAIRequestTransformer::transform(request).unwrap();
-        assert!(result.messages[0].content.is_some());
+        assert!(result.messages.first().unwrap().content.is_some());
     }
 
     #[test]
@@ -481,7 +481,7 @@ mod tests {
         };
 
         let result = OpenAIRequestTransformer::transform(request).unwrap();
-        assert!(result.messages[0].content.is_some());
+        assert!(result.messages.first().unwrap().content.is_some());
     }
 
     #[test]
@@ -502,7 +502,7 @@ mod tests {
         };
 
         let result = OpenAIRequestTransformer::transform(request).unwrap();
-        assert!(result.messages[0].content.is_some());
+        assert!(result.messages.first().unwrap().content.is_some());
     }
 
     #[test]
@@ -525,7 +525,7 @@ mod tests {
         };
 
         let result = OpenAIRequestTransformer::transform(request).unwrap();
-        assert!(result.messages[0].content.is_some());
+        assert!(result.messages.first().unwrap().content.is_some());
     }
 
     #[test]
@@ -571,10 +571,10 @@ mod tests {
         };
 
         let result = OpenAIRequestTransformer::transform(request).unwrap();
-        let tool_calls = result.messages[0].tool_calls.as_ref().unwrap();
+        let tool_calls = result.messages.first().unwrap().tool_calls.as_ref().unwrap();
         assert_eq!(tool_calls.len(), 1);
-        assert_eq!(tool_calls[0].id, "call_123");
-        assert_eq!(tool_calls[0].function.name, "get_weather");
+        assert_eq!(tool_calls.first().unwrap().id, "call_123");
+        assert_eq!(tool_calls.first().unwrap().function.name, "get_weather");
     }
 
     #[test]
@@ -601,7 +601,7 @@ mod tests {
         let result = OpenAIRequestTransformer::transform(request).unwrap();
         let tools = result.tools.unwrap();
         assert_eq!(tools.len(), 1);
-        assert_eq!(tools[0].function.as_ref().unwrap().name, "get_weather");
+        assert_eq!(tools.first().unwrap().function.as_ref().unwrap().name, "get_weather");
     }
 
     #[test]
@@ -741,7 +741,7 @@ mod tests {
         assert_eq!(result.model, "gpt-4");
         assert_eq!(result.choices.len(), 1);
         assert!(matches!(
-            result.choices[0].finish_reason,
+            result.choices.first().unwrap().finish_reason,
             Some(FinishReason::Stop)
         ));
     }
@@ -863,7 +863,7 @@ mod tests {
             };
 
             let result = OpenAIResponseTransformer::transform(response).unwrap();
-            assert_eq!(result.choices[0].finish_reason, Some(expected));
+            assert_eq!(result.choices.first().unwrap().finish_reason, Some(expected));
         }
     }
 
@@ -902,10 +902,10 @@ mod tests {
         };
 
         let result = OpenAIResponseTransformer::transform(response).unwrap();
-        let tool_calls = result.choices[0].message.tool_calls.as_ref().unwrap();
+        let tool_calls = result.choices.first().unwrap().message.tool_calls.as_ref().unwrap();
         assert_eq!(tool_calls.len(), 1);
-        assert_eq!(tool_calls[0].id, "call_abc");
-        assert_eq!(tool_calls[0].function.name, "get_weather");
+        assert_eq!(tool_calls.first().unwrap().id, "call_abc");
+        assert_eq!(tool_calls.first().unwrap().function.name, "get_weather");
     }
 
     #[test]
@@ -936,7 +936,7 @@ mod tests {
         };
 
         let result = OpenAIResponseTransformer::transform(response).unwrap();
-        assert!(result.choices[0].message.thinking.is_some());
+        assert!(result.choices.first().unwrap().message.thinking.is_some());
     }
 
     #[test]
@@ -967,7 +967,7 @@ mod tests {
         };
 
         let result = OpenAIResponseTransformer::transform(response).unwrap();
-        assert!(result.choices[0].message.thinking.is_some());
+        assert!(result.choices.first().unwrap().message.thinking.is_some());
     }
 
     #[test]
@@ -998,7 +998,7 @@ mod tests {
         };
 
         let result = OpenAIResponseTransformer::transform(response).unwrap();
-        assert!(result.choices[0].message.content.is_none());
+        assert!(result.choices.first().unwrap().message.content.is_none());
     }
 
     #[test]
@@ -1029,7 +1029,7 @@ mod tests {
         };
 
         let result = OpenAIResponseTransformer::transform(response).unwrap();
-        assert!(result.choices[0].message.content.is_none());
+        assert!(result.choices.first().unwrap().message.content.is_none());
     }
 
     // ==================== Stream Transformer Tests ====================
@@ -1059,7 +1059,7 @@ mod tests {
         let result = OpenAIResponseTransformer::transform_stream_chunk(chunk).unwrap();
         assert_eq!(result.id, "chatcmpl-123");
         assert_eq!(result.choices.len(), 1);
-        assert_eq!(result.choices[0].delta.content, Some("Hello".to_string()));
+        assert_eq!(result.choices.first().unwrap().delta.content, Some("Hello".to_string()));
     }
 
     #[test]
@@ -1092,7 +1092,7 @@ mod tests {
 
         let result = OpenAIResponseTransformer::transform_stream_chunk(chunk).unwrap();
         assert!(matches!(
-            result.choices[0].finish_reason,
+            result.choices.first().unwrap().finish_reason,
             Some(FinishReason::Stop)
         ));
         assert!(result.usage.is_some());
@@ -1220,7 +1220,7 @@ mod tests {
         };
 
         let result = OpenAIResponseTransformer::transform(response).unwrap();
-        assert!(result.choices[0].logprobs.is_some());
+        assert!(result.choices.first().unwrap().logprobs.is_some());
     }
 
     #[test]
@@ -1253,7 +1253,7 @@ mod tests {
         };
 
         let result = OpenAIResponseTransformer::transform(response).unwrap();
-        assert!(result.choices[0].message.content.is_some());
+        assert!(result.choices.first().unwrap().message.content.is_some());
     }
 
     #[test]
@@ -1273,7 +1273,7 @@ mod tests {
         };
 
         let result = OpenAIRequestTransformer::transform(request).unwrap();
-        assert!(result.messages[0].function_call.is_some());
+        assert!(result.messages.first().unwrap().function_call.is_some());
     }
 
     #[test]
@@ -1307,7 +1307,7 @@ mod tests {
         };
 
         let result = OpenAIResponseTransformer::transform(response).unwrap();
-        let func_call = result.choices[0].message.function_call.as_ref().unwrap();
+        let func_call = result.choices.first().unwrap().message.function_call.as_ref().unwrap();
         assert_eq!(func_call.name, "get_weather");
     }
 }

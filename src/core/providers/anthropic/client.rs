@@ -980,7 +980,7 @@ mod tests {
         assert_eq!(result.model, "claude-3-opus-20240229");
         assert_eq!(result.choices.len(), 1);
 
-        if let Some(MessageContent::Text(text)) = &result.choices[0].message.content {
+        if let Some(MessageContent::Text(text)) = &result.choices.first().unwrap().message.content {
             assert_eq!(text, "Hello, world!");
         } else {
             panic!("Expected text content");
@@ -1029,10 +1029,10 @@ mod tests {
         });
 
         let result = client.transform_chat_response(response).unwrap();
-        let tool_calls = result.choices[0].message.tool_calls.as_ref().unwrap();
+        let tool_calls = result.choices.first().unwrap().message.tool_calls.as_ref().unwrap();
         assert_eq!(tool_calls.len(), 1);
-        assert_eq!(tool_calls[0].id, "tool_1");
-        assert_eq!(tool_calls[0].function.name, "get_weather");
+        assert_eq!(tool_calls.first().unwrap().id, "tool_1");
+        assert_eq!(tool_calls.first().unwrap().function.name, "get_weather");
     }
 
     #[test]
@@ -1049,7 +1049,7 @@ mod tests {
         });
         let result = client.transform_chat_response(response).unwrap();
         assert!(matches!(
-            result.choices[0].finish_reason,
+            result.choices.first().unwrap().finish_reason,
             Some(crate::core::types::responses::FinishReason::Stop)
         ));
 
@@ -1062,7 +1062,7 @@ mod tests {
         });
         let result = client.transform_chat_response(response).unwrap();
         assert!(matches!(
-            result.choices[0].finish_reason,
+            result.choices.first().unwrap().finish_reason,
             Some(crate::core::types::responses::FinishReason::Length)
         ));
 
@@ -1075,7 +1075,7 @@ mod tests {
         });
         let result = client.transform_chat_response(response).unwrap();
         assert!(matches!(
-            result.choices[0].finish_reason,
+            result.choices.first().unwrap().finish_reason,
             Some(crate::core::types::responses::FinishReason::ToolCalls)
         ));
     }

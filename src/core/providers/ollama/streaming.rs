@@ -458,7 +458,7 @@ mod tests {
         let chunk: OllamaStreamChunk = serde_json::from_str(json).unwrap();
         let tool_calls = chunk.message.as_ref().unwrap().tool_calls.as_ref().unwrap();
         assert_eq!(tool_calls.len(), 1);
-        assert_eq!(tool_calls[0].function.name, "get_weather");
+        assert_eq!(tool_calls.first().unwrap().function.name, "get_weather");
     }
 
     #[test]
@@ -534,11 +534,11 @@ mod tests {
         assert!(chunks.len() >= 3);
 
         // First chunk should have role
-        assert!(chunks[0].choices[0].delta.role.is_some());
+        assert!(chunks[0].choices.first().unwrap().delta.role.is_some());
 
         // Last chunk should have finish_reason
         let last = chunks.last().unwrap();
-        assert!(last.choices[0].finish_reason.is_some());
+        assert!(last.choices.first().unwrap().finish_reason.is_some());
         assert!(last.usage.is_some());
     }
 }

@@ -5,6 +5,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use crate::core::providers::unified_provider::ProviderError;
+
 /// STT API endpoint path
 pub const STT_ENDPOINT_PATH: &str = "/listen";
 
@@ -295,10 +297,16 @@ pub struct OpenAIWordInfo {
     pub end: f32,
 }
 
-impl From<DeepgramResponse> for OpenAITranscriptionResponse {
-    fn from(response: DeepgramResponse) -> Self {
-        let first_channel = &response.results.channels[0];
-        let first_alternative = &first_channel.alternatives[0];
+impl TryFrom<DeepgramResponse> for OpenAITranscriptionResponse {
+    type Error = ProviderError;
+
+    fn try_from(response: DeepgramResponse) -> Result<Self, Self::Error> {
+        let first_channel = response.results.channels.first().ok_or_else(|| {
+            ProviderError::response_parsing("deepgram", "Response contains no channels")
+        })?;
+        let first_alternative = first_channel.alternatives.first().ok_or_else(|| {
+            ProviderError::response_parsing("deepgram", "Channel contains no alternatives")
+        })?;
 
         // Determine if diarization is active
         let has_diarization = first_alternative
@@ -335,13 +343,13 @@ impl From<DeepgramResponse> for OpenAITranscriptionResponse {
             .clone()
             .unwrap_or_else(|| "en".to_string());
 
-        OpenAITranscriptionResponse {
+        Ok(OpenAITranscriptionResponse {
             text,
             task: "transcribe".to_string(),
             language,
             duration: Some(response.metadata.duration),
             words,
-        }
+        })
     }
 }
 
