@@ -24,22 +24,7 @@ fn test_calculate_average() {
 
 #[tokio::test]
 async fn test_metrics_collector_creation() {
-    let config = MonitoringConfig {
-        metrics: crate::config::models::monitoring::MetricsConfig {
-            enabled: true,
-            port: 9090,
-            path: "/metrics".to_string(),
-        },
-        tracing: crate::config::models::monitoring::TracingConfig {
-            enabled: false,
-            endpoint: None,
-            service_name: "test".to_string(),
-        },
-        health: crate::config::models::monitoring::HealthConfig {
-            path: "/health".to_string(),
-            detailed: true,
-        },
-    };
+    let config = MonitoringConfig::default();
 
     let collector = MetricsCollector::new(&config).await.unwrap();
     assert!(!collector.is_active());

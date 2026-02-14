@@ -1,4 +1,8 @@
-//! Monitoring configuration
+//! Monitoring and observability configuration
+//!
+//! Unified configuration for metrics, tracing, health checks, and logging.
+//! This is the canonical location — the legacy `core::types::config::observability`
+//! module re-exports types from here.
 
 use super::*;
 use serde::{Deserialize, Serialize};
@@ -15,6 +19,9 @@ pub struct MonitoringConfig {
     /// Health check configuration
     #[serde(default)]
     pub health: HealthConfig,
+    /// Logging configuration
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub logging: Option<LoggingConfig>,
 }
 
 impl MonitoringConfig {
@@ -23,6 +30,9 @@ impl MonitoringConfig {
         self.metrics = self.metrics.merge(other.metrics);
         self.tracing = self.tracing.merge(other.tracing);
         self.health = self.health.merge(other.health);
+        if other.logging.is_some() {
+            self.logging = other.logging;
+        }
         self
     }
 }
@@ -36,9 +46,12 @@ pub struct MetricsConfig {
     /// Metrics port
     #[serde(default = "default_metrics_port")]
     pub port: u16,
-    /// Metrics path
+    /// Metrics path / endpoint
     #[serde(default = "default_metrics_path")]
     pub path: String,
+    /// Collection interval in seconds
+    #[serde(default = "default_interval_seconds")]
+    pub interval_seconds: u64,
 }
 
 impl Default for MetricsConfig {
@@ -47,6 +60,7 @@ impl Default for MetricsConfig {
             enabled: true,
             port: default_metrics_port(),
             path: default_metrics_path(),
+            interval_seconds: default_interval_seconds(),
         }
     }
 }
@@ -63,6 +77,9 @@ impl MetricsConfig {
         if other.path != default_metrics_path() {
             self.path = other.path;
         }
+        if other.interval_seconds != default_interval_seconds() {
+            self.interval_seconds = other.interval_seconds;
+        }
         self
     }
 }
@@ -73,11 +90,17 @@ pub struct TracingConfig {
     /// Enable tracing
     #[serde(default)]
     pub enabled: bool,
-    /// Tracing endpoint
+    /// Tracing endpoint (e.g. OpenTelemetry collector URL)
     pub endpoint: Option<String>,
     /// Service name
     #[serde(default = "default_service_name")]
     pub service_name: String,
+    /// Sampling rate (0.0–1.0)
+    #[serde(default = "default_sampling_rate")]
+    pub sampling_rate: f64,
+    /// Jaeger-specific configuration
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub jaeger: Option<JaegerConfig>,
 }
 
 impl Default for TracingConfig {
@@ -86,6 +109,8 @@ impl Default for TracingConfig {
             enabled: false,
             endpoint: None,
             service_name: default_service_name(),
+            sampling_rate: default_sampling_rate(),
+            jaeger: None,
         }
     }
 }
@@ -102,8 +127,23 @@ impl TracingConfig {
         if other.service_name != default_service_name() {
             self.service_name = other.service_name;
         }
+        if (other.sampling_rate - default_sampling_rate()).abs() > f64::EPSILON {
+            self.sampling_rate = other.sampling_rate;
+        }
+        if other.jaeger.is_some() {
+            self.jaeger = other.jaeger;
+        }
         self
     }
+}
+
+/// Jaeger configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JaegerConfig {
+    /// Agent endpoint
+    pub agent_endpoint: String,
+    /// Service name
+    pub service_name: String,
 }
 
 /// Health check configuration
@@ -139,8 +179,59 @@ impl HealthConfig {
     }
 }
 
+/// Logging configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LoggingConfig {
+    /// Log level
+    #[serde(default = "default_log_level")]
+    pub level: String,
+    /// Output format
+    #[serde(default = "default_log_format")]
+    pub format: LogFormat,
+    /// Output targets
+    #[serde(default)]
+    pub outputs: Vec<LogOutput>,
+}
+
+/// Log format
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LogFormat {
+    Text,
+    Json,
+    Structured,
+}
+
+/// Log output target
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum LogOutput {
+    #[serde(rename = "console")]
+    Console,
+    #[serde(rename = "file")]
+    File { path: String },
+    #[serde(rename = "syslog")]
+    Syslog { facility: String },
+}
+
 fn default_true() -> bool {
     true
+}
+
+fn default_interval_seconds() -> u64 {
+    15
+}
+
+fn default_sampling_rate() -> f64 {
+    0.1
+}
+
+fn default_log_level() -> String {
+    "info".to_string()
+}
+
+fn default_log_format() -> LogFormat {
+    LogFormat::Json
 }
 
 #[cfg(test)]
@@ -155,6 +246,7 @@ mod tests {
         assert!(config.enabled);
         assert_eq!(config.port, 9090);
         assert_eq!(config.path, "/metrics");
+        assert_eq!(config.interval_seconds, 15);
     }
 
     #[test]
@@ -163,10 +255,12 @@ mod tests {
             enabled: false,
             port: 8080,
             path: "/prometheus".to_string(),
+            interval_seconds: 30,
         };
         assert!(!config.enabled);
         assert_eq!(config.port, 8080);
         assert_eq!(config.path, "/prometheus");
+        assert_eq!(config.interval_seconds, 30);
     }
 
     #[test]
@@ -175,11 +269,13 @@ mod tests {
             enabled: true,
             port: 9100,
             path: "/stats".to_string(),
+            interval_seconds: 60,
         };
         let json = serde_json::to_value(&config).unwrap();
         assert_eq!(json["enabled"], true);
         assert_eq!(json["port"], 9100);
         assert_eq!(json["path"], "/stats");
+        assert_eq!(json["interval_seconds"], 60);
     }
 
     #[test]
@@ -188,6 +284,7 @@ mod tests {
         let config: MetricsConfig = serde_json::from_str(json).unwrap();
         assert!(!config.enabled);
         assert_eq!(config.port, 3000);
+        assert_eq!(config.interval_seconds, 15); // default
     }
 
     #[test]
@@ -195,8 +292,7 @@ mod tests {
         let base = MetricsConfig::default();
         let other = MetricsConfig {
             enabled: false,
-            port: 9090,
-            path: "/metrics".to_string(),
+            ..MetricsConfig::default()
         };
         let merged = base.merge(other);
         assert!(!merged.enabled);
@@ -206,12 +302,22 @@ mod tests {
     fn test_metrics_config_merge_port() {
         let base = MetricsConfig::default();
         let other = MetricsConfig {
-            enabled: true,
             port: 8888,
-            path: "/metrics".to_string(),
+            ..MetricsConfig::default()
         };
         let merged = base.merge(other);
         assert_eq!(merged.port, 8888);
+    }
+
+    #[test]
+    fn test_metrics_config_merge_interval() {
+        let base = MetricsConfig::default();
+        let other = MetricsConfig {
+            interval_seconds: 60,
+            ..MetricsConfig::default()
+        };
+        let merged = base.merge(other);
+        assert_eq!(merged.interval_seconds, 60);
     }
 
     #[test]
@@ -230,6 +336,8 @@ mod tests {
         assert!(!config.enabled);
         assert!(config.endpoint.is_none());
         assert_eq!(config.service_name, "litellm-rs");
+        assert!((config.sampling_rate - 0.1).abs() < f64::EPSILON);
+        assert!(config.jaeger.is_none());
     }
 
     #[test]
@@ -238,9 +346,27 @@ mod tests {
             enabled: true,
             endpoint: Some("http://jaeger:14268".to_string()),
             service_name: "my-gateway".to_string(),
+            sampling_rate: 0.5,
+            jaeger: None,
         };
         assert!(config.enabled);
         assert_eq!(config.endpoint, Some("http://jaeger:14268".to_string()));
+    }
+
+    #[test]
+    fn test_tracing_config_with_jaeger() {
+        let config = TracingConfig {
+            enabled: true,
+            endpoint: None,
+            service_name: "gw".to_string(),
+            sampling_rate: 1.0,
+            jaeger: Some(JaegerConfig {
+                agent_endpoint: "localhost:6831".to_string(),
+                service_name: "my-service".to_string(),
+            }),
+        };
+        let jaeger = config.jaeger.unwrap();
+        assert_eq!(jaeger.agent_endpoint, "localhost:6831");
     }
 
     #[test]
@@ -249,6 +375,8 @@ mod tests {
             enabled: true,
             endpoint: Some("http://otel:4317".to_string()),
             service_name: "api-gateway".to_string(),
+            sampling_rate: 0.25,
+            jaeger: None,
         };
         let json = serde_json::to_value(&config).unwrap();
         assert_eq!(json["enabled"], true);
@@ -262,6 +390,8 @@ mod tests {
         let config: TracingConfig = serde_json::from_str(json).unwrap();
         assert!(config.enabled);
         assert_eq!(config.service_name, "tracer");
+        // sampling_rate defaults to 0.1
+        assert!((config.sampling_rate - 0.1).abs() < f64::EPSILON);
     }
 
     #[test]
@@ -269,8 +399,7 @@ mod tests {
         let base = TracingConfig::default();
         let other = TracingConfig {
             enabled: true,
-            endpoint: None,
-            service_name: "litellm-gateway".to_string(),
+            ..TracingConfig::default()
         };
         let merged = base.merge(other);
         assert!(merged.enabled);
@@ -280,12 +409,22 @@ mod tests {
     fn test_tracing_config_merge_endpoint() {
         let base = TracingConfig::default();
         let other = TracingConfig {
-            enabled: false,
             endpoint: Some("http://collector:4317".to_string()),
-            service_name: "litellm-gateway".to_string(),
+            ..TracingConfig::default()
         };
         let merged = base.merge(other);
         assert_eq!(merged.endpoint, Some("http://collector:4317".to_string()));
+    }
+
+    #[test]
+    fn test_tracing_config_merge_sampling_rate() {
+        let base = TracingConfig::default();
+        let other = TracingConfig {
+            sampling_rate: 0.5,
+            ..TracingConfig::default()
+        };
+        let merged = base.merge(other);
+        assert!((merged.sampling_rate - 0.5).abs() < f64::EPSILON);
     }
 
     #[test]
@@ -364,6 +503,35 @@ mod tests {
         assert_eq!(config.detailed, cloned.detailed);
     }
 
+    // ==================== LoggingConfig Tests ====================
+
+    #[test]
+    fn test_log_format_serialization() {
+        assert_eq!(serde_json::to_string(&LogFormat::Text).unwrap(), "\"text\"");
+        assert_eq!(serde_json::to_string(&LogFormat::Json).unwrap(), "\"json\"");
+        assert_eq!(
+            serde_json::to_string(&LogFormat::Structured).unwrap(),
+            "\"structured\""
+        );
+    }
+
+    #[test]
+    fn test_log_output_console() {
+        let json = r#"{"type": "console"}"#;
+        let output: LogOutput = serde_json::from_str(json).unwrap();
+        assert!(matches!(output, LogOutput::Console));
+    }
+
+    #[test]
+    fn test_log_output_file() {
+        let json = r#"{"type": "file", "path": "/tmp/test.log"}"#;
+        let output: LogOutput = serde_json::from_str(json).unwrap();
+        match output {
+            LogOutput::File { path } => assert_eq!(path, "/tmp/test.log"),
+            _ => panic!("Expected File"),
+        }
+    }
+
     // ==================== MonitoringConfig Tests ====================
 
     #[test]
@@ -372,16 +540,21 @@ mod tests {
         assert!(config.metrics.enabled);
         assert!(!config.tracing.enabled);
         assert!(config.health.detailed);
+        assert!(config.logging.is_none());
     }
 
     #[test]
-    fn test_monitoring_config_structure() {
+    fn test_monitoring_config_with_logging() {
         let config = MonitoringConfig {
-            metrics: MetricsConfig::default(),
-            tracing: TracingConfig::default(),
-            health: HealthConfig::default(),
+            logging: Some(LoggingConfig {
+                level: "debug".to_string(),
+                format: LogFormat::Json,
+                outputs: vec![LogOutput::Console],
+            }),
+            ..MonitoringConfig::default()
         };
-        assert_eq!(config.metrics.port, 9090);
+        assert!(config.logging.is_some());
+        assert_eq!(config.logging.unwrap().level, "debug");
     }
 
     #[test]
@@ -399,14 +572,27 @@ mod tests {
         let other = MonitoringConfig {
             metrics: MetricsConfig {
                 enabled: false,
-                port: 9090,
-                path: "/metrics".to_string(),
+                ..MetricsConfig::default()
             },
-            tracing: TracingConfig::default(),
-            health: HealthConfig::default(),
+            ..MonitoringConfig::default()
         };
         let merged = base.merge(other);
         assert!(!merged.metrics.enabled);
+    }
+
+    #[test]
+    fn test_monitoring_config_merge_logging() {
+        let base = MonitoringConfig::default();
+        let other = MonitoringConfig {
+            logging: Some(LoggingConfig {
+                level: "warn".to_string(),
+                format: LogFormat::Text,
+                outputs: vec![],
+            }),
+            ..MonitoringConfig::default()
+        };
+        let merged = base.merge(other);
+        assert!(merged.logging.is_some());
     }
 
     #[test]
