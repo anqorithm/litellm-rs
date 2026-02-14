@@ -256,12 +256,12 @@ impl EmbeddingRouter {
 static GLOBAL_EMBEDDING_ROUTER: OnceCell<EmbeddingRouter> = OnceCell::const_new();
 
 /// Get or initialize the global embedding router
-pub async fn get_global_embedding_router() -> &'static EmbeddingRouter {
+pub async fn get_global_embedding_router() -> Result<&'static EmbeddingRouter> {
     GLOBAL_EMBEDDING_ROUTER
-        .get_or_init(|| async {
+        .get_or_try_init(|| async {
             EmbeddingRouter::new()
                 .await
-                .expect("Failed to initialize embedding router")
+                .map_err(|e| GatewayError::internal(format!("Failed to initialize embedding router: {}", e)))
         })
         .await
 }

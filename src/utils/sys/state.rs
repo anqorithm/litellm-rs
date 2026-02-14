@@ -125,11 +125,10 @@ impl<T> GlobalShared<T> {
     /// Initialize the global resource (can only be called once)
     pub fn init(&self, value: T) -> Result<(), T> {
         self.cell.set(Shared::new(value)).map_err(|shared| {
-            // Extract the value from the Shared wrapper
-            match Arc::try_unwrap(shared.inner) {
-                Ok(value) => value,
-                Err(_) => panic!("Failed to extract value from shared resource"),
-            }
+            // The Shared was just created with Arc::new (refcount=1) and OnceLock::set
+            // returns it as-is on failure, so try_unwrap always succeeds here.
+            Arc::try_unwrap(shared.inner)
+                .unwrap_or_else(|_| unreachable!("freshly created Arc should have refcount 1"))
         })
     }
 

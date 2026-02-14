@@ -105,7 +105,7 @@ pub async fn embedding(
     input: impl Into<EmbeddingInput>,
     options: Option<EmbeddingOptions>,
 ) -> crate::utils::error::gateway_error::Result<EmbeddingResponse> {
-    let router = get_global_embedding_router().await;
+    let router = get_global_embedding_router().await?;
     router
         .embed(model, input.into(), options.unwrap_or_default())
         .await

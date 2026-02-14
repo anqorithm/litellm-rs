@@ -294,8 +294,8 @@ impl XAIModel {
     }
 
     /// Get model information
-    pub fn info(&self) -> &'static ModelInfo {
-        get_model_info(self.model_id()).expect("Model info should exist for enum variant")
+    pub fn info(&self) -> Option<&'static ModelInfo> {
+        get_model_info(self.model_id())
     }
 }
 
@@ -391,7 +391,7 @@ mod tests {
         assert_eq!(XAIModel::GrokBeta.model_id(), "grok-beta");
         assert_eq!(XAIModel::GrokVision.model_id(), "grok-vision-beta");
 
-        let info = XAIModel::Grok4.info();
+        let info = XAIModel::Grok4.info().expect("Grok4 info should exist");
         assert_eq!(info.display_name, "Grok 4");
     }
 }
