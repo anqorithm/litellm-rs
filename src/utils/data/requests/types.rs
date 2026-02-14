@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MessageContent {
@@ -18,17 +17,6 @@ pub struct ToolCall {
 pub struct ToolFunction {
     pub name: String,
     pub arguments: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChatCompletionRequest {
-    pub model: String,
-    pub messages: Vec<MessageContent>,
-    pub temperature: Option<f32>,
-    pub max_tokens: Option<u32>,
-    pub stream: Option<bool>,
-    pub tools: Option<Vec<Value>>,
-    pub tool_choice: Option<String>,
 }
 
 pub struct RequestUtils;
@@ -229,176 +217,6 @@ mod tests {
         assert_eq!(json["type"], "function");
     }
 
-    // ==================== ChatCompletionRequest Tests ====================
-
-    #[test]
-    fn test_chat_completion_request_minimal() {
-        let request = ChatCompletionRequest {
-            model: "gpt-4".to_string(),
-            messages: vec![MessageContent {
-                role: "user".to_string(),
-                content: "Hello".to_string(),
-            }],
-            temperature: None,
-            max_tokens: None,
-            stream: None,
-            tools: None,
-            tool_choice: None,
-        };
-
-        assert_eq!(request.model, "gpt-4");
-        assert_eq!(request.messages.len(), 1);
-    }
-
-    #[test]
-    fn test_chat_completion_request_full() {
-        let request = ChatCompletionRequest {
-            model: "gpt-4-turbo".to_string(),
-            messages: vec![
-                MessageContent {
-                    role: "system".to_string(),
-                    content: "You are a helpful assistant.".to_string(),
-                },
-                MessageContent {
-                    role: "user".to_string(),
-                    content: "What's the weather?".to_string(),
-                },
-            ],
-            temperature: Some(0.7),
-            max_tokens: Some(1000),
-            stream: Some(true),
-            tools: Some(vec![serde_json::json!({
-                "type": "function",
-                "function": {
-                    "name": "get_weather",
-                    "parameters": {}
-                }
-            })]),
-            tool_choice: Some("auto".to_string()),
-        };
-
-        assert_eq!(request.model, "gpt-4-turbo");
-        assert_eq!(request.messages.len(), 2);
-        assert_eq!(request.temperature, Some(0.7));
-        assert_eq!(request.max_tokens, Some(1000));
-        assert_eq!(request.stream, Some(true));
-        assert!(request.tools.is_some());
-    }
-
-    #[test]
-    fn test_chat_completion_request_clone() {
-        let request = ChatCompletionRequest {
-            model: "claude-3".to_string(),
-            messages: vec![MessageContent {
-                role: "user".to_string(),
-                content: "Test".to_string(),
-            }],
-            temperature: Some(0.5),
-            max_tokens: None,
-            stream: None,
-            tools: None,
-            tool_choice: None,
-        };
-
-        let cloned = request.clone();
-        assert_eq!(cloned.model, request.model);
-        assert_eq!(cloned.temperature, request.temperature);
-    }
-
-    #[test]
-    fn test_chat_completion_request_debug() {
-        let request = ChatCompletionRequest {
-            model: "gpt-3.5-turbo".to_string(),
-            messages: vec![],
-            temperature: None,
-            max_tokens: None,
-            stream: None,
-            tools: None,
-            tool_choice: None,
-        };
-
-        let debug_str = format!("{:?}", request);
-        assert!(debug_str.contains("ChatCompletionRequest"));
-        assert!(debug_str.contains("gpt-3.5-turbo"));
-    }
-
-    #[test]
-    fn test_chat_completion_request_serialization() {
-        let request = ChatCompletionRequest {
-            model: "gpt-4".to_string(),
-            messages: vec![MessageContent {
-                role: "user".to_string(),
-                content: "Hi".to_string(),
-            }],
-            temperature: Some(0.8),
-            max_tokens: Some(500),
-            stream: Some(false),
-            tools: None,
-            tool_choice: None,
-        };
-
-        let json = serde_json::to_value(&request).unwrap();
-        assert_eq!(json["model"], "gpt-4");
-        // Use approximate comparison for f32 precision
-        let temp = json["temperature"].as_f64().unwrap();
-        assert!((temp - 0.8).abs() < 0.001);
-        assert_eq!(json["max_tokens"], 500);
-    }
-
-    #[test]
-    fn test_chat_completion_request_deserialization() {
-        let json = r#"{
-            "model": "gpt-4",
-            "messages": [
-                {"role": "user", "content": "Hello"}
-            ],
-            "temperature": 0.7
-        }"#;
-
-        let request: ChatCompletionRequest = serde_json::from_str(json).unwrap();
-        assert_eq!(request.model, "gpt-4");
-        assert_eq!(request.messages.len(), 1);
-        assert_eq!(request.temperature, Some(0.7));
-    }
-
-    // ==================== Integration Tests ====================
-
-    #[test]
-    fn test_conversation_flow() {
-        let messages = vec![
-            MessageContent {
-                role: "system".to_string(),
-                content: "You are a coding assistant.".to_string(),
-            },
-            MessageContent {
-                role: "user".to_string(),
-                content: "Write a hello world in Rust".to_string(),
-            },
-            MessageContent {
-                role: "assistant".to_string(),
-                content: "fn main() { println!(\"Hello, world!\"); }".to_string(),
-            },
-            MessageContent {
-                role: "user".to_string(),
-                content: "Now make it print my name".to_string(),
-            },
-        ];
-
-        let request = ChatCompletionRequest {
-            model: "gpt-4".to_string(),
-            messages,
-            temperature: Some(0.0),
-            max_tokens: Some(200),
-            stream: None,
-            tools: None,
-            tool_choice: None,
-        };
-
-        assert_eq!(request.messages.len(), 4);
-        assert_eq!(request.messages[0].role, "system");
-        assert_eq!(request.messages[3].role, "user");
-    }
-
     #[test]
     fn test_tool_call_workflow() {
         let tool_call = ToolCall {
@@ -420,21 +238,4 @@ mod tests {
         assert_eq!(args["unit"], "celsius");
     }
 
-    #[test]
-    fn test_streaming_request() {
-        let request = ChatCompletionRequest {
-            model: "gpt-4".to_string(),
-            messages: vec![MessageContent {
-                role: "user".to_string(),
-                content: "Stream this response".to_string(),
-            }],
-            temperature: None,
-            max_tokens: None,
-            stream: Some(true),
-            tools: None,
-            tool_choice: None,
-        };
-
-        assert_eq!(request.stream, Some(true));
-    }
 }
