@@ -450,6 +450,41 @@ impl HttpErrorMapper {
     }
 }
 
+/// Common chat request validation helper.
+///
+/// Validates the common parts of a chat request that most providers share:
+/// - Messages must not be empty
+/// - max_tokens must not exceed the model's output token limit
+///
+/// Providers should call this after their own registry lookup, passing the
+/// resolved `max_output_tokens` from their model spec.
+pub fn validate_chat_request_common(
+    provider: &'static str,
+    request: &crate::core::types::chat::ChatRequest,
+    max_output_tokens: u32,
+) -> Result<(), ProviderError> {
+    if request.messages.is_empty() {
+        return Err(ProviderError::invalid_request(
+            provider,
+            "Messages cannot be empty",
+        ));
+    }
+
+    if let Some(max_tokens) = request.max_tokens {
+        if max_tokens > max_output_tokens {
+            return Err(ProviderError::invalid_request(
+                provider,
+                format!(
+                    "max_tokens {} exceeds model limit of {}",
+                    max_tokens, max_output_tokens
+                ),
+            ));
+        }
+    }
+
+    Ok(())
+}
+
 /// Cost calculation utilities
 pub struct CostCalculator;
 

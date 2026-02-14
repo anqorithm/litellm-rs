@@ -68,27 +68,18 @@ impl GeminiProvider {
     fn validate_request(&self, request: &ChatRequest) -> Result<(), ProviderError> {
         let registry = get_gemini_registry();
 
-        // Check
         let model_spec = registry
             .get_model_spec(&request.model)
             .ok_or_else(|| gemini_model_error(format!("Unsupported model: {}", request.model)))?;
 
-        // Check
-        if request.messages.is_empty() {
-            return Err(gemini_validation_error("Messages cannot be empty"));
-        }
+        // Common validation: empty messages + max_tokens
+        crate::core::providers::base_provider::validate_chat_request_common(
+            "gemini",
+            request,
+            model_spec.limits.max_output_tokens,
+        )?;
 
-        // Check
-        if let Some(max_tokens) = request.max_tokens {
-            if max_tokens > model_spec.limits.max_output_tokens {
-                return Err(gemini_validation_error(format!(
-                    "max_tokens ({}) exceeds model limit ({})",
-                    max_tokens, model_spec.limits.max_output_tokens
-                )));
-            }
-        }
-
-        // Check
+        // Check temperature range
         if let Some(temperature) = request.temperature {
             if !(0.0..=2.0).contains(&temperature) {
                 return Err(gemini_validation_error(
@@ -97,14 +88,14 @@ impl GeminiProvider {
             }
         }
 
-        // Check
+        // Check top_p range
         if let Some(top_p) = request.top_p {
             if !(0.0..=1.0).contains(&top_p) {
                 return Err(gemini_validation_error("top_p must be between 0.0 and 1.0"));
             }
         }
 
-        // Check
+        // Check tool calling support
         if request.tools.is_some() && !model_spec.features.contains(&ModelFeature::ToolCalling) {
             return Err(gemini_validation_error(format!(
                 "Model {} does not support tool calling",

@@ -60,7 +60,6 @@ impl AnthropicProvider {
     fn validate_request(&self, request: &ChatRequest) -> Result<(), ProviderError> {
         let registry = get_anthropic_registry();
 
-        // Check model support
         let model_spec = registry.get_model_spec(&request.model).ok_or_else(|| {
             ProviderError::invalid_request(
                 "anthropic",
@@ -68,26 +67,12 @@ impl AnthropicProvider {
             )
         })?;
 
-        // Check message requirements
-        if request.messages.is_empty() {
-            return Err(ProviderError::invalid_request(
-                "anthropic",
-                "Messages cannot be empty",
-            ));
-        }
-
-        // Check token limits
-        if let Some(max_tokens) = request.max_tokens {
-            if max_tokens > model_spec.limits.max_output_tokens {
-                return Err(ProviderError::invalid_request(
-                    "anthropic",
-                    format!(
-                        "max_tokens {} exceeds model limit of {}",
-                        max_tokens, model_spec.limits.max_output_tokens
-                    ),
-                ));
-            }
-        }
+        // Common validation: empty messages + max_tokens
+        crate::core::providers::base_provider::validate_chat_request_common(
+            "anthropic",
+            request,
+            model_spec.limits.max_output_tokens,
+        )?;
 
         // Check multimodal content
         let has_multimodal_content = request.messages.iter().any(|msg| {

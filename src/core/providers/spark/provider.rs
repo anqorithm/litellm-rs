@@ -74,31 +74,16 @@ impl SparkProvider {
     fn validate_request(&self, request: &ChatRequest) -> Result<(), ProviderError> {
         let registry = get_spark_registry();
 
-        // Check model support
         let model_spec = registry.get_model_spec(&request.model).ok_or_else(|| {
             ProviderError::invalid_request("spark", format!("Unsupported model: {}", request.model))
         })?;
 
-        // Check message requirements
-        if request.messages.is_empty() {
-            return Err(ProviderError::invalid_request(
-                "spark",
-                "Messages cannot be empty",
-            ));
-        }
-
-        // Check token limits
-        if let Some(max_tokens) = request.max_tokens {
-            if max_tokens > model_spec.limits.max_output_tokens {
-                return Err(ProviderError::invalid_request(
-                    "spark",
-                    format!(
-                        "max_tokens {} exceeds model limit of {}",
-                        max_tokens, model_spec.limits.max_output_tokens
-                    ),
-                ));
-            }
-        }
+        // Common validation: empty messages + max_tokens
+        crate::core::providers::base_provider::validate_chat_request_common(
+            "spark",
+            request,
+            model_spec.limits.max_output_tokens,
+        )?;
 
         // Check function calling support
         if request.tools.is_some() && !model_spec.features.contains(&ModelFeature::FunctionCalling)
