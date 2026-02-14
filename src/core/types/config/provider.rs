@@ -103,6 +103,7 @@ impl crate::core::traits::provider::ProviderConfig for OpenAIProviderConfig {
 mod tests {
     use super::*;
     use crate::core::traits::provider::ProviderConfig;
+    use crate::core::types::config::rate_limit::RateLimitStrategy;
 
     // ==================== ProviderConfigEntry Tests ====================
 
@@ -137,11 +138,10 @@ mod tests {
             health_check: Some(HealthCheckConfig::default()),
             retry: Some(RetryConfig::default()),
             rate_limit: Some(RateLimitConfig {
-                algorithm: super::super::rate_limit::RateLimitAlgorithm::TokenBucket,
+                strategy: RateLimitStrategy::TokenBucket,
                 requests_per_second: Some(10),
-                requests_per_minute: None,
-                tokens_per_minute: None,
                 burst_size: Some(20),
+                ..Default::default()
             }),
         };
         assert!(entry.health_check.is_some());

@@ -14,7 +14,7 @@ mod tests;
 pub use limiter::RateLimiter;
 pub use types::RateLimitResult;
 
-use crate::config::models::rate_limit::RateLimitConfig;
+use crate::core::types::config::rate_limit::RateLimitConfig;
 use std::sync::Arc;
 
 /// Global rate limiter singleton

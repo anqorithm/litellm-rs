@@ -7,7 +7,7 @@ use super::cache::CacheConfig;
 use super::enterprise::EnterpriseConfig;
 use super::monitoring::MonitoringConfig;
 use super::provider::ProviderConfig;
-use super::rate_limit::RateLimitConfig;
+use crate::core::types::config::rate_limit::RateLimitConfig;
 use super::router::RouterConfig;
 use super::server::ServerConfig;
 use super::storage::StorageConfig;

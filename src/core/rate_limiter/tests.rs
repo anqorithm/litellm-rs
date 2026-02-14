@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 use super::limiter::RateLimiter;
-use crate::config::models::rate_limit::{RateLimitConfig, RateLimitStrategy};
+use crate::core::types::config::rate_limit::{RateLimitConfig, RateLimitStrategy};
 use std::time::Duration;
 
 fn test_config(enabled: bool, rpm: u32) -> RateLimitConfig {
@@ -11,6 +11,7 @@ fn test_config(enabled: bool, rpm: u32) -> RateLimitConfig {
         default_rpm: rpm,
         default_tpm: 100000,
         strategy: RateLimitStrategy::SlidingWindow,
+        ..Default::default()
     }
 }
 
@@ -74,6 +75,7 @@ async fn test_token_bucket() {
         default_rpm: 60, // 1 per second
         default_tpm: 100000,
         strategy: RateLimitStrategy::TokenBucket,
+        ..Default::default()
     };
     let limiter = RateLimiter::new(config);
 
@@ -89,6 +91,7 @@ async fn test_fixed_window() {
         default_rpm: 5,
         default_tpm: 100000,
         strategy: RateLimitStrategy::FixedWindow,
+        ..Default::default()
     };
     let limiter = RateLimiter::new(config);
 

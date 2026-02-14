@@ -1,7 +1,7 @@
 //! Core rate limiter implementation
 
 use super::types::{RateLimitEntry, RateLimitResult};
-use crate::config::models::rate_limit::{RateLimitConfig, RateLimitStrategy};
+use crate::core::types::config::rate_limit::{RateLimitConfig, RateLimitStrategy};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;

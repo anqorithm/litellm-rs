@@ -9,7 +9,7 @@ use crate::config::models::auth::AuthConfig;
 use crate::config::models::cache::CacheConfig;
 use crate::config::models::enterprise::{EnterpriseConfig, SsoConfig};
 use crate::config::models::provider::ProviderConfig;
-use crate::config::models::rate_limit::RateLimitConfig;
+use crate::core::types::config::rate_limit::RateLimitConfig;
 use crate::config::models::server::ServerConfig;
 use crate::config::models::storage::{DatabaseConfig, RedisConfig};
 
