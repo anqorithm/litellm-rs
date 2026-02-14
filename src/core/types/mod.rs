@@ -3,7 +3,6 @@
 //! Contains all core data structures and type definitions
 
 // Split from common.rs (new modules)
-pub mod cache;
 pub mod context;
 pub mod health;
 pub mod metrics;
