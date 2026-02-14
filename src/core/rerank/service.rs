@@ -135,26 +135,26 @@ impl RerankService {
     /// Validate rerank request
     pub(crate) fn validate_request(&self, request: &RerankRequest) -> Result<()> {
         if request.query.is_empty() {
-            return Err(GatewayError::InvalidRequest(
+            return Err(GatewayError::BadRequest(
                 "Query cannot be empty".to_string(),
             ));
         }
 
         if request.documents.is_empty() {
-            return Err(GatewayError::InvalidRequest(
+            return Err(GatewayError::BadRequest(
                 "Documents list cannot be empty".to_string(),
             ));
         }
 
         if request.documents.len() > 10000 {
-            return Err(GatewayError::InvalidRequest(
+            return Err(GatewayError::BadRequest(
                 "Too many documents (max 10000)".to_string(),
             ));
         }
 
         if let Some(top_n) = request.top_n {
             if top_n == 0 {
-                return Err(GatewayError::InvalidRequest(
+                return Err(GatewayError::BadRequest(
                     "top_n must be greater than 0".to_string(),
                 ));
             }

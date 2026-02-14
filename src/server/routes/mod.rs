@@ -260,7 +260,7 @@ pub mod errors {
     pub fn gateway_error_to_response(error: GatewayError) -> HttpResponse {
         let (status, message) = match error {
             GatewayError::NotFound(msg) => (actix_web::http::StatusCode::NOT_FOUND, msg),
-            GatewayError::Unauthorized(msg) => (actix_web::http::StatusCode::UNAUTHORIZED, msg),
+            GatewayError::Auth(msg) => (actix_web::http::StatusCode::UNAUTHORIZED, msg),
             GatewayError::Forbidden(msg) => (actix_web::http::StatusCode::FORBIDDEN, msg),
             GatewayError::Conflict(msg) => (actix_web::http::StatusCode::CONFLICT, msg),
             GatewayError::Validation(msg) => (actix_web::http::StatusCode::BAD_REQUEST, msg),

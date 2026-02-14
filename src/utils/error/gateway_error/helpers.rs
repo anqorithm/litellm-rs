@@ -10,7 +10,7 @@ impl GatewayError {
     }
 
     pub fn authorization<S: Into<String>>(message: S) -> Self {
-        Self::Authorization(message.into())
+        Self::Forbidden(message.into())
     }
 
     pub fn bad_request<S: Into<String>>(message: S) -> Self {
@@ -74,7 +74,7 @@ impl GatewayError {
     }
 
     pub fn unauthorized<S: Into<String>>(message: S) -> Self {
-        Self::Unauthorized(message.into())
+        Self::Auth(message.into())
     }
 
     pub fn forbidden<S: Into<String>>(message: S) -> Self {
@@ -86,7 +86,7 @@ impl GatewayError {
     }
 
     pub fn invalid_request_error<S: Into<String>>(message: S) -> Self {
-        Self::InvalidRequest(message.into())
+        Self::BadRequest(message.into())
     }
 
     pub fn no_providers_available<S: Into<String>>(message: S) -> Self {
@@ -140,7 +140,7 @@ mod tests {
     fn test_authorization_error() {
         let error = GatewayError::authorization("Insufficient permissions");
         assert!(
-            matches!(error, GatewayError::Authorization(msg) if msg == "Insufficient permissions")
+            matches!(error, GatewayError::Forbidden(msg) if msg == "Insufficient permissions")
         );
     }
 
@@ -179,7 +179,7 @@ mod tests {
     #[test]
     fn test_invalid_request_error_method() {
         let error = GatewayError::invalid_request_error("Invalid format");
-        assert!(matches!(error, GatewayError::InvalidRequest(msg) if msg == "Invalid format"));
+        assert!(matches!(error, GatewayError::BadRequest(msg) if msg == "Invalid format"));
     }
 
     // ==================== Server Error Tests ====================
@@ -309,7 +309,7 @@ mod tests {
     #[test]
     fn test_unauthorized_error() {
         let error = GatewayError::unauthorized("Invalid credentials");
-        assert!(matches!(error, GatewayError::Unauthorized(msg) if msg == "Invalid credentials"));
+        assert!(matches!(error, GatewayError::Auth(msg) if msg == "Invalid credentials"));
     }
 
     #[test]

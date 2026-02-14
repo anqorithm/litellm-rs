@@ -162,7 +162,7 @@ impl BatchProcessor {
 
                 Ok(batch)
             }
-            _ => Err(GatewayError::InvalidRequest(
+            _ => Err(GatewayError::BadRequest(
                 "Batch cannot be cancelled in current status".to_string(),
             )),
         }

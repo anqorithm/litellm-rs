@@ -110,11 +110,11 @@ impl VirtualKeyManager {
             .database
             .get_virtual_key(&key_hash)
             .await?
-            .ok_or_else(|| GatewayError::Unauthorized("Invalid API key".to_string()))?;
+            .ok_or_else(|| GatewayError::Auth("Invalid API key".to_string()))?;
 
         // Validate key
         if !self.is_key_valid(&virtual_key) {
-            return Err(GatewayError::Unauthorized(
+            return Err(GatewayError::Auth(
                 "API key is expired or inactive".to_string(),
             ));
         }

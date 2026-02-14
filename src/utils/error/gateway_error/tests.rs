@@ -35,7 +35,7 @@ fn test_auth_helper() {
 #[test]
 fn test_authorization_helper() {
     let error = GatewayError::authorization("Access denied");
-    assert!(matches!(error, GatewayError::Authorization(msg) if msg == "Access denied"));
+    assert!(matches!(error, GatewayError::Forbidden(msg) if msg == "Access denied"));
 }
 
 #[test]
@@ -133,7 +133,7 @@ fn test_not_implemented_helper() {
 #[test]
 fn test_unauthorized_helper() {
     let error = GatewayError::unauthorized("No credentials");
-    assert!(matches!(error, GatewayError::Unauthorized(msg) if msg == "No credentials"));
+    assert!(matches!(error, GatewayError::Auth(msg) if msg == "No credentials"));
 }
 
 #[test]
@@ -151,7 +151,7 @@ fn test_external_helper() {
 #[test]
 fn test_invalid_request_error_helper() {
     let error = GatewayError::invalid_request_error("Invalid data");
-    assert!(matches!(error, GatewayError::InvalidRequest(msg) if msg == "Invalid data"));
+    assert!(matches!(error, GatewayError::BadRequest(msg) if msg == "Invalid data"));
 }
 
 #[test]
@@ -209,7 +209,6 @@ fn test_all_error_variants_display() {
     let errors = vec![
         GatewayError::Config("config error".to_string()),
         GatewayError::Auth("auth error".to_string()),
-        GatewayError::Authorization("authz error".to_string()),
         GatewayError::RateLimit("rate limit".to_string()),
         GatewayError::Validation("validation".to_string()),
         GatewayError::Cache("cache".to_string()),
@@ -223,23 +222,16 @@ fn test_all_error_variants_display() {
         GatewayError::Crypto("crypto".to_string()),
         GatewayError::FileStorage("file storage".to_string()),
         GatewayError::VectorDb("vector db".to_string()),
-        GatewayError::Monitoring("monitoring".to_string()),
-        GatewayError::Integration("integration".to_string()),
         GatewayError::Network("network".to_string()),
         GatewayError::Parsing("parsing".to_string()),
         GatewayError::Alert("alert".to_string()),
         GatewayError::NotImplemented("not impl".to_string()),
-        GatewayError::Unauthorized("unauthorized".to_string()),
         GatewayError::Forbidden("forbidden".to_string()),
         GatewayError::External("external".to_string()),
-        GatewayError::InvalidRequest("invalid".to_string()),
         GatewayError::NoProvidersAvailable("no providers".to_string()),
         GatewayError::ProviderNotFound("provider not found".to_string()),
         GatewayError::NoProvidersForModel("no model".to_string()),
         GatewayError::NoHealthyProviders("no healthy".to_string()),
-        GatewayError::Migration("migration".to_string()),
-        GatewayError::Session("session".to_string()),
-        GatewayError::Email("email".to_string()),
     ];
 
     for error in errors {

@@ -54,10 +54,6 @@ pub enum GatewayError {
     #[error("Authentication error: {0}")]
     Auth(String),
 
-    /// Authorization errors
-    #[error("Authorization error: {0}")]
-    Authorization(String),
-
     /// Provider errors
     #[error("Provider error: {0}")]
     Provider(ProviderError),
@@ -118,14 +114,6 @@ pub enum GatewayError {
     #[error("Vector database error: {0}")]
     VectorDb(String),
 
-    /// Monitoring errors
-    #[error("Monitoring error: {0}")]
-    Monitoring(String),
-
-    /// Integration errors
-    #[error("Integration error: {0}")]
-    Integration(String),
-
     /// Network errors
     #[error("Network error: {0}")]
     Network(String),
@@ -142,10 +130,6 @@ pub enum GatewayError {
     #[error("Not implemented: {0}")]
     NotImplemented(String),
 
-    /// Unauthorized errors
-    #[error("Unauthorized: {0}")]
-    Unauthorized(String),
-
     /// Forbidden errors
     #[error("Forbidden: {0}")]
     Forbidden(String),
@@ -153,10 +137,6 @@ pub enum GatewayError {
     /// External service errors
     #[error("External service error: {0}")]
     External(String),
-
-    /// Invalid request errors
-    #[error("Invalid request: {0}")]
-    InvalidRequest(String),
 
     /// No providers available
     #[error("No providers available: {0}")]
@@ -189,17 +169,6 @@ pub enum GatewayError {
     #[error("WebSocket error: {0}")]
     WebSocket(String),
 
-    /// Migration errors
-    #[error("Migration error: {0}")]
-    Migration(String),
-
-    /// Session errors
-    #[error("Session error: {0}")]
-    Session(String),
-
-    /// Email service errors
-    #[error("Email error: {0}")]
-    Email(String),
 }
 
 #[cfg(test)]
@@ -227,11 +196,17 @@ mod tests {
     }
 
     #[test]
-    fn test_authorization_error_display() {
-        let error = GatewayError::Authorization("Insufficient permissions".to_string());
+    fn test_forbidden_error_display() {
+        let error = GatewayError::Forbidden("Access denied".to_string());
+        assert_eq!(error.to_string(), "Forbidden: Access denied");
+    }
+
+    #[test]
+    fn test_external_error_display() {
+        let error = GatewayError::External("Third-party API error".to_string());
         assert_eq!(
             error.to_string(),
-            "Authorization error: Insufficient permissions"
+            "External service error: Third-party API error"
         );
     }
 
@@ -335,24 +310,6 @@ mod tests {
     }
 
     #[test]
-    fn test_monitoring_error_display() {
-        let error = GatewayError::Monitoring("Metrics collection failed".to_string());
-        assert_eq!(
-            error.to_string(),
-            "Monitoring error: Metrics collection failed"
-        );
-    }
-
-    #[test]
-    fn test_integration_error_display() {
-        let error = GatewayError::Integration("Webhook delivery failed".to_string());
-        assert_eq!(
-            error.to_string(),
-            "Integration error: Webhook delivery failed"
-        );
-    }
-
-    #[test]
     fn test_network_error_display() {
         let error = GatewayError::Network("Connection refused".to_string());
         assert_eq!(error.to_string(), "Network error: Connection refused");
@@ -377,33 +334,6 @@ mod tests {
             error.to_string(),
             "Not implemented: Feature X is not implemented"
         );
-    }
-
-    #[test]
-    fn test_unauthorized_error_display() {
-        let error = GatewayError::Unauthorized("Token expired".to_string());
-        assert_eq!(error.to_string(), "Unauthorized: Token expired");
-    }
-
-    #[test]
-    fn test_forbidden_error_display() {
-        let error = GatewayError::Forbidden("Access denied".to_string());
-        assert_eq!(error.to_string(), "Forbidden: Access denied");
-    }
-
-    #[test]
-    fn test_external_error_display() {
-        let error = GatewayError::External("Third-party API error".to_string());
-        assert_eq!(
-            error.to_string(),
-            "External service error: Third-party API error"
-        );
-    }
-
-    #[test]
-    fn test_invalid_request_error_display() {
-        let error = GatewayError::InvalidRequest("Missing required field".to_string());
-        assert_eq!(error.to_string(), "Invalid request: Missing required field");
     }
 
     #[test]
@@ -435,24 +365,6 @@ mod tests {
             error.to_string(),
             "No healthy providers: All providers failed health check"
         );
-    }
-
-    #[test]
-    fn test_migration_error_display() {
-        let error = GatewayError::Migration("Migration 001 failed".to_string());
-        assert_eq!(error.to_string(), "Migration error: Migration 001 failed");
-    }
-
-    #[test]
-    fn test_session_error_display() {
-        let error = GatewayError::Session("Session expired".to_string());
-        assert_eq!(error.to_string(), "Session error: Session expired");
-    }
-
-    #[test]
-    fn test_email_error_display() {
-        let error = GatewayError::Email("SMTP connection failed".to_string());
-        assert_eq!(error.to_string(), "Email error: SMTP connection failed");
     }
 
     // ==================== Error Debug Tests ====================
@@ -515,15 +427,9 @@ mod tests {
 
     #[test]
     fn test_authentication_errors() {
-        let errors = vec![
-            GatewayError::Auth("Invalid token".to_string()),
-            GatewayError::Unauthorized("Token expired".to_string()),
-        ];
-
-        for error in errors {
-            let msg = error.to_string().to_lowercase();
-            assert!(msg.contains("token") || msg.contains("auth"));
-        }
+        let error = GatewayError::Auth("Invalid token".to_string());
+        let msg = error.to_string().to_lowercase();
+        assert!(msg.contains("auth"));
     }
 
     #[test]
@@ -544,7 +450,6 @@ mod tests {
         let errors = vec![
             GatewayError::Validation("field required".to_string()),
             GatewayError::BadRequest("invalid payload".to_string()),
-            GatewayError::InvalidRequest("missing param".to_string()),
         ];
 
         for error in errors {

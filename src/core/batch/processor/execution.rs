@@ -116,7 +116,7 @@ impl BatchProcessor {
             BatchType::ChatCompletion => {
                 let request: ChatCompletionRequest = serde_json::from_value(item.body.clone())
                     .map_err(|e| {
-                        GatewayError::InvalidRequest(format!("Invalid request body: {}", e))
+                        GatewayError::BadRequest(format!("Invalid request body: {}", e))
                     })?;
 
                 // This would need to be integrated with the actual provider system
@@ -154,7 +154,7 @@ impl BatchProcessor {
             BatchType::Embedding => {
                 let request: EmbeddingRequest =
                     serde_json::from_value(item.body.clone()).map_err(|e| {
-                        GatewayError::InvalidRequest(format!("Invalid request body: {}", e))
+                        GatewayError::BadRequest(format!("Invalid request body: {}", e))
                     })?;
 
                 let response = BatchHttpResponse {
@@ -181,7 +181,7 @@ impl BatchProcessor {
                     error: None,
                 })
             }
-            _ => Err(GatewayError::InvalidRequest(
+            _ => Err(GatewayError::BadRequest(
                 "Unsupported batch type".to_string(),
             )),
         }

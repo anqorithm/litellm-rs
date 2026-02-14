@@ -79,7 +79,7 @@ async fn test_async_batch_executor_with_failures() {
     let results = executor
         .execute(items, |n| async move {
             if n == 3 {
-                Err(GatewayError::InvalidRequest("Test error".to_string()))
+                Err(GatewayError::BadRequest("Test error".to_string()))
             } else {
                 Ok::<_, GatewayError>(n * 2)
             }
@@ -106,7 +106,7 @@ async fn test_async_batch_executor_with_summary() {
     let (results, summary) = executor
         .execute_with_summary(items, |n| async move {
             if n % 2 == 0 {
-                Err(GatewayError::InvalidRequest("Even number".to_string()))
+                Err(GatewayError::BadRequest("Even number".to_string()))
             } else {
                 Ok::<_, GatewayError>(n)
             }
@@ -142,7 +142,7 @@ fn test_async_batch_error_from_gateway_error() {
     let batch_err: AsyncBatchError = timeout_err.into();
     assert!(batch_err.retryable);
 
-    let invalid_err = GatewayError::InvalidRequest("invalid".to_string());
+    let invalid_err = GatewayError::BadRequest("invalid".to_string());
     let batch_err: AsyncBatchError = invalid_err.into();
     assert!(!batch_err.retryable);
 }

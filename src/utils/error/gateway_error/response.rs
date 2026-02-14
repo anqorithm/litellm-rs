@@ -27,9 +27,9 @@ impl ResponseError for GatewayError {
                 "AUTH_ERROR",
                 self.to_string(),
             ),
-            GatewayError::Authorization(_) => (
+            GatewayError::Forbidden(_) => (
                 actix_web::http::StatusCode::FORBIDDEN,
-                "AUTHORIZATION_ERROR",
+                "FORBIDDEN",
                 self.to_string(),
             ),
             GatewayError::Provider(provider_error) => match provider_error {
@@ -134,24 +134,9 @@ impl ResponseError for GatewayError {
                 "NOT_IMPLEMENTED",
                 self.to_string(),
             ),
-            GatewayError::Unauthorized(_) => (
-                actix_web::http::StatusCode::UNAUTHORIZED,
-                "UNAUTHORIZED",
-                self.to_string(),
-            ),
-            GatewayError::Forbidden(_) => (
-                actix_web::http::StatusCode::FORBIDDEN,
-                "FORBIDDEN",
-                self.to_string(),
-            ),
             GatewayError::External(_) => (
                 actix_web::http::StatusCode::BAD_GATEWAY,
                 "EXTERNAL_ERROR",
-                self.to_string(),
-            ),
-            GatewayError::InvalidRequest(_) => (
-                actix_web::http::StatusCode::BAD_REQUEST,
-                "INVALID_REQUEST",
                 self.to_string(),
             ),
             GatewayError::NoProvidersAvailable(_) => (
@@ -346,8 +331,8 @@ mod tests {
     }
 
     #[test]
-    fn test_gateway_error_authorization_response() {
-        let error = GatewayError::Authorization("Permission denied".to_string());
+    fn test_gateway_error_forbidden_response2() {
+        let error = GatewayError::Forbidden("Permission denied".to_string());
         let response = error.error_response();
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
     }
@@ -430,13 +415,6 @@ mod tests {
     }
 
     #[test]
-    fn test_gateway_error_unauthorized_response() {
-        let error = GatewayError::Unauthorized("Unauthorized access".to_string());
-        let response = error.error_response();
-        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-    }
-
-    #[test]
     fn test_gateway_error_forbidden_response() {
         let error = GatewayError::Forbidden("Forbidden".to_string());
         let response = error.error_response();
@@ -448,13 +426,6 @@ mod tests {
         let error = GatewayError::External("External service error".to_string());
         let response = error.error_response();
         assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
-    }
-
-    #[test]
-    fn test_gateway_error_invalid_request_response() {
-        let error = GatewayError::InvalidRequest("Invalid request".to_string());
-        let response = error.error_response();
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 
     #[test]

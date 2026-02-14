@@ -251,7 +251,7 @@ impl From<McpError> for GatewayError {
                         server_name, message
                     )
                 };
-                GatewayError::Authorization(msg)
+                GatewayError::Forbidden(msg)
             }
             McpError::ProtocolError { message } => {
                 GatewayError::BadRequest(format!("MCP protocol error: {}", message))
@@ -1021,11 +1021,11 @@ mod tests {
         };
         let gateway_err: GatewayError = mcp_err.into();
         match gateway_err {
-            GatewayError::Authorization(msg) => {
+            GatewayError::Forbidden(msg) => {
                 assert!(msg.contains("MCP"));
                 assert!(msg.contains("delete_repo"));
             }
-            _ => panic!("Expected Authorization error"),
+            _ => panic!("Expected Forbidden error"),
         }
     }
 
@@ -1038,11 +1038,11 @@ mod tests {
         };
         let gateway_err: GatewayError = mcp_err.into();
         match gateway_err {
-            GatewayError::Authorization(msg) => {
+            GatewayError::Forbidden(msg) => {
                 assert!(msg.contains("MCP"));
                 assert!(msg.contains("github"));
             }
-            _ => panic!("Expected Authorization error"),
+            _ => panic!("Expected Forbidden error"),
         }
     }
 

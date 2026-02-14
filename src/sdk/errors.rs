@@ -74,7 +74,7 @@ pub enum SDKError {
 impl From<crate::utils::error::gateway_error::GatewayError> for SDKError {
     fn from(error: crate::utils::error::gateway_error::GatewayError) -> Self {
         match error {
-            crate::utils::error::gateway_error::GatewayError::Unauthorized(msg) => SDKError::AuthError(msg),
+            crate::utils::error::gateway_error::GatewayError::Auth(msg) => SDKError::AuthError(msg),
             crate::utils::error::gateway_error::GatewayError::NotFound(msg) => SDKError::ModelNotFound(msg),
             crate::utils::error::gateway_error::GatewayError::BadRequest(msg) => SDKError::InvalidRequest(msg),
             crate::utils::error::gateway_error::GatewayError::RateLimit(msg) => SDKError::RateLimitError(msg),
@@ -338,7 +338,7 @@ mod tests {
 
     #[test]
     fn test_from_gateway_error_unauthorized() {
-        let gateway_error = GatewayError::Unauthorized("Invalid token".to_string());
+        let gateway_error = GatewayError::Auth("Invalid token".to_string());
         let sdk_error: SDKError = gateway_error.into();
         assert!(matches!(sdk_error, SDKError::AuthError(_)));
         assert!(sdk_error.is_auth_error());
