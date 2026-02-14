@@ -185,32 +185,17 @@ impl SparkConfig {
 
 impl ProviderConfig for SparkConfig {
     fn validate(&self) -> Result<(), String> {
-        // Validate app ID
-        if self.app_id.is_none() {
-            return Err("Spark APP_ID is required".to_string());
-        }
-
-        let app_id = self.app_id.as_ref().unwrap();
+        let app_id = self.app_id.as_ref().ok_or("Spark APP_ID is required")?;
         if app_id.is_empty() {
             return Err("Spark APP_ID cannot be empty".to_string());
         }
 
-        // Validate API key
-        if self.api_key.is_none() {
-            return Err("Spark API key is required".to_string());
-        }
-
-        let api_key = self.api_key.as_ref().unwrap();
+        let api_key = self.api_key.as_ref().ok_or("Spark API key is required")?;
         if api_key.is_empty() {
             return Err("Spark API key cannot be empty".to_string());
         }
 
-        // Validate API secret
-        if self.api_secret.is_none() {
-            return Err("Spark API secret is required".to_string());
-        }
-
-        let api_secret = self.api_secret.as_ref().unwrap();
+        let api_secret = self.api_secret.as_ref().ok_or("Spark API secret is required")?;
         if api_secret.is_empty() {
             return Err("Spark API secret cannot be empty".to_string());
         }

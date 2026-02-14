@@ -429,11 +429,10 @@ where
     ///
     /// Loads entries from Redis into memory for specified keys
     pub async fn warm_from_redis(&self, keys: &[CacheKey]) -> Result<usize> {
-        if self.redis.is_none() || self.config.mode == CacheMode::MemoryOnly {
-            return Ok(0);
-        }
-
-        let redis = self.redis.as_ref().unwrap();
+        let redis = match self.redis.as_ref() {
+            Some(r) if self.config.mode != CacheMode::MemoryOnly => r,
+            _ => return Ok(0),
+        };
         let mut warmed = 0;
 
         for key in keys {
