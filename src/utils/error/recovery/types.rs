@@ -4,7 +4,6 @@ use std::time::Duration;
 
 /// Circuit breaker state
 #[derive(Debug, Clone, PartialEq)]
-#[allow(dead_code)]
 pub enum CircuitState {
     /// Circuit is closed, requests flow normally
     Closed,
@@ -16,7 +15,6 @@ pub enum CircuitState {
 
 /// Circuit breaker configuration
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct CircuitBreakerConfig {
     /// Failure threshold to open circuit
     pub failure_threshold: u32,
@@ -44,7 +42,6 @@ impl Default for CircuitBreakerConfig {
 
 /// Circuit breaker metrics
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct CircuitBreakerMetrics {
     /// Current circuit breaker state
     pub state: CircuitState,
@@ -54,34 +51,6 @@ pub struct CircuitBreakerMetrics {
     pub success_count: u32,
     /// Total number of requests processed
     pub request_count: u32,
-}
-
-/// Retry configuration
-#[derive(Debug, Clone)]
-#[allow(dead_code)]
-pub struct RetryConfig {
-    /// Maximum number of retry attempts
-    pub max_attempts: u32,
-    /// Base delay between retries
-    pub base_delay: Duration,
-    /// Maximum delay between retries
-    pub max_delay: Duration,
-    /// Backoff multiplier
-    pub backoff_multiplier: f64,
-    /// Whether to add jitter to delays
-    pub jitter: bool,
-}
-
-impl Default for RetryConfig {
-    fn default() -> Self {
-        Self {
-            max_attempts: 3,
-            base_delay: Duration::from_millis(100),
-            max_delay: Duration::from_secs(30),
-            backoff_multiplier: 2.0,
-            jitter: true,
-        }
-    }
 }
 
 #[cfg(test)]
@@ -199,58 +168,5 @@ mod tests {
         let cloned = metrics.clone();
         assert_eq!(metrics.state, cloned.state);
         assert_eq!(metrics.failure_count, cloned.failure_count);
-    }
-
-    // ==================== RetryConfig Default Tests ====================
-
-    #[test]
-    fn test_retry_config_default() {
-        let config = RetryConfig::default();
-        assert_eq!(config.max_attempts, 3);
-        assert_eq!(config.base_delay, Duration::from_millis(100));
-        assert_eq!(config.max_delay, Duration::from_secs(30));
-        assert!((config.backoff_multiplier - 2.0).abs() < f64::EPSILON);
-        assert!(config.jitter);
-    }
-
-    #[test]
-    fn test_retry_config_custom() {
-        let config = RetryConfig {
-            max_attempts: 5,
-            base_delay: Duration::from_millis(500),
-            max_delay: Duration::from_secs(60),
-            backoff_multiplier: 1.5,
-            jitter: false,
-        };
-        assert_eq!(config.max_attempts, 5);
-        assert_eq!(config.base_delay, Duration::from_millis(500));
-        assert!(!config.jitter);
-    }
-
-    #[test]
-    fn test_retry_config_no_retries() {
-        let config = RetryConfig {
-            max_attempts: 0,
-            ..RetryConfig::default()
-        };
-        assert_eq!(config.max_attempts, 0);
-    }
-
-    #[test]
-    fn test_retry_config_clone() {
-        let config = RetryConfig::default();
-        let cloned = config.clone();
-        assert_eq!(config.max_attempts, cloned.max_attempts);
-        assert_eq!(config.base_delay, cloned.base_delay);
-        assert_eq!(config.jitter, cloned.jitter);
-    }
-
-    #[test]
-    fn test_retry_config_high_multiplier() {
-        let config = RetryConfig {
-            backoff_multiplier: 10.0,
-            ..RetryConfig::default()
-        };
-        assert!((config.backoff_multiplier - 10.0).abs() < f64::EPSILON);
     }
 }

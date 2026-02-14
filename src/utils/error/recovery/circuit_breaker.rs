@@ -9,7 +9,6 @@ use std::time::Instant;
 use tracing::{debug, warn};
 
 /// Circuit breaker implementation
-#[allow(dead_code)]
 pub struct CircuitBreaker {
     config: CircuitBreakerConfig,
     state: Arc<Mutex<CircuitState>>,
@@ -20,7 +19,6 @@ pub struct CircuitBreaker {
     window_start: Arc<Mutex<Instant>>,
 }
 
-#[allow(dead_code)]
 impl CircuitBreaker {
     /// Create a new circuit breaker
     pub fn new(config: CircuitBreakerConfig) -> Self {

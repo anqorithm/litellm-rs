@@ -3,8 +3,6 @@
 //! This module provides utilities for error recovery, circuit breakers, and resilience patterns.
 
 pub mod circuit_breaker;
-pub mod resilience;
-pub mod retry;
 pub mod types;
 
 // Include tests module

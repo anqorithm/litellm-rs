@@ -15,6 +15,7 @@ use std::pin::Pin;
 
 /// DeepInfra chat handler
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // Stub handler for future implementation
 pub struct DeepInfraChatHandler {
     config: DeepInfraConfig,
 }
@@ -51,10 +52,3 @@ impl DeepInfraChatHandler {
     }
 }
 
-#[allow(dead_code)]
-impl DeepInfraChatHandler {
-    /// Get the config (used for testing)
-    fn get_config(&self) -> &DeepInfraConfig {
-        &self.config
-    }
-}

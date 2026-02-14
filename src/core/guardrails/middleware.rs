@@ -4,8 +4,7 @@
 
 use actix_web::body::MessageBody;
 use actix_web::dev::{Service, ServiceRequest, ServiceResponse, Transform, forward_ready};
-use actix_web::http::StatusCode;
-use actix_web::{Error, HttpResponse, body::BoxBody};
+use actix_web::{Error, body::BoxBody};
 use futures::future::{LocalBoxFuture, Ready, ready};
 use std::sync::Arc;
 use tracing::debug;
@@ -88,23 +87,6 @@ where
     }
 }
 
-/// Create a blocked response
-#[allow(dead_code)]
-fn create_blocked_response(message: &str) -> HttpResponse<BoxBody> {
-    HttpResponse::build(StatusCode::BAD_REQUEST)
-        .content_type("application/json")
-        .body(
-            serde_json::json!({
-                "error": {
-                    "message": message,
-                    "type": "guardrail_violation",
-                    "code": "content_blocked"
-                }
-            })
-            .to_string(),
-        )
-}
-
 /// Context stored in request extensions after guardrail check
 #[derive(Debug, Clone)]
 pub struct GuardrailCheckContext {
@@ -128,12 +110,6 @@ mod tests {
         let config = GuardrailConfig::default();
         let engine = Arc::new(GuardrailEngine::new(config).unwrap());
         let _middleware = GuardrailMiddleware::new(engine);
-    }
-
-    #[test]
-    fn test_blocked_response() {
-        let response = create_blocked_response("Content blocked");
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 
     #[test]
