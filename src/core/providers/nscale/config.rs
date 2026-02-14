@@ -2,45 +2,14 @@
 //!
 //! Configuration for Nscale AI inference platform
 
-use crate::core::traits::provider::ProviderConfig;
 use crate::define_provider_config;
 
-// Configuration using the provider config macro
-define_provider_config!(NscaleConfig {});
-
-impl NscaleConfig {
-    /// Create configuration from environment variables
-    pub fn from_env() -> Self {
-        Self::new("nscale")
-    }
-}
-
-// Implement ProviderConfig trait
-impl ProviderConfig for NscaleConfig {
-    fn validate(&self) -> Result<(), String> {
-        self.base.validate("nscale")
-    }
-
-    fn api_key(&self) -> Option<&str> {
-        self.base.api_key.as_deref()
-    }
-
-    fn api_base(&self) -> Option<&str> {
-        self.base.api_base.as_deref()
-    }
-
-    fn timeout(&self) -> std::time::Duration {
-        self.base.timeout_duration()
-    }
-
-    fn max_retries(&self) -> u32 {
-        self.base.max_retries
-    }
-}
+define_provider_config!(NscaleConfig, provider: "nscale");
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::traits::provider::ProviderConfig;
 
     #[test]
     fn test_nscale_config() {

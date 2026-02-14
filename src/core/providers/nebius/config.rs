@@ -2,18 +2,11 @@
 //!
 //! Configuration for Nebius AI cloud platform
 
-use crate::core::traits::provider::ProviderConfig;
 use crate::define_provider_config;
 
-// Configuration using the provider config macro
-define_provider_config!(NebiusConfig {});
+define_provider_config!(NebiusConfig, provider: "nebius");
 
 impl NebiusConfig {
-    /// Create configuration from environment variables
-    pub fn from_env() -> Self {
-        Self::new("nebius")
-    }
-
     /// Set custom folder ID (Nebius uses folder IDs for organization)
     pub fn with_folder_id(mut self, folder_id: &str) -> Self {
         self.base
@@ -23,32 +16,10 @@ impl NebiusConfig {
     }
 }
 
-// Implement ProviderConfig trait
-impl ProviderConfig for NebiusConfig {
-    fn validate(&self) -> Result<(), String> {
-        self.base.validate("nebius")
-    }
-
-    fn api_key(&self) -> Option<&str> {
-        self.base.api_key.as_deref()
-    }
-
-    fn api_base(&self) -> Option<&str> {
-        self.base.api_base.as_deref()
-    }
-
-    fn timeout(&self) -> std::time::Duration {
-        self.base.timeout_duration()
-    }
-
-    fn max_retries(&self) -> u32 {
-        self.base.max_retries
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::traits::provider::ProviderConfig;
 
     #[test]
     fn test_nebius_config() {

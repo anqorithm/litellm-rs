@@ -2,45 +2,14 @@
 //!
 //! Configuration for Cerebras AI API
 
-use crate::core::traits::provider::ProviderConfig;
 use crate::define_provider_config;
 
-// Configuration
-define_provider_config!(CerebrasConfig {});
-
-impl CerebrasConfig {
-    /// Create configuration from environment variables
-    pub fn from_env() -> Self {
-        Self::new("cerebras")
-    }
-}
-
-// Implement ProviderConfig trait
-impl ProviderConfig for CerebrasConfig {
-    fn validate(&self) -> Result<(), String> {
-        self.base.validate("cerebras")
-    }
-
-    fn api_key(&self) -> Option<&str> {
-        self.base.api_key.as_deref()
-    }
-
-    fn api_base(&self) -> Option<&str> {
-        self.base.api_base.as_deref()
-    }
-
-    fn timeout(&self) -> std::time::Duration {
-        self.base.timeout_duration()
-    }
-
-    fn max_retries(&self) -> u32 {
-        self.base.max_retries
-    }
-}
+define_provider_config!(CerebrasConfig, provider: "cerebras");
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::traits::provider::ProviderConfig;
 
     #[test]
     fn test_cerebras_config() {

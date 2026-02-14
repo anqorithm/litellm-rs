@@ -199,6 +199,112 @@ impl BaseConfig {
 /// Configuration
 #[macro_export]
 macro_rules! define_provider_config {
+    // Full version: generates struct, Default, new, from_env, builders, ProviderConfig impl
+    ($name:ident, provider: $provider:expr) => {
+        $crate::define_provider_config!($name { }, provider: $provider);
+    };
+
+    ($name:ident { $($field:ident: $type:ty = $default:expr),* $(,)? }, provider: $provider:expr) => {
+        $crate::define_provider_config!($name { $($field: $type = $default),* });
+
+        impl $name {
+            pub fn from_env() -> Self {
+                Self::new($provider)
+            }
+
+            pub fn with_api_key(mut self, api_key: impl Into<String>) -> Self {
+                self.base.api_key = Some(api_key.into());
+                self
+            }
+
+            pub fn with_base_url(mut self, base_url: impl Into<String>) -> Self {
+                self.base.api_base = Some(base_url.into());
+                self
+            }
+
+            pub fn with_timeout(mut self, timeout: u64) -> Self {
+                self.base.timeout = timeout;
+                self
+            }
+        }
+
+        impl $crate::core::traits::provider::ProviderConfig for $name {
+            fn validate(&self) -> Result<(), String> {
+                self.base.validate($provider)
+            }
+
+            fn api_key(&self) -> Option<&str> {
+                self.base.api_key.as_deref()
+            }
+
+            fn api_base(&self) -> Option<&str> {
+                self.base.api_base.as_deref()
+            }
+
+            fn timeout(&self) -> std::time::Duration {
+                self.base.timeout_duration()
+            }
+
+            fn max_retries(&self) -> u32 {
+                self.base.max_retries
+            }
+        }
+    };
+
+    // Env-required version: from_env() returns Result<Self, String> requiring API key
+    ($name:ident, env_key: $env_key:expr, provider: $provider:expr) => {
+        $crate::define_provider_config!($name { }, env_key: $env_key, provider: $provider);
+    };
+
+    ($name:ident { $($field:ident: $type:ty = $default:expr),* $(,)? }, env_key: $env_key:expr, provider: $provider:expr) => {
+        $crate::define_provider_config!($name { $($field: $type = $default),* });
+
+        impl $name {
+            pub fn from_env() -> Result<Self, String> {
+                let api_key = std::env::var($env_key)
+                    .map_err(|_| concat!($env_key, " environment variable is required"))?;
+                Ok(Self::new($provider).with_api_key(api_key))
+            }
+
+            pub fn with_api_key(mut self, api_key: impl Into<String>) -> Self {
+                self.base.api_key = Some(api_key.into());
+                self
+            }
+
+            pub fn with_base_url(mut self, base_url: impl Into<String>) -> Self {
+                self.base.api_base = Some(base_url.into());
+                self
+            }
+
+            pub fn with_timeout(mut self, timeout: u64) -> Self {
+                self.base.timeout = timeout;
+                self
+            }
+        }
+
+        impl $crate::core::traits::provider::ProviderConfig for $name {
+            fn validate(&self) -> Result<(), String> {
+                self.base.validate($provider)
+            }
+
+            fn api_key(&self) -> Option<&str> {
+                self.base.api_key.as_deref()
+            }
+
+            fn api_base(&self) -> Option<&str> {
+                self.base.api_base.as_deref()
+            }
+
+            fn timeout(&self) -> std::time::Duration {
+                self.base.timeout_duration()
+            }
+
+            fn max_retries(&self) -> u32 {
+                self.base.max_retries
+            }
+        }
+    };
+
     ($name:ident { $($field:ident: $type:ty = $default:expr),* $(,)? }) => {
         #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
         pub struct $name {
@@ -247,7 +353,7 @@ macro_rules! define_provider_config {
 
     // Version without additional fields
     ($name:ident) => {
-        define_provider_config!($name {});
+        $crate::define_provider_config!($name {});
     };
 }
 

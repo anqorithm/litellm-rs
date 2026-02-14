@@ -2,18 +2,11 @@
 //!
 //! Configuration for ByteDance's Volcengine AI platform
 
-use crate::core::traits::provider::ProviderConfig;
 use crate::define_provider_config;
 
-// Configuration using the provider config macro
-define_provider_config!(VolcengineConfig {});
+define_provider_config!(VolcengineConfig, provider: "volcengine");
 
 impl VolcengineConfig {
-    /// Create configuration from environment variables
-    pub fn from_env() -> Self {
-        Self::new("volcengine")
-    }
-
     /// Create with custom API base (for different regions)
     pub fn with_region(mut self, region: &str) -> Self {
         self.base.api_base = Some(match region {
@@ -25,32 +18,10 @@ impl VolcengineConfig {
     }
 }
 
-// Implement ProviderConfig trait
-impl ProviderConfig for VolcengineConfig {
-    fn validate(&self) -> Result<(), String> {
-        self.base.validate("volcengine")
-    }
-
-    fn api_key(&self) -> Option<&str> {
-        self.base.api_key.as_deref()
-    }
-
-    fn api_base(&self) -> Option<&str> {
-        self.base.api_base.as_deref()
-    }
-
-    fn timeout(&self) -> std::time::Duration {
-        self.base.timeout_duration()
-    }
-
-    fn max_retries(&self) -> u32 {
-        self.base.max_retries
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::traits::provider::ProviderConfig;
 
     #[test]
     fn test_volcengine_config() {

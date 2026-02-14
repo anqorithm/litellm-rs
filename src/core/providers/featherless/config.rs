@@ -1,16 +1,10 @@
 //! Featherless Configuration
 
-use crate::core::traits::provider::ProviderConfig;
 use crate::define_provider_config;
 
-define_provider_config!(FeatherlessConfig {});
+define_provider_config!(FeatherlessConfig, provider: "featherless");
 
 impl FeatherlessConfig {
-    /// Create configuration from environment
-    pub fn from_env() -> Self {
-        Self::new("featherless")
-    }
-
     /// Get the effective API base URL
     pub fn get_api_base(&self) -> String {
         self.base
@@ -20,31 +14,10 @@ impl FeatherlessConfig {
     }
 }
 
-impl ProviderConfig for FeatherlessConfig {
-    fn validate(&self) -> Result<(), String> {
-        self.base.validate("featherless")
-    }
-
-    fn api_key(&self) -> Option<&str> {
-        self.base.api_key.as_deref()
-    }
-
-    fn api_base(&self) -> Option<&str> {
-        self.base.api_base.as_deref()
-    }
-
-    fn timeout(&self) -> std::time::Duration {
-        self.base.timeout_duration()
-    }
-
-    fn max_retries(&self) -> u32 {
-        self.base.max_retries
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::traits::provider::ProviderConfig;
 
     #[test]
     fn test_featherless_config() {

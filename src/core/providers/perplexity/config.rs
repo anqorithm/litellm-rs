@@ -2,18 +2,11 @@
 //!
 //! Configuration for Perplexity AI provider
 
-use crate::core::traits::provider::ProviderConfig;
 use crate::define_provider_config;
 
-// Configuration using the macro
-define_provider_config!(PerplexityConfig {});
+define_provider_config!(PerplexityConfig, provider: "perplexity");
 
 impl PerplexityConfig {
-    /// Create configuration from environment
-    pub fn from_env() -> Self {
-        Self::new("perplexity")
-    }
-
     /// Get the effective API base URL
     pub fn get_api_base(&self) -> String {
         self.base
@@ -23,32 +16,10 @@ impl PerplexityConfig {
     }
 }
 
-// Implementation of ProviderConfig trait
-impl ProviderConfig for PerplexityConfig {
-    fn validate(&self) -> Result<(), String> {
-        self.base.validate("perplexity")
-    }
-
-    fn api_key(&self) -> Option<&str> {
-        self.base.api_key.as_deref()
-    }
-
-    fn api_base(&self) -> Option<&str> {
-        self.base.api_base.as_deref()
-    }
-
-    fn timeout(&self) -> std::time::Duration {
-        self.base.timeout_duration()
-    }
-
-    fn max_retries(&self) -> u32 {
-        self.base.max_retries
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::traits::provider::ProviderConfig;
 
     #[test]
     fn test_perplexity_config() {

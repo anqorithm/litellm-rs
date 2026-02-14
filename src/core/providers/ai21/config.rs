@@ -2,45 +2,14 @@
 //!
 //! Configuration for AI21 Labs API
 
-use crate::core::traits::provider::ProviderConfig;
 use crate::define_provider_config;
 
-// Configuration
-define_provider_config!(AI21Config {});
-
-impl AI21Config {
-    /// Create configuration from environment variables
-    pub fn from_env() -> Self {
-        Self::new("ai21")
-    }
-}
-
-// Implement ProviderConfig trait
-impl ProviderConfig for AI21Config {
-    fn validate(&self) -> Result<(), String> {
-        self.base.validate("ai21")
-    }
-
-    fn api_key(&self) -> Option<&str> {
-        self.base.api_key.as_deref()
-    }
-
-    fn api_base(&self) -> Option<&str> {
-        self.base.api_base.as_deref()
-    }
-
-    fn timeout(&self) -> std::time::Duration {
-        self.base.timeout_duration()
-    }
-
-    fn max_retries(&self) -> u32 {
-        self.base.max_retries
-    }
-}
+define_provider_config!(AI21Config, provider: "ai21");
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::traits::provider::ProviderConfig;
 
     #[test]
     fn test_ai21_config() {
