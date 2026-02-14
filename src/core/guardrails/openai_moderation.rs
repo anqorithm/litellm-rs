@@ -7,6 +7,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
+use tracing::warn;
 
 use super::config::OpenAIModerationConfig;
 use super::traits::Guardrail;
@@ -61,7 +62,10 @@ impl OpenAIModerationGuardrail {
 
         if !response.status().is_success() {
             let status = response.status();
-            let body = response.text().await.unwrap_or_default();
+            let body = response.text().await.unwrap_or_else(|e| {
+                warn!("Failed to read OpenAI moderation error response body: {}", e);
+                String::new()
+            });
             return Err(GuardrailError::Api(format!(
                 "OpenAI API error: {} - {}",
                 status, body

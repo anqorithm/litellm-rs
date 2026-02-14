@@ -105,7 +105,10 @@ impl OpenAIFineTuningProvider {
                 .await
                 .map_err(|e| FineTuningError::other(format!("Failed to parse response: {}", e)))
         } else {
-            let error_body = response.text().await.unwrap_or_default();
+            let error_body = response.text().await.unwrap_or_else(|e| {
+                warn!("Failed to read OpenAI fine-tuning error response body: {}", e);
+                String::new()
+            });
             warn!("OpenAI API error: {} - {}", status, error_body);
 
             match status.as_u16() {

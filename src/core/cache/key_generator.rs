@@ -9,6 +9,7 @@ use serde::Serialize;
 use std::collections::BTreeMap;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+use tracing::warn;
 
 /// Prefix for chat completion cache keys
 pub const CHAT_KEY_PREFIX: &str = "chat";
@@ -139,7 +140,10 @@ pub fn generate_embedding_key_with_user(
 
 /// Generate a cache key from arbitrary serializable request
 pub fn generate_key_from_json<T: Serialize>(prefix: &str, request: &T) -> CacheKey {
-    let json = serde_json::to_string(request).unwrap_or_default();
+    let json = serde_json::to_string(request).unwrap_or_else(|e| {
+        warn!("Failed to serialize request for cache key generation: {}", e);
+        String::new()
+    });
     let normalized = normalize_json_string(&json);
 
     let mut hasher = DefaultHasher::new();
