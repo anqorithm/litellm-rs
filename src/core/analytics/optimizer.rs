@@ -1,7 +1,7 @@
 //! Cost optimization system
 
 use super::types::UserMetrics;
-use crate::utils::error::error::Result;
+use crate::utils::error::gateway_error::Result;
 use serde::{Deserialize, Serialize};
 
 /// Cost optimization suggestions

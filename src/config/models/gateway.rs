@@ -43,7 +43,7 @@ fn env_var(key: &str) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
-fn parse_env<T>(key: &str) -> crate::utils::error::error::Result<Option<T>>
+fn parse_env<T>(key: &str) -> crate::utils::error::gateway_error::Result<Option<T>>
 where
     T: std::str::FromStr,
     T::Err: std::fmt::Display,
@@ -53,14 +53,14 @@ where
     };
 
     raw.parse::<T>().map(Some).map_err(|error| {
-        crate::utils::error::error::GatewayError::Config(format!(
+        crate::utils::error::gateway_error::GatewayError::Config(format!(
             "Invalid value for {}: {}",
             key, error
         ))
     })
 }
 
-fn parse_env_bool(key: &str) -> crate::utils::error::error::Result<Option<bool>> {
+fn parse_env_bool(key: &str) -> crate::utils::error::gateway_error::Result<Option<bool>> {
     let Some(raw) = env_var(key) else {
         return Ok(None);
     };
@@ -69,7 +69,7 @@ fn parse_env_bool(key: &str) -> crate::utils::error::error::Result<Option<bool>>
         "true" | "1" | "yes" | "on" => true,
         "false" | "0" | "no" | "off" => false,
         _ => {
-            return Err(crate::utils::error::error::GatewayError::Config(format!(
+            return Err(crate::utils::error::gateway_error::GatewayError::Config(format!(
                 "Invalid boolean value for {}: {}",
                 key, raw
             )));
@@ -88,9 +88,9 @@ fn parse_env_list(key: &str) -> Option<Vec<String>> {
     })
 }
 
-fn required_env(key: &str) -> crate::utils::error::error::Result<String> {
+fn required_env(key: &str) -> crate::utils::error::gateway_error::Result<String> {
     env_var(key).ok_or_else(|| {
-        crate::utils::error::error::GatewayError::Config(format!(
+        crate::utils::error::gateway_error::GatewayError::Config(format!(
             "Missing required env var: {}",
             key
         ))
@@ -118,16 +118,16 @@ fn provider_env_name(provider_name: &str, field: &str) -> String {
     )
 }
 
-fn load_providers_from_env() -> crate::utils::error::error::Result<Vec<ProviderConfig>> {
+fn load_providers_from_env() -> crate::utils::error::gateway_error::Result<Vec<ProviderConfig>> {
     let provider_names = parse_env_list(ENV_PROVIDERS).ok_or_else(|| {
-        crate::utils::error::error::GatewayError::Config(format!(
+        crate::utils::error::gateway_error::GatewayError::Config(format!(
             "{} must be set with at least one provider name",
             ENV_PROVIDERS
         ))
     })?;
 
     if provider_names.is_empty() {
-        return Err(crate::utils::error::error::GatewayError::Config(format!(
+        return Err(crate::utils::error::gateway_error::GatewayError::Config(format!(
             "{} must contain at least one provider name",
             ENV_PROVIDERS
         )));
@@ -223,7 +223,7 @@ pub struct GatewayConfig {
 }
 
 impl GatewayConfig {
-    pub fn from_env() -> crate::utils::error::error::Result<Self> {
+    pub fn from_env() -> crate::utils::error::gateway_error::Result<Self> {
         let mut config = Self::default();
 
         if let Some(host) = env_var(ENV_HOST) {
@@ -280,7 +280,7 @@ impl GatewayConfig {
         if let Some(jwt_secret) = env_var(ENV_JWT_SECRET) {
             config.auth.jwt_secret = jwt_secret;
         } else if config.auth.enable_jwt {
-            return Err(crate::utils::error::error::GatewayError::Config(format!(
+            return Err(crate::utils::error::gateway_error::GatewayError::Config(format!(
                 "{} is required when {} is enabled",
                 ENV_JWT_SECRET, ENV_ENABLE_JWT
             )));

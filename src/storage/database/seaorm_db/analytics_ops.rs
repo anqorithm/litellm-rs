@@ -1,4 +1,4 @@
-use crate::utils::error::error::Result;
+use crate::utils::error::gateway_error::Result;
 use tracing::warn;
 
 use super::types::{DatabaseStats, SeaOrmDatabase};

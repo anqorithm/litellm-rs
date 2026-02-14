@@ -17,7 +17,7 @@ use crate::core::types::{
 use crate::server::routes::errors;
 use crate::server::state::AppState;
 use crate::utils::data::validation::RequestValidator;
-use crate::utils::error::error::GatewayError;
+use crate::utils::error::gateway_error::GatewayError;
 use actix_web::http::header::{CACHE_CONTROL, CONTENT_TYPE};
 use actix_web::{HttpRequest, HttpResponse, Result as ActixResult, web};
 use futures::StreamExt;

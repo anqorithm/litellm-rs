@@ -1,6 +1,6 @@
 //! Security-aware logging utilities
 
-use crate::utils::logging::logging::async_logger::async_logger;
+use crate::utils::logging::enhanced::async_logger::async_logger;
 use std::collections::HashMap;
 use tracing::Level;
 use uuid::Uuid;
@@ -145,8 +145,8 @@ impl SecurityLogger {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::utils::logging::logging::async_logger::init_async_logger;
-    use crate::utils::logging::logging::types::AsyncLoggerConfig;
+    use crate::utils::logging::enhanced::async_logger::init_async_logger;
+    use crate::utils::logging::enhanced::types::AsyncLoggerConfig;
     use std::sync::Once;
 
     static INIT: Once = Once::new();

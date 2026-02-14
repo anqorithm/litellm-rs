@@ -1,6 +1,6 @@
 //! Encryption utilities including AES-GCM and hashing with salt
 
-use crate::utils::error::error::{GatewayError, Result};
+use crate::utils::error::gateway_error::{GatewayError, Result};
 use aes_gcm::{
     Aes256Gcm, Key, Nonce,
     aead::{Aead, KeyInit},

@@ -3,7 +3,7 @@
 //! This module provides storage abstractions for team management.
 
 use crate::core::models::team::{Team, TeamMember, TeamRole, TeamStatus};
-use crate::utils::error::error::{GatewayError, Result};
+use crate::utils::error::gateway_error::{GatewayError, Result};
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::RwLock;

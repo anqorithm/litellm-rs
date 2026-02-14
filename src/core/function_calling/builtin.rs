@@ -2,7 +2,7 @@
 
 use super::executor::FunctionExecutor;
 use super::types::FunctionDefinition;
-use crate::utils::error::error::{GatewayError, Result};
+use crate::utils::error::gateway_error::{GatewayError, Result};
 use serde_json::{Value, json};
 
 /// Weather function executor (example)

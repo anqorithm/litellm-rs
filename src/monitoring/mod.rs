@@ -11,4 +11,5 @@ pub mod types;
 
 // Internal submodules
 mod background;
+#[cfg(test)]
 mod tests;

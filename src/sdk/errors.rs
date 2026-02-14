@@ -71,20 +71,20 @@ pub enum SDKError {
 }
 
 /// Error
-impl From<crate::utils::error::error::GatewayError> for SDKError {
-    fn from(error: crate::utils::error::error::GatewayError) -> Self {
+impl From<crate::utils::error::gateway_error::GatewayError> for SDKError {
+    fn from(error: crate::utils::error::gateway_error::GatewayError) -> Self {
         match error {
-            crate::utils::error::error::GatewayError::Unauthorized(msg) => SDKError::AuthError(msg),
-            crate::utils::error::error::GatewayError::NotFound(msg) => SDKError::ModelNotFound(msg),
-            crate::utils::error::error::GatewayError::BadRequest(msg) => SDKError::InvalidRequest(msg),
-            crate::utils::error::error::GatewayError::RateLimit(msg) => SDKError::RateLimitError(msg),
-            crate::utils::error::error::GatewayError::ProviderUnavailable(msg) => {
+            crate::utils::error::gateway_error::GatewayError::Unauthorized(msg) => SDKError::AuthError(msg),
+            crate::utils::error::gateway_error::GatewayError::NotFound(msg) => SDKError::ModelNotFound(msg),
+            crate::utils::error::gateway_error::GatewayError::BadRequest(msg) => SDKError::InvalidRequest(msg),
+            crate::utils::error::gateway_error::GatewayError::RateLimit(msg) => SDKError::RateLimitError(msg),
+            crate::utils::error::gateway_error::GatewayError::ProviderUnavailable(msg) => {
                 SDKError::ProviderError(msg)
             }
-            crate::utils::error::error::GatewayError::Internal(msg) => SDKError::Internal(msg),
-            crate::utils::error::error::GatewayError::Network(msg) => SDKError::NetworkError(msg),
-            crate::utils::error::error::GatewayError::Validation(msg) => SDKError::InvalidRequest(msg),
-            crate::utils::error::error::GatewayError::Parsing(msg) => SDKError::Internal(msg),
+            crate::utils::error::gateway_error::GatewayError::Internal(msg) => SDKError::Internal(msg),
+            crate::utils::error::gateway_error::GatewayError::Network(msg) => SDKError::NetworkError(msg),
+            crate::utils::error::gateway_error::GatewayError::Validation(msg) => SDKError::InvalidRequest(msg),
+            crate::utils::error::gateway_error::GatewayError::Parsing(msg) => SDKError::Internal(msg),
             // Handle
             _ => SDKError::Internal(error.to_string()),
         }
@@ -147,7 +147,7 @@ impl SDKError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::utils::error::error::GatewayError;
+    use crate::utils::error::gateway_error::GatewayError;
 
     // ==================== SDKError Display Tests ====================
 

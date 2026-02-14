@@ -2,7 +2,7 @@
 //!
 //! This module contains the main RateLimiter struct and its core methods.
 
-use crate::utils::error::error::{GatewayError, Result};
+use crate::utils::error::gateway_error::{GatewayError, Result};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;

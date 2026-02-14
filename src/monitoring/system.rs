@@ -2,7 +2,7 @@
 
 use crate::config::models::monitoring::MonitoringConfig;
 use crate::storage::StorageLayer;
-use crate::utils::error::error::Result;
+use crate::utils::error::gateway_error::Result;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 

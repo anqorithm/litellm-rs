@@ -3,7 +3,7 @@
 //! This module provides core key-value caching operations including get, set, delete, exists, expire, and ttl.
 
 use super::pool::RedisPool;
-use crate::utils::error::error::{GatewayError, Result};
+use crate::utils::error::gateway_error::{GatewayError, Result};
 use redis::{AsyncCommands, RedisResult};
 
 impl RedisPool {

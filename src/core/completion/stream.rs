@@ -7,7 +7,7 @@ use crate::core::streaming::types::ChatCompletionChunk;
 
 /// Streaming completion response
 pub type CompletionStream =
-    BoxStream<'static, Result<CompletionChunk, crate::utils::error::error::GatewayError>>;
+    BoxStream<'static, Result<CompletionChunk, crate::utils::error::gateway_error::GatewayError>>;
 
 /// Chunk in a streaming completion response
 #[derive(Debug, Clone)]

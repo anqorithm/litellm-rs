@@ -15,7 +15,7 @@ pub mod redis_optimized;
 pub mod vector;
 
 use crate::config::models::storage::StorageConfig;
-use crate::utils::error::error::{GatewayError, Result};
+use crate::utils::error::gateway_error::{GatewayError, Result};
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 

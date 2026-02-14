@@ -3,7 +3,7 @@
 use super::requests::{CreateKeyRequest, UpdateKeyRequest};
 use super::types::{KeyGenerationSettings, RateLimitState, VirtualKey};
 use crate::storage::database::Database;
-use crate::utils::error::error::{GatewayError, Result};
+use crate::utils::error::gateway_error::{GatewayError, Result};
 use chrono::{Duration, Utc};
 use std::collections::HashMap;
 use std::sync::Arc;

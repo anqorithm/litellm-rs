@@ -22,6 +22,7 @@ mod monitoring_validators;
 mod router_validators;
 mod ssrf;
 mod storage_validators;
+#[cfg(test)]
 mod tests;
 mod trait_def;
 

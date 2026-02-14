@@ -94,7 +94,7 @@ mod integration_tests {
         assert_eq!(vec.len(), 4);
         // AtomicValue.store is atomic, final value should be one of 0, 1, 2, 3
         let final_value = *value.load();
-        assert!(final_value >= 0 && final_value < 4);
+        assert!((0..4).contains(&final_value));
         assert_eq!(vmap.len(), 4);
     }
 }

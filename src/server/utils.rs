@@ -3,7 +3,7 @@
 //! This module provides utility methods for the HttpServer.
 
 use crate::server::HttpServer;
-use crate::utils::error::error::GatewayError;
+use crate::utils::error::gateway_error::GatewayError;
 use tracing::{info, warn};
 
 impl HttpServer {

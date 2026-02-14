@@ -2,7 +2,7 @@
 
 use super::types::{Claims, JwtHandler, TokenPair, TokenType};
 use crate::config::models::auth::AuthConfig;
-use crate::utils::error::error::{GatewayError, Result};
+use crate::utils::error::gateway_error::{GatewayError, Result};
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::{debug, warn};

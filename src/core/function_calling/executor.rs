@@ -1,7 +1,7 @@
 //! Function executor trait and handler implementation
 
 use super::types::*;
-use crate::utils::error::error::Result;
+use crate::utils::error::gateway_error::Result;
 use serde_json::Value;
 use std::collections::HashMap;
 

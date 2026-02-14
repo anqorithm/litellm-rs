@@ -1,7 +1,7 @@
 //! Permission checking methods
 
 use crate::core::models::user::types::User;
-use crate::utils::error::error::{GatewayError, Result};
+use crate::utils::error::gateway_error::{GatewayError, Result};
 use std::collections::HashSet;
 
 use super::helpers::RbacHelpers;

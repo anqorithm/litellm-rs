@@ -4,7 +4,7 @@ use super::roles::UserRole;
 use super::settings::UserPreferences;
 use super::types::{Team, User};
 use crate::storage::database::Database;
-use crate::utils::error::error::{GatewayError, Result};
+use crate::utils::error::gateway_error::{GatewayError, Result};
 use chrono::Utc;
 use std::collections::HashMap;
 use std::sync::Arc;

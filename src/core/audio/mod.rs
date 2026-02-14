@@ -3,6 +3,7 @@
 //! Provides unified audio processing capabilities across providers.
 
 mod speech;
+#[cfg(test)]
 mod tests;
 mod transcription;
 mod translation;
@@ -11,7 +12,7 @@ mod translation;
 pub mod types;
 
 use crate::core::providers::ProviderRegistry;
-use crate::utils::error::error::Result;
+use crate::utils::error::gateway_error::Result;
 use std::sync::Arc;
 
 // Internal service imports

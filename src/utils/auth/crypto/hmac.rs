@@ -1,6 +1,6 @@
 //! HMAC signature creation and verification
 
-use crate::utils::error::error::{GatewayError, Result};
+use crate::utils::error::gateway_error::{GatewayError, Result};
 use hmac::{Hmac, Mac, digest::KeyInit as HmacKeyInit};
 use sha2::Sha256;
 

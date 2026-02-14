@@ -16,7 +16,7 @@ use crate::config::models::provider::ProviderConfig;
 use crate::config::models::router::RouterConfig;
 use crate::config::models::server::ServerConfig;
 use crate::config::models::storage::StorageConfig;
-use crate::utils::error::error::{GatewayError, Result};
+use crate::utils::error::gateway_error::{GatewayError, Result};
 use std::path::Path;
 use tracing::{debug, info};
 

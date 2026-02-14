@@ -3,7 +3,7 @@
 use super::executor::FunctionCallingHandler;
 use super::types::ToolCall;
 use crate::core::models::openai::{ChatMessage, MessageContent, MessageRole};
-use crate::utils::error::error::{GatewayError, Result};
+use crate::utils::error::gateway_error::{GatewayError, Result};
 use serde_json::Value;
 use tracing::{error, warn};
 

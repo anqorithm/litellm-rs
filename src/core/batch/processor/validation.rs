@@ -2,7 +2,7 @@
 
 use super::super::types::*;
 use super::core::BatchProcessor;
-use crate::utils::error::error::{GatewayError, Result};
+use crate::utils::error::gateway_error::{GatewayError, Result};
 
 impl BatchProcessor {
     /// Validate batch request

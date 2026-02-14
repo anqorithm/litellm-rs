@@ -5,6 +5,7 @@
 mod channels;
 mod manager;
 mod processing;
+#[cfg(test)]
 mod tests;
 mod types;
 

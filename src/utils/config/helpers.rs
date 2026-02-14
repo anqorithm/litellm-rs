@@ -2,7 +2,7 @@
 //!
 //! This module provides utilities for configuration management and environment handling.
 
-use crate::utils::error::error::{GatewayError, Result};
+use crate::utils::error::gateway_error::{GatewayError, Result};
 use regex::Regex;
 use std::collections::HashMap;
 use std::env;

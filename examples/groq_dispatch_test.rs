@@ -4,7 +4,7 @@ use litellm_rs::core::providers::{
     Provider,
     groq::{GroqConfig, GroqProvider},
 };
-use litellm_rs::core::types::HealthStatus;
+use litellm_rs::core::types::health::HealthStatus;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

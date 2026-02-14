@@ -3,7 +3,7 @@
 use super::types::ProviderConfigBuilder;
 use crate::config::models::provider::ProviderConfig;
 use crate::utils::data::type_utils::{NonEmptyString, PositiveF64};
-use crate::utils::error::error::{GatewayError, Result};
+use crate::utils::error::gateway_error::{GatewayError, Result};
 use std::time::Duration;
 
 impl ProviderConfigBuilder {

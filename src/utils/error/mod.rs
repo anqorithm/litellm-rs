@@ -2,7 +2,7 @@
 //!
 //! This module provides comprehensive error handling, recovery, and error context management.
 
-pub mod error;
+pub mod gateway_error;
 pub mod recovery;
 pub mod utils;
 

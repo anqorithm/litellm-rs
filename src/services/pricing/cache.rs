@@ -2,7 +2,7 @@
 
 use super::service::PricingService;
 use super::types::{PricingEventType, PricingUpdateEvent};
-use crate::utils::error::error::Result;
+use crate::utils::error::gateway_error::Result;
 use std::sync::Arc;
 use std::time::SystemTime;
 use tracing::{debug, info, warn};

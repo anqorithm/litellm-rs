@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::utils::error::error::Result;
+use crate::utils::error::gateway_error::Result;
 
 /// Vector data for storage and retrieval
 #[derive(Debug, Clone, Serialize, Deserialize)]

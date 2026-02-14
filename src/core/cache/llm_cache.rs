@@ -12,7 +12,7 @@ use crate::core::models::openai::{
     ChatCompletionRequest, ChatCompletionResponse, EmbeddingRequest, EmbeddingResponse,
 };
 use crate::storage::redis::RedisPool;
-use crate::utils::error::error::Result;
+use crate::utils::error::gateway_error::Result;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;

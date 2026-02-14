@@ -1,7 +1,7 @@
 //! Core health checker implementation
 
 use crate::storage::StorageLayer;
-use crate::utils::error::error::Result;
+use crate::utils::error::gateway_error::Result;
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;

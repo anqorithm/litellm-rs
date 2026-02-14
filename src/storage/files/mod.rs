@@ -5,6 +5,7 @@
 mod local;
 mod s3;
 mod storage;
+#[cfg(test)]
 mod tests;
 mod types;
 

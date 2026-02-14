@@ -1,7 +1,7 @@
 //! Specialized token operations (password reset, email verification, invitations)
 
 use super::types::{Claims, JwtHandler, TokenType};
-use crate::utils::error::error::{GatewayError, Result};
+use crate::utils::error::gateway_error::{GatewayError, Result};
 use jsonwebtoken::{Header, Validation, decode, encode};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::debug;

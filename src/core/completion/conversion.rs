@@ -3,7 +3,7 @@
 use super::types::{Choice, CompletionOptions, CompletionResponse};
 use crate::core::types::responses::ChatResponse;
 use crate::core::types::{chat::ChatMessage, chat::ChatRequest};
-use crate::utils::error::error::Result;
+use crate::utils::error::gateway_error::Result;
 #[cfg(test)]
 use crate::core::types::responses::Usage;
 

@@ -4,7 +4,7 @@ use super::types::{
     CostBreakdown, CostMetrics, ProviderMetrics, RequestMetrics, RequestSizeDistribution,
     TokenUsage, UsagePatterns, UserMetrics,
 };
-use crate::utils::error::error::Result;
+use crate::utils::error::gateway_error::Result;
 use std::collections::HashMap;
 
 /// Metrics collector for gathering usage statistics

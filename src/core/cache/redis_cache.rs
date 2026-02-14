@@ -7,7 +7,7 @@ use super::types::{
     AtomicCacheStats, CacheEntry, CacheKey, DualCacheConfig, SerializableCacheEntry,
 };
 use crate::storage::redis::RedisPool;
-use crate::utils::error::error::{GatewayError, Result};
+use crate::utils::error::gateway_error::{GatewayError, Result};
 use serde::{Serialize, de::DeserializeOwned};
 use std::marker::PhantomData;
 use std::sync::Arc;

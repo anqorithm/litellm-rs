@@ -4,7 +4,7 @@ use super::channels::{NotificationChannel, SlackChannel};
 use super::types::{AlertRule, AlertStats, AlertStorage};
 use crate::config::models::file_storage::AlertingConfig;
 use crate::monitoring::types::{Alert, AlertSeverity};
-use crate::utils::error::error::Result;
+use crate::utils::error::gateway_error::Result;
 use parking_lot::{Mutex, RwLock};
 use std::collections::VecDeque;
 use std::sync::Arc;

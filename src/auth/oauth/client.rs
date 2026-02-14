@@ -4,7 +4,7 @@ use super::config::OAuthConfig;
 use super::types::{
     CallbackParams, OAuthError, OAuthState, PkceChallengeMethod, TokenResponse, UserInfo,
 };
-use crate::utils::error::error::{GatewayError, Result};
+use crate::utils::error::gateway_error::{GatewayError, Result};
 use crate::utils::net::http::create_custom_client;
 use reqwest::Client;
 use std::collections::HashMap;

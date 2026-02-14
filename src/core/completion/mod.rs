@@ -44,7 +44,7 @@ pub use types::{Choice, CompletionOptions, CompletionResponse, FunctionCall, Too
 pub use crate::core::types::{content::ContentPart, message::MessageContent, message::MessageRole};
 
 /// LiteLLM Error type alias
-pub type LiteLLMError = crate::utils::error::error::GatewayError;
+pub type LiteLLMError = crate::utils::error::gateway_error::GatewayError;
 
 /// Usage statistics (re-export from core types)
 pub type Usage = crate::core::types::responses::Usage;

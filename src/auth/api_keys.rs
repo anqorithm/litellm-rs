@@ -2,7 +2,7 @@
 
 use super::system::AuthSystem;
 use crate::core::models::ApiKey;
-use crate::utils::error::error::Result;
+use crate::utils::error::gateway_error::Result;
 use tracing::info;
 use uuid::Uuid;
 

@@ -4,7 +4,7 @@
 
 use crate::core::models::metrics::cost::{CostInfo, CostRates};
 use crate::core::models::metrics::token::TokenUsage;
-use crate::utils::error::error::{GatewayError, Result};
+use crate::utils::error::gateway_error::{GatewayError, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

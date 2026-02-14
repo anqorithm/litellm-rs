@@ -1,7 +1,7 @@
 //! RBAC system core functionality
 
 use crate::config::models::auth::RbacConfig;
-use crate::utils::error::error::Result;
+use crate::utils::error::gateway_error::Result;
 use std::collections::HashMap;
 use tracing::{debug, info};
 

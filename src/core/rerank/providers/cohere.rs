@@ -2,7 +2,7 @@
 
 use crate::core::rerank::service::RerankProvider;
 use crate::core::rerank::types::{RerankRequest, RerankResponse, RerankResult, RerankUsage};
-use crate::utils::error::error::{GatewayError, Result};
+use crate::utils::error::gateway_error::{GatewayError, Result};
 use async_trait::async_trait;
 use std::collections::HashMap;
 

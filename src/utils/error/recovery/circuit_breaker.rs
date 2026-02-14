@@ -1,7 +1,7 @@
 //! Circuit breaker implementation for fault tolerance
 
 use super::types::{CircuitBreakerConfig, CircuitBreakerMetrics, CircuitState};
-use crate::utils::error::error::{GatewayError, Result};
+use crate::utils::error::gateway_error::{GatewayError, Result};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;

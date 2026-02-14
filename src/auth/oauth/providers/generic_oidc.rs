@@ -13,7 +13,7 @@ use tracing::{debug, error, info};
 
 use crate::auth::oauth::config::{OAuthConfig, OAuthProvider};
 use crate::auth::oauth::types::{OAuthState, TokenResponse, UserInfo};
-use crate::utils::error::error::{GatewayError, Result};
+use crate::utils::error::gateway_error::{GatewayError, Result};
 use crate::utils::net::http::create_custom_client;
 
 /// OIDC Discovery document

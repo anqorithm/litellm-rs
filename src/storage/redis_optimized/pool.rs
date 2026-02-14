@@ -6,7 +6,7 @@
 use super::connection::ConnectionPool;
 use super::types::{PoolConfig, PoolStats};
 use crate::config::models::storage::RedisConfig;
-use crate::utils::error::error::{GatewayError, Result};
+use crate::utils::error::gateway_error::{GatewayError, Result};
 use dashmap::DashMap;
 use redis::{Client, RedisResult, aio::MultiplexedConnection};
 use std::sync::Arc;

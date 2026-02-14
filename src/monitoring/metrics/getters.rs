@@ -8,7 +8,7 @@ use crate::monitoring::types::{
     ErrorMetrics, LatencyPercentiles, PerformanceMetrics, ProviderMetrics, RequestMetrics,
     SystemResourceMetrics,
 };
-use crate::utils::error::error::Result;
+use crate::utils::error::gateway_error::Result;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 

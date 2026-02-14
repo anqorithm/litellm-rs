@@ -5,7 +5,7 @@
 use super::creation::ApiKeyHandler;
 use super::types::CreateApiKeyRequest;
 use crate::core::models::{ApiKey, RateLimits, UsageStats};
-use crate::utils::error::error::{GatewayError, Result};
+use crate::utils::error::gateway_error::{GatewayError, Result};
 use chrono::{DateTime, Utc};
 use tracing::{debug, info};
 use uuid::Uuid;

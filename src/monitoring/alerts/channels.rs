@@ -1,7 +1,7 @@
 //! Notification channel implementations
 
 use crate::monitoring::types::{Alert, AlertSeverity};
-use crate::utils::error::error::{GatewayError, Result};
+use crate::utils::error::gateway_error::{GatewayError, Result};
 use tracing::warn;
 
 /// Notification channel trait

@@ -14,7 +14,7 @@ mod implementation {
 
     use crate::core::cache::cloud::{CacheMetadata, CloudCache, CloudCacheConfig};
     use crate::core::cache::types::CacheKey;
-    use crate::utils::error::error::{GatewayError, Result};
+    use crate::utils::error::gateway_error::{GatewayError, Result};
 
     /// S3 cache configuration
     #[derive(Debug, Clone, Default)]
@@ -410,7 +410,7 @@ pub use implementation::*;
 // Stub implementation when feature is disabled
 #[cfg(not(feature = "s3"))]
 mod stub {
-    use crate::utils::error::error::{GatewayError, Result};
+    use crate::utils::error::gateway_error::{GatewayError, Result};
 
     /// S3 cache configuration (stub)
     #[derive(Debug, Clone, Default)]

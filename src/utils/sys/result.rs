@@ -5,7 +5,7 @@
 
 #![allow(dead_code)] // Tool module - functions may be used in the future
 
-use crate::utils::error::error::{GatewayError, Result};
+use crate::utils::error::gateway_error::{GatewayError, Result};
 use tracing::{error, warn};
 
 /// Extension trait for Result types to provide better error handling
@@ -124,7 +124,7 @@ macro_rules! safe_unwrap {
             Ok(val) => val,
             Err(e) => {
                 error!("Error in {}: {}", $context, e);
-                return Err($crate::utils::error::error::GatewayError::Internal(format!(
+                return Err($crate::utils::error::gateway_error::GatewayError::Internal(format!(
                     "Failed in {}: {}",
                     $context, e
                 )));
@@ -141,7 +141,7 @@ macro_rules! safe_unwrap_option {
             Some(val) => val,
             None => {
                 error!("Missing required value in {}", $context);
-                return Err($crate::utils::error::error::GatewayError::Internal(format!(
+                return Err($crate::utils::error::gateway_error::GatewayError::Internal(format!(
                     "Missing required value in {}",
                     $context
                 )));

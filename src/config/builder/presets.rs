@@ -1,7 +1,7 @@
 //! Convenience functions for common configurations
 
 use super::types::{ProviderConfigBuilder, ServerConfigBuilder};
-use crate::utils::error::error::Result;
+use crate::utils::error::gateway_error::Result;
 use std::time::Duration;
 
 /// Create a development server configuration

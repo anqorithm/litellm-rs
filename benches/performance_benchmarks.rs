@@ -390,8 +390,8 @@ fn bench_serialization(c: &mut Criterion) {
 
 /// Benchmark concurrent operations
 fn bench_concurrent_operations(c: &mut Criterion) {
-    let rt = Runtime::new().unwrap();
-    let mut group = c.benchmark_group("concurrent_operations");
+    let _rt = Runtime::new().unwrap();
+    let group = c.benchmark_group("concurrent_operations");
 
     group.finish();
 }

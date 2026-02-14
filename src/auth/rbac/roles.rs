@@ -2,7 +2,7 @@
 
 use crate::core::models::team::TeamRole;
 use crate::core::models::user::types::UserRole;
-use crate::utils::error::error::{GatewayError, Result};
+use crate::utils::error::gateway_error::{GatewayError, Result};
 
 use super::system::RbacSystem;
 use super::types::Role;

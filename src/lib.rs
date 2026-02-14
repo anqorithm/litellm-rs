@@ -86,7 +86,7 @@ pub mod version; // Build and version information
 
 // Re-export main types
 pub use config::Config;
-pub use utils::error::error::{GatewayError, Result};
+pub use utils::error::gateway_error::{GatewayError, Result};
 pub use version::{BuildInfo, GIT_HASH, VERSION, build_info, full_version};
 
 // Export core completion functionality (Python LiteLLM compatible)

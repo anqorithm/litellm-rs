@@ -5,7 +5,7 @@ use crate::config::models::auth::AuthConfig;
 use crate::core::types::context::RequestContext;
 use crate::core::models::user::types::{User, UserRole};
 use crate::storage::StorageLayer;
-use crate::utils::error::error::Result;
+use crate::utils::error::gateway_error::Result;
 use std::sync::Arc;
 use tracing::{debug, info};
 

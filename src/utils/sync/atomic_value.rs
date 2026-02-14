@@ -424,7 +424,7 @@ mod tests {
 
         // Value should be one of the written values (0-9)
         let final_value = *value.load();
-        assert!(final_value >= 0 && final_value < 10);
+        assert!((0..10).contains(&final_value));
     }
 
     #[test]

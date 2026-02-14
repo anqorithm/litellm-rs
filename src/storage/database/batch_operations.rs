@@ -5,7 +5,7 @@
 
 use crate::core::models::user::types::User;
 use crate::storage::database::Database;
-use crate::utils::error::error::{GatewayError, Result};
+use crate::utils::error::gateway_error::{GatewayError, Result};
 use sqlx::{Postgres, Sqlite, Transaction};
 use tracing::info;
 use uuid::Uuid;

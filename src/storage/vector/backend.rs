@@ -1,7 +1,7 @@
 //! Vector store backend enum with dispatch methods
 
 use crate::config::models::file_storage::VectorDbConfig;
-use crate::utils::error::error::{GatewayError, Result};
+use crate::utils::error::gateway_error::{GatewayError, Result};
 use tracing::info;
 
 use super::pinecone::PineconeStore;

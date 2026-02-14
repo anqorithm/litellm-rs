@@ -7,7 +7,7 @@ use super::utils::{extract_prompt_text, hash_prompt};
 use super::validation::{is_entry_valid, should_cache_request};
 use crate::core::models::openai::{ChatCompletionRequest, ChatCompletionResponse};
 use crate::storage::vector::VectorStore;
-use crate::utils::error::error::Result;
+use crate::utils::error::gateway_error::Result;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;

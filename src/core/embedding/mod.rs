@@ -58,7 +58,7 @@ pub use types::EmbeddingInput;
 pub use crate::core::types::responses::{EmbeddingData, EmbeddingResponse, EmbeddingUsage};
 
 /// LiteLLM Error type alias
-pub type LiteLLMError = crate::utils::error::error::GatewayError;
+pub type LiteLLMError = crate::utils::error::gateway_error::GatewayError;
 
 /// Create embeddings using any supported provider
 ///
@@ -104,7 +104,7 @@ pub async fn embedding(
     model: &str,
     input: impl Into<EmbeddingInput>,
     options: Option<EmbeddingOptions>,
-) -> crate::utils::error::error::Result<EmbeddingResponse> {
+) -> crate::utils::error::gateway_error::Result<EmbeddingResponse> {
     let router = get_global_embedding_router().await;
     router
         .embed(model, input.into(), options.unwrap_or_default())
@@ -116,7 +116,7 @@ pub async fn aembedding(
     model: &str,
     input: impl Into<EmbeddingInput>,
     options: Option<EmbeddingOptions>,
-) -> crate::utils::error::error::Result<EmbeddingResponse> {
+) -> crate::utils::error::gateway_error::Result<EmbeddingResponse> {
     embedding(model, input, options).await
 }
 
@@ -145,7 +145,7 @@ pub async fn aembedding(
 /// # Ok(())
 /// # }
 /// ```
-pub async fn embed_text(model: &str, text: &str) -> crate::utils::error::error::Result<Vec<f32>> {
+pub async fn embed_text(model: &str, text: &str) -> crate::utils::error::gateway_error::Result<Vec<f32>> {
     let response = embedding(model, text, None).await?;
 
     response
@@ -153,7 +153,7 @@ pub async fn embed_text(model: &str, text: &str) -> crate::utils::error::error::
         .into_iter()
         .next()
         .map(|d| d.embedding)
-        .ok_or_else(|| crate::utils::error::error::GatewayError::internal("No embedding data in response"))
+        .ok_or_else(|| crate::utils::error::gateway_error::GatewayError::internal("No embedding data in response"))
 }
 
 /// Embed multiple texts and return their embedding vectors
@@ -185,7 +185,7 @@ pub async fn embed_text(model: &str, text: &str) -> crate::utils::error::error::
 pub async fn embed_texts(
     model: &str,
     texts: &[&str],
-) -> crate::utils::error::error::Result<Vec<Vec<f32>>> {
+) -> crate::utils::error::gateway_error::Result<Vec<Vec<f32>>> {
     let input: Vec<String> = texts.iter().map(|s| s.to_string()).collect();
     let response = embedding(model, input, None).await?;
 
@@ -217,7 +217,7 @@ pub async fn embed_texts_with_options(
     model: &str,
     texts: &[&str],
     options: EmbeddingOptions,
-) -> crate::utils::error::error::Result<Vec<Vec<f32>>> {
+) -> crate::utils::error::gateway_error::Result<Vec<Vec<f32>>> {
     let input: Vec<String> = texts.iter().map(|s| s.to_string()).collect();
     let response = embedding(model, input, Some(options)).await?;
 

@@ -3,7 +3,7 @@
 use super::system::AuthSystem;
 use crate::utils::auth::crypto::keys::generate_token;
 use crate::utils::auth::crypto::password::{hash_password, verify_password};
-use crate::utils::error::error::{GatewayError, Result};
+use crate::utils::error::gateway_error::{GatewayError, Result};
 use tracing::info;
 use uuid::Uuid;
 

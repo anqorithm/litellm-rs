@@ -1,7 +1,7 @@
 //! Webhook and upload token signature utilities
 
 use super::hmac::{constant_time_eq, create_hmac_signature};
-use crate::utils::error::error::Result;
+use crate::utils::error::gateway_error::Result;
 use base64::{Engine as _, engine::general_purpose};
 use sha2::{Digest, Sha256};
 use std::time::{SystemTime, UNIX_EPOCH};

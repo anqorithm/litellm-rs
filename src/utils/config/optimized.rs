@@ -3,7 +3,7 @@
 //! This module provides optimized configuration loading and management
 //! with better performance and reduced memory usage.
 
-use crate::utils::error::error::{GatewayError, Result};
+use crate::utils::error::gateway_error::{GatewayError, Result};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
