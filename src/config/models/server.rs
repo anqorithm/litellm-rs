@@ -15,6 +15,9 @@ pub struct ServerConfig {
     pub port: u16,
     /// Number of worker threads
     pub workers: Option<usize>,
+    /// Maximum connections
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_connections: Option<usize>,
     /// Request timeout in seconds
     #[serde(default = "default_timeout")]
     pub timeout: u64,
@@ -29,6 +32,9 @@ pub struct ServerConfig {
     /// CORS configuration
     #[serde(default)]
     pub cors: CorsConfig,
+    /// Enabled features
+    #[serde(default)]
+    pub features: Vec<String>,
 }
 
 impl Default for ServerConfig {
@@ -37,11 +43,13 @@ impl Default for ServerConfig {
             host: default_host(),
             port: default_port(),
             workers: None,
+            max_connections: None,
             timeout: default_timeout(),
             max_body_size: default_max_body_size(),
             dev_mode: false,
             tls: None,
             cors: CorsConfig::default(),
+            features: Vec::new(),
         }
     }
 }
@@ -58,6 +66,9 @@ impl ServerConfig {
         if other.workers.is_some() {
             self.workers = other.workers;
         }
+        if other.max_connections.is_some() {
+            self.max_connections = other.max_connections;
+        }
         if other.timeout != default_timeout() {
             self.timeout = other.timeout;
         }
@@ -71,6 +82,9 @@ impl ServerConfig {
             self.tls = other.tls;
         }
         self.cors = self.cors.merge(other.cors);
+        if !other.features.is_empty() {
+            self.features = other.features;
+        }
         self
     }
 
@@ -124,6 +138,9 @@ pub struct TlsConfig {
     /// Require client certificates
     #[serde(default)]
     pub require_client_cert: bool,
+    /// Enable HTTP/2
+    #[serde(default)]
+    pub http2: bool,
 }
 
 impl TlsConfig {
@@ -295,6 +312,7 @@ mod tests {
             dev_mode: true,
             tls: None,
             cors: CorsConfig::default(),
+            ..ServerConfig::default()
         };
         assert_eq!(config.host, "127.0.0.1");
         assert_eq!(config.port, 3000);
@@ -326,6 +344,7 @@ mod tests {
                 key_file: "/path/to/key.pem".to_string(),
                 ca_file: None,
                 require_client_cert: false,
+                http2: false,
             }),
             ..ServerConfig::default()
         };
@@ -475,6 +494,7 @@ mod tests {
             key_file: "/etc/ssl/key.pem".to_string(),
             ca_file: Some("/etc/ssl/ca.pem".to_string()),
             require_client_cert: true,
+            http2: false,
         };
         assert_eq!(config.cert_file, "/etc/ssl/cert.pem");
         assert_eq!(config.key_file, "/etc/ssl/key.pem");
@@ -489,6 +509,7 @@ mod tests {
             key_file: "/path/to/key.pem".to_string(),
             ca_file: None,
             require_client_cert: false,
+            http2: false,
         };
         let result = config.validate();
         assert!(result.is_err());
@@ -502,6 +523,7 @@ mod tests {
             key_file: "".to_string(),
             ca_file: None,
             require_client_cert: false,
+            http2: false,
         };
         let result = config.validate();
         assert!(result.is_err());
@@ -515,6 +537,7 @@ mod tests {
             key_file: "key.pem".to_string(),
             ca_file: None,
             require_client_cert: false,
+            http2: false,
         };
         let json = serde_json::to_value(&config).unwrap();
         assert_eq!(json["cert_file"], "cert.pem");
@@ -541,6 +564,7 @@ mod tests {
             key_file: "key.pem".to_string(),
             ca_file: None,
             require_client_cert: false,
+            http2: false,
         };
         let cloned = config.clone();
         assert_eq!(config.cert_file, cloned.cert_file);

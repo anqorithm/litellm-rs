@@ -21,13 +21,12 @@ pub mod rate_limit;
 pub mod retry;
 #[doc(hidden)]
 pub mod routing;
-#[doc(hidden)]
-pub mod server;
 
 use self::{
     middleware::MiddlewareConfig, observability::ObservabilityConfig,
-    provider::ProviderConfigEntry, routing::RoutingConfig, server::ServerConfig,
+    provider::ProviderConfigEntry, routing::RoutingConfig,
 };
+use crate::config::models::server::ServerConfig;
 use serde::{Deserialize, Serialize};
 
 /// Main LiteLLM configuration
@@ -48,8 +47,6 @@ pub struct LiteLLMConfig {
     pub observability: ObservabilityConfig,
 }
 
-/// Legacy compatibility alias to avoid semantic collision with gateway config types.
-pub type LegacyServerConfig = server::ServerConfig;
 /// Legacy compatibility alias to avoid semantic collision with gateway config types.
 pub type LegacyProviderConfigEntry = provider::ProviderConfigEntry;
 

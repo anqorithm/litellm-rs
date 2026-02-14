@@ -67,6 +67,7 @@ impl ServerConfigBuilder {
             host: self.host.unwrap_or_else(|| "127.0.0.1".to_string()),
             port: self.port.unwrap_or(8080),
             workers: self.workers,
+            max_connections: self.max_connections,
             timeout: self.timeout.map(|d| d.as_secs()).unwrap_or(30),
             max_body_size: 1024 * 1024, // 1MB default
             dev_mode: false,
@@ -83,6 +84,7 @@ impl ServerConfigBuilder {
                 max_age: 3600,
                 allow_credentials: false,
             },
+            features: Vec::new(),
         }
     }
 }

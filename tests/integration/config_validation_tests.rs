@@ -159,6 +159,7 @@ mod tests {
             key_file: "/path/to/key".to_string(),
             ca_file: None,
             require_client_cert: false,
+            http2: false,
         });
         assert!(config.is_tls_enabled());
     }
