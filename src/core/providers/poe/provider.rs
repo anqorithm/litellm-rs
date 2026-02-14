@@ -61,7 +61,7 @@ impl PoeProvider {
     }
 
     pub fn from_env() -> Result<Self, Error> {
-        Self::new(PoeConfig::default())
+        Self::new(PoeConfig::from_env())
     }
 
     async fn execute_request(

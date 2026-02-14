@@ -33,7 +33,7 @@ fn test_config_get_api_base() {
     let config = LambdaAIConfig::default();
     assert_eq!(config.get_api_base(), "https://api.lambdalabs.com/v1");
 
-    let config_custom = LambdaAIConfig::default().with_api_base("https://custom.lambda.com/v1");
+    let config_custom = LambdaAIConfig::default().with_base_url("https://custom.lambda.com/v1");
     assert_eq!(config_custom.get_api_base(), "https://custom.lambda.com/v1");
 }
 
@@ -105,16 +105,14 @@ fn test_model_costs() {
 #[test]
 fn test_config_builder_pattern() {
     let config = LambdaAIConfig::new("api-key")
-        .with_api_base("https://custom.api.com")
+        .with_base_url("https://custom.api.com")
         .with_timeout(60)
-        .with_max_retries(5)
-        .with_debug(true);
+        .with_max_retries(5);
 
     assert_eq!(config.api_key, Some("api-key".to_string()));
     assert_eq!(config.api_base, Some("https://custom.api.com".to_string()));
     assert_eq!(config.timeout, 60);
     assert_eq!(config.max_retries, 5);
-    assert!(config.debug);
 }
 
 #[test]
@@ -197,7 +195,7 @@ async fn test_cost_calculation() {
 #[test]
 fn test_config_serialization() {
     let config = LambdaAIConfig::new("test-key")
-        .with_api_base("https://custom.api.com")
+        .with_base_url("https://custom.api.com")
         .with_timeout(90)
         .with_max_retries(2);
 

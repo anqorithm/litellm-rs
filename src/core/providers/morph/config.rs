@@ -1,87 +1,14 @@
 //! Morph AI Provider Configuration
 
-use crate::core::traits::provider::ProviderConfig;
-use serde::{Deserialize, Serialize};
+use crate::define_standalone_provider_config;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MorphConfig {
-    pub api_key: Option<String>,
-    pub api_base: Option<String>,
-    #[serde(default = "default_timeout")]
-    pub timeout: u64,
-    #[serde(default = "default_max_retries")]
-    pub max_retries: u32,
-    #[serde(default)]
-    pub debug: bool,
-}
-
-impl Default for MorphConfig {
-    fn default() -> Self {
-        Self {
-            api_key: None,
-            api_base: None,
-            timeout: default_timeout(),
-            max_retries: default_max_retries(),
-            debug: false,
-        }
-    }
-}
-
-impl ProviderConfig for MorphConfig {
-    fn validate(&self) -> Result<(), String> {
-        if self.api_key.is_none() && std::env::var("MORPH_API_KEY").is_err() {
-            return Err(
-                "Morph API key not provided and MORPH_API_KEY environment variable not set"
-                    .to_string(),
-            );
-        }
-
-        if self.timeout == 0 {
-            return Err("Timeout must be greater than 0".to_string());
-        }
-
-        Ok(())
-    }
-
-    fn api_key(&self) -> Option<&str> {
-        self.api_key.as_deref()
-    }
-
-    fn api_base(&self) -> Option<&str> {
-        self.api_base.as_deref()
-    }
-
-    fn timeout(&self) -> std::time::Duration {
-        std::time::Duration::from_secs(self.timeout)
-    }
-
-    fn max_retries(&self) -> u32 {
-        self.max_retries
-    }
-}
-
-impl MorphConfig {
-    pub fn get_api_key(&self) -> Option<String> {
-        self.api_key
-            .clone()
-            .or_else(|| std::env::var("MORPH_API_KEY").ok())
-    }
-
-    pub fn get_api_base(&self) -> String {
-        self.api_base
-            .clone()
-            .or_else(|| std::env::var("MORPH_API_BASE").ok())
-            .unwrap_or_else(|| "https://api.morph.so/v1".to_string())
-    }
-}
-
-fn default_timeout() -> u64 {
-    60
-}
-
-fn default_max_retries() -> u32 {
-    3
-}
+define_standalone_provider_config!(MorphConfig,
+    provider: "Morph",
+    env_prefix: "MORPH",
+    default_base_url: "https://api.morph.so/v1",
+    default_timeout: 60,
+    extra_fields: { debug: bool = false },
+);
 
 #[cfg(test)]
 mod tests {
@@ -93,5 +20,17 @@ mod tests {
         assert!(config.api_key.is_none());
         assert_eq!(config.timeout, 60);
         assert_eq!(config.max_retries, 3);
+    }
+
+    #[test]
+    fn test_morph_config_get_api_base() {
+        let config = MorphConfig::default();
+        assert_eq!(config.get_api_base(), "https://api.morph.so/v1");
+    }
+
+    #[test]
+    fn test_morph_config_with_api_key() {
+        let config = MorphConfig::new("test-key");
+        assert_eq!(config.get_api_key(), Some("test-key".to_string()));
     }
 }

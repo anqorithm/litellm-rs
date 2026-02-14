@@ -107,6 +107,38 @@ impl BaseConfig {
                     "volcengine" => "https://ark.cn-beijing.volces.com/api/v3",
                     "nebius" => "https://api.studio.nebius.ai/v1",
                     "nscale" => "https://inference.api.nscale.ai/v1",
+                    "groq" => "https://api.groq.com/openai/v1",
+                    "together" => "https://api.together.xyz/v1",
+                    "fireworks" => "https://api.fireworks.ai/inference/v1",
+                    "xai" => "https://api.x.ai/v1",
+                    "voyage" => "https://api.voyageai.com/v1",
+                    "github" => "https://models.inference.ai.azure.com",
+                    "deepgram" => "https://api.deepgram.com/v1",
+                    "hyperbolic" => "https://api.hyperbolic.xyz/v1",
+                    "elevenlabs" => "https://api.elevenlabs.io",
+                    "clarifai" => "https://api.clarifai.com/v2",
+                    "replicate" => "https://api.replicate.com/v1",
+                    "huggingface" => "https://api-inference.huggingface.co",
+                    "cohere" => "https://api.cohere.ai/v1",
+                    "datarobot" => "https://app.datarobot.com/api/v2",
+                    "empower" => "https://api.empower.dev/v1",
+                    "exa_ai" => "https://api.exa.ai/v1",
+                    "featherless" => "https://api.featherless.ai/v1",
+                    "firecrawl" => "https://api.firecrawl.dev/v1",
+                    "perplexity" => "https://api.perplexity.ai",
+                    "aiml" | "aiml_api" => "https://api.aimlapi.com/v1",
+                    "aleph_alpha" => "https://api.aleph-alpha.com/v1",
+                    "anyscale" => "https://api.endpoints.anyscale.com/v1",
+                    "bytez" => "https://api.bytez.com/v1",
+                    "compactifai" => "https://api.compactif.ai/v1",
+                    "comet_api" => "https://api.comet.com/v1",
+                    "deepl" => "https://api-free.deepl.com/v2",
+                    "fal_ai" => "https://fal.run",
+                    "maritalk" => "https://chat.maritaca.ai/api",
+                    "novita" => "https://api.novita.ai/v3/openai",
+                    "nvidia_nim" => "https://integrate.api.nvidia.com/v1",
+                    "siliconflow" => "https://api.siliconflow.cn/v1",
+                    "yi" => "https://api.lingyiwanwu.com/v1",
                     _ => "https://api.openai.com/v1", // Default
                 }
                 .to_string(),
@@ -226,6 +258,16 @@ macro_rules! define_provider_config {
                 self.base.timeout = timeout;
                 self
             }
+
+            /// Get API key with environment variable fallback
+            pub fn get_api_key(&self) -> Option<String> {
+                self.base.get_effective_api_key($provider)
+            }
+
+            /// Get API base URL with environment variable fallback
+            pub fn get_api_base(&self) -> String {
+                self.base.get_effective_api_base($provider)
+            }
         }
 
         impl $crate::core::traits::provider::ProviderConfig for $name {
@@ -280,6 +322,16 @@ macro_rules! define_provider_config {
                 self.base.timeout = timeout;
                 self
             }
+
+            /// Get API key with environment variable fallback
+            pub fn get_api_key(&self) -> Option<String> {
+                self.base.get_effective_api_key($provider)
+            }
+
+            /// Get API base URL with environment variable fallback
+            pub fn get_api_base(&self) -> String {
+                self.base.get_effective_api_base($provider)
+            }
         }
 
         impl $crate::core::traits::provider::ProviderConfig for $name {
@@ -311,7 +363,7 @@ macro_rules! define_provider_config {
             #[serde(flatten)]
             pub base: $crate::core::providers::base::config::BaseConfig,
             $(
-                #[serde(skip_serializing_if = "Option::is_none")]
+                #[serde(default)]
                 pub $field: $type,
             )*
         }
@@ -354,6 +406,191 @@ macro_rules! define_provider_config {
     // Version without additional fields
     ($name:ident) => {
         $crate::define_provider_config!($name {});
+    };
+}
+
+/// Macro for standalone provider configs that don't use BaseConfig.
+///
+/// Generates a flat struct with `api_key`, `api_base`, `timeout`, `max_retries`,
+/// plus optional extra fields. Also generates:
+/// - `Default` impl with provider-specific defaults
+/// - `ProviderConfig` trait impl
+/// - `from_env()` loading from `{PROVIDER}_API_KEY` etc.
+/// - `get_api_key()` / `get_api_base()` with env var fallback
+/// - Builder methods: `with_api_key()`, `with_base_url()`, `with_timeout()`
+///
+/// # Example
+/// ```ignore
+/// define_standalone_provider_config!(MorphConfig,
+///     provider: "morph",
+///     env_prefix: "MORPH",
+///     default_base_url: "https://api.morph.so/v1",
+///     default_timeout: 60,
+/// );
+///
+/// // With extra fields:
+/// define_standalone_provider_config!(BasetenConfig,
+///     provider: "baseten",
+///     env_prefix: "BASETEN",
+///     default_base_url: "https://inference.baseten.co/v1",
+///     default_timeout: 30,
+///     extra_fields: { debug: bool = false },
+/// );
+/// ```
+#[macro_export]
+macro_rules! define_standalone_provider_config {
+    // Version with extra fields
+    ($name:ident,
+     provider: $provider:expr,
+     env_prefix: $env_prefix:expr,
+     default_base_url: $default_base_url:expr,
+     default_timeout: $default_timeout:expr,
+     extra_fields: { $($field:ident: $type:ty = $default:expr),* $(,)? } $(,)?
+    ) => {
+        #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+        pub struct $name {
+            /// API key for authentication
+            pub api_key: Option<String>,
+            /// API base URL
+            pub api_base: Option<String>,
+            /// Request timeout in seconds
+            #[serde(default)]
+            pub timeout: u64,
+            /// Maximum number of retries
+            #[serde(default)]
+            pub max_retries: u32,
+            $(
+                #[serde(default)]
+                pub $field: $type,
+            )*
+        }
+
+        impl Default for $name {
+            fn default() -> Self {
+                Self {
+                    api_key: None,
+                    api_base: None,
+                    timeout: $default_timeout,
+                    max_retries: 3,
+                    $($field: $default,)*
+                }
+            }
+        }
+
+        impl $crate::core::traits::provider::ProviderConfig for $name {
+            fn validate(&self) -> Result<(), String> {
+                if self.api_key.is_none()
+                    && std::env::var(concat!($env_prefix, "_API_KEY")).is_err()
+                {
+                    return Err(format!(
+                        "{} API key not provided and {}_API_KEY environment variable not set",
+                        $provider, $env_prefix
+                    ));
+                }
+                if self.timeout == 0 {
+                    return Err("Timeout must be greater than 0".to_string());
+                }
+                Ok(())
+            }
+
+            fn api_key(&self) -> Option<&str> {
+                self.api_key.as_deref()
+            }
+
+            fn api_base(&self) -> Option<&str> {
+                self.api_base.as_deref()
+            }
+
+            fn timeout(&self) -> std::time::Duration {
+                std::time::Duration::from_secs(self.timeout)
+            }
+
+            fn max_retries(&self) -> u32 {
+                self.max_retries
+            }
+        }
+
+        impl $name {
+            /// Create config from environment variables
+            pub fn from_env() -> Self {
+                Self {
+                    api_key: std::env::var(concat!($env_prefix, "_API_KEY")).ok(),
+                    api_base: std::env::var(concat!($env_prefix, "_API_BASE")).ok(),
+                    timeout: std::env::var(concat!($env_prefix, "_TIMEOUT"))
+                        .ok()
+                        .and_then(|t| t.parse().ok())
+                        .unwrap_or($default_timeout),
+                    max_retries: std::env::var(concat!($env_prefix, "_MAX_RETRIES"))
+                        .ok()
+                        .and_then(|r| r.parse().ok())
+                        .unwrap_or(3),
+                    $($field: $default,)*
+                }
+            }
+
+            /// Create a new configuration with API key
+            pub fn new(api_key: impl Into<String>) -> Self {
+                Self {
+                    api_key: Some(api_key.into()),
+                    ..Default::default()
+                }
+            }
+
+            /// Get API key with environment variable fallback
+            pub fn get_api_key(&self) -> Option<String> {
+                self.api_key
+                    .clone()
+                    .or_else(|| std::env::var(concat!($env_prefix, "_API_KEY")).ok())
+            }
+
+            /// Get API base with environment variable fallback
+            pub fn get_api_base(&self) -> String {
+                self.api_base
+                    .clone()
+                    .or_else(|| std::env::var(concat!($env_prefix, "_API_BASE")).ok())
+                    .unwrap_or_else(|| $default_base_url.to_string())
+            }
+
+            /// Set the API key
+            pub fn with_api_key(mut self, api_key: impl Into<String>) -> Self {
+                self.api_key = Some(api_key.into());
+                self
+            }
+
+            /// Set the API base URL
+            pub fn with_base_url(mut self, base_url: impl Into<String>) -> Self {
+                self.api_base = Some(base_url.into());
+                self
+            }
+
+            /// Set the timeout in seconds
+            pub fn with_timeout(mut self, timeout: u64) -> Self {
+                self.timeout = timeout;
+                self
+            }
+
+            /// Set the maximum number of retries
+            pub fn with_max_retries(mut self, max_retries: u32) -> Self {
+                self.max_retries = max_retries;
+                self
+            }
+        }
+    };
+
+    // Version without extra fields
+    ($name:ident,
+     provider: $provider:expr,
+     env_prefix: $env_prefix:expr,
+     default_base_url: $default_base_url:expr,
+     default_timeout: $default_timeout:expr $(,)?
+    ) => {
+        $crate::define_standalone_provider_config!($name,
+            provider: $provider,
+            env_prefix: $env_prefix,
+            default_base_url: $default_base_url,
+            default_timeout: $default_timeout,
+            extra_fields: {},
+        );
     };
 }
 
