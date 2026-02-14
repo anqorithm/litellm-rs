@@ -157,54 +157,10 @@ impl GeminiErrorMapper {
     }
 }
 
-// Error
+// Standard error helper functions
+crate::define_provider_error_helpers!("gemini", gemini);
 
-/// Create
-pub fn gemini_config_error(msg: impl Into<String>) -> ProviderError {
-    ProviderError::configuration("gemini", msg.into())
-}
-
-/// Create
-pub fn gemini_auth_error(msg: impl Into<String>) -> ProviderError {
-    ProviderError::authentication("gemini", msg.into())
-}
-
-/// Create
-pub fn gemini_api_error(status: u16, msg: impl Into<String>) -> ProviderError {
-    ProviderError::api_error("gemini", status, msg.into())
-}
-
-/// Create
-pub fn gemini_network_error(msg: impl Into<String>) -> ProviderError {
-    ProviderError::network("gemini", msg.into())
-}
-
-/// Create
-pub fn gemini_parse_error(msg: impl Into<String>) -> ProviderError {
-    ProviderError::serialization("gemini", msg.into())
-}
-
-/// Create
-pub fn gemini_stream_error(msg: impl Into<String>) -> ProviderError {
-    ProviderError::streaming_error("gemini", "chat", None, None, msg.into())
-}
-
-/// Create
-pub fn gemini_rate_limit_error(retry_after: Option<u64>) -> ProviderError {
-    ProviderError::rate_limit("gemini", retry_after)
-}
-
-/// Create
-pub fn gemini_model_error(model: impl Into<String>) -> ProviderError {
-    ProviderError::model_not_found("gemini", model.into())
-}
-
-/// Create
-pub fn gemini_validation_error(msg: impl Into<String>) -> ProviderError {
-    ProviderError::invalid_request("gemini", msg.into())
-}
-
-/// Create
+/// Create safety filter error (Gemini-specific)
 pub fn gemini_safety_error(msg: impl Into<String>) -> ProviderError {
     ProviderError::invalid_request(
         "gemini",
@@ -212,7 +168,7 @@ pub fn gemini_safety_error(msg: impl Into<String>) -> ProviderError {
     )
 }
 
-/// Create
+/// Create multimodal error (Gemini-specific)
 pub fn gemini_multimodal_error(msg: impl Into<String>) -> ProviderError {
     ProviderError::NotSupported {
         provider: "gemini",

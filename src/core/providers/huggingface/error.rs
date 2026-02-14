@@ -7,23 +7,11 @@ pub use crate::core::providers::unified_provider::ProviderError;
 /// HuggingFace-specific error type alias
 pub type HuggingFaceError = ProviderError;
 
-/// HuggingFace-specific error constructors
+// Standard error helper methods
+crate::impl_provider_error_helpers!("huggingface", huggingface);
+
+/// HuggingFace-specific error constructors (non-standard)
 impl ProviderError {
-    /// Create HuggingFace authentication error
-    pub fn huggingface_authentication(message: impl Into<String>) -> Self {
-        Self::authentication("huggingface", message)
-    }
-
-    /// Create HuggingFace rate limit error
-    pub fn huggingface_rate_limit(retry_after: Option<u64>) -> Self {
-        Self::rate_limit("huggingface", retry_after)
-    }
-
-    /// Create HuggingFace model not found error
-    pub fn huggingface_model_not_found(model: impl Into<String>) -> Self {
-        Self::model_not_found("huggingface", model)
-    }
-
     /// Create HuggingFace provider not found error
     pub fn huggingface_provider_not_found(model: &str, provider: &str) -> Self {
         Self::InvalidRequest {
@@ -32,43 +20,6 @@ impl ProviderError {
                 "Model '{}' is not available for provider '{}'. Check provider mapping.",
                 model, provider
             ),
-        }
-    }
-
-    /// Create HuggingFace invalid request error
-    pub fn huggingface_invalid_request(message: impl Into<String>) -> Self {
-        Self::invalid_request("huggingface", message)
-    }
-
-    /// Create HuggingFace network error
-    pub fn huggingface_network_error(message: impl Into<String>) -> Self {
-        Self::network("huggingface", message)
-    }
-
-    /// Create HuggingFace timeout error
-    pub fn huggingface_timeout(message: impl Into<String>) -> Self {
-        Self::Timeout {
-            provider: "huggingface",
-            message: message.into(),
-        }
-    }
-
-    /// Create HuggingFace response parsing error
-    pub fn huggingface_response_parsing(message: impl Into<String>) -> Self {
-        Self::response_parsing("huggingface", message)
-    }
-
-    /// Create HuggingFace configuration error
-    pub fn huggingface_configuration(message: impl Into<String>) -> Self {
-        Self::configuration("huggingface", message)
-    }
-
-    /// Create HuggingFace API error with status code
-    pub fn huggingface_api_error(status: u16, message: impl Into<String>) -> Self {
-        Self::ApiError {
-            provider: "huggingface",
-            status,
-            message: message.into(),
         }
     }
 

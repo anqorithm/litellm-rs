@@ -5,23 +5,11 @@
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::error_mapper::trait_def::ErrorMapper;
 
-/// Replicate-specific error constructors
+// Standard error helper methods
+crate::impl_provider_error_helpers!("replicate", replicate);
+
+/// Replicate-specific error constructors (non-standard)
 impl ProviderError {
-    /// Create Replicate authentication error
-    pub fn replicate_authentication(message: impl Into<String>) -> Self {
-        Self::authentication("replicate", message)
-    }
-
-    /// Create Replicate rate limit error
-    pub fn replicate_rate_limit(retry_after: Option<u64>) -> Self {
-        Self::rate_limit("replicate", retry_after)
-    }
-
-    /// Create Replicate model not found error
-    pub fn replicate_model_not_found(model: impl Into<String>) -> Self {
-        Self::model_not_found("replicate", model)
-    }
-
     /// Create Replicate prediction failed error
     pub fn replicate_prediction_failed(message: impl Into<String>) -> Self {
         Self::api_error("replicate", 422, message.into())
@@ -32,38 +20,9 @@ impl ProviderError {
         Self::timeout("replicate", message)
     }
 
-    /// Create Replicate network error
-    pub fn replicate_network_error(message: impl Into<String>) -> Self {
-        Self::network("replicate", message)
-    }
-
-    /// Create Replicate response parsing error
-    pub fn replicate_response_parsing(message: impl Into<String>) -> Self {
-        Self::response_parsing("replicate", message)
-    }
-
-    /// Create Replicate API error with status code
-    pub fn replicate_api_error(status: u16, message: impl Into<String>) -> Self {
-        Self::ApiError {
-            provider: "replicate",
-            status,
-            message: message.into(),
-        }
-    }
-
-    /// Create Replicate configuration error
-    pub fn replicate_configuration(message: impl Into<String>) -> Self {
-        Self::configuration("replicate", message)
-    }
-
     /// Create Replicate prediction canceled error
     pub fn replicate_prediction_canceled(message: impl Into<String>) -> Self {
         Self::cancelled("replicate", "prediction", Some(message.into()))
-    }
-
-    /// Check if this is a Replicate-specific error
-    pub fn is_replicate_error(&self) -> bool {
-        self.provider() == "replicate"
     }
 }
 

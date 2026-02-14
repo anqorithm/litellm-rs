@@ -100,52 +100,8 @@ impl AnthropicErrorMapper {
     }
 }
 
-// Error
-
-/// Create
-pub fn anthropic_config_error(msg: impl Into<String>) -> ProviderError {
-    ProviderError::configuration("anthropic", msg.into())
-}
-
-/// Create
-pub fn anthropic_auth_error(msg: impl Into<String>) -> ProviderError {
-    ProviderError::authentication("anthropic", msg.into())
-}
-
-/// Create
-pub fn anthropic_api_error(status: u16, msg: impl Into<String>) -> ProviderError {
-    ProviderError::api_error("anthropic", status, msg.into())
-}
-
-/// Create
-pub fn anthropic_network_error(msg: impl Into<String>) -> ProviderError {
-    ProviderError::network("anthropic", msg.into())
-}
-
-/// Create
-pub fn anthropic_parse_error(msg: impl Into<String>) -> ProviderError {
-    ProviderError::serialization("anthropic", msg.into())
-}
-
-/// Create
-pub fn anthropic_stream_error(msg: impl Into<String>) -> ProviderError {
-    ProviderError::streaming_error("anthropic", "chat", None, None, msg.into())
-}
-
-/// Create
-pub fn anthropic_rate_limit_error(retry_after: Option<u64>) -> ProviderError {
-    ProviderError::rate_limit("anthropic", retry_after)
-}
-
-/// Create
-pub fn anthropic_model_error(model: impl Into<String>) -> ProviderError {
-    ProviderError::model_not_found("anthropic", model.into())
-}
-
-/// Create
-pub fn anthropic_validation_error(msg: impl Into<String>) -> ProviderError {
-    ProviderError::invalid_request("anthropic", msg.into())
-}
+// Standard error helper functions
+crate::define_provider_error_helpers!("anthropic", anthropic);
 
 #[cfg(test)]
 mod tests {

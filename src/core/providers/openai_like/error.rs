@@ -7,18 +7,11 @@ pub use crate::core::providers::unified_provider::ProviderError as OpenAILikeErr
 /// Provider name constant for error context
 pub const PROVIDER_NAME: &str = "openai_like";
 
-/// OpenAI-like specific error constructors
+// Standard error helper methods
+crate::impl_provider_error_helpers!("openai_like", openai_like);
+
+/// OpenAI-like specific error constructors (non-standard)
 impl OpenAILikeError {
-    /// Create OpenAI-like authentication error
-    pub fn openai_like_authentication(message: impl Into<String>) -> Self {
-        Self::authentication(PROVIDER_NAME, message)
-    }
-
-    /// Create OpenAI-like rate limit error
-    pub fn openai_like_rate_limit(retry_after: Option<u64>) -> Self {
-        Self::rate_limit(PROVIDER_NAME, retry_after)
-    }
-
     /// Create OpenAI-like rate limit error with detailed context
     pub fn openai_like_rate_limit_with_limits(
         retry_after: Option<u64>,
@@ -35,39 +28,6 @@ impl OpenAILikeError {
         )
     }
 
-    /// Create OpenAI-like model not found error
-    pub fn openai_like_model_not_found(model: impl Into<String>) -> Self {
-        Self::model_not_found(PROVIDER_NAME, model)
-    }
-
-    /// Create OpenAI-like invalid request error
-    pub fn openai_like_invalid_request(message: impl Into<String>) -> Self {
-        Self::invalid_request(PROVIDER_NAME, message)
-    }
-
-    /// Create OpenAI-like network error
-    pub fn openai_like_network_error(message: impl Into<String>) -> Self {
-        Self::network(PROVIDER_NAME, message)
-    }
-
-    /// Create OpenAI-like timeout error
-    pub fn openai_like_timeout(message: impl Into<String>) -> Self {
-        Self::Timeout {
-            provider: PROVIDER_NAME,
-            message: message.into(),
-        }
-    }
-
-    /// Create OpenAI-like configuration error
-    pub fn openai_like_configuration(message: impl Into<String>) -> Self {
-        Self::configuration(PROVIDER_NAME, message)
-    }
-
-    /// Create OpenAI-like response parsing error
-    pub fn openai_like_response_parsing(message: impl Into<String>) -> Self {
-        Self::response_parsing(PROVIDER_NAME, message)
-    }
-
     /// Create OpenAI-like streaming error
     pub fn openai_like_streaming_error(
         stream_type: impl Into<String>,
@@ -75,15 +35,6 @@ impl OpenAILikeError {
         message: impl Into<String>,
     ) -> Self {
         Self::streaming_error(PROVIDER_NAME, stream_type, position, None, message)
-    }
-
-    /// Create OpenAI-like API error with status code
-    pub fn openai_like_api_error(status: u16, message: impl Into<String>) -> Self {
-        Self::ApiError {
-            provider: PROVIDER_NAME,
-            status,
-            message: message.into(),
-        }
     }
 
     /// Create OpenAI-like quota exceeded error
@@ -99,11 +50,6 @@ impl OpenAILikeError {
     /// Create generic OpenAI-like error
     pub fn openai_like_other(message: impl Into<String>) -> Self {
         Self::other(PROVIDER_NAME, message)
-    }
-
-    /// Check if this is an OpenAI-like error
-    pub fn is_openai_like_error(&self) -> bool {
-        self.provider() == PROVIDER_NAME
     }
 
     /// Get OpenAI-like error category for metrics
