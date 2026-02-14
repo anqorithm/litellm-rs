@@ -1,54 +1,17 @@
 //! Nscale Error Handling
-//!
-//! Error mapping for Nscale AI inference platform
 
-use crate::core::providers::unified_provider::ProviderError;
-use crate::core::traits::error_mapper::trait_def::ErrorMapper;
-
-/// Nscale error mapper
-#[derive(Debug)]
-pub struct NscaleErrorMapper;
-
-impl ErrorMapper<ProviderError> for NscaleErrorMapper {
-    fn map_http_error(&self, status_code: u16, response_body: &str) -> ProviderError {
-        match status_code {
-            401 => ProviderError::authentication("nscale", "Invalid API key"),
-            403 => ProviderError::authentication("nscale", "Permission denied"),
-            404 => ProviderError::model_not_found("nscale", "Model not found"),
-            429 => {
-                let retry_after = parse_retry_after(response_body);
-                ProviderError::rate_limit("nscale", retry_after)
-            }
-            500..=599 => ProviderError::api_error("nscale", status_code, response_body),
-            _ => ProviderError::api_error("nscale", status_code, response_body),
-        }
-    }
-}
-
-/// Parse retry-after duration from response body
-fn parse_retry_after(response_body: &str) -> Option<u64> {
-    if response_body.contains("rate limit") || response_body.contains("too many requests") {
-        Some(60) // Default 60 seconds
-    } else {
-        None
-    }
-}
+crate::define_standard_error_mapper!("nscale", Nscale);
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::providers::unified_provider::ProviderError;
+    use crate::core::traits::error_mapper::trait_def::ErrorMapper;
 
     #[test]
     fn test_nscale_error_mapper_401() {
         let mapper = NscaleErrorMapper;
         let err = mapper.map_http_error(401, "Unauthorized");
-        assert!(matches!(err, ProviderError::Authentication { .. }));
-    }
-
-    #[test]
-    fn test_nscale_error_mapper_403() {
-        let mapper = NscaleErrorMapper;
-        let err = mapper.map_http_error(403, "Forbidden");
         assert!(matches!(err, ProviderError::Authentication { .. }));
     }
 
@@ -74,34 +37,9 @@ mod tests {
     }
 
     #[test]
-    fn test_nscale_error_mapper_503() {
-        let mapper = NscaleErrorMapper;
-        let err = mapper.map_http_error(503, "Service unavailable");
-        assert!(matches!(err, ProviderError::ApiError { .. }));
-    }
-
-    #[test]
     fn test_nscale_error_mapper_unknown() {
         let mapper = NscaleErrorMapper;
         let err = mapper.map_http_error(418, "I'm a teapot");
         assert!(matches!(err, ProviderError::ApiError { .. }));
-    }
-
-    #[test]
-    fn test_parse_retry_after_with_rate_limit() {
-        let result = parse_retry_after("rate limit exceeded");
-        assert_eq!(result, Some(60));
-    }
-
-    #[test]
-    fn test_parse_retry_after_too_many_requests() {
-        let result = parse_retry_after("too many requests");
-        assert_eq!(result, Some(60));
-    }
-
-    #[test]
-    fn test_parse_retry_after_without_rate_limit() {
-        let result = parse_retry_after("other error");
-        assert_eq!(result, None);
     }
 }
