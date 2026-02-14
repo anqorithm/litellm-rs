@@ -7,13 +7,12 @@ use crate::core::types::{
     embedding::EmbeddingInput, embedding::EmbeddingRequest as CoreEmbeddingRequest,
     model::ProviderCapability,
 };
-use crate::server::routes::errors;
 use crate::server::state::AppState;
 use crate::utils::error::gateway_error::GatewayError;
 use actix_web::{HttpRequest, HttpResponse, Result as ActixResult, web};
-use tracing::{error, info};
+use tracing::info;
 
-use super::context::get_request_context;
+use super::context::handle_ai_request;
 use super::provider_selection::select_provider_for_model;
 
 /// Embeddings endpoint
@@ -26,17 +25,10 @@ pub async fn embeddings(
 ) -> ActixResult<HttpResponse> {
     info!("Embedding request for model: {}", request.model);
 
-    // Get request context from middleware
-    let context = get_request_context(&req)?;
-
-    // Route request through the core router
-    match handle_embedding_via_pool(&state.router, request.into_inner(), context).await {
-        Ok(response) => Ok(HttpResponse::Ok().json(response)),
-        Err(e) => {
-            error!("Embedding error: {}", e);
-            Ok(errors::gateway_error_to_response(e))
-        }
-    }
+    handle_ai_request(&req, request.into_inner(), "Embedding", |request, context| {
+        handle_embedding_via_pool(&state.router, request, context)
+    })
+    .await
 }
 
 /// Handle embedding via provider pool

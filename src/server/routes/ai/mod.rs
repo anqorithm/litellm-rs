@@ -18,7 +18,7 @@ pub use chat::chat_completions;
 pub use completions::completions;
 pub use context::{
     check_permission, get_authenticated_api_key, get_authenticated_user, get_request_context,
-    log_api_usage,
+    handle_ai_request, log_api_usage,
 };
 pub use embeddings::embeddings;
 pub use images::image_generations;
