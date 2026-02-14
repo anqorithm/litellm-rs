@@ -1,7 +1,7 @@
 //! Performance logging utilities
 
 use crate::utils::logging::enhanced::async_logger::async_logger;
-use crate::utils::logging::enhanced::types::RequestMetrics;
+use crate::utils::logging::enhanced::types::HttpRequestMetrics;
 use std::collections::HashMap;
 use tracing::Level;
 
@@ -12,7 +12,7 @@ pub struct PerformanceLogger;
 #[allow(dead_code)]
 impl PerformanceLogger {
     /// Log request performance metrics
-    pub fn log_request_metrics(metrics: RequestMetrics) {
+    pub fn log_request_metrics(metrics: HttpRequestMetrics) {
         let mut fields = HashMap::new();
         fields.insert(
             "method".to_string(),
@@ -121,11 +121,11 @@ impl PerformanceLogger {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::utils::logging::enhanced::types::RequestMetrics;
+    use crate::utils::logging::enhanced::types::HttpRequestMetrics;
     use uuid::Uuid;
 
-    fn create_test_request_metrics(duration_ms: u64, status_code: u16) -> RequestMetrics {
-        RequestMetrics {
+    fn create_test_request_metrics(duration_ms: u64, status_code: u16) -> HttpRequestMetrics {
+        HttpRequestMetrics {
             method: "GET".to_string(),
             path: "/api/test".to_string(),
             status_code,

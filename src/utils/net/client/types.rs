@@ -50,7 +50,7 @@ impl Default for RetryConfig {
 
 /// Metrics for tracking request performance
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RequestMetrics {
+pub struct ProviderRequestMetrics {
     pub start_time: std::time::SystemTime,
     pub end_time: Option<std::time::SystemTime>,
     pub duration: Option<Duration>,
@@ -60,7 +60,7 @@ pub struct RequestMetrics {
     pub status_code: Option<u16>,
 }
 
-impl RequestMetrics {
+impl ProviderRequestMetrics {
     pub fn new(provider: String, model: String) -> Self {
         Self {
             start_time: std::time::SystemTime::now(),
@@ -255,11 +255,11 @@ mod tests {
         assert!(config.initial_delay < Duration::from_secs(1));
     }
 
-    // ==================== RequestMetrics Tests ====================
+    // ==================== ProviderRequestMetrics Tests ====================
 
     #[test]
     fn test_request_metrics_new() {
-        let metrics = RequestMetrics::new("openai".to_string(), "gpt-4".to_string());
+        let metrics = ProviderRequestMetrics::new("openai".to_string(), "gpt-4".to_string());
 
         assert_eq!(metrics.provider, "openai");
         assert_eq!(metrics.model, "gpt-4");
@@ -271,7 +271,7 @@ mod tests {
 
     #[test]
     fn test_request_metrics_finish() {
-        let mut metrics = RequestMetrics::new("anthropic".to_string(), "claude-3".to_string());
+        let mut metrics = ProviderRequestMetrics::new("anthropic".to_string(), "claude-3".to_string());
 
         // Small delay to ensure measurable duration
         thread::sleep(Duration::from_millis(10));
@@ -286,7 +286,7 @@ mod tests {
 
     #[test]
     fn test_request_metrics_finish_no_status() {
-        let mut metrics = RequestMetrics::new("azure".to_string(), "gpt-4".to_string());
+        let mut metrics = ProviderRequestMetrics::new("azure".to_string(), "gpt-4".to_string());
         metrics.finish(None);
 
         assert!(metrics.end_time.is_some());
@@ -295,7 +295,7 @@ mod tests {
 
     #[test]
     fn test_request_metrics_increment_retry() {
-        let mut metrics = RequestMetrics::new("openai".to_string(), "gpt-3.5-turbo".to_string());
+        let mut metrics = ProviderRequestMetrics::new("openai".to_string(), "gpt-3.5-turbo".to_string());
 
         assert_eq!(metrics.retry_count, 0);
 
@@ -311,7 +311,7 @@ mod tests {
 
     #[test]
     fn test_request_metrics_clone() {
-        let mut metrics = RequestMetrics::new("openai".to_string(), "gpt-4".to_string());
+        let mut metrics = ProviderRequestMetrics::new("openai".to_string(), "gpt-4".to_string());
         metrics.increment_retry();
         metrics.finish(Some(200));
 
@@ -323,17 +323,17 @@ mod tests {
 
     #[test]
     fn test_request_metrics_debug() {
-        let metrics = RequestMetrics::new("openai".to_string(), "gpt-4".to_string());
+        let metrics = ProviderRequestMetrics::new("openai".to_string(), "gpt-4".to_string());
         let debug_str = format!("{:?}", metrics);
 
-        assert!(debug_str.contains("RequestMetrics"));
+        assert!(debug_str.contains("ProviderRequestMetrics"));
         assert!(debug_str.contains("openai"));
         assert!(debug_str.contains("gpt-4"));
     }
 
     #[test]
     fn test_request_metrics_serialization() {
-        let mut metrics = RequestMetrics::new("openai".to_string(), "gpt-4".to_string());
+        let mut metrics = ProviderRequestMetrics::new("openai".to_string(), "gpt-4".to_string());
         metrics.finish(Some(200));
 
         let json = serde_json::to_string(&metrics).unwrap();
@@ -341,7 +341,7 @@ mod tests {
         assert!(json.contains("gpt-4"));
         assert!(json.contains("200"));
 
-        let parsed: RequestMetrics = serde_json::from_str(&json).unwrap();
+        let parsed: ProviderRequestMetrics = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.provider, "openai");
         assert_eq!(parsed.status_code, Some(200));
     }
@@ -349,7 +349,7 @@ mod tests {
     #[test]
     fn test_request_metrics_start_time() {
         let before = SystemTime::now();
-        let metrics = RequestMetrics::new("provider".to_string(), "model".to_string());
+        let metrics = ProviderRequestMetrics::new("provider".to_string(), "model".to_string());
         let after = SystemTime::now();
 
         assert!(metrics.start_time >= before);
@@ -363,7 +363,7 @@ mod tests {
         let _config = HttpClientConfig::default();
         let retry_config = RetryConfig::default();
 
-        let mut metrics = RequestMetrics::new("openai".to_string(), "gpt-4".to_string());
+        let mut metrics = ProviderRequestMetrics::new("openai".to_string(), "gpt-4".to_string());
 
         // Simulate retries
         for _ in 0..retry_config.max_retries {
@@ -380,7 +380,7 @@ mod tests {
 
     #[test]
     fn test_failed_request_metrics() {
-        let mut metrics = RequestMetrics::new("provider".to_string(), "model".to_string());
+        let mut metrics = ProviderRequestMetrics::new("provider".to_string(), "model".to_string());
 
         metrics.increment_retry();
         metrics.increment_retry();
@@ -429,7 +429,7 @@ mod tests {
         ];
 
         for (provider, model) in providers {
-            let metrics = RequestMetrics::new(provider.to_string(), model.to_string());
+            let metrics = ProviderRequestMetrics::new(provider.to_string(), model.to_string());
             assert_eq!(metrics.provider, provider);
             assert_eq!(metrics.model, model);
         }
@@ -440,7 +440,7 @@ mod tests {
         let status_codes = vec![200, 201, 400, 401, 403, 404, 429, 500, 502, 503];
 
         for code in status_codes {
-            let mut metrics = RequestMetrics::new("provider".to_string(), "model".to_string());
+            let mut metrics = ProviderRequestMetrics::new("provider".to_string(), "model".to_string());
             metrics.finish(Some(code));
             assert_eq!(metrics.status_code, Some(code));
         }

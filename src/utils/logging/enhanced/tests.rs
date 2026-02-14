@@ -3,7 +3,7 @@
 #[cfg(test)]
 use crate::utils::logging::enhanced::async_logger::AsyncLogger;
 use crate::utils::logging::enhanced::sampler::LogSampler;
-use crate::utils::logging::enhanced::types::{AsyncLoggerConfig, AsyncLogRecord, RequestMetrics};
+use crate::utils::logging::enhanced::types::{AsyncLoggerConfig, AsyncLogRecord, HttpRequestMetrics};
 use std::collections::HashMap;
 use tracing::Level;
 use uuid::Uuid;
@@ -215,11 +215,11 @@ fn test_log_entry_clone() {
     assert_eq!(cloned.request_id, entry.request_id);
 }
 
-// ==================== RequestMetrics Tests ====================
+// ==================== HttpRequestMetrics Tests ====================
 
 #[test]
 fn test_request_metrics_creation() {
-    let metrics = RequestMetrics {
+    let metrics = HttpRequestMetrics {
         method: "POST".to_string(),
         path: "/api/v1/chat".to_string(),
         status_code: 200,
@@ -242,7 +242,7 @@ fn test_request_metrics_creation() {
 
 #[test]
 fn test_request_metrics_without_optional_fields() {
-    let metrics = RequestMetrics {
+    let metrics = HttpRequestMetrics {
         method: "GET".to_string(),
         path: "/health".to_string(),
         status_code: 200,
@@ -259,7 +259,7 @@ fn test_request_metrics_without_optional_fields() {
 
 #[test]
 fn test_request_metrics_debug() {
-    let metrics = RequestMetrics {
+    let metrics = HttpRequestMetrics {
         method: "DELETE".to_string(),
         path: "/api/resource/123".to_string(),
         status_code: 404,

@@ -41,7 +41,7 @@ pub use data::DataUtils;
 pub use error::{ErrorCategory, ErrorContext, ErrorUtils};
 pub use event::{Event, EventBroker, EventType, Subscriber, SubscriptionHandle};
 pub use logging::{LogEntry, LogLevel, Logger, LoggingUtils};
-pub use net::client::types::{HttpClientConfig, RequestMetrics, RetryConfig};
+pub use net::client::types::{HttpClientConfig, ProviderRequestMetrics, RetryConfig};
 pub use net::client::utils::ClientUtils;
 pub use sync::{
     AtomicValue, ConcurrentMap, ConcurrentVec, VersionError, VersionedEntry, VersionedMap,

@@ -1,5 +1,5 @@
 #[cfg(test)]
-use super::types::{HttpClientConfig, RequestMetrics, RetryConfig};
+use super::types::{HttpClientConfig, ProviderRequestMetrics, RetryConfig};
 use super::utils::ClientUtils;
 use std::collections::HashMap;
 use std::time::Duration;
@@ -312,11 +312,11 @@ fn test_get_default_headers_azure() {
     assert!(headers.contains_key("api-key"));
 }
 
-// ==================== RequestMetrics Tests ====================
+// ==================== ProviderRequestMetrics Tests ====================
 
 #[test]
 fn test_request_metrics() {
-    let mut metrics = RequestMetrics::new("openai".to_string(), "gpt-4".to_string());
+    let mut metrics = ProviderRequestMetrics::new("openai".to_string(), "gpt-4".to_string());
     assert_eq!(metrics.retry_count, 0);
     assert!(metrics.end_time.is_none());
 
@@ -330,7 +330,7 @@ fn test_request_metrics() {
 
 #[test]
 fn test_request_metrics_initial_state() {
-    let metrics = RequestMetrics::new("anthropic".to_string(), "claude-3".to_string());
+    let metrics = ProviderRequestMetrics::new("anthropic".to_string(), "claude-3".to_string());
     assert_eq!(metrics.provider, "anthropic");
     assert_eq!(metrics.model, "claude-3");
     assert_eq!(metrics.retry_count, 0);
@@ -341,7 +341,7 @@ fn test_request_metrics_initial_state() {
 
 #[test]
 fn test_request_metrics_multiple_retries() {
-    let mut metrics = RequestMetrics::new("openai".to_string(), "gpt-4".to_string());
+    let mut metrics = ProviderRequestMetrics::new("openai".to_string(), "gpt-4".to_string());
 
     metrics.increment_retry();
     assert_eq!(metrics.retry_count, 1);
@@ -355,7 +355,7 @@ fn test_request_metrics_multiple_retries() {
 
 #[test]
 fn test_request_metrics_finish_with_error() {
-    let mut metrics = RequestMetrics::new("openai".to_string(), "gpt-4".to_string());
+    let mut metrics = ProviderRequestMetrics::new("openai".to_string(), "gpt-4".to_string());
     metrics.finish(Some(500));
 
     assert!(metrics.end_time.is_some());
@@ -365,7 +365,7 @@ fn test_request_metrics_finish_with_error() {
 
 #[test]
 fn test_request_metrics_finish_no_status() {
-    let mut metrics = RequestMetrics::new("openai".to_string(), "gpt-4".to_string());
+    let mut metrics = ProviderRequestMetrics::new("openai".to_string(), "gpt-4".to_string());
     metrics.finish(None);
 
     assert!(metrics.end_time.is_some());

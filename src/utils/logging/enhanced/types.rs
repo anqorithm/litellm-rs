@@ -50,9 +50,9 @@ impl Default for AsyncLoggerConfig {
     }
 }
 
-/// Request metrics for performance logging
+/// Request metrics for performance logging of incoming HTTP requests
 #[derive(Debug)]
-pub struct RequestMetrics {
+pub struct HttpRequestMetrics {
     /// HTTP method (GET, POST, etc.)
     pub method: String,
     /// Request path
@@ -276,11 +276,11 @@ mod tests {
         assert!(config.drop_on_overflow);
     }
 
-    // ==================== RequestMetrics Tests ====================
+    // ==================== HttpRequestMetrics Tests ====================
 
     #[test]
     fn test_request_metrics_creation() {
-        let metrics = RequestMetrics {
+        let metrics = HttpRequestMetrics {
             method: "GET".to_string(),
             path: "/api/v1/users".to_string(),
             status_code: 200,
@@ -298,7 +298,7 @@ mod tests {
 
     #[test]
     fn test_request_metrics_minimal() {
-        let metrics = RequestMetrics {
+        let metrics = HttpRequestMetrics {
             method: "POST".to_string(),
             path: "/".to_string(),
             status_code: 201,
@@ -315,7 +315,7 @@ mod tests {
 
     #[test]
     fn test_request_metrics_debug() {
-        let metrics = RequestMetrics {
+        let metrics = HttpRequestMetrics {
             method: "PUT".to_string(),
             path: "/api/v1/resource".to_string(),
             status_code: 200,
@@ -327,7 +327,7 @@ mod tests {
         };
 
         let debug_str = format!("{:?}", metrics);
-        assert!(debug_str.contains("RequestMetrics"));
+        assert!(debug_str.contains("HttpRequestMetrics"));
         assert!(debug_str.contains("PUT"));
     }
 
@@ -336,7 +336,7 @@ mod tests {
         let methods = vec!["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"];
 
         for method in methods {
-            let metrics = RequestMetrics {
+            let metrics = HttpRequestMetrics {
                 method: method.to_string(),
                 path: "/test".to_string(),
                 status_code: 200,
@@ -356,7 +356,7 @@ mod tests {
         let status_codes = vec![200, 201, 204, 301, 400, 401, 403, 404, 500, 502, 503];
 
         for code in status_codes {
-            let metrics = RequestMetrics {
+            let metrics = HttpRequestMetrics {
                 method: "GET".to_string(),
                 path: "/test".to_string(),
                 status_code: code,
@@ -373,7 +373,7 @@ mod tests {
 
     #[test]
     fn test_request_metrics_large_sizes() {
-        let metrics = RequestMetrics {
+        let metrics = HttpRequestMetrics {
             method: "POST".to_string(),
             path: "/upload".to_string(),
             status_code: 200,
@@ -389,7 +389,7 @@ mod tests {
 
     #[test]
     fn test_request_metrics_slow_request() {
-        let metrics = RequestMetrics {
+        let metrics = HttpRequestMetrics {
             method: "GET".to_string(),
             path: "/slow-endpoint".to_string(),
             status_code: 200,
@@ -467,7 +467,7 @@ mod tests {
 
     #[test]
     fn test_request_metrics_is_success() {
-        let success_metrics = RequestMetrics {
+        let success_metrics = HttpRequestMetrics {
             method: "GET".to_string(),
             path: "/api".to_string(),
             status_code: 200,
@@ -478,7 +478,7 @@ mod tests {
             request_id: None,
         };
 
-        let error_metrics = RequestMetrics {
+        let error_metrics = HttpRequestMetrics {
             method: "GET".to_string(),
             path: "/api".to_string(),
             status_code: 500,
@@ -497,7 +497,7 @@ mod tests {
 
     #[test]
     fn test_request_metrics_is_error() {
-        let client_error = RequestMetrics {
+        let client_error = HttpRequestMetrics {
             method: "POST".to_string(),
             path: "/api".to_string(),
             status_code: 400,
@@ -508,7 +508,7 @@ mod tests {
             request_id: None,
         };
 
-        let server_error = RequestMetrics {
+        let server_error = HttpRequestMetrics {
             method: "POST".to_string(),
             path: "/api".to_string(),
             status_code: 503,
