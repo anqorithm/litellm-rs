@@ -285,18 +285,40 @@ impl<T> RedisCache<T>
 where
     T: Serialize + DeserializeOwned + Clone + Send + Sync + 'static,
 {
-    /// Get multiple values from the cache
+    /// Get multiple values from the cache using Redis MGET
     pub async fn get_many(&self, keys: &[CacheKey]) -> Result<Vec<Option<T>>> {
         if self.pool.is_noop() || keys.is_empty() {
             return Ok(vec![None; keys.len()]);
         }
 
-        let mut results = Vec::with_capacity(keys.len());
+        let redis_keys: Vec<String> = keys.iter().map(|k| self.make_redis_key(k)).collect();
+        let raw_values = self.pool.mget(&redis_keys).await?;
 
-        // Process keys one by one (Redis mget would be more efficient but pool doesn't expose it)
-        for key in keys {
-            let result = self.get(key).await?;
-            results.push(result);
+        let mut results = Vec::with_capacity(keys.len());
+        for (i, raw) in raw_values.into_iter().enumerate() {
+            match raw {
+                Some(data) => match self.deserialize::<SerializableCacheEntry<T>>(&data) {
+                    Ok(entry) if !entry.is_expired() => {
+                        self.stats.record_redis_hit();
+                        results.push(Some(entry.value));
+                    }
+                    Ok(_) => {
+                        let _ = self.pool.delete(&redis_keys[i]).await;
+                        self.stats.record_redis_miss();
+                        results.push(None);
+                    }
+                    Err(e) => {
+                        warn!(key = %keys[i], error = %e, "Failed to deserialize cache entry");
+                        let _ = self.pool.delete(&redis_keys[i]).await;
+                        self.stats.record_redis_miss();
+                        results.push(None);
+                    }
+                },
+                None => {
+                    self.stats.record_redis_miss();
+                    results.push(None);
+                }
+            }
         }
 
         Ok(results)
