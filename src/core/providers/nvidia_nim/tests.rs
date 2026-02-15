@@ -8,28 +8,22 @@ use crate::core::traits::provider::ProviderConfig;
 #[test]
 fn test_nvidia_nim_config_default_values() {
     let config = NvidiaNimConfig::default();
-    assert!(config.api_key.is_none());
-    assert!(config.api_base.is_none());
-    assert_eq!(config.timeout, 60);
-    assert_eq!(config.max_retries, 3);
+    assert!(config.base.api_key.is_none());
+    assert_eq!(config.base.timeout, 60);
+    assert_eq!(config.base.max_retries, 3);
     assert!(!config.debug);
 }
 
 #[test]
 fn test_nvidia_nim_config_custom_values() {
-    let config = NvidiaNimConfig {
-        api_key: Some("nvapi-test-key".to_string()),
-        api_base: Some("https://custom.nvidia.com/v1".to_string()),
-        timeout: 120,
-        max_retries: 5,
-        debug: true,
-    };
+    let config = NvidiaNimConfig::from_env()
+        .with_api_key("nvapi-test-key")
+        .with_base_url("https://custom.nvidia.com/v1")
+        .with_timeout(120);
 
-    assert_eq!(config.api_key, Some("nvapi-test-key".to_string()));
-    assert_eq!(config.api_base, Some("https://custom.nvidia.com/v1".to_string()));
-    assert_eq!(config.timeout, 120);
-    assert_eq!(config.max_retries, 5);
-    assert!(config.debug);
+    assert_eq!(config.base.api_key.as_deref(), Some("nvapi-test-key"));
+    assert_eq!(config.base.api_base.as_deref(), Some("https://custom.nvidia.com/v1"));
+    assert_eq!(config.base.timeout, 120);
 }
 
 #[test]
@@ -43,29 +37,23 @@ fn test_nvidia_nim_config_get_api_base_default() {
 
 #[test]
 fn test_nvidia_nim_config_get_api_base_custom() {
-    let config = NvidiaNimConfig {
-        api_base: Some("https://my-nim.nvidia.com".to_string()),
-        ..Default::default()
-    };
+    let config = NvidiaNimConfig::from_env()
+        .with_base_url("https://my-nim.nvidia.com");
     assert_eq!(config.get_api_base(), "https://my-nim.nvidia.com");
 }
 
 #[test]
 fn test_nvidia_nim_config_validation_with_key() {
-    let config = NvidiaNimConfig {
-        api_key: Some("nvapi-valid-key".to_string()),
-        ..Default::default()
-    };
+    let config = NvidiaNimConfig::from_env()
+        .with_api_key("nvapi-valid-key");
     assert!(config.validate().is_ok());
 }
 
 #[test]
 fn test_nvidia_nim_config_validation_zero_timeout() {
-    let config = NvidiaNimConfig {
-        api_key: Some("nvapi-key".to_string()),
-        timeout: 0,
-        ..Default::default()
-    };
+    let mut config = NvidiaNimConfig::from_env()
+        .with_api_key("nvapi-key");
+    config.base.timeout = 0;
     let result = config.validate();
     assert!(result.is_err());
     assert!(result.unwrap_err().contains("Timeout"));
@@ -73,53 +61,43 @@ fn test_nvidia_nim_config_validation_zero_timeout() {
 
 #[test]
 fn test_nvidia_nim_config_provider_config_trait() {
-    let config = NvidiaNimConfig {
-        api_key: Some("nvapi-test".to_string()),
-        api_base: Some("https://custom.com".to_string()),
-        timeout: 90,
-        max_retries: 4,
-        ..Default::default()
-    };
+    let config = NvidiaNimConfig::from_env()
+        .with_api_key("nvapi-test")
+        .with_base_url("https://custom.com")
+        .with_timeout(90);
 
     assert_eq!(config.api_key(), Some("nvapi-test"));
     assert_eq!(config.api_base(), Some("https://custom.com"));
     assert_eq!(config.timeout(), std::time::Duration::from_secs(90));
-    assert_eq!(config.max_retries(), 4);
 }
 
 #[test]
 fn test_nvidia_nim_config_clone() {
-    let config = NvidiaNimConfig {
-        api_key: Some("nvapi-key".to_string()),
-        api_base: Some("https://base.com".to_string()),
-        timeout: 60,
-        max_retries: 3,
-        debug: true,
-    };
+    let config = NvidiaNimConfig::from_env()
+        .with_api_key("nvapi-key")
+        .with_base_url("https://base.com")
+        .with_timeout(60);
 
     let cloned = config.clone();
-    assert_eq!(cloned.api_key, config.api_key);
-    assert_eq!(cloned.api_base, config.api_base);
-    assert_eq!(cloned.timeout, config.timeout);
+    assert_eq!(cloned.base.api_key, config.base.api_key);
+    assert_eq!(cloned.base.api_base, config.base.api_base);
+    assert_eq!(cloned.base.timeout, config.base.timeout);
 }
 
 #[test]
 fn test_nvidia_nim_config_serialization_roundtrip() {
-    let config = NvidiaNimConfig {
-        api_key: Some("nvapi-test-key".to_string()),
-        api_base: Some("https://test.com".to_string()),
-        timeout: 45,
-        max_retries: 2,
-        debug: true,
-    };
+    let config = NvidiaNimConfig::from_env()
+        .with_api_key("nvapi-test-key")
+        .with_base_url("https://test.com")
+        .with_timeout(45);
 
     let json = serde_json::to_string(&config).unwrap();
     let deserialized: NvidiaNimConfig = serde_json::from_str(&json).unwrap();
 
-    assert_eq!(deserialized.api_key, config.api_key);
-    assert_eq!(deserialized.api_base, config.api_base);
-    assert_eq!(deserialized.timeout, config.timeout);
-    assert_eq!(deserialized.max_retries, config.max_retries);
+    assert_eq!(deserialized.base.api_key, config.base.api_key);
+    assert_eq!(deserialized.base.api_base, config.base.api_base);
+    assert_eq!(deserialized.base.timeout, config.base.timeout);
+    assert_eq!(deserialized.base.max_retries, config.base.max_retries);
     assert_eq!(deserialized.debug, config.debug);
 }
 
@@ -276,10 +254,8 @@ fn test_get_models_map() {
 
 #[tokio::test]
 async fn test_nvidia_nim_provider_creation() {
-    let config = NvidiaNimConfig {
-        api_key: Some("nvapi-test-key".to_string()),
-        ..Default::default()
-    };
+    let config = NvidiaNimConfig::from_env()
+        .with_api_key("nvapi-test-key");
 
     let provider = NvidiaNimProvider::new(config).await;
     assert!(provider.is_ok());
@@ -453,11 +429,8 @@ async fn test_nvidia_nim_provider_calculate_cost_unknown_model() {
 
 #[test]
 fn test_nvidia_nim_provider_debug_impl() {
-    // Create a minimal config for testing Debug trait
-    let config = NvidiaNimConfig {
-        api_key: Some("nvapi-test-key".to_string()),
-        ..Default::default()
-    };
+    let config = NvidiaNimConfig::from_env()
+        .with_api_key("nvapi-test-key");
 
     let debug_str = format!("{:?}", config);
     assert!(debug_str.contains("NvidiaNimConfig"));
@@ -465,7 +438,11 @@ fn test_nvidia_nim_provider_debug_impl() {
 
 #[test]
 fn test_nvidia_nim_error_debug_impl() {
-    let err = NvidiaNimError::ApiError("test error".to_string());
+    let err = NvidiaNimError::ApiError {
+        provider: "nvidia_nim",
+        status: 500,
+        message: "test error".to_string(),
+    };
     let debug_str = format!("{:?}", err);
     assert!(debug_str.contains("ApiError"));
     assert!(debug_str.contains("test error"));

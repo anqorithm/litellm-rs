@@ -30,14 +30,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_provider_creation() {
-        let config = AlephAlphaConfig::new("test-key");
+        let config = AlephAlphaConfig::new("aleph_alpha").with_api_key("test-key");
         let provider = AlephAlphaProvider::new(config);
         assert!(provider.is_ok());
     }
 
     #[test]
     fn test_provider_capabilities() {
-        let config = AlephAlphaConfig::new("test-key");
+        let config = AlephAlphaConfig::new("aleph_alpha").with_api_key("test-key");
         let provider = AlephAlphaProvider::new(config).unwrap();
 
         let caps = provider.capabilities();
@@ -46,7 +46,7 @@ mod tests {
 
     #[test]
     fn test_provider_models() {
-        let config = AlephAlphaConfig::new("test-key");
+        let config = AlephAlphaConfig::new("aleph_alpha").with_api_key("test-key");
         let provider = AlephAlphaProvider::new(config).unwrap();
 
         let models = provider.models();

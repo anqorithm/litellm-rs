@@ -90,10 +90,8 @@ impl VoyageProvider {
 
     /// Create provider with API key only
     pub async fn with_api_key(api_key: impl Into<String>) -> Result<Self, VoyageError> {
-        let config = VoyageConfig {
-            api_key: Some(api_key.into()),
-            ..Default::default()
-        };
+        let config = VoyageConfig::from_env()
+            .with_api_key(api_key);
         Self::new(config).await
     }
 

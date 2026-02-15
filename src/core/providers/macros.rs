@@ -598,7 +598,8 @@ macro_rules! define_openai_compatible_provider {
             pub async fn with_api_key(
                 api_key: impl Into<String>,
             ) -> Result<Self, $crate::core::providers::unified_provider::ProviderError> {
-                let config = <$config_type>::new(api_key);
+                let config = <$config_type>::new($provider_name)
+                    .with_api_key(api_key.into());
                 Self::new(config)
             }
 

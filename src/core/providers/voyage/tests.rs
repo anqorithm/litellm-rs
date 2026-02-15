@@ -13,19 +13,15 @@ mod provider_tests {
     use crate::core::types::{context::RequestContext, model::ProviderCapability};
 
     async fn create_test_provider() -> VoyageProvider {
-        let config = VoyageConfig {
-            api_key: Some("test-key".to_string()),
-            ..Default::default()
-        };
+        let config = VoyageConfig::from_env()
+            .with_api_key("test-key");
         VoyageProvider::new(config).await.unwrap()
     }
 
     #[tokio::test]
     async fn test_provider_creation() {
-        let config = VoyageConfig {
-            api_key: Some("test-key".to_string()),
-            ..Default::default()
-        };
+        let config = VoyageConfig::from_env()
+            .with_api_key("test-key");
         let provider = VoyageProvider::new(config).await;
         assert!(provider.is_ok());
     }
@@ -328,28 +324,21 @@ mod config_tests {
     #[test]
     fn test_config_default() {
         let config = VoyageConfig::default();
-        assert!(config.api_key.is_none());
-        assert!(config.api_base.is_none());
-        assert_eq!(config.timeout, 60);
-        assert_eq!(config.max_retries, 3);
+        assert!(config.base.api_key.is_none());
+        assert_eq!(config.base.timeout, 60);
+        assert_eq!(config.base.max_retries, 3);
     }
 
     #[test]
     fn test_config_validation_with_key() {
-        let config = VoyageConfig {
-            api_key: Some("test-key".to_string()),
-            ..Default::default()
-        };
+        let config = VoyageConfig::from_env()
+            .with_api_key("test-key");
         assert!(config.validate().is_ok());
     }
 
     #[test]
-    fn test_config_validation_zero_timeout() {
-        let config = VoyageConfig {
-            api_key: Some("test-key".to_string()),
-            timeout: 0,
-            ..Default::default()
-        };
+    fn test_config_validation_missing_key() {
+        let config = VoyageConfig::default();
         assert!(config.validate().is_err());
     }
 

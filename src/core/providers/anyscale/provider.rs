@@ -29,14 +29,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_provider_creation() {
-        let config = AnyscaleConfig::new("test-key");
+        let config = AnyscaleConfig::new("anyscale").with_api_key("test-key");
         let provider = AnyscaleProvider::new(config);
         assert!(provider.is_ok());
     }
 
     #[test]
     fn test_provider_capabilities() {
-        let config = AnyscaleConfig::new("test-key");
+        let config = AnyscaleConfig::new("anyscale").with_api_key("test-key");
         let provider = AnyscaleProvider::new(config).unwrap();
 
         let caps = provider.capabilities();
@@ -45,7 +45,7 @@ mod tests {
 
     #[test]
     fn test_provider_models() {
-        let config = AnyscaleConfig::new("test-key");
+        let config = AnyscaleConfig::new("anyscale").with_api_key("test-key");
         let provider = AnyscaleProvider::new(config).unwrap();
 
         let models = provider.models();

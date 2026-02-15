@@ -29,14 +29,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_provider_creation() {
-        let config = YiConfig::new("test-key");
+        let config = YiConfig::new("yi").with_api_key("test-key");
         let provider = YiProvider::new(config);
         assert!(provider.is_ok());
     }
 
     #[test]
     fn test_provider_capabilities() {
-        let config = YiConfig::new("test-key");
+        let config = YiConfig::new("yi").with_api_key("test-key");
         let provider = YiProvider::new(config).unwrap();
 
         let caps = provider.capabilities();
@@ -45,7 +45,7 @@ mod tests {
 
     #[test]
     fn test_provider_models() {
-        let config = YiConfig::new("test-key");
+        let config = YiConfig::new("yi").with_api_key("test-key");
         let provider = YiProvider::new(config).unwrap();
 
         let models = provider.models();

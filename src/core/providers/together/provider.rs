@@ -105,10 +105,8 @@ impl TogetherProvider {
 
     /// Create provider with API key only
     pub async fn with_api_key(api_key: impl Into<String>) -> Result<Self, TogetherError> {
-        let config = TogetherConfig {
-            api_key: Some(api_key.into()),
-            ..Default::default()
-        };
+        let config = TogetherConfig::from_env()
+            .with_api_key(api_key);
         Self::new(config).await
     }
 

@@ -11,28 +11,23 @@ use crate::core::types::model::ProviderCapability;
 #[test]
 fn test_config_default() {
     let config = DeepgramConfig::default();
-    assert!(config.api_key.is_none());
-    assert!(config.api_base.is_none());
-    assert_eq!(config.timeout, 120); // Longer default for audio processing
-    assert_eq!(config.max_retries, 3);
+    assert!(config.base.api_key.is_none());
+    assert_eq!(config.base.timeout, 60);
+    assert_eq!(config.base.max_retries, 3);
     assert!(!config.debug);
 }
 
 #[test]
 fn test_config_custom_values() {
-    let config = DeepgramConfig {
-        api_key: Some("test-key".to_string()),
-        api_base: Some("https://custom.api.com".to_string()),
-        timeout: 180,
-        max_retries: 5,
-        debug: true,
-    };
+    let config = DeepgramConfig::from_env()
+        .with_api_key("test-key")
+        .with_base_url("https://custom.api.com")
+        .with_timeout(180);
 
-    assert_eq!(config.api_key.as_deref(), Some("test-key"));
-    assert_eq!(config.api_base.as_deref(), Some("https://custom.api.com"));
-    assert_eq!(config.timeout, 180);
-    assert_eq!(config.max_retries, 5);
-    assert!(config.debug);
+    assert_eq!(config.base.api_key.as_deref(), Some("test-key"));
+    assert_eq!(config.base.api_base.as_deref(), Some("https://custom.api.com"));
+    assert_eq!(config.base.timeout, 180);
+    assert!(!config.debug);
 }
 
 #[test]
@@ -43,10 +38,8 @@ fn test_config_get_api_base_default() {
 
 #[test]
 fn test_config_get_api_key() {
-    let config = DeepgramConfig {
-        api_key: Some("my-api-key".to_string()),
-        ..Default::default()
-    };
+    let config = DeepgramConfig::from_env()
+        .with_api_key("my-api-key");
     assert_eq!(config.get_api_key(), Some("my-api-key".to_string()));
 }
 
@@ -214,10 +207,8 @@ fn test_openai_transcription_response_serialization() {
 
 #[tokio::test]
 async fn test_provider_capabilities() {
-    let config = DeepgramConfig {
-        api_key: Some("test-key".to_string()),
-        ..Default::default()
-    };
+    let config = DeepgramConfig::from_env()
+        .with_api_key("test-key");
     let provider = DeepgramProvider::new(config).await.unwrap();
     let capabilities = provider.capabilities();
 
@@ -339,10 +330,8 @@ async fn test_provider_creation_without_key() {
 
 #[tokio::test]
 async fn test_provider_creation_with_key() {
-    let config = DeepgramConfig {
-        api_key: Some("test-api-key".to_string()),
-        ..Default::default()
-    };
+    let config = DeepgramConfig::from_env()
+        .with_api_key("test-api-key");
 
     let result = DeepgramProvider::new(config).await;
     assert!(result.is_ok());

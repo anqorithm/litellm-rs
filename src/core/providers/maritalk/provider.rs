@@ -21,14 +21,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_provider_creation() {
-        let config = MaritalkConfig::new("test-key");
+        let config = MaritalkConfig::new("maritalk").with_api_key("test-key");
         let provider = MaritalkProvider::new(config);
         assert!(provider.is_ok());
     }
 
     #[test]
     fn test_provider_capabilities() {
-        let config = MaritalkConfig::new("test-key");
+        let config = MaritalkConfig::new("maritalk").with_api_key("test-key");
         let provider = MaritalkProvider::new(config).unwrap();
 
         let caps = provider.capabilities();
@@ -37,7 +37,7 @@ mod tests {
 
     #[test]
     fn test_provider_models() {
-        let config = MaritalkConfig::new("test-key");
+        let config = MaritalkConfig::new("maritalk").with_api_key("test-key");
         let provider = MaritalkProvider::new(config).unwrap();
 
         let models = provider.models();
@@ -48,7 +48,7 @@ mod tests {
 
     #[test]
     fn test_build_headers() {
-        let config = MaritalkConfig::new("test-api-key");
+        let config = MaritalkConfig::new("maritalk").with_api_key("test-api-key");
         let provider = MaritalkProvider::new(config).unwrap();
 
         let headers = provider.build_headers();
@@ -64,7 +64,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_calculate_cost() {
-        let config = MaritalkConfig::new("test-key");
+        let config = MaritalkConfig::new("maritalk").with_api_key("test-key");
         let provider = MaritalkProvider::new(config).unwrap();
 
         // Test sabia-2-medium cost calculation
@@ -78,7 +78,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_calculate_cost_unknown_model() {
-        let config = MaritalkConfig::new("test-key");
+        let config = MaritalkConfig::new("maritalk").with_api_key("test-key");
         let provider = MaritalkProvider::new(config).unwrap();
 
         let cost = provider.calculate_cost("unknown-model", 1000, 1000).await;

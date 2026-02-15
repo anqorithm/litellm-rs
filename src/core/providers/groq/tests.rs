@@ -7,10 +7,8 @@ use crate::core::types::model::ProviderCapability;
 
 #[tokio::test]
 async fn test_provider_creation() {
-    let config = GroqConfig {
-        api_key: Some("test-key".to_string()),
-        ..Default::default()
-    };
+    let config = GroqConfig::from_env()
+        .with_api_key("test-key");
 
     let provider = GroqProvider::new(config).await;
     assert!(provider.is_ok());

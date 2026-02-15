@@ -7,10 +7,8 @@ use crate::core::types::model::ProviderCapability;
 
 #[tokio::test]
 async fn test_provider_creation() {
-    let config = HyperbolicConfig {
-        api_key: Some("test-key".to_string()),
-        ..Default::default()
-    };
+    let config = HyperbolicConfig::from_env()
+        .with_api_key("test-key");
 
     let provider = HyperbolicProvider::new(config).await;
     assert!(provider.is_ok());
@@ -140,10 +138,8 @@ fn test_config_api_base() {
     let config = HyperbolicConfig::default();
     assert_eq!(config.get_api_base(), "https://api.hyperbolic.xyz/v1");
 
-    let custom_config = HyperbolicConfig {
-        api_base: Some("https://custom.hyperbolic.xyz".to_string()),
-        ..Default::default()
-    };
+    let custom_config = HyperbolicConfig::from_env()
+        .with_base_url("https://custom.hyperbolic.xyz");
     assert_eq!(
         custom_config.get_api_base(),
         "https://custom.hyperbolic.xyz"

@@ -62,7 +62,8 @@ crate::define_http_provider_with_hooks!(
         headers.insert("Content-Type".to_string(), "application/json".to_string());
     },
     with_api_key: |api_key: String| -> Result<DeepLProvider, crate::core::providers::unified_provider::ProviderError> {
-        let config = super::config::DeepLConfig::new(api_key);
+        let config = super::config::DeepLConfig::new("deepl")
+            .with_api_key(api_key);
         DeepLProvider::new(config)
     },
     request_transform: |provider: &DeepLProvider,
@@ -344,14 +345,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_provider_creation() {
-        let config = DeepLConfig::new("test-key");
+        let config = DeepLConfig::new("deepl").with_api_key("test-key");
         let provider = DeepLProvider::new(config);
         assert!(provider.is_ok());
     }
 
     #[test]
     fn test_provider_capabilities() {
-        let config = DeepLConfig::new("test-key");
+        let config = DeepLConfig::new("deepl").with_api_key("test-key");
         let provider = DeepLProvider::new(config).unwrap();
 
         let caps = provider.capabilities();
@@ -361,7 +362,7 @@ mod tests {
 
     #[test]
     fn test_provider_models() {
-        let config = DeepLConfig::new("test-key");
+        let config = DeepLConfig::new("deepl").with_api_key("test-key");
         let provider = DeepLProvider::new(config).unwrap();
 
         let models = provider.models();
@@ -371,7 +372,7 @@ mod tests {
 
     #[test]
     fn test_provider_name() {
-        let config = DeepLConfig::new("test-key");
+        let config = DeepLConfig::new("deepl").with_api_key("test-key");
         let provider = DeepLProvider::new(config).unwrap();
         assert_eq!(provider.name(), "deepl");
     }

@@ -102,10 +102,8 @@ impl NovitaProvider {
 
     /// Create provider with API key only
     pub async fn with_api_key(api_key: impl Into<String>) -> Result<Self, ProviderError> {
-        let config = NovitaConfig {
-            api_key: Some(api_key.into()),
-            ..Default::default()
-        };
+        let config = NovitaConfig::from_env()
+            .with_api_key(api_key.into());
         Self::new(config).await
     }
 

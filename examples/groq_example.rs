@@ -6,10 +6,8 @@ use litellm_rs::core::traits::provider::llm_provider::trait_definition::LLMProvi
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create Groq provider
-    let config = GroqConfig {
-        api_key: Some(std::env::var("GROQ_API_KEY").unwrap_or_else(|_| "test-key".to_string())),
-        ..Default::default()
-    };
+    let config = GroqConfig::from_env()
+        .with_api_key(std::env::var("GROQ_API_KEY").unwrap_or_else(|_| "test-key".to_string()));
 
     let provider = GroqProvider::new(config).await?;
 

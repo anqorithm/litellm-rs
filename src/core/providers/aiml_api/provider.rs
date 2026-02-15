@@ -29,14 +29,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_provider_creation() {
-        let config = AimlConfig::new("test-key");
+        let config = AimlConfig::new("aiml_api").with_api_key("test-key");
         let provider = AimlProvider::new(config);
         assert!(provider.is_ok());
     }
 
     #[test]
     fn test_provider_capabilities() {
-        let config = AimlConfig::new("test-key");
+        let config = AimlConfig::new("aiml_api").with_api_key("test-key");
         let provider = AimlProvider::new(config).unwrap();
 
         let caps = provider.capabilities();
@@ -45,7 +45,7 @@ mod tests {
 
     #[test]
     fn test_provider_models() {
-        let config = AimlConfig::new("test-key");
+        let config = AimlConfig::new("aiml_api").with_api_key("test-key");
         let provider = AimlProvider::new(config).unwrap();
 
         let models = provider.models();

@@ -102,10 +102,8 @@ impl NvidiaNimProvider {
 
     /// Create provider with API key only
     pub async fn with_api_key(api_key: impl Into<String>) -> Result<Self, ProviderError> {
-        let config = NvidiaNimConfig {
-            api_key: Some(api_key.into()),
-            ..Default::default()
-        };
+        let config = NvidiaNimConfig::from_env()
+            .with_api_key(api_key.into());
         Self::new(config).await
     }
 

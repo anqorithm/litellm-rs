@@ -8,10 +8,8 @@ use crate::core::types::model::ProviderCapability;
 
 #[tokio::test]
 async fn test_provider_creation() {
-    let config = NovitaConfig {
-        api_key: Some("test-key".to_string()),
-        ..Default::default()
-    };
+    let config = NovitaConfig::from_env()
+        .with_api_key("test-key");
 
     let provider = NovitaProvider::new(config).await;
     assert!(provider.is_ok());
@@ -161,13 +159,11 @@ fn test_model_capabilities() {
 
 #[test]
 fn test_config_api_base() {
-    let config = NovitaConfig::default();
+    let config = NovitaConfig::from_env();
     assert_eq!(config.get_api_base(), "https://api.novita.ai/v3/openai");
 
-    let custom_config = NovitaConfig {
-        api_base: Some("https://custom.novita.ai".to_string()),
-        ..Default::default()
-    };
+    let custom_config = NovitaConfig::from_env()
+        .with_base_url("https://custom.novita.ai");
     assert_eq!(custom_config.get_api_base(), "https://custom.novita.ai");
 }
 

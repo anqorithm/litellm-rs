@@ -12,10 +12,8 @@ mod tests {
     /// Test Groq provider creation
     #[tokio::test]
     async fn test_groq_provider_creation() {
-        let config = GroqConfig {
-            api_key: Some("test-key".to_string()),
-            ..Default::default()
-        };
+        let config = GroqConfig::from_env()
+            .with_api_key("test-key");
 
         let provider = GroqProvider::new(config).await;
         assert!(provider.is_ok());

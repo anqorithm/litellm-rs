@@ -8,10 +8,8 @@ use crate::core::types::model::ProviderCapability;
 
 #[tokio::test]
 async fn test_provider_creation() {
-    let config = TogetherConfig {
-        api_key: Some("test-key".to_string()),
-        ..Default::default()
-    };
+    let config = TogetherConfig::from_env()
+        .with_api_key("test-key");
 
     let provider = TogetherProvider::new(config).await;
     assert!(provider.is_ok());
@@ -284,38 +282,31 @@ fn test_rerank_request_with_options() {
 #[test]
 fn test_config_defaults() {
     let config = TogetherConfig::default();
-    assert!(config.api_key.is_none());
-    assert!(config.api_base.is_none());
-    assert_eq!(config.timeout, 60);
-    assert_eq!(config.max_retries, 3);
+    assert!(config.base.api_key.is_none());
+    assert_eq!(config.base.timeout, 60);
+    assert_eq!(config.base.max_retries, 3);
     assert!(!config.debug);
 }
 
 #[test]
 fn test_config_get_api_base() {
-    let config = TogetherConfig::default();
+    let config = TogetherConfig::from_env();
     assert_eq!(config.get_api_base(), "https://api.together.xyz/v1");
 
-    let custom_config = TogetherConfig {
-        api_base: Some("https://custom.together.xyz".to_string()),
-        ..Default::default()
-    };
+    let custom_config = TogetherConfig::from_env()
+        .with_base_url("https://custom.together.xyz");
     assert_eq!(custom_config.get_api_base(), "https://custom.together.xyz");
 }
 
 #[test]
 fn test_config_validation() {
-    let valid_config = TogetherConfig {
-        api_key: Some("test-key".to_string()),
-        ..Default::default()
-    };
+    let valid_config = TogetherConfig::from_env()
+        .with_api_key("test-key");
     assert!(valid_config.validate().is_ok());
 
-    let invalid_timeout_config = TogetherConfig {
-        api_key: Some("test-key".to_string()),
-        timeout: 0,
-        ..Default::default()
-    };
+    let mut invalid_timeout_config = TogetherConfig::from_env()
+        .with_api_key("test-key");
+    invalid_timeout_config.base.timeout = 0;
     assert!(invalid_timeout_config.validate().is_err());
 }
 

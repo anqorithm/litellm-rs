@@ -4,16 +4,6 @@ use crate::define_provider_config;
 
 define_provider_config!(FeatherlessConfig, provider: "featherless");
 
-impl FeatherlessConfig {
-    /// Get the effective API base URL
-    pub fn get_api_base(&self) -> String {
-        self.base
-            .api_base
-            .clone()
-            .unwrap_or_else(|| "https://api.featherless.ai/v1".to_string())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
