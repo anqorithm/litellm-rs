@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use super::types::{ComponentHealth, HealthCheckConfig, HealthSummary};
+use super::types::{ComponentHealth, ComponentHealthCheckConfig, HealthSummary};
 
 #[test]
 fn test_component_health_creation() {
@@ -38,7 +38,7 @@ fn test_health_summary_calculation() {
 
 #[test]
 fn test_health_check_config() {
-    let config = HealthCheckConfig {
+    let config = ComponentHealthCheckConfig {
         name: "database".to_string(),
         interval: Duration::from_secs(30),
         timeout: Duration::from_secs(5),

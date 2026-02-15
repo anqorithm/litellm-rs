@@ -191,7 +191,7 @@ mod tests {
             enabled: true,
             max_concurrent_requests: 10,
             retry: crate::config::models::provider::RetryConfig::default(),
-            health_check: crate::config::models::provider::HealthCheckConfig::default(),
+            health_check: crate::config::models::provider::ProviderHealthCheckConfig::default(),
             settings: HashMap::new(),
             tags: vec!["test".to_string()],
         };
@@ -219,7 +219,7 @@ mod tests {
             timeout: 30,
             max_retries: 3,
             retry: crate::config::models::provider::RetryConfig::default(),
-            health_check: crate::config::models::provider::HealthCheckConfig::default(),
+            health_check: crate::config::models::provider::ProviderHealthCheckConfig::default(),
             settings: HashMap::new(),
             models: vec![],
             tags: vec![],

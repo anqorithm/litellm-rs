@@ -6,7 +6,7 @@
 use super::ssrf::validate_url_against_ssrf;
 use super::trait_def::Validate;
 use crate::config::models::gateway::GatewayConfig;
-use crate::config::models::provider::{HealthCheckConfig, ProviderConfig, RetryConfig};
+use crate::config::models::provider::{ProviderConfig, ProviderHealthCheckConfig, RetryConfig};
 use crate::config::models::server::ServerConfig;
 use std::collections::HashSet;
 use tracing::debug;
@@ -207,7 +207,7 @@ impl Validate for RetryConfig {
     }
 }
 
-impl Validate for HealthCheckConfig {
+impl Validate for ProviderHealthCheckConfig {
     fn validate(&self) -> Result<(), String> {
         if self.interval == 0 {
             return Err("Health check interval must be greater than 0".to_string());

@@ -44,7 +44,7 @@ pub struct ProviderConfig {
     pub retry: RetryConfig,
     /// Health check configuration
     #[serde(default)]
-    pub health_check: HealthCheckConfig,
+    pub health_check: ProviderHealthCheckConfig,
     /// Provider-specific settings
     #[serde(default)]
     pub settings: HashMap<String, serde_json::Value>,
@@ -76,7 +76,7 @@ impl Default for ProviderConfig {
             timeout: default_timeout(),
             max_retries: default_max_retries(),
             retry: RetryConfig::default(),
-            health_check: HealthCheckConfig::default(),
+            health_check: ProviderHealthCheckConfig::default(),
             settings: HashMap::new(),
             models: Vec::new(),
             tags: Vec::new(),
@@ -113,9 +113,9 @@ impl Default for RetryConfig {
     }
 }
 
-/// Health check configuration
+/// Health check configuration for provider-level health monitoring
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HealthCheckConfig {
+pub struct ProviderHealthCheckConfig {
     /// Health check interval in seconds
     #[serde(default = "default_health_check_interval")]
     pub interval: u64,
@@ -132,7 +132,7 @@ pub struct HealthCheckConfig {
     pub expected_codes: Vec<u16>,
 }
 
-impl Default for HealthCheckConfig {
+impl Default for ProviderHealthCheckConfig {
     fn default() -> Self {
         Self {
             interval: default_health_check_interval(),
@@ -205,11 +205,11 @@ mod tests {
         assert_eq!(config.max_delay, cloned.max_delay);
     }
 
-    // ==================== HealthCheckConfig Tests ====================
+    // ==================== ProviderHealthCheckConfig Tests ====================
 
     #[test]
     fn test_health_check_config_default() {
-        let config = HealthCheckConfig::default();
+        let config = ProviderHealthCheckConfig::default();
         assert_eq!(config.interval, 30);
         assert_eq!(config.failure_threshold, 5);
         assert_eq!(config.recovery_timeout, 60);
@@ -219,7 +219,7 @@ mod tests {
 
     #[test]
     fn test_health_check_config_structure() {
-        let config = HealthCheckConfig {
+        let config = ProviderHealthCheckConfig {
             interval: 60,
             failure_threshold: 5,
             recovery_timeout: 120,
@@ -233,7 +233,7 @@ mod tests {
 
     #[test]
     fn test_health_check_config_serialization() {
-        let config = HealthCheckConfig {
+        let config = ProviderHealthCheckConfig {
             interval: 45,
             failure_threshold: 4,
             recovery_timeout: 90,
@@ -248,14 +248,14 @@ mod tests {
     #[test]
     fn test_health_check_config_deserialization() {
         let json = r#"{"interval": 20, "failure_threshold": 2, "recovery_timeout": 30, "expected_codes": [200, 204]}"#;
-        let config: HealthCheckConfig = serde_json::from_str(json).unwrap();
+        let config: ProviderHealthCheckConfig = serde_json::from_str(json).unwrap();
         assert_eq!(config.interval, 20);
         assert_eq!(config.failure_threshold, 2);
     }
 
     #[test]
     fn test_health_check_config_clone() {
-        let config = HealthCheckConfig::default();
+        let config = ProviderHealthCheckConfig::default();
         let cloned = config.clone();
         assert_eq!(config.interval, cloned.interval);
     }
@@ -291,7 +291,7 @@ mod tests {
             timeout: 60,
             max_retries: 5,
             retry: RetryConfig::default(),
-            health_check: HealthCheckConfig::default(),
+            health_check: ProviderHealthCheckConfig::default(),
             settings: HashMap::new(),
             models: vec!["gpt-4".to_string()],
             tags: vec!["production".to_string()],
@@ -323,7 +323,7 @@ mod tests {
             timeout: 30,
             max_retries: 3,
             retry: RetryConfig::default(),
-            health_check: HealthCheckConfig::default(),
+            health_check: ProviderHealthCheckConfig::default(),
             settings,
             models: vec![],
             tags: vec![],
@@ -349,7 +349,7 @@ mod tests {
             timeout: 45,
             max_retries: 4,
             retry: RetryConfig::default(),
-            health_check: HealthCheckConfig::default(),
+            health_check: ProviderHealthCheckConfig::default(),
             settings: HashMap::new(),
             models: vec!["claude-3".to_string()],
             tags: vec!["backup".to_string()],

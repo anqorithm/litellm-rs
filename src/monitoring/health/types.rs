@@ -50,9 +50,9 @@ pub struct HealthSummary {
     pub health_percentage: f64,
 }
 
-/// Health check configuration for a component
+/// Health check configuration for a runtime component
 #[derive(Debug, Clone)]
-pub struct HealthCheckConfig {
+pub struct ComponentHealthCheckConfig {
     /// Component name
     pub name: String,
     /// Check interval
@@ -397,11 +397,11 @@ mod tests {
         );
     }
 
-    // ==================== HealthCheckConfig Tests ====================
+    // ==================== ComponentHealthCheckConfig Tests ====================
 
     #[test]
     fn test_health_check_config_creation() {
-        let config = HealthCheckConfig {
+        let config = ComponentHealthCheckConfig {
             name: "database".to_string(),
             interval: Duration::from_secs(30),
             timeout: Duration::from_secs(5),
@@ -418,7 +418,7 @@ mod tests {
 
     #[test]
     fn test_health_check_config_non_critical() {
-        let config = HealthCheckConfig {
+        let config = ComponentHealthCheckConfig {
             name: "metrics".to_string(),
             interval: Duration::from_secs(60),
             timeout: Duration::from_secs(10),
@@ -432,7 +432,7 @@ mod tests {
 
     #[test]
     fn test_health_check_config_clone() {
-        let config = HealthCheckConfig {
+        let config = ComponentHealthCheckConfig {
             name: "api".to_string(),
             interval: Duration::from_secs(15),
             timeout: Duration::from_secs(3),
@@ -448,7 +448,7 @@ mod tests {
 
     #[test]
     fn test_health_check_config_debug() {
-        let config = HealthCheckConfig {
+        let config = ComponentHealthCheckConfig {
             name: "cache".to_string(),
             interval: Duration::from_secs(20),
             timeout: Duration::from_secs(2),
@@ -457,13 +457,13 @@ mod tests {
         };
 
         let debug_str = format!("{:?}", config);
-        assert!(debug_str.contains("HealthCheckConfig"));
+        assert!(debug_str.contains("ComponentHealthCheckConfig"));
         assert!(debug_str.contains("cache"));
     }
 
     #[test]
     fn test_health_check_config_aggressive() {
-        let config = HealthCheckConfig {
+        let config = ComponentHealthCheckConfig {
             name: "critical_service".to_string(),
             interval: Duration::from_secs(5),
             timeout: Duration::from_secs(1),
@@ -477,7 +477,7 @@ mod tests {
 
     #[test]
     fn test_health_check_config_relaxed() {
-        let config = HealthCheckConfig {
+        let config = ComponentHealthCheckConfig {
             name: "background_job".to_string(),
             interval: Duration::from_secs(300),
             timeout: Duration::from_secs(30),
@@ -588,21 +588,21 @@ mod tests {
     #[test]
     fn test_critical_vs_non_critical_components() {
         let configs = [
-            HealthCheckConfig {
+            ComponentHealthCheckConfig {
                 name: "database".to_string(),
                 interval: Duration::from_secs(10),
                 timeout: Duration::from_secs(2),
                 retries: 3,
                 critical: true,
             },
-            HealthCheckConfig {
+            ComponentHealthCheckConfig {
                 name: "cache".to_string(),
                 interval: Duration::from_secs(30),
                 timeout: Duration::from_secs(5),
                 retries: 2,
                 critical: true,
             },
-            HealthCheckConfig {
+            ComponentHealthCheckConfig {
                 name: "metrics".to_string(),
                 interval: Duration::from_secs(60),
                 timeout: Duration::from_secs(10),

@@ -117,7 +117,7 @@ impl ProviderConfigBuilder {
             timeout: self.timeout.map(|d| d.as_secs()).unwrap_or(30),
             max_retries: 3,
             retry: crate::config::models::provider::RetryConfig::default(),
-            health_check: crate::config::models::provider::HealthCheckConfig::default(),
+            health_check: crate::config::models::provider::ProviderHealthCheckConfig::default(),
             settings: std::collections::HashMap::new(),
             models: self.models,
             enabled: self.enabled,

@@ -7,7 +7,7 @@
 #[cfg(test)]
 mod tests {
     use litellm_rs::config::models::gateway::GatewayConfig;
-    use litellm_rs::config::models::provider::{HealthCheckConfig, ProviderConfig, RetryConfig};
+    use litellm_rs::config::models::provider::{ProviderConfig, ProviderHealthCheckConfig, RetryConfig};
     use litellm_rs::config::models::server::{CorsConfig, ServerConfig, TlsConfig};
 
     // ==================== GatewayConfig Validation ====================
@@ -258,12 +258,12 @@ mod tests {
         assert!(config.jitter >= 0.0 && config.jitter <= 1.0);
     }
 
-    // ==================== HealthCheckConfig Defaults ====================
+    // ==================== ProviderHealthCheckConfig Defaults ====================
 
     /// Test health check config default values
     #[test]
     fn test_health_check_config_defaults() {
-        let config = HealthCheckConfig::default();
+        let config = ProviderHealthCheckConfig::default();
 
         assert!(config.interval > 0);
         assert!(config.failure_threshold > 0);

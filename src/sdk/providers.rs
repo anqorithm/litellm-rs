@@ -99,7 +99,7 @@ fn convert_to_gateway_config(
         enabled: config.enabled,
         max_concurrent_requests: 10, // Default value
         retry: crate::config::models::provider::RetryConfig::default(),
-        health_check: crate::config::models::provider::HealthCheckConfig::default(),
+        health_check: crate::config::models::provider::ProviderHealthCheckConfig::default(),
         settings: HashMap::new(),
         tags: Vec::new(),
     })
