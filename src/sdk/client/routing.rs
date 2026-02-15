@@ -3,7 +3,7 @@
 use super::llm_client::LLMClient;
 use super::types::{LoadBalancingStrategy, ProviderStats};
 use crate::sdk::errors::*;
-use crate::sdk::types::{SdkChatRequest, Message};
+use crate::sdk::types::{Message, SdkChatRequest};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -13,7 +13,7 @@ impl LLMClient {
     pub(crate) async fn select_provider(
         &self,
         request: &SdkChatRequest,
-    ) -> Result<&crate::sdk::config::ProviderConfig> {
+    ) -> Result<&crate::sdk::config::SdkProviderConfig> {
         // If model is specified, find provider that supports it
         if !request.model.is_empty() {
             for provider in &self.config.providers {
@@ -37,7 +37,7 @@ impl LLMClient {
     pub(crate) async fn select_provider_for_stream(
         &self,
         _messages: &[Message],
-    ) -> Result<&crate::sdk::config::ProviderConfig> {
+    ) -> Result<&crate::sdk::config::SdkProviderConfig> {
         // Find provider that supports streaming
         for provider in &self.config.providers {
             if provider.enabled {
@@ -55,10 +55,10 @@ impl LoadBalancer {
     /// Select provider using load balancing strategy
     pub(crate) async fn select_provider<'a>(
         &self,
-        providers: &'a [crate::sdk::config::ProviderConfig],
+        providers: &'a [crate::sdk::config::SdkProviderConfig],
         stats: &Arc<RwLock<HashMap<String, ProviderStats>>>,
-    ) -> Result<&'a crate::sdk::config::ProviderConfig> {
-        let enabled_providers: Vec<&crate::sdk::config::ProviderConfig> =
+    ) -> Result<&'a crate::sdk::config::SdkProviderConfig> {
+        let enabled_providers: Vec<&crate::sdk::config::SdkProviderConfig> =
             providers.iter().filter(|p| p.enabled).collect();
 
         if enabled_providers.is_empty() {

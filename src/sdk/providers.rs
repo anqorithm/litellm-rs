@@ -68,7 +68,7 @@ impl ProviderRegistry {
 
 /// Convert SDK config to gateway config
 fn convert_to_gateway_config(
-    config: &crate::sdk::config::ProviderConfig,
+    config: &crate::sdk::config::SdkProviderConfig,
 ) -> Result<crate::config::models::provider::ProviderConfig> {
     Ok(crate::config::models::provider::ProviderConfig {
         name: config.id.clone(),

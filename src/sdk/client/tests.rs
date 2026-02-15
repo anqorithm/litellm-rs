@@ -9,7 +9,7 @@ use std::collections::HashMap;
 #[tokio::test]
 async fn test_llm_client_creation() {
     let config = ConfigBuilder::new()
-        .add_provider(crate::sdk::config::ProviderConfig {
+        .add_provider(crate::sdk::config::SdkProviderConfig {
             id: "test".to_string(),
             provider_type: ProviderType::OpenAI,
             name: "Test Provider".to_string(),
@@ -31,7 +31,7 @@ async fn test_llm_client_creation() {
 #[tokio::test]
 async fn test_provider_selection() {
     let config = ConfigBuilder::new()
-        .add_provider(crate::sdk::config::ProviderConfig {
+        .add_provider(crate::sdk::config::SdkProviderConfig {
             id: "anthropic".to_string(),
             provider_type: ProviderType::Anthropic,
             name: "Anthropic".to_string(),

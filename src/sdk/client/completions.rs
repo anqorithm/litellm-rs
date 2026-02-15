@@ -115,7 +115,7 @@ impl LLMClient {
     /// Call Anthropic API
     async fn call_anthropic_api(
         &self,
-        provider: &crate::sdk::config::ProviderConfig,
+        provider: &crate::sdk::config::SdkProviderConfig,
         request: SdkChatRequest,
     ) -> Result<ChatResponse> {
         // Convert message format
@@ -191,7 +191,7 @@ impl LLMClient {
     /// Call OpenAI API
     async fn call_openai_api(
         &self,
-        provider: &crate::sdk::config::ProviderConfig,
+        provider: &crate::sdk::config::SdkProviderConfig,
         request: SdkChatRequest,
     ) -> Result<ChatResponse> {
         let body = serde_json::json!({
@@ -239,7 +239,7 @@ impl LLMClient {
     /// Call Google API
     async fn call_google_api(
         &self,
-        provider: &crate::sdk::config::ProviderConfig,
+        provider: &crate::sdk::config::SdkProviderConfig,
         request: SdkChatRequest,
     ) -> Result<ChatResponse> {
         // Google API implementation placeholder
@@ -250,7 +250,7 @@ impl LLMClient {
     /// Create mock response for testing
     async fn create_mock_response(
         &self,
-        provider: &crate::sdk::config::ProviderConfig,
+        provider: &crate::sdk::config::SdkProviderConfig,
         messages: &[Message],
     ) -> Result<ChatResponse> {
         let user_message = messages

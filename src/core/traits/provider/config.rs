@@ -18,7 +18,7 @@ use std::fmt::Debug;
 /// # Example
 /// ```rust
 /// use std::time::Duration;
-/// use litellm_rs::core::traits::ProviderConfig;
+/// use litellm_rs::core::traits::provider::ProviderConfig;
 ///
 /// #[derive(Debug, Clone)]
 /// struct MyProviderConfig {

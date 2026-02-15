@@ -12,7 +12,7 @@ pub struct ClientConfig {
     /// Default
     pub default_provider: Option<String>,
     /// Configuration
-    pub providers: Vec<ProviderConfig>,
+    pub providers: Vec<SdkProviderConfig>,
     /// Settings
     pub settings: ClientSettings,
 }
@@ -44,9 +44,13 @@ impl Default for ClientSettings {
     }
 }
 
-/// Configuration
+/// SDK client-side provider configuration.
+///
+/// This is the client-facing provider config used by the SDK.
+/// For the gateway/server-side YAML config model, see
+/// [`crate::config::models::provider::ProviderConfig`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProviderConfig {
+pub struct SdkProviderConfig {
     /// Provider unique ID
     pub id: String,
     /// Provider type
@@ -74,7 +78,9 @@ pub struct ProviderConfig {
 /// Canonical alias for SDK client configuration.
 pub type ClientRuntimeConfig = ClientConfig;
 /// Canonical alias for SDK provider configuration.
-pub type ClientProviderConfig = ProviderConfig;
+pub type ClientProviderConfig = SdkProviderConfig;
+/// Backward-compatible alias.
+pub type ProviderConfig = SdkProviderConfig;
 
 /// Provider type enumeration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -142,14 +148,14 @@ impl ConfigBuilder {
     }
 
     /// Add provider
-    pub fn add_provider(mut self, provider: ProviderConfig) -> Self {
+    pub fn add_provider(mut self, provider: SdkProviderConfig) -> Self {
         self.config.providers.push(provider);
         self
     }
 
     /// Add OpenAI provider
     pub fn add_openai(self, id: &str, api_key: &str) -> Self {
-        self.add_provider(ProviderConfig {
+        self.add_provider(SdkProviderConfig {
             id: id.to_string(),
             provider_type: ProviderType::OpenAI,
             name: "OpenAI".to_string(),
@@ -170,7 +176,7 @@ impl ConfigBuilder {
 
     /// Add Anthropic provider
     pub fn add_anthropic(self, id: &str, api_key: &str) -> Self {
-        self.add_provider(ProviderConfig {
+        self.add_provider(SdkProviderConfig {
             id: id.to_string(),
             provider_type: ProviderType::Anthropic,
             name: "Anthropic".to_string(),
@@ -569,10 +575,12 @@ mod tests {
             ProviderType::OpenAI
         ));
         assert!(!config.providers[0].models.is_empty());
-        assert!(config.providers[0]
-            .models
-            .iter()
-            .any(|model| model.starts_with("gpt-")));
+        assert!(
+            config.providers[0]
+                .models
+                .iter()
+                .any(|model| model.starts_with("gpt-"))
+        );
     }
 
     #[test]
