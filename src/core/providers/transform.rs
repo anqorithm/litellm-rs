@@ -15,7 +15,7 @@ pub type ProviderResult<T> = Result<T, ProviderError>;
 
 /// Generic request types for different endpoints
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChatRequest {
+pub struct TransformChatRequest {
     pub model: String,
     pub messages: Vec<ChatMessage>,
     pub temperature: Option<f64>,
@@ -210,7 +210,7 @@ pub trait TransformEngine: Send + Sync {
     /// Transform OpenAI format request to provider-specific format
     async fn transform_chat_request(
         &self,
-        request: &ChatRequest,
+        request: &TransformChatRequest,
         provider_type: &ProviderType,
         provider_config: &HashMap<String, Value>,
     ) -> ProviderResult<TransformResult<ProviderRequest>>;
@@ -220,7 +220,7 @@ pub trait TransformEngine: Send + Sync {
         &self,
         response: &ProviderResponse,
         provider_type: &ProviderType,
-        original_request: &ChatRequest,
+        original_request: &TransformChatRequest,
     ) -> ProviderResult<TransformResult<ChatResponse>>;
 
     /// Transform embedding request
@@ -245,7 +245,7 @@ pub trait TransformEngine: Send + Sync {
     /// Validate request compatibility with provider
     async fn validate_request_compatibility(
         &self,
-        request: &ChatRequest,
+        request: &TransformChatRequest,
         provider_type: &ProviderType,
     ) -> ProviderResult<Vec<String>>;
 }
@@ -399,7 +399,7 @@ impl DefaultTransformEngine {
 impl TransformEngine for DefaultTransformEngine {
     async fn transform_chat_request(
         &self,
-        request: &ChatRequest,
+        request: &TransformChatRequest,
         provider_type: &ProviderType,
         provider_config: &HashMap<String, Value>,
     ) -> ProviderResult<TransformResult<ProviderRequest>> {
@@ -456,7 +456,7 @@ impl TransformEngine for DefaultTransformEngine {
         &self,
         response: &ProviderResponse,
         provider_type: &ProviderType,
-        original_request: &ChatRequest,
+        original_request: &TransformChatRequest,
     ) -> ProviderResult<TransformResult<ChatResponse>> {
         let context = TransformContext {
             provider_type: provider_type.clone(),
@@ -577,7 +577,7 @@ impl TransformEngine for DefaultTransformEngine {
 
     async fn validate_request_compatibility(
         &self,
-        request: &ChatRequest,
+        request: &TransformChatRequest,
         provider_type: &ProviderType,
     ) -> ProviderResult<Vec<String>> {
         let mut issues = Vec::new();
@@ -794,11 +794,11 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    // ==================== ChatRequest Tests ====================
+    // ==================== TransformChatRequest Tests ====================
 
     #[test]
     fn test_chat_request_serialization_full() {
-        let request = ChatRequest {
+        let request = TransformChatRequest {
             model: "gpt-4".to_string(),
             messages: vec![ChatMessage {
                 role: "user".to_string(),
@@ -837,7 +837,7 @@ mod tests {
 
     #[test]
     fn test_chat_request_minimal() {
-        let request = ChatRequest {
+        let request = TransformChatRequest {
             model: "gpt-3.5-turbo".to_string(),
             messages: vec![],
             temperature: None,
@@ -1267,7 +1267,7 @@ mod tests {
     async fn test_validate_request_compatibility_anthropic() {
         let engine = DefaultTransformEngine::new();
 
-        let request = ChatRequest {
+        let request = TransformChatRequest {
             model: "claude-3".to_string(),
             messages: vec![],
             temperature: None,
@@ -1302,7 +1302,7 @@ mod tests {
     async fn test_validate_request_compatibility_vertexai() {
         let engine = DefaultTransformEngine::new();
 
-        let request = ChatRequest {
+        let request = TransformChatRequest {
             model: "gemini-pro".to_string(),
             messages: vec![],
             temperature: None,
@@ -1336,7 +1336,7 @@ mod tests {
     async fn test_validate_request_compatibility_no_issues() {
         let engine = DefaultTransformEngine::new();
 
-        let request = ChatRequest {
+        let request = TransformChatRequest {
             model: "gpt-4".to_string(),
             messages: vec![],
             temperature: None,
@@ -1417,7 +1417,7 @@ mod tests {
 
     #[test]
     fn test_chat_request_clone() {
-        let request = ChatRequest {
+        let request = TransformChatRequest {
             model: "gpt-4".to_string(),
             messages: vec![],
             temperature: Some(0.5),

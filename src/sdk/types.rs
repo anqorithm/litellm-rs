@@ -136,7 +136,7 @@ pub enum ToolChoice {
 
 /// Chat request
 #[derive(Debug, Clone)]
-pub struct ChatRequest {
+pub struct SdkChatRequest {
     /// Model name
     pub model: String,
     /// Message list
@@ -731,11 +731,11 @@ mod tests {
         assert_eq!(options.max_tokens, cloned.max_tokens);
     }
 
-    // ==================== ChatRequest Tests ====================
+    // ==================== SdkChatRequest Tests ====================
 
     #[test]
     fn test_chat_request_creation() {
-        let request = ChatRequest {
+        let request = SdkChatRequest {
             model: "gpt-4".to_string(),
             messages: vec![Message {
                 role: Role::User,
@@ -751,7 +751,7 @@ mod tests {
 
     #[test]
     fn test_chat_request_multiple_messages() {
-        let request = ChatRequest {
+        let request = SdkChatRequest {
             model: "claude-3-opus".to_string(),
             messages: vec![
                 Message {
@@ -776,7 +776,7 @@ mod tests {
 
     #[test]
     fn test_chat_request_clone() {
-        let request = ChatRequest {
+        let request = SdkChatRequest {
             model: "gpt-4".to_string(),
             messages: vec![],
             options: ChatOptions::default(),

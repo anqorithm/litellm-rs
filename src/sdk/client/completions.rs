@@ -8,7 +8,7 @@ use tracing::{debug, error, warn};
 impl LLMClient {
     /// Send chat message (using load balancing)
     pub async fn chat(&self, messages: Vec<Message>) -> Result<ChatResponse> {
-        let request = ChatRequest {
+        let request = SdkChatRequest {
             model: String::new(), // Will be set by load balancer
             messages,
             options: ChatOptions::default(),
@@ -18,7 +18,7 @@ impl LLMClient {
     }
 
     /// Send chat message (with options)
-    pub async fn chat_with_options(&self, request: ChatRequest) -> Result<ChatResponse> {
+    pub async fn chat_with_options(&self, request: SdkChatRequest) -> Result<ChatResponse> {
         let start_time = SystemTime::now();
 
         // Select best provider
@@ -47,7 +47,7 @@ impl LLMClient {
     pub(crate) async fn execute_chat_request(
         &self,
         provider_id: &str,
-        request: ChatRequest,
+        request: SdkChatRequest,
     ) -> Result<ChatResponse> {
         let provider = self
             .config
@@ -116,7 +116,7 @@ impl LLMClient {
     async fn call_anthropic_api(
         &self,
         provider: &crate::sdk::config::ProviderConfig,
-        request: ChatRequest,
+        request: SdkChatRequest,
     ) -> Result<ChatResponse> {
         // Convert message format
         let (system_message, anthropic_messages) =
@@ -192,7 +192,7 @@ impl LLMClient {
     async fn call_openai_api(
         &self,
         provider: &crate::sdk::config::ProviderConfig,
-        request: ChatRequest,
+        request: SdkChatRequest,
     ) -> Result<ChatResponse> {
         let body = serde_json::json!({
             "model": provider.models.first().unwrap_or(&"gpt-5.2-chat".to_string()),
@@ -240,7 +240,7 @@ impl LLMClient {
     async fn call_google_api(
         &self,
         provider: &crate::sdk::config::ProviderConfig,
-        request: ChatRequest,
+        request: SdkChatRequest,
     ) -> Result<ChatResponse> {
         // Google API implementation placeholder
         warn!("Google API not fully implemented, using mock response");

@@ -107,7 +107,7 @@ pub struct AppState {
 
 /// Chat completion request
 #[derive(Debug, Deserialize)]
-pub struct ChatRequest {
+pub struct GoogleChatRequest {
     pub model: String,
     pub messages: Vec<Message>,
     pub temperature: Option<f32>,
@@ -216,7 +216,7 @@ async fn list_models(state: web::Data<AppState>) -> HttpResponse {
 #[instrument(skip(state))]
 async fn chat_completions(
     state: web::Data<AppState>,
-    request: web::Json<ChatRequest>,
+    request: web::Json<GoogleChatRequest>,
 ) -> ActixResult<HttpResponse> {
     info!(
         "🤖 Processing actual Google API request: model={}",

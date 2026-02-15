@@ -3,7 +3,7 @@
 #[cfg(test)]
 use super::llm_client::LLMClient;
 use crate::sdk::config::{ConfigBuilder, ProviderType};
-use crate::sdk::types::{ChatOptions, ChatRequest};
+use crate::sdk::types::{ChatOptions, SdkChatRequest};
 use std::collections::HashMap;
 
 #[tokio::test]
@@ -48,7 +48,7 @@ async fn test_provider_selection() {
 
     let client = LLMClient::new(config).unwrap();
 
-    let request = ChatRequest {
+    let request = SdkChatRequest {
         model: "claude-3-sonnet-20240229".to_string(),
         messages: vec![],
         options: ChatOptions::default(),

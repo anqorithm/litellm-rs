@@ -3,7 +3,7 @@
 use super::llm_client::LLMClient;
 use super::types::{LoadBalancingStrategy, ProviderStats};
 use crate::sdk::errors::*;
-use crate::sdk::types::{ChatRequest, Message};
+use crate::sdk::types::{SdkChatRequest, Message};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -12,7 +12,7 @@ impl LLMClient {
     /// Select best provider for a request
     pub(crate) async fn select_provider(
         &self,
-        request: &ChatRequest,
+        request: &SdkChatRequest,
     ) -> Result<&crate::sdk::config::ProviderConfig> {
         // If model is specified, find provider that supports it
         if !request.model.is_empty() {
