@@ -192,7 +192,7 @@ impl MonitoringSystem {
     }
 
     /// Collect request metrics
-    pub(super) async fn collect_request_metrics(&self) -> Result<RequestMetrics> {
+    pub(super) async fn collect_request_metrics(&self) -> Result<MonitoringRequestMetrics> {
         self.metrics.get_request_metrics().await
     }
 

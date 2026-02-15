@@ -1,7 +1,7 @@
 //! Metrics collector for analytics
 
 use super::types::{
-    CostBreakdown, CostMetrics, ProviderMetrics, RequestMetrics, RequestSizeDistribution,
+    AnalyticsRequestMetrics, CostBreakdown, CostMetrics, ProviderMetrics, RequestSizeDistribution,
     TokenUsage, UsagePatterns, UserMetrics,
 };
 use crate::utils::error::gateway_error::Result;
@@ -11,7 +11,7 @@ use std::collections::HashMap;
 #[derive(Debug, Clone)]
 pub struct MetricsCollector {
     /// Request metrics
-    request_metrics: HashMap<String, RequestMetrics>,
+    request_metrics: HashMap<String, AnalyticsRequestMetrics>,
     /// Provider metrics
     provider_metrics: HashMap<String, ProviderMetrics>,
     /// User metrics
@@ -96,7 +96,7 @@ impl MetricsCollector {
     }
 
     /// Get request metrics
-    pub fn request_metrics(&self) -> &HashMap<String, RequestMetrics> {
+    pub fn request_metrics(&self) -> &HashMap<String, AnalyticsRequestMetrics> {
         &self.request_metrics
     }
 

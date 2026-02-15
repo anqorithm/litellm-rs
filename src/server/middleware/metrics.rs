@@ -36,7 +36,7 @@ pub struct MetricsMiddlewareService<S> {
 
 /// Request metrics data
 #[derive(Clone)]
-pub struct RequestMetrics {
+pub struct MiddlewareRequestMetrics {
     pub method: String,
     pub path: String,
     pub status_code: u16,

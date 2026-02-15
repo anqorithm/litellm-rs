@@ -5,7 +5,7 @@
 #[cfg(test)]
 use crate::server::HttpServer;
 use crate::server::builder::ServerBuilder;
-use crate::server::types::RequestMetrics;
+use crate::server::types::ServerRequestMetrics;
 
 #[test]
 fn test_server_builder() {
@@ -25,7 +25,7 @@ fn test_app_state_creation() {
 
 #[test]
 fn test_request_metrics_creation() {
-    let metrics = RequestMetrics {
+    let metrics = ServerRequestMetrics {
         request_id: "req-123".to_string(),
         method: "GET".to_string(),
         path: "/health".to_string(),

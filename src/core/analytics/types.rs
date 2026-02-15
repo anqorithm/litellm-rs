@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 /// Request metrics
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RequestMetrics {
+pub struct AnalyticsRequestMetrics {
     /// Total requests
     pub total_requests: u64,
     /// Successful requests
@@ -213,7 +213,7 @@ mod tests {
     #[test]
     fn test_request_metrics_creation() {
         let now = Utc::now();
-        let metrics = RequestMetrics {
+        let metrics = AnalyticsRequestMetrics {
             total_requests: 1000,
             successful_requests: 950,
             failed_requests: 50,
@@ -235,7 +235,7 @@ mod tests {
     #[test]
     fn test_request_metrics_serialization() {
         let now = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
-        let metrics = RequestMetrics {
+        let metrics = AnalyticsRequestMetrics {
             total_requests: 100,
             successful_requests: 95,
             failed_requests: 5,
@@ -249,7 +249,7 @@ mod tests {
         };
 
         let json = serde_json::to_string(&metrics).unwrap();
-        let parsed: RequestMetrics = serde_json::from_str(&json).unwrap();
+        let parsed: AnalyticsRequestMetrics = serde_json::from_str(&json).unwrap();
 
         assert_eq!(parsed.total_requests, metrics.total_requests);
         assert_eq!(parsed.successful_requests, metrics.successful_requests);
@@ -258,7 +258,7 @@ mod tests {
     #[test]
     fn test_request_metrics_success_rate_calculation() {
         let now = Utc::now();
-        let metrics = RequestMetrics {
+        let metrics = AnalyticsRequestMetrics {
             total_requests: 1000,
             successful_requests: 950,
             failed_requests: 50,
@@ -278,7 +278,7 @@ mod tests {
     #[test]
     fn test_request_metrics_clone() {
         let now = Utc::now();
-        let metrics = RequestMetrics {
+        let metrics = AnalyticsRequestMetrics {
             total_requests: 500,
             successful_requests: 480,
             failed_requests: 20,
@@ -991,7 +991,7 @@ mod tests {
         // Create a complete analytics snapshot
         let now = Utc::now();
 
-        let request_metrics = RequestMetrics {
+        let request_metrics = AnalyticsRequestMetrics {
             total_requests: 10000,
             successful_requests: 9900,
             failed_requests: 100,

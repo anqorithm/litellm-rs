@@ -21,7 +21,7 @@ pub struct ServerHealth {
 
 /// Request metrics for monitoring
 #[derive(Debug, Clone)]
-pub struct RequestMetrics {
+pub struct ServerRequestMetrics {
     /// Request ID
     pub request_id: String,
     /// HTTP method
@@ -210,7 +210,7 @@ mod tests {
 
     #[test]
     fn test_request_metrics_creation() {
-        let metrics = RequestMetrics {
+        let metrics = ServerRequestMetrics {
             request_id: "req-123".to_string(),
             method: "GET".to_string(),
             path: "/api/v1/users".to_string(),
@@ -231,7 +231,7 @@ mod tests {
 
     #[test]
     fn test_request_metrics_minimal() {
-        let metrics = RequestMetrics {
+        let metrics = ServerRequestMetrics {
             request_id: "req-456".to_string(),
             method: "POST".to_string(),
             path: "/".to_string(),
@@ -254,7 +254,7 @@ mod tests {
     #[test]
     fn test_request_metrics_clone() {
         let user_id = Uuid::new_v4();
-        let metrics = RequestMetrics {
+        let metrics = ServerRequestMetrics {
             request_id: "req-789".to_string(),
             method: "PUT".to_string(),
             path: "/api/resource".to_string(),
@@ -275,7 +275,7 @@ mod tests {
 
     #[test]
     fn test_request_metrics_debug() {
-        let metrics = RequestMetrics {
+        let metrics = ServerRequestMetrics {
             request_id: "req-abc".to_string(),
             method: "DELETE".to_string(),
             path: "/api/item/1".to_string(),
@@ -299,7 +299,7 @@ mod tests {
         let methods = vec!["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"];
 
         for method in methods {
-            let metrics = RequestMetrics {
+            let metrics = ServerRequestMetrics {
                 request_id: format!("req-{}", method.to_lowercase()),
                 method: method.to_string(),
                 path: "/test".to_string(),
@@ -319,7 +319,7 @@ mod tests {
 
     #[test]
     fn test_request_metrics_error_status() {
-        let metrics = RequestMetrics {
+        let metrics = ServerRequestMetrics {
             request_id: "req-error".to_string(),
             method: "GET".to_string(),
             path: "/api/not-found".to_string(),
@@ -338,7 +338,7 @@ mod tests {
 
     #[test]
     fn test_request_metrics_server_error() {
-        let metrics = RequestMetrics {
+        let metrics = ServerRequestMetrics {
             request_id: "req-server-error".to_string(),
             method: "POST".to_string(),
             path: "/api/process".to_string(),
@@ -357,7 +357,7 @@ mod tests {
 
     #[test]
     fn test_request_metrics_slow_request() {
-        let metrics = RequestMetrics {
+        let metrics = ServerRequestMetrics {
             request_id: "req-slow".to_string(),
             method: "GET".to_string(),
             path: "/api/heavy-computation".to_string(),
@@ -376,7 +376,7 @@ mod tests {
 
     #[test]
     fn test_request_metrics_large_payload() {
-        let metrics = RequestMetrics {
+        let metrics = ServerRequestMetrics {
             request_id: "req-large".to_string(),
             method: "POST".to_string(),
             path: "/api/upload".to_string(),
@@ -421,7 +421,7 @@ mod tests {
         let user_id = Uuid::new_v4();
         let api_key_id = Uuid::new_v4();
 
-        let metrics = RequestMetrics {
+        let metrics = ServerRequestMetrics {
             request_id: "req-auth".to_string(),
             method: "GET".to_string(),
             path: "/api/protected".to_string(),

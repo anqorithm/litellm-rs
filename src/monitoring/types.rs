@@ -6,7 +6,7 @@ pub struct SystemMetrics {
     /// Timestamp of the snapshot
     pub timestamp: chrono::DateTime<chrono::Utc>,
     /// Request metrics
-    pub requests: RequestMetrics,
+    pub requests: MonitoringRequestMetrics,
     /// Provider metrics
     pub providers: ProviderMetrics,
     /// System resource metrics
@@ -19,7 +19,7 @@ pub struct SystemMetrics {
 
 /// Request-related metrics
 #[derive(Debug, Clone, serde::Serialize)]
-pub struct RequestMetrics {
+pub struct MonitoringRequestMetrics {
     /// Total requests processed
     pub total_requests: u64,
     /// Requests per second (current)
@@ -177,7 +177,7 @@ mod tests {
 
     #[test]
     fn test_request_metrics_creation() {
-        let metrics = RequestMetrics {
+        let metrics = MonitoringRequestMetrics {
             total_requests: 1000,
             requests_per_second: 50.5,
             avg_response_time_ms: 120.0,
@@ -200,7 +200,7 @@ mod tests {
         status_codes.insert(400, 30u64);
         status_codes.insert(500, 20u64);
 
-        let metrics = RequestMetrics {
+        let metrics = MonitoringRequestMetrics {
             total_requests: 1000,
             requests_per_second: 10.0,
             avg_response_time_ms: 100.0,
@@ -217,7 +217,7 @@ mod tests {
 
     #[test]
     fn test_request_metrics_clone() {
-        let metrics = RequestMetrics {
+        let metrics = MonitoringRequestMetrics {
             total_requests: 500,
             requests_per_second: 25.0,
             avg_response_time_ms: 80.0,
@@ -235,7 +235,7 @@ mod tests {
 
     #[test]
     fn test_request_metrics_serialization() {
-        let metrics = RequestMetrics {
+        let metrics = MonitoringRequestMetrics {
             total_requests: 100,
             requests_per_second: 5.0,
             avg_response_time_ms: 50.0,
@@ -671,7 +671,7 @@ mod tests {
     fn test_system_metrics_creation() {
         let metrics = SystemMetrics {
             timestamp: Utc::now(),
-            requests: RequestMetrics {
+            requests: MonitoringRequestMetrics {
                 total_requests: 1000,
                 requests_per_second: 10.0,
                 avg_response_time_ms: 50.0,
@@ -735,7 +735,7 @@ mod tests {
     fn test_system_metrics_clone() {
         let metrics = SystemMetrics {
             timestamp: Utc::now(),
-            requests: RequestMetrics {
+            requests: MonitoringRequestMetrics {
                 total_requests: 500,
                 requests_per_second: 5.0,
                 avg_response_time_ms: 30.0,
@@ -802,7 +802,7 @@ mod tests {
     fn test_system_metrics_serialization() {
         let metrics = SystemMetrics {
             timestamp: Utc::now(),
-            requests: RequestMetrics {
+            requests: MonitoringRequestMetrics {
                 total_requests: 100,
                 requests_per_second: 1.0,
                 avg_response_time_ms: 10.0,

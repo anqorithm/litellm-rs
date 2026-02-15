@@ -117,7 +117,7 @@ fn test_alert_severity_clone() {
 fn test_system_metrics_structure() {
     let metrics = SystemMetrics {
         timestamp: chrono::Utc::now(),
-        requests: RequestMetrics {
+        requests: MonitoringRequestMetrics {
             total_requests: 1000,
             requests_per_second: 10.5,
             avg_response_time_ms: 150.0,
@@ -190,7 +190,7 @@ fn test_request_metrics() {
     endpoints.insert("/v1/chat/completions".to_string(), 800_u64);
     endpoints.insert("/v1/embeddings".to_string(), 200_u64);
 
-    let metrics = RequestMetrics {
+    let metrics = MonitoringRequestMetrics {
         total_requests: 1000,
         requests_per_second: 10.0,
         avg_response_time_ms: 100.0,
@@ -208,7 +208,7 @@ fn test_request_metrics() {
 
 #[test]
 fn test_request_metrics_empty() {
-    let metrics = RequestMetrics {
+    let metrics = MonitoringRequestMetrics {
         total_requests: 0,
         requests_per_second: 0.0,
         avg_response_time_ms: 0.0,
@@ -443,7 +443,7 @@ fn test_alert_serialization() {
 
 #[test]
 fn test_request_metrics_serialization() {
-    let metrics = RequestMetrics {
+    let metrics = MonitoringRequestMetrics {
         total_requests: 100,
         requests_per_second: 5.0,
         avg_response_time_ms: 50.0,
@@ -500,7 +500,7 @@ fn test_alert_clone() {
 fn test_system_metrics_clone() {
     let metrics = SystemMetrics {
         timestamp: chrono::Utc::now(),
-        requests: RequestMetrics {
+        requests: MonitoringRequestMetrics {
             total_requests: 100,
             requests_per_second: 5.0,
             avg_response_time_ms: 50.0,

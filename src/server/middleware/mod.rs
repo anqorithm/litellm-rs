@@ -25,7 +25,7 @@ mod tests;
 pub use auth::{AuthMiddleware, AuthMiddlewareService, get_request_context};
 pub use auth_rate_limiter::{AuthRateLimiter, get_auth_rate_limiter};
 pub use helpers::{extract_auth_method, is_admin_route, is_api_route, is_public_route};
-pub use metrics::{MetricsMiddleware, MetricsMiddlewareService, RequestMetrics};
+pub use metrics::{MetricsMiddleware, MetricsMiddlewareService, MiddlewareRequestMetrics};
 pub use rate_limit::{RateLimitMiddleware, RateLimitMiddlewareService};
 pub use request_id::{RequestIdMiddleware, RequestIdMiddlewareService};
 pub use security::{

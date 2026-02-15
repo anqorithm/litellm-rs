@@ -24,7 +24,7 @@ pub use reports::{
     ReportSectionData, ReportSectionType, ReportSummary, ReportTemplate,
 };
 pub use types::{
-    BudgetUtilization, CostBreakdown, CostMetrics, CostTrend, DailyCost, ModelUsage,
-    ProviderMetrics, RequestMetrics, RequestSizeDistribution, SeasonalTrend, TokenUsage,
-    UsagePatterns, UserMetrics,
+    AnalyticsRequestMetrics, BudgetUtilization, CostBreakdown, CostMetrics, CostTrend, DailyCost,
+    ModelUsage, ProviderMetrics, RequestSizeDistribution, SeasonalTrend, TokenUsage, UsagePatterns,
+    UserMetrics,
 };

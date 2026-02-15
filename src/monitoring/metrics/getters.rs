@@ -5,8 +5,8 @@ use super::helpers::{
     calculate_average, calculate_average_u32, calculate_average_u64, calculate_percentile,
 };
 use crate::monitoring::types::{
-    ErrorMetrics, LatencyPercentiles, PerformanceMetrics, ProviderMetrics, RequestMetrics,
-    SystemResourceMetrics,
+    ErrorMetrics, LatencyPercentiles, MonitoringRequestMetrics, PerformanceMetrics,
+    ProviderMetrics, SystemResourceMetrics,
 };
 use crate::utils::error::gateway_error::Result;
 use std::collections::HashMap;
@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 
 impl MetricsCollector {
     /// Get request metrics
-    pub async fn get_request_metrics(&self) -> Result<RequestMetrics> {
+    pub async fn get_request_metrics(&self) -> Result<MonitoringRequestMetrics> {
         let storage = self.storage.read();
         let metrics = &storage.request;
         let now = Instant::now();
@@ -61,7 +61,7 @@ impl MetricsCollector {
             100.0
         };
 
-        Ok(RequestMetrics {
+        Ok(MonitoringRequestMetrics {
             total_requests,
             requests_per_second,
             avg_response_time_ms: avg_response_time,
