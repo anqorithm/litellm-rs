@@ -15,7 +15,7 @@ pub mod types;
 
 // Re-exports for convenience
 pub use client::{LLMClient, LoadBalancer, LoadBalancingStrategy, ProviderStats};
-pub use config::{ClientConfig, ConfigBuilder};
+pub use config::{ClientConfig, ConfigBuilder, SdkConfigBuilder};
 pub use errors::{Result, SDKError};
 
 /// SDK version

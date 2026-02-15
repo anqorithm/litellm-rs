@@ -1,6 +1,6 @@
 //! Main configuration builder implementation
 
-use super::types::ConfigBuilder;
+use super::types::GatewayConfigBuilder;
 use crate::config::{
     AuthConfig, Config, GatewayConfig, ProviderConfig, ServerConfig, StorageConfig,
 };
@@ -8,7 +8,7 @@ use crate::utils::data::type_utils::Builder;
 use crate::utils::error::gateway_error::{GatewayError, Result};
 use std::collections::HashMap;
 
-impl ConfigBuilder {
+impl GatewayConfigBuilder {
     /// Create a new configuration builder
     pub fn new() -> Self {
         Self {
@@ -109,17 +109,17 @@ impl ConfigBuilder {
     }
 }
 
-impl Default for ConfigBuilder {
+impl Default for GatewayConfigBuilder {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Builder<Config> for ConfigBuilder {
+impl Builder<Config> for GatewayConfigBuilder {
     /// Build the configuration, returning defaults on validation failure
     ///
     /// Note: This trait requires a non-fallible return type.
-    /// For fallible construction, use `ConfigBuilder::build()` directly.
+    /// For fallible construction, use `GatewayConfigBuilder::build()` directly.
     fn build(self) -> Config {
         self.build_or_default()
     }

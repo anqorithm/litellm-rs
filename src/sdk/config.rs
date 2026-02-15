@@ -129,11 +129,11 @@ impl From<&str> for ProviderType {
 }
 
 /// Configuration
-pub struct ConfigBuilder {
+pub struct SdkConfigBuilder {
     config: ClientConfig,
 }
 
-impl ConfigBuilder {
+impl SdkConfigBuilder {
     /// Create a new configuration builder
     pub fn new() -> Self {
         Self {
@@ -213,17 +213,20 @@ impl ConfigBuilder {
     }
 }
 
-impl Default for ConfigBuilder {
+impl Default for SdkConfigBuilder {
     fn default() -> Self {
         Self::new()
     }
 }
 
+/// Backward-compatible alias.
+pub type ConfigBuilder = SdkConfigBuilder;
+
 /// Configuration
 impl ClientConfig {
     /// Configuration
     pub fn from_env() -> crate::sdk::errors::Result<Self> {
-        let mut builder = ConfigBuilder::new();
+        let mut builder = SdkConfigBuilder::new();
 
         // Configuration
         if let Ok(api_key) = std::env::var("OPENAI_API_KEY") {

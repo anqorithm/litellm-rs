@@ -6,7 +6,7 @@ use std::time::Duration;
 
 /// Builder for creating gateway configurations
 #[derive(Debug, Clone)]
-pub struct ConfigBuilder {
+pub struct GatewayConfigBuilder {
     pub(super) server: Option<super::super::ServerConfig>,
     pub(super) auth: Option<super::super::AuthConfig>,
     pub(super) storage: Option<super::super::StorageConfig>,
@@ -39,3 +39,6 @@ pub struct ProviderConfigBuilder {
     pub(super) enabled: bool,
     pub(super) weight: Option<PositiveF64>,
 }
+
+/// Backward-compatible alias.
+pub type ConfigBuilder = GatewayConfigBuilder;

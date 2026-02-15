@@ -1,13 +1,13 @@
 //! Tests for configuration builders
 
+use super::presets;
+use super::types::{GatewayConfigBuilder, ProviderConfigBuilder};
 #[cfg(test)]
 use crate::config::models::auth::{AuthConfig, RbacConfig};
-use super::presets;
-use super::types::{ConfigBuilder, ProviderConfigBuilder};
 
 #[test]
 fn test_config_builder() {
-    let config = ConfigBuilder::new()
+    let config = GatewayConfigBuilder::new()
         .with_server(presets::dev_server().build())
         .with_auth(AuthConfig {
             enable_jwt: true,
