@@ -3,9 +3,13 @@
 use super::*;
 use serde::{Deserialize, Serialize};
 
-/// Router configuration
+/// Gateway router configuration (YAML config model)
+///
+/// This is the YAML-deserialized router config for the gateway config file.
+/// For the runtime router config used by the actual router, see
+/// [`crate::core::router::config::RouterConfig`].
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct RouterConfig {
+pub struct GatewayRouterConfig {
     /// Routing strategy
     #[serde(default)]
     pub strategy: RoutingStrategyConfig,
@@ -17,7 +21,7 @@ pub struct RouterConfig {
     pub load_balancer: LoadBalancerConfig,
 }
 
-impl RouterConfig {
+impl GatewayRouterConfig {
     /// Merge router configurations
     pub fn merge(mut self, other: Self) -> Self {
         self.strategy = other.strategy;
@@ -393,17 +397,17 @@ mod tests {
         assert_eq!(config.health_check_enabled, cloned.health_check_enabled);
     }
 
-    // ==================== RouterConfig Tests ====================
+    // ==================== GatewayRouterConfig Tests ====================
 
     #[test]
     fn test_router_config_default() {
-        let config = RouterConfig::default();
+        let config = GatewayRouterConfig::default();
         matches!(config.strategy, RoutingStrategyConfig::RoundRobin);
     }
 
     #[test]
     fn test_router_config_structure() {
-        let config = RouterConfig {
+        let config = GatewayRouterConfig {
             strategy: RoutingStrategyConfig::LeastLatency,
             circuit_breaker: CircuitBreakerConfig::default(),
             load_balancer: LoadBalancerConfig::default(),
@@ -413,7 +417,7 @@ mod tests {
 
     #[test]
     fn test_router_config_serialization() {
-        let config = RouterConfig {
+        let config = GatewayRouterConfig {
             strategy: RoutingStrategyConfig::LeastCost,
             circuit_breaker: CircuitBreakerConfig::default(),
             load_balancer: LoadBalancerConfig::default(),
@@ -429,14 +433,14 @@ mod tests {
             "circuit_breaker": {"failure_threshold": 5, "recovery_timeout": 120, "min_requests": 10, "success_threshold": 3},
             "load_balancer": {"health_check_enabled": true, "sticky_sessions": false, "session_timeout": 3600}
         }"#;
-        let config: RouterConfig = serde_json::from_str(json).unwrap();
+        let config: GatewayRouterConfig = serde_json::from_str(json).unwrap();
         matches!(config.strategy, RoutingStrategyConfig::Random);
     }
 
     #[test]
     fn test_router_config_merge() {
-        let base = RouterConfig::default();
-        let other = RouterConfig {
+        let base = GatewayRouterConfig::default();
+        let other = GatewayRouterConfig {
             strategy: RoutingStrategyConfig::LeastLatency,
             circuit_breaker: CircuitBreakerConfig::default(),
             load_balancer: LoadBalancerConfig::default(),
@@ -447,7 +451,7 @@ mod tests {
 
     #[test]
     fn test_router_config_clone() {
-        let config = RouterConfig::default();
+        let config = GatewayRouterConfig::default();
         let cloned = config.clone();
         matches!(cloned.strategy, RoutingStrategyConfig::RoundRobin);
     }

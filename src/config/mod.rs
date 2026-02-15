@@ -13,7 +13,7 @@ use crate::config::models::auth::AuthConfig;
 use crate::config::models::gateway::GatewayConfig;
 use crate::config::models::monitoring::MonitoringConfig;
 use crate::config::models::provider::ProviderConfig;
-use crate::config::models::router::RouterConfig;
+use crate::config::models::router::GatewayRouterConfig;
 use crate::config::models::server::ServerConfig;
 use crate::config::models::storage::StorageConfig;
 use crate::utils::error::gateway_error::{GatewayError, Result};
@@ -76,7 +76,7 @@ impl Config {
     }
 
     /// Get router settings
-    pub fn router(&self) -> &RouterConfig {
+    pub fn router(&self) -> &GatewayRouterConfig {
         &self.gateway.router
     }
 

@@ -69,7 +69,7 @@ impl ConfigBuilder {
             auth: self.auth.unwrap_or_default(),
             storage: self.storage.unwrap_or_default(),
             providers: self.providers,
-            router: crate::config::models::router::RouterConfig::default(),
+            router: crate::config::models::router::GatewayRouterConfig::default(),
             monitoring: crate::config::models::monitoring::MonitoringConfig::default(),
             cache: crate::config::models::cache::CacheConfig::default(),
             rate_limit: crate::core::types::config::rate_limit::RateLimitConfig::default(),

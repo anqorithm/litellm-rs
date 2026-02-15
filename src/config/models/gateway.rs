@@ -7,10 +7,10 @@ use super::cache::CacheConfig;
 use super::enterprise::EnterpriseConfig;
 use super::monitoring::MonitoringConfig;
 use super::provider::ProviderConfig;
-use crate::core::types::config::rate_limit::RateLimitConfig;
-use super::router::RouterConfig;
+use super::router::GatewayRouterConfig;
 use super::server::ServerConfig;
 use super::storage::StorageConfig;
+use crate::core::types::config::rate_limit::RateLimitConfig;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::env;
@@ -69,10 +69,9 @@ fn parse_env_bool(key: &str) -> crate::utils::error::gateway_error::Result<Optio
         "true" | "1" | "yes" | "on" => true,
         "false" | "0" | "no" | "off" => false,
         _ => {
-            return Err(crate::utils::error::gateway_error::GatewayError::Config(format!(
-                "Invalid boolean value for {}: {}",
-                key, raw
-            )));
+            return Err(crate::utils::error::gateway_error::GatewayError::Config(
+                format!("Invalid boolean value for {}: {}", key, raw),
+            ));
         }
     };
     Ok(Some(value))
@@ -127,10 +126,9 @@ fn load_providers_from_env() -> crate::utils::error::gateway_error::Result<Vec<P
     })?;
 
     if provider_names.is_empty() {
-        return Err(crate::utils::error::gateway_error::GatewayError::Config(format!(
-            "{} must contain at least one provider name",
-            ENV_PROVIDERS
-        )));
+        return Err(crate::utils::error::gateway_error::GatewayError::Config(
+            format!("{} must contain at least one provider name", ENV_PROVIDERS),
+        ));
     }
 
     let mut providers = Vec::with_capacity(provider_names.len());
@@ -204,7 +202,7 @@ pub struct GatewayConfig {
     /// Provider configurations
     pub providers: Vec<ProviderConfig>,
     /// Router configuration
-    pub router: RouterConfig,
+    pub router: GatewayRouterConfig,
     /// Storage configuration
     pub storage: StorageConfig,
     /// Authentication configuration
@@ -280,10 +278,12 @@ impl GatewayConfig {
         if let Some(jwt_secret) = env_var(ENV_JWT_SECRET) {
             config.auth.jwt_secret = jwt_secret;
         } else if config.auth.enable_jwt {
-            return Err(crate::utils::error::gateway_error::GatewayError::Config(format!(
-                "{} is required when {} is enabled",
-                ENV_JWT_SECRET, ENV_ENABLE_JWT
-            )));
+            return Err(crate::utils::error::gateway_error::GatewayError::Config(
+                format!(
+                    "{} is required when {} is enabled",
+                    ENV_JWT_SECRET, ENV_ENABLE_JWT
+                ),
+            ));
         }
         if let Some(jwt_expiration) = parse_env::<u64>(ENV_JWT_EXPIRATION)? {
             config.auth.jwt_expiration = jwt_expiration;

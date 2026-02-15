@@ -4,10 +4,12 @@
 //! structures including RouterConfig, CircuitBreakerConfig, and RetryConfig.
 
 use super::trait_def::Validate;
-use crate::config::models::router::{CircuitBreakerConfig, LoadBalancerConfig, RouterConfig};
+use crate::config::models::router::{
+    CircuitBreakerConfig, GatewayRouterConfig, LoadBalancerConfig,
+};
 use tracing::debug;
 
-impl Validate for RouterConfig {
+impl Validate for GatewayRouterConfig {
     fn validate(&self) -> Result<(), String> {
         debug!("Validating router configuration");
 
@@ -247,13 +249,13 @@ mod tests {
 
     #[test]
     fn test_router_config_valid() {
-        let config = RouterConfig::default();
+        let config = GatewayRouterConfig::default();
         assert!(validate_config(&config).is_ok());
     }
 
     #[test]
     fn test_router_config_with_invalid_circuit_breaker() {
-        let mut config = RouterConfig::default();
+        let mut config = GatewayRouterConfig::default();
         config.circuit_breaker.failure_threshold = 0;
 
         let result = validate_config(&config);
