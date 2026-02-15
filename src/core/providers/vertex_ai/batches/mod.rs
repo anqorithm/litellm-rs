@@ -98,12 +98,12 @@ pub struct GenerationConfig {
 pub struct BatchError {
     pub code: i32,
     pub message: String,
-    pub details: Option<Vec<ErrorDetail>>,
+    pub details: Option<Vec<BatchErrorDetail>>,
 }
 
-/// Error detail
+/// Batch error detail
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ErrorDetail {
+pub struct BatchErrorDetail {
     pub error_type: String,
     pub error_message: String,
 }

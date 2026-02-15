@@ -347,7 +347,7 @@ pub struct ResponseConfig {
 pub enum ServerEvent {
     Error {
         event_id: String,
-        error: ErrorDetail,
+        error: RealtimeErrorDetail,
     },
     SessionCreated {
         event_id: String,
@@ -394,7 +394,7 @@ pub enum ServerEvent {
         event_id: String,
         item_id: String,
         content_index: u32,
-        error: ErrorDetail,
+        error: RealtimeErrorDetail,
     },
     ConversationItemTruncated {
         event_id: String,
@@ -511,9 +511,9 @@ pub enum ServerEvent {
     },
 }
 
-/// Error detail
+/// Realtime API error detail
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ErrorDetail {
+pub struct RealtimeErrorDetail {
     #[serde(rename = "type")]
     pub error_type: String,
     pub code: Option<String>,
