@@ -12,5 +12,5 @@ mod tests;
 mod types;
 
 // Re-export all public types for backward compatibility
-pub use response::{ErrorDetail, ErrorResponse};
+pub use response::{GatewayErrorDetail, GatewayErrorResponse};
 pub use types::{GatewayError, Result};

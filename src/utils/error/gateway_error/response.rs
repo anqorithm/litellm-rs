@@ -166,8 +166,8 @@ impl ResponseError for GatewayError {
             ),
         };
 
-        let error_response = ErrorResponse {
-            error: ErrorDetail {
+        let error_response = GatewayErrorResponse {
+            error: GatewayErrorDetail {
                 code: error_code.to_string(),
                 message,
                 timestamp: chrono::Utc::now().timestamp(),
@@ -179,15 +179,15 @@ impl ResponseError for GatewayError {
     }
 }
 
-/// Standard error response format
+/// Standard gateway error response format
 #[derive(serde::Serialize)]
-pub struct ErrorResponse {
-    pub error: ErrorDetail,
+pub struct GatewayErrorResponse {
+    pub error: GatewayErrorDetail,
 }
 
-/// Error detail structure
+/// Gateway error detail structure
 #[derive(serde::Serialize)]
-pub struct ErrorDetail {
+pub struct GatewayErrorDetail {
     pub code: String,
     pub message: String,
     pub timestamp: i64,
@@ -203,7 +203,7 @@ mod tests {
 
     #[test]
     fn test_error_detail_creation() {
-        let detail = ErrorDetail {
+        let detail = GatewayErrorDetail {
             code: "AUTH_ERROR".to_string(),
             message: "Authentication failed".to_string(),
             timestamp: 1704067200,
@@ -218,7 +218,7 @@ mod tests {
 
     #[test]
     fn test_error_detail_without_request_id() {
-        let detail = ErrorDetail {
+        let detail = GatewayErrorDetail {
             code: "VALIDATION_ERROR".to_string(),
             message: "Invalid input".to_string(),
             timestamp: chrono::Utc::now().timestamp(),
@@ -231,7 +231,7 @@ mod tests {
 
     #[test]
     fn test_error_detail_serialization() {
-        let detail = ErrorDetail {
+        let detail = GatewayErrorDetail {
             code: "NOT_FOUND".to_string(),
             message: "Resource not found".to_string(),
             timestamp: 1704067200,
@@ -247,7 +247,7 @@ mod tests {
 
     #[test]
     fn test_error_detail_serialization_null_request_id() {
-        let detail = ErrorDetail {
+        let detail = GatewayErrorDetail {
             code: "ERROR".to_string(),
             message: "Some error".to_string(),
             timestamp: 1704067200,
@@ -262,8 +262,8 @@ mod tests {
 
     #[test]
     fn test_error_response_creation() {
-        let response = ErrorResponse {
-            error: ErrorDetail {
+        let response = GatewayErrorResponse {
+            error: GatewayErrorDetail {
                 code: "INTERNAL_ERROR".to_string(),
                 message: "An internal error occurred".to_string(),
                 timestamp: 1704067200,
@@ -276,8 +276,8 @@ mod tests {
 
     #[test]
     fn test_error_response_serialization() {
-        let response = ErrorResponse {
-            error: ErrorDetail {
+        let response = GatewayErrorResponse {
+            error: GatewayErrorDetail {
                 code: "BAD_REQUEST".to_string(),
                 message: "Invalid parameters".to_string(),
                 timestamp: 1704067200,
@@ -293,8 +293,8 @@ mod tests {
 
     #[test]
     fn test_error_response_json_string() {
-        let response = ErrorResponse {
-            error: ErrorDetail {
+        let response = GatewayErrorResponse {
+            error: GatewayErrorDetail {
                 code: "RATE_LIMIT".to_string(),
                 message: "Too many requests".to_string(),
                 timestamp: 1704067200,
@@ -565,7 +565,7 @@ mod tests {
     #[test]
     fn test_error_detail_timestamp_is_current() {
         let before = chrono::Utc::now().timestamp();
-        let detail = ErrorDetail {
+        let detail = GatewayErrorDetail {
             code: "TEST".to_string(),
             message: "Test".to_string(),
             timestamp: chrono::Utc::now().timestamp(),

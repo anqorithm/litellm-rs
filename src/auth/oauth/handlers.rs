@@ -93,9 +93,9 @@ pub struct AuthResponse {
     pub user: UserInfo,
 }
 
-/// Error response
+/// OAuth error response (follows OAuth 2.0 spec format)
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ErrorResponse {
+pub struct OAuthErrorResponse {
     /// Error code
     pub error: String,
 
@@ -103,7 +103,7 @@ pub struct ErrorResponse {
     pub error_description: String,
 }
 
-impl ErrorResponse {
+impl OAuthErrorResponse {
     pub fn new(error: impl Into<String>, description: impl Into<String>) -> Self {
         Self {
             error: error.into(),
@@ -157,7 +157,7 @@ pub async fn oauth_login(
         Some(c) => c,
         None => {
             warn!("Unknown OAuth provider: {}", provider);
-            return Ok(HttpResponse::NotFound().json(ErrorResponse::new(
+            return Ok(HttpResponse::NotFound().json(OAuthErrorResponse::new(
                 "provider_not_found",
                 format!("OAuth provider '{}' is not configured", provider),
             )));
@@ -209,7 +209,7 @@ pub async fn oauth_login(
     // Store state for CSRF validation
     if let Err(e) = oauth.session_store.set_state(state.clone()).await {
         error!("Failed to store OAuth state: {:?}", e);
-        return Ok(HttpResponse::InternalServerError().json(ErrorResponse::new(
+        return Ok(HttpResponse::InternalServerError().json(OAuthErrorResponse::new(
             "state_storage_error",
             "Failed to initialize OAuth flow",
         )));
@@ -244,7 +244,7 @@ pub async fn oauth_callback(
                 .as_deref()
                 .unwrap_or("No description")
         );
-        return Ok(HttpResponse::BadRequest().json(ErrorResponse::new(
+        return Ok(HttpResponse::BadRequest().json(OAuthErrorResponse::new(
             error.clone(),
             query.error_description.clone().unwrap_or_default(),
         )));
@@ -254,7 +254,7 @@ pub async fn oauth_callback(
     let state_id = match &query.state {
         Some(s) => s,
         None => {
-            return Ok(HttpResponse::BadRequest().json(ErrorResponse::new(
+            return Ok(HttpResponse::BadRequest().json(OAuthErrorResponse::new(
                 "missing_state",
                 "State parameter is required",
             )));
@@ -266,14 +266,14 @@ pub async fn oauth_callback(
         Ok(Some(s)) => s,
         Ok(None) => {
             warn!("OAuth state not found or expired: {}", state_id);
-            return Ok(HttpResponse::BadRequest().json(ErrorResponse::new(
+            return Ok(HttpResponse::BadRequest().json(OAuthErrorResponse::new(
                 "invalid_state",
                 "OAuth state is invalid or has expired",
             )));
         }
         Err(e) => {
             error!("Failed to retrieve OAuth state: {:?}", e);
-            return Ok(HttpResponse::InternalServerError().json(ErrorResponse::new(
+            return Ok(HttpResponse::InternalServerError().json(OAuthErrorResponse::new(
                 "state_retrieval_error",
                 "Failed to validate OAuth state",
             )));
@@ -284,7 +284,7 @@ pub async fn oauth_callback(
     let client = match oauth.get_client(&provider) {
         Some(c) => c,
         None => {
-            return Ok(HttpResponse::NotFound().json(ErrorResponse::new(
+            return Ok(HttpResponse::NotFound().json(OAuthErrorResponse::new(
                 "provider_not_found",
                 format!("OAuth provider '{}' is not configured", provider),
             )));
@@ -295,7 +295,7 @@ pub async fn oauth_callback(
     if let Err(e) = client.validate_callback(&query, &stored_state) {
         warn!("OAuth callback validation failed: {}", e);
         return Ok(
-            HttpResponse::BadRequest().json(ErrorResponse::new("validation_error", e.to_string()))
+            HttpResponse::BadRequest().json(OAuthErrorResponse::new("validation_error", e.to_string()))
         );
     }
 
@@ -303,7 +303,7 @@ pub async fn oauth_callback(
     let code = match query.code.as_ref() {
         Some(code) => code,
         None => {
-            return Ok(HttpResponse::BadRequest().json(ErrorResponse::new(
+            return Ok(HttpResponse::BadRequest().json(OAuthErrorResponse::new(
                 "missing_code",
                 "Authorization code is required",
             )));
@@ -313,7 +313,7 @@ pub async fn oauth_callback(
         Ok(t) => t,
         Err(e) => {
             error!("Token exchange failed: {}", e);
-            return Ok(HttpResponse::InternalServerError().json(ErrorResponse::new(
+            return Ok(HttpResponse::InternalServerError().json(OAuthErrorResponse::new(
                 "token_exchange_error",
                 "Failed to exchange authorization code for tokens",
             )));
@@ -325,7 +325,7 @@ pub async fn oauth_callback(
         Ok(u) => u,
         Err(e) => {
             error!("Failed to get user info: {}", e);
-            return Ok(HttpResponse::InternalServerError().json(ErrorResponse::new(
+            return Ok(HttpResponse::InternalServerError().json(OAuthErrorResponse::new(
                 "userinfo_error",
                 "Failed to retrieve user information",
             )));
@@ -369,7 +369,7 @@ pub async fn oauth_callback(
     // Store session
     if let Err(e) = oauth.session_store.set(session).await {
         error!("Failed to store session: {:?}", e);
-        return Ok(HttpResponse::InternalServerError().json(ErrorResponse::new(
+        return Ok(HttpResponse::InternalServerError().json(OAuthErrorResponse::new(
             "session_storage_error",
             "Failed to create session",
         )));
@@ -434,7 +434,7 @@ pub async fn oauth_refresh(
         }
     }
 
-    Ok(HttpResponse::Unauthorized().json(ErrorResponse::new(
+    Ok(HttpResponse::Unauthorized().json(OAuthErrorResponse::new(
         "refresh_failed",
         "Failed to refresh token with any provider",
     )))
@@ -510,7 +510,7 @@ pub async fn oauth_userinfo(
     let session_id = match session_id {
         Some(sid) => sid,
         None => {
-            return Ok(HttpResponse::Unauthorized().json(ErrorResponse::new(
+            return Ok(HttpResponse::Unauthorized().json(OAuthErrorResponse::new(
                 "missing_session",
                 "Session ID is required",
             )));
@@ -521,14 +521,14 @@ pub async fn oauth_userinfo(
     let session = match oauth.session_store.get(session_id).await {
         Ok(Some(s)) => s,
         Ok(None) => {
-            return Ok(HttpResponse::Unauthorized().json(ErrorResponse::new(
+            return Ok(HttpResponse::Unauthorized().json(OAuthErrorResponse::new(
                 "invalid_session",
                 "Session not found or expired",
             )));
         }
         Err(e) => {
             error!("Failed to retrieve session: {:?}", e);
-            return Ok(HttpResponse::InternalServerError().json(ErrorResponse::new(
+            return Ok(HttpResponse::InternalServerError().json(OAuthErrorResponse::new(
                 "session_error",
                 "Failed to retrieve session",
             )));
@@ -597,7 +597,7 @@ mod tests {
 
     #[test]
     fn test_error_response() {
-        let error = ErrorResponse::new("invalid_grant", "The authorization code has expired");
+        let error = OAuthErrorResponse::new("invalid_grant", "The authorization code has expired");
         assert_eq!(error.error, "invalid_grant");
         assert!(error.error_description.contains("expired"));
     }
