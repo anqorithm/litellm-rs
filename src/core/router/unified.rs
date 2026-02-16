@@ -142,17 +142,22 @@ impl Router {
 
     /// Get healthy deployment IDs for a given model
     pub fn get_healthy_deployments(&self, model_name: &str) -> Vec<DeploymentId> {
-        let deployment_ids = self.get_deployments_for_model(model_name);
+        let resolved_name = self.resolve_model_name(model_name);
+
+        let Some(deployment_ids) = self.model_index.get(&resolved_name) else {
+            return Vec::new();
+        };
 
         deployment_ids
-            .into_iter()
+            .iter()
             .filter(|id| {
-                if let Some(deployment) = self.deployments.get(id) {
+                if let Some(deployment) = self.deployments.get(id.as_str()) {
                     deployment.is_healthy() && !deployment.is_in_cooldown()
                 } else {
                     false
                 }
             })
+            .cloned()
             .collect()
     }
 

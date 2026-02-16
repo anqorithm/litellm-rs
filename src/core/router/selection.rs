@@ -47,19 +47,18 @@ impl Router {
         // 1. Resolve model name (handle aliases)
         let resolved_name = self.resolve_model_name(model_name);
 
-        // 2. Get all deployment IDs for this model
-        let deployment_ids = self
+        // 2. Get all deployment IDs for this model (hold DashMap guard, avoid Vec clone)
+        let deployment_ids_ref = self
             .model_index
             .get(&resolved_name)
-            .ok_or_else(|| RouterError::ModelNotFound(model_name.to_string()))?
-            .clone();
+            .ok_or_else(|| RouterError::ModelNotFound(model_name.to_string()))?;
 
-        if deployment_ids.is_empty() {
+        if deployment_ids_ref.is_empty() {
             return Err(RouterError::ModelNotFound(model_name.to_string()));
         }
 
         // 3. Filter: healthy + not in cooldown + not rate limited
-        let candidate_ids: Vec<DeploymentId> = deployment_ids
+        let candidate_ids: Vec<DeploymentId> = deployment_ids_ref
             .iter()
             .filter(|id| {
                 if let Some(deployment) = self.deployments.get(id.as_str()) {
@@ -82,6 +81,9 @@ impl Router {
             })
             .cloned()
             .collect();
+
+        // Drop the model_index read guard before strategy selection
+        drop(deployment_ids_ref);
 
         if candidate_ids.is_empty() {
             return Err(RouterError::NoAvailableDeployment(model_name.to_string()));
