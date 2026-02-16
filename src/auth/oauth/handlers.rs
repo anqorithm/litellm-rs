@@ -60,9 +60,9 @@ impl OAuthState {
     }
 }
 
-/// Response for login initiation
+/// Response for OAuth login initiation (authorization URL + CSRF state)
 #[derive(Debug, Serialize, Deserialize)]
-pub struct LoginResponse {
+pub struct OAuthLoginResponse {
     /// Authorization URL to redirect the user to
     pub authorization_url: String,
 
@@ -209,10 +209,12 @@ pub async fn oauth_login(
     // Store state for CSRF validation
     if let Err(e) = oauth.session_store.set_state(state.clone()).await {
         error!("Failed to store OAuth state: {:?}", e);
-        return Ok(HttpResponse::InternalServerError().json(OAuthErrorResponse::new(
-            "state_storage_error",
-            "Failed to initialize OAuth flow",
-        )));
+        return Ok(
+            HttpResponse::InternalServerError().json(OAuthErrorResponse::new(
+                "state_storage_error",
+                "Failed to initialize OAuth flow",
+            )),
+        );
     }
 
     debug!("Redirecting to OAuth provider: {}", auth_url);
@@ -273,10 +275,12 @@ pub async fn oauth_callback(
         }
         Err(e) => {
             error!("Failed to retrieve OAuth state: {:?}", e);
-            return Ok(HttpResponse::InternalServerError().json(OAuthErrorResponse::new(
-                "state_retrieval_error",
-                "Failed to validate OAuth state",
-            )));
+            return Ok(
+                HttpResponse::InternalServerError().json(OAuthErrorResponse::new(
+                    "state_retrieval_error",
+                    "Failed to validate OAuth state",
+                )),
+            );
         }
     };
 
@@ -294,9 +298,8 @@ pub async fn oauth_callback(
     // Validate callback parameters
     if let Err(e) = client.validate_callback(&query, &stored_state) {
         warn!("OAuth callback validation failed: {}", e);
-        return Ok(
-            HttpResponse::BadRequest().json(OAuthErrorResponse::new("validation_error", e.to_string()))
-        );
+        return Ok(HttpResponse::BadRequest()
+            .json(OAuthErrorResponse::new("validation_error", e.to_string())));
     }
 
     // Exchange code for tokens
@@ -313,10 +316,12 @@ pub async fn oauth_callback(
         Ok(t) => t,
         Err(e) => {
             error!("Token exchange failed: {}", e);
-            return Ok(HttpResponse::InternalServerError().json(OAuthErrorResponse::new(
-                "token_exchange_error",
-                "Failed to exchange authorization code for tokens",
-            )));
+            return Ok(
+                HttpResponse::InternalServerError().json(OAuthErrorResponse::new(
+                    "token_exchange_error",
+                    "Failed to exchange authorization code for tokens",
+                )),
+            );
         }
     };
 
@@ -325,10 +330,12 @@ pub async fn oauth_callback(
         Ok(u) => u,
         Err(e) => {
             error!("Failed to get user info: {}", e);
-            return Ok(HttpResponse::InternalServerError().json(OAuthErrorResponse::new(
-                "userinfo_error",
-                "Failed to retrieve user information",
-            )));
+            return Ok(
+                HttpResponse::InternalServerError().json(OAuthErrorResponse::new(
+                    "userinfo_error",
+                    "Failed to retrieve user information",
+                )),
+            );
         }
     };
 
@@ -369,10 +376,12 @@ pub async fn oauth_callback(
     // Store session
     if let Err(e) = oauth.session_store.set(session).await {
         error!("Failed to store session: {:?}", e);
-        return Ok(HttpResponse::InternalServerError().json(OAuthErrorResponse::new(
-            "session_storage_error",
-            "Failed to create session",
-        )));
+        return Ok(
+            HttpResponse::InternalServerError().json(OAuthErrorResponse::new(
+                "session_storage_error",
+                "Failed to create session",
+            )),
+        );
     }
 
     // Check if we need to redirect to a client URL
@@ -528,10 +537,12 @@ pub async fn oauth_userinfo(
         }
         Err(e) => {
             error!("Failed to retrieve session: {:?}", e);
-            return Ok(HttpResponse::InternalServerError().json(OAuthErrorResponse::new(
-                "session_error",
-                "Failed to retrieve session",
-            )));
+            return Ok(
+                HttpResponse::InternalServerError().json(OAuthErrorResponse::new(
+                    "session_error",
+                    "Failed to retrieve session",
+                )),
+            );
         }
     };
 
@@ -568,7 +579,7 @@ mod tests {
 
     #[test]
     fn test_login_response_serialization() {
-        let response = LoginResponse {
+        let response = OAuthLoginResponse {
             authorization_url: "https://auth.example.com".to_string(),
             state: "state123".to_string(),
         };
