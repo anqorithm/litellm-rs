@@ -8,9 +8,13 @@ use reqwest::{Client, ClientBuilder, Response};
 use serde_json::{Value, json};
 use tokio::time::timeout;
 
+use crate::core::providers::base::{
+    HeaderPair, apply_headers, header, header_owned, header_static,
+};
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::{
-    chat::ChatMessage, chat::ChatRequest,
+    chat::ChatMessage,
+    chat::ChatRequest,
     content::ContentPart,
     message::MessageRole,
     responses::{ChatChoice, ChatResponse, Usage},
@@ -83,15 +87,11 @@ impl AnthropicClient {
     /// Request
     async fn send_request(&self, endpoint: &str, body: Value) -> Result<Value, ProviderError> {
         let url = format!("{}{}", self.config.base_url.trim_end_matches('/'), endpoint);
-        let headers = self.build_headers();
+        let headers = self.get_request_headers();
 
         let response = timeout(
             Duration::from_secs(self.config.request_timeout),
-            self.http_client
-                .post(&url)
-                .json(&body)
-                .headers(headers)
-                .send(),
+            apply_headers(self.http_client.post(&url).json(&body), headers).send(),
         )
         .await
         .map_err(|_| anthropic_network_error("Request timeout"))?
@@ -107,15 +107,11 @@ impl AnthropicClient {
         body: Value,
     ) -> Result<Response, ProviderError> {
         let url = format!("{}{}", self.config.base_url.trim_end_matches('/'), endpoint);
-        let headers = self.build_headers();
+        let headers = self.get_request_headers();
 
         let response = timeout(
             Duration::from_secs(self.config.request_timeout),
-            self.http_client
-                .post(&url)
-                .json(&body)
-                .headers(headers)
-                .send(),
+            apply_headers(self.http_client.post(&url).json(&body), headers).send(),
         )
         .await
         .map_err(|_| anthropic_network_error("Request timeout"))?
@@ -134,46 +130,25 @@ impl AnthropicClient {
         Ok(response)
     }
 
-    /// Request
-    fn build_headers(&self) -> reqwest::header::HeaderMap {
-        let mut headers = reqwest::header::HeaderMap::new();
+    /// Build request headers using the unified HeaderPair pattern.
+    fn get_request_headers(&self) -> Vec<HeaderPair> {
+        let mut headers = Vec::with_capacity(5);
 
         // Authentication header
         if let Some(ref api_key) = self.config.api_key {
-            if let Ok(api_key_header) = api_key.parse() {
-                headers.insert("x-api-key", api_key_header);
-            }
+            headers.push(header("x-api-key", api_key.clone()));
         }
 
         // Version header
-        if let Ok(version_header) = self.config.api_version.parse() {
-            headers.insert("anthropic-version", version_header);
-        }
+        headers.push(header("anthropic-version", self.config.api_version.clone()));
 
-        // Content type - static string guaranteed to be valid
-        headers.insert(
-            "Content-Type",
-            "application/json"
-                .parse()
-                .expect("static header value is valid"),
-        );
-
-        // User agent - static string guaranteed to be valid
-        headers.insert(
-            "User-Agent",
-            "LiteLLM-Rust/1.0"
-                .parse()
-                .expect("static header value is valid"),
-        );
+        // Content type and user agent - zero allocation for static values
+        headers.push(header_static("Content-Type", "application/json"));
+        headers.push(header_static("User-Agent", "LiteLLM-Rust/1.0"));
 
         // Custom headers
         for (key, value) in &self.config.custom_headers {
-            if let (Ok(header_name), Ok(header_value)) = (
-                key.parse::<reqwest::header::HeaderName>(),
-                value.parse::<reqwest::header::HeaderValue>(),
-            ) {
-                headers.insert(header_name, header_value);
-            }
+            headers.push(header_owned(key.clone(), value.clone()));
         }
 
         headers
@@ -643,37 +618,54 @@ mod tests {
 
     // ==================== Header Building Tests ====================
 
+    /// Helper to check if a header key exists in Vec<HeaderPair>
+    fn has_header(headers: &[HeaderPair], key: &str) -> bool {
+        headers.iter().any(|(k, _)| k.eq_ignore_ascii_case(key))
+    }
+
+    /// Helper to get a header value from Vec<HeaderPair>
+    fn get_header<'a>(headers: &'a [HeaderPair], key: &str) -> Option<&'a str> {
+        headers
+            .iter()
+            .find(|(k, _)| k.eq_ignore_ascii_case(key))
+            .map(|(_, v)| v.as_ref())
+    }
+
     #[test]
     fn test_header_building() {
         let config = AnthropicConfig::new_test("test-key");
         let client = AnthropicClient::new(config).unwrap();
-        let headers = client.build_headers();
+        let headers = client.get_request_headers();
 
         // Anthropic uses x-api-key header instead of Authorization
-        assert!(headers.contains_key("x-api-key"));
-        assert!(headers.contains_key("anthropic-version"));
-        assert!(headers.contains_key("content-type"));
-        assert!(headers.contains_key("user-agent"));
+        assert!(has_header(&headers, "x-api-key"));
+        assert!(has_header(&headers, "anthropic-version"));
+        assert!(has_header(&headers, "Content-Type"));
+        assert!(has_header(&headers, "User-Agent"));
     }
 
     #[test]
     fn test_header_content_type() {
         let config = AnthropicConfig::new_test("test-key");
         let client = AnthropicClient::new(config).unwrap();
-        let headers = client.build_headers();
+        let headers = client.get_request_headers();
 
-        let content_type = headers.get("content-type").unwrap();
-        assert_eq!(content_type, "application/json");
+        assert_eq!(
+            get_header(&headers, "Content-Type").unwrap(),
+            "application/json"
+        );
     }
 
     #[test]
     fn test_header_user_agent() {
         let config = AnthropicConfig::new_test("test-key");
         let client = AnthropicClient::new(config).unwrap();
-        let headers = client.build_headers();
+        let headers = client.get_request_headers();
 
-        let user_agent = headers.get("user-agent").unwrap();
-        assert_eq!(user_agent, "LiteLLM-Rust/1.0");
+        assert_eq!(
+            get_header(&headers, "User-Agent").unwrap(),
+            "LiteLLM-Rust/1.0"
+        );
     }
 
     #[test]
@@ -683,9 +675,9 @@ mod tests {
             .custom_headers
             .insert("X-Custom-Header".to_string(), "custom-value".to_string());
         let client = AnthropicClient::new(config).unwrap();
-        let headers = client.build_headers();
+        let headers = client.get_request_headers();
 
-        assert!(headers.contains_key("x-custom-header"));
+        assert!(has_header(&headers, "X-Custom-Header"));
     }
 
     // ==================== Error Mapping Tests ====================
@@ -1029,7 +1021,14 @@ mod tests {
         });
 
         let result = client.transform_chat_response(response).unwrap();
-        let tool_calls = result.choices.first().unwrap().message.tool_calls.as_ref().unwrap();
+        let tool_calls = result
+            .choices
+            .first()
+            .unwrap()
+            .message
+            .tool_calls
+            .as_ref()
+            .unwrap();
         assert_eq!(tool_calls.len(), 1);
         assert_eq!(tool_calls.first().unwrap().id, "tool_1");
         assert_eq!(tool_calls.first().unwrap().function.name, "get_weather");

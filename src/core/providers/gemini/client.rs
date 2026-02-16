@@ -5,16 +5,17 @@
 
 use std::time::Duration;
 
-use reqwest::{
-    Client, ClientBuilder, Response,
-    header::{AUTHORIZATION, CONTENT_TYPE, HeaderMap, HeaderValue},
-};
+use reqwest::{Client, ClientBuilder, Response};
 use serde_json::{Value, json};
 use tokio::time::timeout;
 
+use crate::core::providers::base::{
+    HeaderPair, apply_headers, header, header_owned, header_static,
+};
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::{
-    chat::ChatMessage, chat::ChatRequest,
+    chat::ChatMessage,
+    chat::ChatRequest,
     content::ContentPart,
     message::MessageContent,
     message::MessageRole,
@@ -23,8 +24,7 @@ use crate::core::types::{
 
 use super::config::GeminiConfig;
 use super::error::{
-    GeminiErrorMapper, gemini_auth_error, gemini_multimodal_error, gemini_network_error,
-    gemini_parse_error,
+    GeminiErrorMapper, gemini_multimodal_error, gemini_network_error, gemini_parse_error,
 };
 
 /// Gemini API client
@@ -95,7 +95,7 @@ impl GeminiClient {
         body: Value,
     ) -> Result<Value, ProviderError> {
         let url = self.config.get_endpoint(model, operation);
-        let headers = self.build_headers()?;
+        let headers = self.get_request_headers();
 
         if self.config.debug {
             tracing::debug!("Gemini request URL: {}", url);
@@ -107,11 +107,7 @@ impl GeminiClient {
 
         let response = timeout(
             Duration::from_secs(self.config.request_timeout),
-            self.http_client
-                .post(&url)
-                .json(&body)
-                .headers(headers)
-                .send(),
+            apply_headers(self.http_client.post(&url).json(&body), headers).send(),
         )
         .await
         .map_err(|_| gemini_network_error("Request timeout"))?
@@ -128,7 +124,7 @@ impl GeminiClient {
         body: Value,
     ) -> Result<Response, ProviderError> {
         let url = self.config.get_endpoint(model, operation);
-        let headers = self.build_headers()?;
+        let headers = self.get_request_headers();
 
         if self.config.debug {
             tracing::debug!("Gemini stream request URL: {}", url);
@@ -140,11 +136,7 @@ impl GeminiClient {
 
         let response = timeout(
             Duration::from_secs(self.config.request_timeout),
-            self.http_client
-                .post(&url)
-                .json(&body)
-                .headers(headers)
-                .send(),
+            apply_headers(self.http_client.post(&url).json(&body), headers).send(),
         )
         .await
         .map_err(|_| gemini_network_error("Request timeout"))?
@@ -166,34 +158,24 @@ impl GeminiClient {
         Ok(response)
     }
 
-    /// Request
-    fn build_headers(&self) -> Result<HeaderMap, ProviderError> {
-        let mut headers = HeaderMap::new();
-        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+    /// Build request headers using the unified HeaderPair pattern.
+    fn get_request_headers(&self) -> Vec<HeaderPair> {
+        let mut headers = Vec::with_capacity(4);
+        headers.push(header_static("Content-Type", "application/json"));
 
         // Vertex AI uses Bearer token, Google AI Studio uses API key as query parameter
         if self.config.use_vertex_ai {
-            // For Vertex AI, we need OAuth2 token
-            // Handle
             if let Some(api_key) = &self.config.api_key {
-                headers.insert(
-                    AUTHORIZATION,
-                    HeaderValue::from_str(&format!("Bearer {}", api_key))
-                        .map_err(|e| gemini_auth_error(format!("Invalid API key format: {}", e)))?,
-                );
+                headers.push(header("Authorization", format!("Bearer {}", api_key)));
             }
         }
 
         // Add custom headers
         for (key, value) in &self.config.custom_headers {
-            let header_name = reqwest::header::HeaderName::from_bytes(key.as_bytes())
-                .map_err(|e| gemini_network_error(format!("Invalid header name: {}", e)))?;
-            let header_value = HeaderValue::from_str(value)
-                .map_err(|e| gemini_network_error(format!("Invalid header value: {}", e)))?;
-            headers.insert(header_name, header_value);
+            headers.push(header_owned(key.clone(), value.clone()));
         }
 
-        Ok(headers)
+        headers
     }
 
     /// Handle

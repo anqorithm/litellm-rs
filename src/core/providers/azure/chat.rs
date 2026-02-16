@@ -3,13 +3,13 @@
 //! Complete chat completion implementation for Azure OpenAI Service
 
 use futures::{Stream, StreamExt};
-use reqwest::header::HeaderMap;
 use serde_json::{Value, json};
 use std::pin::Pin;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::core::types::{
-    chat::ChatMessage, chat::ChatRequest,
+    chat::ChatMessage,
+    chat::ChatRequest,
     context::RequestContext,
     message::MessageContent,
     message::MessageRole,
@@ -19,8 +19,11 @@ use crate::core::types::{
 };
 
 use super::config::AzureConfig;
-use super::error::{AzureError, azure_api_error, azure_config_error, azure_header_error};
+use super::error::{AzureError, azure_api_error, azure_config_error};
 use super::utils::{AzureEndpointType, AzureUtils};
+use crate::core::providers::base::{
+    HeaderPair, apply_headers, header, header_owned, header_static,
+};
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::provider::ProviderConfig;
 use crate::utils::net::http::create_custom_client;
@@ -41,18 +44,13 @@ impl AzureChatHandler {
         Ok(Self { config, client })
     }
 
-    /// Build request headers
-    async fn build_headers(&self) -> Result<HeaderMap, AzureError> {
-        let mut headers = HeaderMap::new();
+    /// Build request headers using the unified HeaderPair pattern.
+    async fn get_request_headers(&self) -> Result<Vec<HeaderPair>, AzureError> {
+        let mut headers = Vec::with_capacity(4);
 
         // Add API key
         if let Some(api_key) = self.config.get_effective_api_key().await {
-            headers.insert(
-                "api-key",
-                api_key
-                    .parse()
-                    .map_err(|e| azure_header_error(format!("Invalid API key: {}", e)))?,
-            );
+            headers.push(header("api-key", api_key));
         } else {
             return Err(ProviderError::authentication(
                 "azure",
@@ -60,21 +58,11 @@ impl AzureChatHandler {
             ));
         }
 
-        headers.insert(
-            "Content-Type",
-            "application/json"
-                .parse()
-                .map_err(|e| azure_header_error(format!("Invalid content type: {}", e)))?,
-        );
+        headers.push(header_static("Content-Type", "application/json"));
 
         // Add custom headers
         for (key, value) in &self.config.custom_headers {
-            let header_name = reqwest::header::HeaderName::from_bytes(key.as_bytes())
-                .map_err(|e| azure_header_error(format!("Invalid header name: {}", e)))?;
-            let header_value = value
-                .parse()
-                .map_err(|e| azure_header_error(format!("Invalid header value: {}", e)))?;
-            headers.insert(header_name, header_value);
+            headers.push(header_owned(key.clone(), value.clone()));
         }
 
         Ok(headers)
@@ -107,14 +95,10 @@ impl AzureChatHandler {
         let azure_request = self.transform_request(&request)?;
 
         // Build headers
-        let headers = self.build_headers().await?;
+        let headers = self.get_request_headers().await?;
 
         // Execute request
-        let response = self
-            .client
-            .post(&url)
-            .headers(headers)
-            .json(&azure_request)
+        let response = apply_headers(self.client.post(&url).json(&azure_request), headers)
             .send()
             .await?;
 
@@ -165,14 +149,10 @@ impl AzureChatHandler {
         let azure_request = self.transform_request(&request)?;
 
         // Build headers
-        let headers = self.build_headers().await?;
+        let headers = self.get_request_headers().await?;
 
         // Execute streaming request
-        let response = self
-            .client
-            .post(&url)
-            .headers(headers)
-            .json(&azure_request)
+        let response = apply_headers(self.client.post(&url).json(&azure_request), headers)
             .send()
             .await?;
 

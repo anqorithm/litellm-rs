@@ -20,10 +20,31 @@ pub fn header(key: &'static str, value: String) -> HeaderPair {
     (Cow::Borrowed(key), Cow::Owned(value))
 }
 
+/// Helper to create a header from both static key and static value (zero allocation).
+#[inline]
+pub fn header_static(key: &'static str, value: &'static str) -> HeaderPair {
+    (Cow::Borrowed(key), Cow::Borrowed(value))
+}
+
 /// Helper to create a header from both dynamic key and value.
 #[inline]
 pub fn header_owned(key: String, value: String) -> HeaderPair {
     (Cow::Owned(key), Cow::Owned(value))
+}
+
+/// Apply a list of `HeaderPair`s to a `reqwest::RequestBuilder`.
+///
+/// This bridges the `Vec<HeaderPair>` pattern with providers that still use
+/// `reqwest::Client` directly instead of `GlobalPoolManager`.
+#[inline]
+pub fn apply_headers(
+    mut builder: reqwest::RequestBuilder,
+    headers: Vec<HeaderPair>,
+) -> reqwest::RequestBuilder {
+    for (key, value) in headers {
+        builder = builder.header(key.as_ref(), value.as_ref());
+    }
+    builder
 }
 
 #[derive(Debug, Clone)]
@@ -60,11 +81,11 @@ static GLOBAL_CLIENT: LazyLock<Arc<Client>> = LazyLock::new(|| {
         Duration::from_secs(PoolConfig::TIMEOUT_SECS),
         &pool_http_config(),
     )
-        .unwrap_or_else(|e| {
-            tracing::error!("Failed to create global HTTP client: {}", e);
-            // Fallback to a basic client
-            Client::new()
-        });
+    .unwrap_or_else(|e| {
+        tracing::error!("Failed to create global HTTP client: {}", e);
+        // Fallback to a basic client
+        Client::new()
+    });
     Arc::new(client)
 });
 
