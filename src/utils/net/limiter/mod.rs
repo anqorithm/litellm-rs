@@ -15,4 +15,4 @@ mod tests;
 
 // Re-exports
 pub use engine::RateLimiter;
-pub use types::{RateLimitConfig, RateLimitKey, RateLimitResult, SlidingWindow, TokenBucket};
+pub use types::{LimiterConfig, RateLimitKey, RateLimitResult, SlidingWindow, TokenBucket};

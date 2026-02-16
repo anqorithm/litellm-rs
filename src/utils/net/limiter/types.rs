@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 /// Rate limit configuration
 #[derive(Debug, Clone)]
-pub struct RateLimitConfig {
+pub struct LimiterConfig {
     /// Requests per minute
     pub rpm: Option<u32>,
     /// Tokens per minute
@@ -82,11 +82,11 @@ pub struct RateLimitKey {
 mod tests {
     use super::*;
 
-    // ==================== RateLimitConfig Tests ====================
+    // ==================== LimiterConfig Tests ====================
 
     #[test]
     fn test_rate_limit_config_full() {
-        let config = RateLimitConfig {
+        let config = LimiterConfig {
             rpm: Some(100),
             tpm: Some(10000),
             rpd: Some(1000),
@@ -104,7 +104,7 @@ mod tests {
 
     #[test]
     fn test_rate_limit_config_minimal() {
-        let config = RateLimitConfig {
+        let config = LimiterConfig {
             rpm: Some(60),
             tpm: None,
             rpd: None,
@@ -118,7 +118,7 @@ mod tests {
 
     #[test]
     fn test_rate_limit_config_clone() {
-        let config = RateLimitConfig {
+        let config = LimiterConfig {
             rpm: Some(100),
             tpm: Some(5000),
             rpd: None,

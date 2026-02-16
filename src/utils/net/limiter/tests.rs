@@ -3,7 +3,7 @@
 //! This module contains comprehensive tests for the rate limiter.
 
 use super::engine::RateLimiter;
-use super::types::{RateLimitConfig, RateLimitKey, RateLimitResult, SlidingWindow, TokenBucket};
+use super::types::{LimiterConfig, RateLimitKey, RateLimitResult, SlidingWindow, TokenBucket};
 use std::time::{Duration, Instant};
 use uuid::Uuid;
 
@@ -13,7 +13,7 @@ use uuid::Uuid;
 async fn test_rate_limiter_creation() {
     let limiter = RateLimiter::new();
 
-    let config = RateLimitConfig {
+    let config = LimiterConfig {
         rpm: Some(10),
         tpm: Some(1000),
         rpd: None,
@@ -29,7 +29,7 @@ async fn test_rate_limiter_creation() {
 async fn test_rate_limit_check() {
     let limiter = RateLimiter::new();
 
-    let config = RateLimitConfig {
+    let config = LimiterConfig {
         rpm: Some(2), // Very low limit for testing
         tpm: Some(100),
         rpd: None,
@@ -62,7 +62,7 @@ async fn test_rate_limit_check() {
 async fn test_token_rate_limit() {
     let limiter = RateLimiter::new();
 
-    let config = RateLimitConfig {
+    let config = LimiterConfig {
         rpm: None,
         tpm: Some(50), // Low token limit
         rpd: None,
@@ -101,7 +101,7 @@ async fn test_rate_limiter_no_config() {
 async fn test_rate_limiter_cleanup() {
     let limiter = RateLimiter::new();
 
-    let config = RateLimitConfig {
+    let config = LimiterConfig {
         rpm: Some(10),
         tpm: None,
         rpd: None,
@@ -128,7 +128,7 @@ async fn test_rate_limiter_cleanup() {
 async fn test_rate_limiter_get_status() {
     let limiter = RateLimiter::new();
 
-    let config = RateLimitConfig {
+    let config = LimiterConfig {
         rpm: Some(10),
         tpm: Some(100),
         rpd: None,
@@ -238,11 +238,11 @@ fn test_rate_limit_key_partial() {
     assert!(!key_str.contains("ip:"));
 }
 
-// ==================== RateLimitConfig Tests ====================
+// ==================== LimiterConfig Tests ====================
 
 #[test]
 fn test_rate_limit_config_clone() {
-    let config = RateLimitConfig {
+    let config = LimiterConfig {
         rpm: Some(100),
         tpm: Some(10000),
         rpd: Some(1000),
@@ -262,7 +262,7 @@ fn test_rate_limit_config_clone() {
 
 #[test]
 fn test_rate_limit_config_debug() {
-    let config = RateLimitConfig {
+    let config = LimiterConfig {
         rpm: Some(100),
         tpm: None,
         rpd: None,
@@ -410,7 +410,7 @@ fn test_sliding_window_clone() {
 async fn test_multiple_keys() {
     let limiter = RateLimiter::new();
 
-    let config = RateLimitConfig {
+    let config = LimiterConfig {
         rpm: Some(5),
         tpm: None,
         rpd: None,
@@ -451,7 +451,7 @@ async fn test_multiple_keys() {
 async fn test_combined_rpm_and_tpm_limits() {
     let limiter = RateLimiter::new();
 
-    let config = RateLimitConfig {
+    let config = LimiterConfig {
         rpm: Some(10),  // High request limit
         tpm: Some(100), // Low token limit
         rpd: None,

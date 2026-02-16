@@ -164,7 +164,7 @@ impl RateLimitKey {
 
 #[cfg(test)]
 mod tests {
-    use super::super::types::RateLimitConfig;
+    use super::super::types::LimiterConfig;
     use super::*;
 
     // ==================== RateLimitKey Builder Tests ====================
@@ -328,7 +328,7 @@ mod tests {
         let limiter = RateLimiter::new();
 
         // Add a config and do a rate limit check to create windows
-        let config = RateLimitConfig {
+        let config = LimiterConfig {
             rpm: Some(100),
             tpm: None,
             rpd: None,
@@ -358,7 +358,7 @@ mod tests {
     async fn test_get_status_with_rpm_config() {
         let limiter = RateLimiter::new();
 
-        let config = RateLimitConfig {
+        let config = LimiterConfig {
             rpm: Some(60),
             tpm: None,
             rpd: None,
@@ -378,7 +378,7 @@ mod tests {
     async fn test_get_status_with_tpm_config() {
         let limiter = RateLimiter::new();
 
-        let config = RateLimitConfig {
+        let config = LimiterConfig {
             rpm: None,
             tpm: Some(10000),
             rpd: None,
@@ -398,7 +398,7 @@ mod tests {
     async fn test_get_status_with_full_config() {
         let limiter = RateLimiter::new();
 
-        let config = RateLimitConfig {
+        let config = LimiterConfig {
             rpm: Some(100),
             tpm: Some(50000),
             rpd: None,
@@ -448,7 +448,7 @@ mod tests {
     async fn test_limiter_multiple_configs() {
         let limiter = RateLimiter::new();
 
-        let config1 = RateLimitConfig {
+        let config1 = LimiterConfig {
             rpm: Some(100),
             tpm: None,
             rpd: None,
@@ -456,7 +456,7 @@ mod tests {
             concurrent: None,
             burst: None,
         };
-        let config2 = RateLimitConfig {
+        let config2 = LimiterConfig {
             rpm: Some(50),
             tpm: Some(10000),
             rpd: None,
