@@ -93,15 +93,6 @@ pub trait Builder<T> {
     fn build(self) -> T;
 }
 
-/// A trait for types that can be validated
-pub trait Validate {
-    /// The error type returned when validation fails
-    type Error;
-
-    /// Validate the type
-    fn validate(&self) -> Result<(), Self::Error>;
-}
-
 /// A trait for types that can provide default configurations
 pub trait DefaultConfig {
     /// Get the default configuration
