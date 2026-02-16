@@ -149,8 +149,14 @@ impl QdrantStore {
         });
 
         if let Some(threshold) = threshold {
-            payload["score_threshold"] =
-                serde_json::Value::Number(serde_json::Number::from_f64(threshold as f64).unwrap());
+            payload["score_threshold"] = serde_json::Number::from_f64(threshold as f64)
+                .map(serde_json::Value::Number)
+                .ok_or_else(|| {
+                    GatewayError::VectorDb(format!(
+                        "Invalid score threshold: {} (NaN/Infinity not allowed)",
+                        threshold
+                    ))
+                })?;
         }
 
         let mut request = self.client.post(&url).json(&payload);
