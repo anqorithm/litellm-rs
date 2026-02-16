@@ -240,7 +240,12 @@ impl LLMProvider for AnthropicProvider {
         self.validate_request(&request)?;
 
         let registry = get_anthropic_registry();
-        let model_spec = registry.get_model_spec(&request.model).unwrap();
+        let model_spec = registry.get_model_spec(&request.model).ok_or_else(|| {
+            ProviderError::not_supported(
+                "anthropic",
+                format!("Unknown model: {}", request.model),
+            )
+        })?;
 
         if !model_spec
             .features
