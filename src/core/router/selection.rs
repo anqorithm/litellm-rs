@@ -116,6 +116,7 @@ impl Router {
                 &self.round_robin_counters,
             ),
         }
+        .cloned()
         .ok_or_else(|| RouterError::NoAvailableDeployment(model_name.to_string()))?;
 
         // 5. Increment active_requests counter

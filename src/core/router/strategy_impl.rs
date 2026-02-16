@@ -8,74 +8,23 @@ use dashmap::DashMap;
 use rand::Rng;
 use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
 
-/// Trait for routing strategy selection
-pub trait StrategySelector {
-    /// Select a deployment from candidates using weighted random selection
-    fn select_weighted_random(
-        &self,
-        candidate_ids: &[DeploymentId],
-        deployments: &DashMap<DeploymentId, Deployment>,
-    ) -> Option<DeploymentId>;
-
-    /// Select a deployment with fewest active requests
-    fn select_least_busy(
-        &self,
-        candidate_ids: &[DeploymentId],
-        deployments: &DashMap<DeploymentId, Deployment>,
-    ) -> Option<DeploymentId>;
-
-    /// Select a deployment with lowest TPM usage rate
-    fn select_lowest_usage(
-        &self,
-        candidate_ids: &[DeploymentId],
-        deployments: &DashMap<DeploymentId, Deployment>,
-    ) -> Option<DeploymentId>;
-
-    /// Select a deployment with lowest average latency
-    fn select_lowest_latency(
-        &self,
-        candidate_ids: &[DeploymentId],
-        deployments: &DashMap<DeploymentId, Deployment>,
-    ) -> Option<DeploymentId>;
-
-    /// Select a deployment with lowest cost (priority)
-    fn select_lowest_cost(
-        &self,
-        candidate_ids: &[DeploymentId],
-        deployments: &DashMap<DeploymentId, Deployment>,
-    ) -> Option<DeploymentId>;
-
-    /// Select a deployment furthest from rate limits
-    fn select_rate_limit_aware(
-        &self,
-        candidate_ids: &[DeploymentId],
-        deployments: &DashMap<DeploymentId, Deployment>,
-    ) -> Option<DeploymentId>;
-
-    /// Select a deployment using round-robin
-    fn select_round_robin(
-        &self,
-        model_name: &str,
-        candidate_ids: &[DeploymentId],
-        round_robin_counters: &DashMap<String, AtomicUsize>,
-    ) -> Option<DeploymentId>;
-}
+// Note: StrategySelector trait was removed as dead code — only free functions are used.
 
 /// Weighted random selection (SimpleShuffle)
 ///
 /// Selects a deployment randomly based on weights.
 /// Higher weight = higher probability of selection.
 /// Returns None if candidate_ids is empty.
-pub fn weighted_random(
-    candidate_ids: &[DeploymentId],
+pub fn weighted_random<'a>(
+    candidate_ids: &'a [DeploymentId],
     deployments: &DashMap<DeploymentId, Deployment>,
-) -> Option<DeploymentId> {
+) -> Option<&'a DeploymentId> {
     if candidate_ids.is_empty() {
         return None;
     }
 
     if candidate_ids.len() == 1 {
-        return Some(candidate_ids[0].clone());
+        return Some(&candidate_ids[0]);
     }
 
     // Calculate total weight
@@ -88,7 +37,7 @@ pub fn weighted_random(
         // All weights are 0, fall back to uniform random
         let mut rng = rand::thread_rng();
         let index = rng.gen_range(0..candidate_ids.len());
-        return Some(candidate_ids[index].clone());
+        return Some(&candidate_ids[index]);
     }
 
     // Generate random point in [0, total_weight)
@@ -100,14 +49,14 @@ pub fn weighted_random(
         if let Some(deployment) = deployments.get(id.as_str()) {
             let weight = deployment.config.weight;
             if point < weight {
-                return Some(id.clone());
+                return Some(id);
             }
             point -= weight;
         }
     }
 
     // Fallback (shouldn't happen)
-    Some(candidate_ids[0].clone())
+    Some(&candidate_ids[0])
 }
 
 /// Select deployment with fewest active requests (LeastBusy)
@@ -115,10 +64,10 @@ pub fn weighted_random(
 /// Chooses the deployment with the lowest number of currently active requests.
 /// In case of tie, selects randomly among tied deployments.
 /// Returns None if candidate_ids is empty.
-pub fn least_busy(
-    candidate_ids: &[DeploymentId],
+pub fn least_busy<'a>(
+    candidate_ids: &'a [DeploymentId],
     deployments: &DashMap<DeploymentId, Deployment>,
-) -> Option<DeploymentId> {
+) -> Option<&'a DeploymentId> {
     if candidate_ids.is_empty() {
         return None;
     }
@@ -145,16 +94,16 @@ pub fn least_busy(
         .collect();
 
     if tied.is_empty() {
-        return Some(candidate_ids[0].clone());
+        return Some(&candidate_ids[0]);
     }
 
     // Random selection among tied
     if tied.len() == 1 {
-        Some(tied[0].clone())
+        Some(tied[0])
     } else {
         let mut rng = rand::thread_rng();
         let index = rng.gen_range(0..tied.len());
-        Some(tied[index].clone())
+        Some(tied[index])
     }
 }
 
@@ -163,10 +112,10 @@ pub fn least_busy(
 /// Calculates TPM usage as: (tpm_current / tpm_limit) * 100
 /// Deployments without limits are considered at 0% usage.
 /// Returns None if candidate_ids is empty.
-pub fn lowest_usage(
-    candidate_ids: &[DeploymentId],
+pub fn lowest_usage<'a>(
+    candidate_ids: &'a [DeploymentId],
     deployments: &DashMap<DeploymentId, Deployment>,
-) -> Option<DeploymentId> {
+) -> Option<&'a DeploymentId> {
     if candidate_ids.is_empty() {
         return None;
     }
@@ -189,7 +138,7 @@ pub fn lowest_usage(
         }
     }
 
-    Some(best_id.clone())
+    Some(best_id)
 }
 
 /// Select deployment with lowest average latency (LatencyBased)
@@ -198,10 +147,10 @@ pub fn lowest_usage(
 /// New deployments (latency = 0) are given a chance by treating them
 /// as having average latency.
 /// Returns None if candidate_ids is empty.
-pub fn lowest_latency(
-    candidate_ids: &[DeploymentId],
+pub fn lowest_latency<'a>(
+    candidate_ids: &'a [DeploymentId],
     deployments: &DashMap<DeploymentId, Deployment>,
-) -> Option<DeploymentId> {
+) -> Option<&'a DeploymentId> {
     if candidate_ids.is_empty() {
         return None;
     }
@@ -242,17 +191,17 @@ pub fn lowest_latency(
         }
     }
 
-    Some(best_id.clone())
+    Some(best_id)
 }
 
 /// Select deployment with lowest cost (CostBased)
 ///
 /// Currently uses priority as a cost proxy (lower priority = lower cost).
 /// Returns None if candidate_ids is empty.
-pub fn lowest_cost(
-    candidate_ids: &[DeploymentId],
+pub fn lowest_cost<'a>(
+    candidate_ids: &'a [DeploymentId],
     deployments: &DashMap<DeploymentId, Deployment>,
-) -> Option<DeploymentId> {
+) -> Option<&'a DeploymentId> {
     if candidate_ids.is_empty() {
         return None;
     }
@@ -270,7 +219,7 @@ pub fn lowest_cost(
         }
     }
 
-    Some(best_id.clone())
+    Some(best_id)
 }
 
 /// Select deployment that is furthest from rate limits (RateLimitAware)
@@ -278,10 +227,10 @@ pub fn lowest_cost(
 /// Calculates distance from rate limit as: (limit - current) / limit
 /// Selects the deployment with maximum distance (most headroom).
 /// Returns None if candidate_ids is empty.
-pub fn rate_limit_aware(
-    candidate_ids: &[DeploymentId],
+pub fn rate_limit_aware<'a>(
+    candidate_ids: &'a [DeploymentId],
     deployments: &DashMap<DeploymentId, Deployment>,
-) -> Option<DeploymentId> {
+) -> Option<&'a DeploymentId> {
     if candidate_ids.is_empty() {
         return None;
     }
@@ -321,24 +270,24 @@ pub fn rate_limit_aware(
         }
     }
 
-    Some(best_id.clone())
+    Some(best_id)
 }
 
 /// Round-robin selection (RoundRobin)
 ///
 /// Cycles through deployments in order, using a per-model counter.
 /// Returns None if candidate_ids is empty.
-pub fn round_robin(
+pub fn round_robin<'a>(
     model_name: &str,
-    candidate_ids: &[DeploymentId],
+    candidate_ids: &'a [DeploymentId],
     round_robin_counters: &DashMap<String, AtomicUsize>,
-) -> Option<DeploymentId> {
+) -> Option<&'a DeploymentId> {
     if candidate_ids.is_empty() {
         return None;
     }
 
     if candidate_ids.len() == 1 {
-        return Some(candidate_ids[0].clone());
+        return Some(&candidate_ids[0]);
     }
 
     // Get or create counter for this model
@@ -349,7 +298,7 @@ pub fn round_robin(
     // Fetch and increment counter
     let index = counter.fetch_add(1, Relaxed) % candidate_ids.len();
 
-    Some(candidate_ids[index].clone())
+    Some(&candidate_ids[index])
 }
 
 // ====================================================================================
