@@ -4,25 +4,19 @@
 //! into the unified `ProviderError` type.
 
 use super::unified_provider::ProviderError;
+use crate::{impl_from_reqwest_error, impl_from_serde_error};
 
 // Convert from common error types
-impl From<reqwest::Error> for ProviderError {
-    fn from(err: reqwest::Error) -> Self {
-        let provider = "unknown"; // Will be overridden by provider-specific constructors
+impl_from_reqwest_error!(ProviderError,
+    timeout => |e| Self::timeout("unknown", e.to_string()),
+    connect => |e| Self::network("unknown", e.to_string()),
+    other   => |e| Self::network("unknown", e.to_string())
+);
 
-        if err.is_timeout() {
-            Self::timeout(provider, err.to_string())
-        } else {
-            Self::network(provider, err.to_string())
-        }
-    }
-}
-
-impl From<serde_json::Error> for ProviderError {
-    fn from(err: serde_json::Error) -> Self {
-        Self::serialization("unknown", err.to_string())
-    }
-}
+impl_from_serde_error!(ProviderError, |e| Self::serialization(
+    "unknown",
+    e.to_string()
+));
 
 // Convert from provider-specific errors for unified handling
 impl From<crate::core::types::errors::OpenAIError> for ProviderError {

@@ -2,6 +2,7 @@
 
 use super::litellm::LiteLLMError;
 use super::traits::ProviderErrorTrait;
+use crate::{impl_from_reqwest_error, impl_from_serde_error};
 
 /// OpenAI provider error types
 #[derive(Debug, thiserror::Error)]
@@ -149,23 +150,13 @@ impl ProviderErrorTrait for OpenAIError {
     }
 }
 
-impl From<reqwest::Error> for OpenAIError {
-    fn from(err: reqwest::Error) -> Self {
-        if err.is_timeout() {
-            Self::Timeout(err.to_string())
-        } else if err.is_connect() || err.is_request() {
-            Self::Network(err.to_string())
-        } else {
-            Self::Other(err.to_string())
-        }
-    }
-}
+impl_from_reqwest_error!(OpenAIError,
+    timeout => |e| Self::Timeout(e.to_string()),
+    connect => |e| Self::Network(e.to_string()),
+    other   => |e| Self::Other(e.to_string())
+);
 
-impl From<serde_json::Error> for OpenAIError {
-    fn from(err: serde_json::Error) -> Self {
-        Self::Parsing(err.to_string())
-    }
-}
+impl_from_serde_error!(OpenAIError, |e| Self::Parsing(e.to_string()));
 
 impl From<OpenAIError> for LiteLLMError {
     fn from(err: OpenAIError) -> Self {

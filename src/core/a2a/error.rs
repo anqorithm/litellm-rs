@@ -2,6 +2,7 @@
 //!
 //! Defines error types for A2A protocol operations.
 
+use crate::{impl_from_reqwest_error, impl_from_serde_error};
 use std::fmt;
 
 /// Result type for A2A operations
@@ -159,33 +160,23 @@ impl fmt::Display for A2AError {
 
 impl std::error::Error for A2AError {}
 
-impl From<serde_json::Error> for A2AError {
-    fn from(e: serde_json::Error) -> Self {
-        A2AError::SerializationError {
-            message: e.to_string(),
-        }
-    }
-}
+impl_from_serde_error!(A2AError, |e| A2AError::SerializationError {
+    message: e.to_string(),
+});
 
-impl From<reqwest::Error> for A2AError {
-    fn from(e: reqwest::Error) -> Self {
-        if e.is_timeout() {
-            A2AError::Timeout {
-                agent_name: "unknown".to_string(),
-                timeout_ms: 0,
-            }
-        } else if e.is_connect() {
-            A2AError::ConnectionError {
-                agent_name: "unknown".to_string(),
-                message: e.to_string(),
-            }
-        } else {
-            A2AError::ProtocolError {
-                message: e.to_string(),
-            }
-        }
+impl_from_reqwest_error!(A2AError,
+    timeout => |_e| A2AError::Timeout {
+        agent_name: "unknown".to_string(),
+        timeout_ms: 0,
+    },
+    connect => |e| A2AError::ConnectionError {
+        agent_name: "unknown".to_string(),
+        message: e.to_string(),
+    },
+    other => |e| A2AError::ProtocolError {
+        message: e.to_string(),
     }
-}
+);
 
 #[cfg(test)]
 mod tests {

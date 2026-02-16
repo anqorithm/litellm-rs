@@ -3,6 +3,7 @@
 use super::litellm::LiteLLMError;
 use super::openai::OpenAIError;
 use super::traits::ProviderErrorTrait;
+use crate::impl_from_serde_error;
 
 /// OpenRouter provider error types
 #[derive(Debug, thiserror::Error)]
@@ -47,11 +48,7 @@ pub enum OpenRouterError {
     NotImplemented(String),
 }
 
-impl From<serde_json::Error> for OpenRouterError {
-    fn from(err: serde_json::Error) -> Self {
-        Self::Parsing(err.to_string())
-    }
-}
+impl_from_serde_error!(OpenRouterError, |e| Self::Parsing(e.to_string()));
 
 impl From<OpenAIError> for OpenRouterError {
     fn from(err: OpenAIError) -> Self {

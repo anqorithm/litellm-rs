@@ -197,27 +197,6 @@ macro_rules! impl_error_conversion {
             }
         )+
     };
-
-    // Simplified version for common library errors
-    (standard: $provider_name:literal) => {
-        impl From<reqwest::Error> for ProviderError {
-            fn from(err: reqwest::Error) -> Self {
-                ProviderError::Network {
-                    provider: $provider_name,
-                    message: err.to_string(),
-                }
-            }
-        }
-
-        impl From<serde_json::Error> for ProviderError {
-            fn from(err: serde_json::Error) -> Self {
-                ProviderError::Serialization {
-                    provider: $provider_name,
-                    message: err.to_string(),
-                }
-            }
-        }
-    };
 }
 
 /// Macro to generate provider configuration struct

@@ -2,6 +2,7 @@
 //!
 //! Defines error types for MCP operations.
 
+use crate::{impl_from_reqwest_error, impl_from_serde_error};
 use std::fmt;
 
 /// Result type for MCP operations
@@ -192,34 +193,24 @@ impl fmt::Display for McpError {
 
 impl std::error::Error for McpError {}
 
-impl From<serde_json::Error> for McpError {
-    fn from(e: serde_json::Error) -> Self {
-        McpError::SerializationError {
-            message: e.to_string(),
-        }
-    }
-}
+impl_from_serde_error!(McpError, |e| McpError::SerializationError {
+    message: e.to_string(),
+});
 
-impl From<reqwest::Error> for McpError {
-    fn from(e: reqwest::Error) -> Self {
-        if e.is_timeout() {
-            McpError::Timeout {
-                server_name: "unknown".to_string(),
-                timeout_ms: 0,
-            }
-        } else if e.is_connect() {
-            McpError::ConnectionError {
-                server_name: "unknown".to_string(),
-                message: e.to_string(),
-            }
-        } else {
-            McpError::TransportError {
-                transport: "http".to_string(),
-                message: e.to_string(),
-            }
-        }
+impl_from_reqwest_error!(McpError,
+    timeout => |_e| McpError::Timeout {
+        server_name: "unknown".to_string(),
+        timeout_ms: 0,
+    },
+    connect => |e| McpError::ConnectionError {
+        server_name: "unknown".to_string(),
+        message: e.to_string(),
+    },
+    other => |e| McpError::TransportError {
+        transport: "http".to_string(),
+        message: e.to_string(),
     }
-}
+);
 
 #[cfg(test)]
 mod tests {

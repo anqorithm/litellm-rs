@@ -54,6 +54,7 @@
 
 mod config;
 mod litellm;
+mod macros;
 mod openai;
 mod openrouter;
 mod routing;
