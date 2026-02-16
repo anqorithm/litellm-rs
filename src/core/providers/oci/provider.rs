@@ -471,8 +471,7 @@ fn transform_oci_response(response: serde_json::Value) -> Result<ChatResponse, P
         object: "chat.completion".to_string(),
         created: std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64,
+            .map_or(0, |d| d.as_secs() as i64),
         model,
         choices: vec![crate::core::types::responses::ChatChoice {
             index: 0,

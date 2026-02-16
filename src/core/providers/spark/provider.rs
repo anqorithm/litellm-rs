@@ -270,7 +270,12 @@ impl LLMProvider for SparkProvider {
         self.validate_request(&request)?;
 
         let registry = get_spark_registry();
-        let model_spec = registry.get_model_spec(&request.model).unwrap();
+        let model_spec = registry.get_model_spec(&request.model).ok_or_else(|| {
+            ProviderError::not_supported(
+                "spark",
+                format!("Unknown model: {}", request.model),
+            )
+        })?;
 
         if !model_spec
             .features

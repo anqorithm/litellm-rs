@@ -205,8 +205,7 @@ impl OpenAILikeProvider {
 
         // Add optional parameters
         if let Some(temp) = request.temperature {
-            openai_request["temperature"] =
-                Value::Number(serde_json::Number::from_f64(temp as f64).unwrap());
+            openai_request["temperature"] = serde_json::json!(temp);
         }
 
         if let Some(max_tokens) = request.max_tokens {
@@ -219,8 +218,7 @@ impl OpenAILikeProvider {
         }
 
         if let Some(top_p) = request.top_p {
-            openai_request["top_p"] =
-                Value::Number(serde_json::Number::from_f64(top_p as f64).unwrap());
+            openai_request["top_p"] = serde_json::json!(top_p);
         }
 
         if let Some(tools) = request.tools {

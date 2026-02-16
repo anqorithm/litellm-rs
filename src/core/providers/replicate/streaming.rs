@@ -102,8 +102,7 @@ fn create_chat_chunk(text: &str) -> ChatChunk {
 
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs() as i64;
+        .map_or(0, |d| d.as_secs() as i64);
 
     ChatChunk {
         id: format!("chatcmpl-replicate-{}", timestamp),
