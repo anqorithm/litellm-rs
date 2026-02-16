@@ -60,7 +60,10 @@ where
         let service = Rc::clone(&self.service);
 
         Box::pin(async move {
-            let path = req.path().to_string();
+            // Check public route with &str reference before any mutable borrows,
+            // avoiding a per-request String allocation for the path.
+            let is_public = is_public_route(req.path());
+
             let context = build_request_context(&mut req);
             let auth_method = extract_auth_method(req.headers());
             let client_id = get_client_identifier(&req);
@@ -75,7 +78,7 @@ where
                 }
             };
 
-            if is_public_route(&path) {
+            if is_public {
                 req.extensions_mut().insert(context);
                 return service.call(req).await;
             }
