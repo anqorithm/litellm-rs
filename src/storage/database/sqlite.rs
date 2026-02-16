@@ -23,7 +23,8 @@ impl SqliteDatabase {
         // Ensure the data directory exists
         if let Some(path) = config.url.strip_prefix("sqlite:") {
             if let Some(parent) = std::path::Path::new(path).parent() {
-                std::fs::create_dir_all(parent)
+                tokio::fs::create_dir_all(parent)
+                    .await
                     .map_err(|e| GatewayError::Config(format!("Failed to create data directory: {}", e)))?;
             }
         }
