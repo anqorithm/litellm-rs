@@ -74,16 +74,28 @@ pub async fn create_fake_stream(
 }
 
 /// Convert a complete ChatResponse to stream chunks
+///
+/// Pre-extracts shared fields (id, model, system_fingerprint) to avoid
+/// cloning from the full response struct on every chunk. The last chunk
+/// moves the values instead of cloning (zero-cost).
 fn response_to_chunks(response: ChatResponse) -> Vec<ChatChunk> {
+    // Extract shared fields once — avoids repeated clones from the full response
+    let id = response.id;
+    let created = response.created;
+    let model = response.model;
+    let system_fingerprint = response.system_fingerprint;
+    let usage = response.usage;
+    let object = "chat.completion.chunk".to_string();
+
     let mut chunks = Vec::new();
 
     // Create initial chunk with role
     chunks.push(ChatChunk {
-        id: response.id.clone(),
-        object: "chat.completion.chunk".to_string(),
-        created: response.created,
-        model: response.model.clone(),
-        system_fingerprint: response.system_fingerprint.clone(),
+        id: id.clone(),
+        object: object.clone(),
+        created,
+        model: model.clone(),
+        system_fingerprint: system_fingerprint.clone(),
         choices: vec![ChatStreamChoice {
             index: 0,
             delta: ChatDelta {
@@ -99,12 +111,12 @@ fn response_to_chunks(response: ChatResponse) -> Vec<ChatChunk> {
         usage: None,
     });
 
-    // Create content chunks
+    // Create content chunks + final chunk
     if let Some(choice) = response.choices.first() {
         if let Some(content) = &choice.message.content {
             let text = match content {
                 MessageContent::Text(text) => text.clone(),
-                MessageContent::Parts(_) => content.to_string(), // Use Display impl
+                MessageContent::Parts(_) => content.to_string(),
             };
 
             // Split content into smaller chunks for more natural streaming
@@ -114,11 +126,11 @@ fn response_to_chunks(response: ChatResponse) -> Vec<ChatChunk> {
             for word_chunk in words.chunks(chunk_size) {
                 let chunk_text = word_chunk.join(" ") + " ";
                 chunks.push(ChatChunk {
-                    id: response.id.clone(),
-                    object: "chat.completion.chunk".to_string(),
-                    created: response.created,
-                    model: response.model.clone(),
-                    system_fingerprint: response.system_fingerprint.clone(),
+                    id: id.clone(),
+                    object: object.clone(),
+                    created,
+                    model: model.clone(),
+                    system_fingerprint: system_fingerprint.clone(),
                     choices: vec![ChatStreamChoice {
                         index: 0,
                         delta: ChatDelta {
@@ -136,13 +148,13 @@ fn response_to_chunks(response: ChatResponse) -> Vec<ChatChunk> {
             }
         }
 
-        // Add final chunk with finish_reason
+        // Final chunk moves shared fields instead of cloning
         chunks.push(ChatChunk {
-            id: response.id.clone(),
-            object: "chat.completion.chunk".to_string(),
-            created: response.created,
-            model: response.model.clone(),
-            system_fingerprint: response.system_fingerprint.clone(),
+            id,
+            object,
+            created,
+            model,
+            system_fingerprint,
             choices: vec![ChatStreamChoice {
                 index: 0,
                 delta: ChatDelta {
@@ -155,7 +167,7 @@ fn response_to_chunks(response: ChatResponse) -> Vec<ChatChunk> {
                 finish_reason: choice.finish_reason.clone(),
                 logprobs: None,
             }],
-            usage: response.usage.clone(),
+            usage,
         });
     }
 
