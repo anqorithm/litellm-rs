@@ -371,7 +371,7 @@ mod tests {
         // Run multiple times and verify result is always in candidates
         for _ in 0..100 {
             let selected = weighted_random(&candidates, &deployments).unwrap();
-            assert!(candidates.contains(&selected));
+            assert!(candidates.contains(selected));
         }
     }
 
@@ -437,7 +437,7 @@ mod tests {
         // Should fall back to uniform random
         for _ in 0..10 {
             let selected = weighted_random(&candidates, &deployments).unwrap();
-            assert!(candidates.contains(&selected));
+            assert!(candidates.contains(selected));
         }
     }
 
@@ -518,7 +518,7 @@ mod tests {
 
         let candidates: Vec<String> = (1..=3).map(|i| format!("d{}", i)).collect();
         let selected = least_busy(&candidates, &deployments).unwrap();
-        assert!(candidates.contains(&selected));
+        assert!(candidates.contains(selected));
     }
 
     #[test]
@@ -698,7 +698,7 @@ mod tests {
         let selected = lowest_latency(&candidates, &deployments).unwrap();
 
         // Any candidate is valid when all have zero latency
-        assert!(candidates.contains(&selected));
+        assert!(candidates.contains(selected));
     }
 
     #[test]
