@@ -36,10 +36,10 @@ impl Router {
                 Ok(id) => id,
                 Err(router_err) => {
                     let provider_err = router_error_to_provider_error(router_err);
-                    last_error = Some(provider_err.clone());
 
                     if is_retryable_error(&provider_err) && attempt < max_attempts {
                         let delay = calculate_retry_delay(&self.config, attempt);
+                        last_error = Some(provider_err);
                         tokio::time::sleep(delay).await;
                         continue;
                     } else {
@@ -62,13 +62,12 @@ impl Router {
                 Err(err) => {
                     self.release_deployment(&deployment_id);
 
-                    last_error = Some(err.clone());
-
                     if is_retryable_error(&err) && attempt < max_attempts {
                         if let Some(d) = self.deployments.get(&deployment_id) {
                             d.record_failure();
                         }
                         let delay = calculate_retry_delay(&self.config, attempt);
+                        last_error = Some(err);
                         tokio::time::sleep(delay).await;
                         continue;
                     } else {
