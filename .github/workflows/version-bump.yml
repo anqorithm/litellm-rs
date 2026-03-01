@@ -1,13 +1,7 @@
 name: Version Bump
 
 on:
-  push:
-    branches:
-      - main
-    paths-ignore:
-      - '**.md'
-      - '.github/**'
-      - 'docs/**'
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
