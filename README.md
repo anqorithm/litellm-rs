@@ -46,8 +46,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 # Install
 cargo install litellm-rs
 
-# Run
-gateway --config config/gateway.yaml
+# First run: create local config
+cp config/gateway.yaml.example config/gateway.yaml
+
+# Run (auto-loads config/gateway.yaml)
+gateway
 ```
 
 ## Installation
@@ -55,19 +58,19 @@ gateway --config config/gateway.yaml
 ```toml
 # Full gateway with SQLite + Redis (default)
 [dependencies]
-litellm-rs = "0.3"
+litellm-rs = "0.4"
 
 # API-only - lightweight, no actix-web/argon2/aes-gcm/clap
 [dependencies]
-litellm-rs = { version = "0.3", default-features = false }
+litellm-rs = { version = "0.4", default-features = false }
 
 # API-only with metrics
 [dependencies]
-litellm-rs = { version = "0.3", default-features = false, features = ["lite"] }
+litellm-rs = { version = "0.4", default-features = false, features = ["lite"] }
 
 # Gateway server without storage
 [dependencies]
-litellm-rs = { version = "0.3", default-features = false, features = ["gateway"] }
+litellm-rs = { version = "0.4", default-features = false, features = ["gateway"] }
 ```
 
 ## Supported Providers
@@ -170,6 +173,17 @@ while let Some(chunk) = stream.next().await {
 - **Latency**: <10ms routing overhead
 - **Memory**: ~50MB base footprint
 - **Concurrency**: Fully async with Tokio
+
+## Repository Layout
+
+- `src/` - Core library and gateway server source code
+- `config/` - Example config and pricing data (`gateway.yaml.example`)
+- `docs/` - Technical documentation and design notes
+- `examples/` - Runnable usage examples
+- `tests/` + `benches/` - Integration tests and performance benchmarks
+- `deployment/` - Docker/Kubernetes and deployment assets
+
+Historical planning notes (`PLAN_*.md`, `*_FIXES.md`) are kept at root for traceability.
 
 ## Documentation
 

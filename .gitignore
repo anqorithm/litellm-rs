@@ -129,6 +129,7 @@ target/criterion/
 dist/
 build/
 out/
+*.rlib
 
 # Backup files
 *.bak
