@@ -1,26 +1,7 @@
 name: Docker
 
 on:
-  push:
-    branches: [ main, develop ]
-    paths:
-      - 'src/**'
-      - 'config/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'build.rs'
-      - 'deployment/docker/**'
-      - '.dockerignore'
-      - '.github/workflows/docker.yml'
-  pull_request:
-    branches: [ main ]
-    paths:
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'build.rs'
-      - 'deployment/docker/**'
-      - '.dockerignore'
-      - '.github/workflows/docker.yml'
+  workflow_dispatch:
 
 concurrency:
   group: docker-${{ github.ref }}
