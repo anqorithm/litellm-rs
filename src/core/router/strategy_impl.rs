@@ -10,6 +10,235 @@ use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
 
 // Note: StrategySelector trait was removed as dead code — only free functions are used.
 
+/// Immutable snapshot used by routing strategies.
+///
+/// This keeps strategy logic decoupled from deployment storage details.
+#[derive(Debug, Clone, Copy)]
+pub struct RoutingContext<'id> {
+    pub deployment_id: &'id DeploymentId,
+    pub weight: u32,
+    pub priority: u32,
+    pub active_requests: u32,
+    pub tpm_current: u64,
+    pub tpm_limit: Option<u64>,
+    pub rpm_current: u64,
+    pub rpm_limit: Option<u64>,
+    pub avg_latency_us: u64,
+}
+
+/// Build immutable routing snapshots for all valid candidates.
+pub fn build_routing_contexts<'id>(
+    candidate_ids: &'id [DeploymentId],
+    deployments: &DashMap<DeploymentId, Deployment>,
+) -> Vec<RoutingContext<'id>> {
+    candidate_ids
+        .iter()
+        .filter_map(|id| {
+            deployments
+                .get(id.as_str())
+                .map(|deployment| RoutingContext {
+                    deployment_id: id,
+                    weight: deployment.config.weight,
+                    priority: deployment.config.priority,
+                    active_requests: deployment.state.active_requests.load(Relaxed),
+                    tpm_current: deployment.state.tpm_current.load(Relaxed),
+                    tpm_limit: deployment.config.tpm_limit,
+                    rpm_current: deployment.state.rpm_current.load(Relaxed),
+                    rpm_limit: deployment.config.rpm_limit,
+                    avg_latency_us: deployment.state.avg_latency_us.load(Relaxed),
+                })
+        })
+        .collect()
+}
+
+/// Weighted random selection (SimpleShuffle) using snapshot contexts.
+pub fn weighted_random_from_context<'ctx, 'id>(
+    contexts: &'ctx [RoutingContext<'id>],
+) -> Option<&'id DeploymentId> {
+    if contexts.is_empty() {
+        return None;
+    }
+
+    if contexts.len() == 1 {
+        return Some(contexts[0].deployment_id);
+    }
+
+    let total_weight: u32 = contexts.iter().map(|ctx| ctx.weight).sum();
+    if total_weight == 0 {
+        let mut rng = rand::thread_rng();
+        let index = rng.gen_range(0..contexts.len());
+        return Some(contexts[index].deployment_id);
+    }
+
+    let mut rng = rand::thread_rng();
+    let mut point = rng.gen_range(0..total_weight);
+
+    for ctx in contexts {
+        if point < ctx.weight {
+            return Some(ctx.deployment_id);
+        }
+        point -= ctx.weight;
+    }
+
+    Some(contexts[0].deployment_id)
+}
+
+/// Select deployment with fewest active requests (LeastBusy) using snapshot contexts.
+pub fn least_busy_from_context<'ctx, 'id>(
+    contexts: &'ctx [RoutingContext<'id>],
+) -> Option<&'id DeploymentId> {
+    if contexts.is_empty() {
+        return None;
+    }
+
+    let min_active = contexts
+        .iter()
+        .map(|ctx| ctx.active_requests)
+        .min()
+        .unwrap_or(0);
+
+    let tied: Vec<&DeploymentId> = contexts
+        .iter()
+        .filter(|ctx| ctx.active_requests == min_active)
+        .map(|ctx| ctx.deployment_id)
+        .collect();
+
+    if tied.is_empty() {
+        return Some(contexts[0].deployment_id);
+    }
+
+    if tied.len() == 1 {
+        Some(tied[0])
+    } else {
+        let mut rng = rand::thread_rng();
+        let index = rng.gen_range(0..tied.len());
+        Some(tied[index])
+    }
+}
+
+/// Select deployment with lowest TPM usage rate (UsageBased) using snapshot contexts.
+pub fn lowest_usage_from_context<'ctx, 'id>(
+    contexts: &'ctx [RoutingContext<'id>],
+) -> Option<&'id DeploymentId> {
+    if contexts.is_empty() {
+        return None;
+    }
+
+    let mut best_id = contexts[0].deployment_id;
+    let mut best_usage_pct = u64::MAX;
+
+    for ctx in contexts {
+        let usage_pct = match ctx.tpm_limit {
+            Some(limit) if limit > 0 => (ctx.tpm_current * 100) / limit,
+            _ => 0, // No limit = 0% usage
+        };
+
+        if usage_pct < best_usage_pct {
+            best_usage_pct = usage_pct;
+            best_id = ctx.deployment_id;
+        }
+    }
+
+    Some(best_id)
+}
+
+/// Select deployment with lowest average latency (LatencyBased) using snapshot contexts.
+pub fn lowest_latency_from_context<'ctx, 'id>(
+    contexts: &'ctx [RoutingContext<'id>],
+) -> Option<&'id DeploymentId> {
+    if contexts.is_empty() {
+        return None;
+    }
+
+    let latencies: Vec<u64> = contexts
+        .iter()
+        .map(|ctx| ctx.avg_latency_us)
+        .filter(|&lat| lat > 0)
+        .collect();
+
+    let avg_latency = if latencies.is_empty() {
+        0
+    } else {
+        latencies.iter().sum::<u64>() / latencies.len() as u64
+    };
+
+    let mut best_id = contexts[0].deployment_id;
+    let mut best_latency = u64::MAX;
+
+    for ctx in contexts {
+        let mut latency = ctx.avg_latency_us;
+        if latency == 0 {
+            latency = avg_latency;
+        }
+
+        if latency < best_latency {
+            best_latency = latency;
+            best_id = ctx.deployment_id;
+        }
+    }
+
+    Some(best_id)
+}
+
+/// Select deployment with lowest cost (CostBased) using snapshot contexts.
+pub fn lowest_cost_from_context<'ctx, 'id>(
+    contexts: &'ctx [RoutingContext<'id>],
+) -> Option<&'id DeploymentId> {
+    if contexts.is_empty() {
+        return None;
+    }
+
+    let mut best_id = contexts[0].deployment_id;
+    let mut best_priority = u32::MAX;
+
+    for ctx in contexts {
+        if ctx.priority < best_priority {
+            best_priority = ctx.priority;
+            best_id = ctx.deployment_id;
+        }
+    }
+
+    Some(best_id)
+}
+
+/// Select deployment furthest from rate limits (RateLimitAware) using snapshot contexts.
+pub fn rate_limit_aware_from_context<'ctx, 'id>(
+    contexts: &'ctx [RoutingContext<'id>],
+) -> Option<&'id DeploymentId> {
+    if contexts.is_empty() {
+        return None;
+    }
+
+    let mut best_id = contexts[0].deployment_id;
+    let mut best_distance: f64 = -1.0;
+
+    for ctx in contexts {
+        let tpm_distance = match ctx.tpm_limit {
+            Some(limit) if limit > 0 => {
+                let remaining = limit.saturating_sub(ctx.tpm_current);
+                remaining as f64 / limit as f64
+            }
+            _ => 1.0, // No limit = maximum distance
+        };
+
+        let rpm_distance = match ctx.rpm_limit {
+            Some(limit) if limit > 0 => {
+                let remaining = limit.saturating_sub(ctx.rpm_current);
+                remaining as f64 / limit as f64
+            }
+            _ => 1.0, // No limit = maximum distance
+        };
+
+        let distance = tpm_distance.min(rpm_distance);
+        if distance > best_distance {
+            best_distance = distance;
+            best_id = ctx.deployment_id;
+        }
+    }
+
+    Some(best_id)
+}
+
 /// Weighted random selection (SimpleShuffle)
 ///
 /// Selects a deployment randomly based on weights.
@@ -19,44 +248,11 @@ pub fn weighted_random<'a>(
     candidate_ids: &'a [DeploymentId],
     deployments: &DashMap<DeploymentId, Deployment>,
 ) -> Option<&'a DeploymentId> {
-    if candidate_ids.is_empty() {
-        return None;
+    let contexts = build_routing_contexts(candidate_ids, deployments);
+    if contexts.is_empty() {
+        return candidate_ids.first();
     }
-
-    if candidate_ids.len() == 1 {
-        return Some(&candidate_ids[0]);
-    }
-
-    // Calculate total weight
-    let total_weight: u32 = candidate_ids
-        .iter()
-        .filter_map(|id| deployments.get(id.as_str()).map(|d| d.config.weight))
-        .sum();
-
-    if total_weight == 0 {
-        // All weights are 0, fall back to uniform random
-        let mut rng = rand::thread_rng();
-        let index = rng.gen_range(0..candidate_ids.len());
-        return Some(&candidate_ids[index]);
-    }
-
-    // Generate random point in [0, total_weight)
-    let mut rng = rand::thread_rng();
-    let mut point = rng.gen_range(0..total_weight);
-
-    // Find the deployment corresponding to this point
-    for id in candidate_ids {
-        if let Some(deployment) = deployments.get(id.as_str()) {
-            let weight = deployment.config.weight;
-            if point < weight {
-                return Some(id);
-            }
-            point -= weight;
-        }
-    }
-
-    // Fallback (shouldn't happen)
-    Some(&candidate_ids[0])
+    weighted_random_from_context(&contexts)
 }
 
 /// Select deployment with fewest active requests (LeastBusy)
@@ -68,43 +264,11 @@ pub fn least_busy<'a>(
     candidate_ids: &'a [DeploymentId],
     deployments: &DashMap<DeploymentId, Deployment>,
 ) -> Option<&'a DeploymentId> {
-    if candidate_ids.is_empty() {
-        return None;
+    let contexts = build_routing_contexts(candidate_ids, deployments);
+    if contexts.is_empty() {
+        return candidate_ids.first();
     }
-
-    let min_active = candidate_ids
-        .iter()
-        .filter_map(|id| {
-            deployments
-                .get(id.as_str())
-                .map(|d| d.state.active_requests.load(Relaxed))
-        })
-        .min()
-        .unwrap_or(0);
-
-    // Collect all deployments with min active requests
-    let tied: Vec<_> = candidate_ids
-        .iter()
-        .filter(|id| {
-            deployments
-                .get(id.as_str())
-                .map(|d| d.state.active_requests.load(Relaxed) == min_active)
-                .unwrap_or(false)
-        })
-        .collect();
-
-    if tied.is_empty() {
-        return Some(&candidate_ids[0]);
-    }
-
-    // Random selection among tied
-    if tied.len() == 1 {
-        Some(tied[0])
-    } else {
-        let mut rng = rand::thread_rng();
-        let index = rng.gen_range(0..tied.len());
-        Some(tied[index])
-    }
+    least_busy_from_context(&contexts)
 }
 
 /// Select deployment with lowest TPM usage rate (UsageBased)
@@ -116,29 +280,11 @@ pub fn lowest_usage<'a>(
     candidate_ids: &'a [DeploymentId],
     deployments: &DashMap<DeploymentId, Deployment>,
 ) -> Option<&'a DeploymentId> {
-    if candidate_ids.is_empty() {
-        return None;
+    let contexts = build_routing_contexts(candidate_ids, deployments);
+    if contexts.is_empty() {
+        return candidate_ids.first();
     }
-
-    let mut best_id = &candidate_ids[0];
-    let mut best_usage_pct = u64::MAX;
-
-    for id in candidate_ids {
-        if let Some(deployment) = deployments.get(id.as_str()) {
-            let tpm_current = deployment.state.tpm_current.load(Relaxed);
-            let usage_pct = match deployment.config.tpm_limit {
-                Some(limit) if limit > 0 => (tpm_current * 100) / limit,
-                _ => 0, // No limit = 0% usage
-            };
-
-            if usage_pct < best_usage_pct {
-                best_usage_pct = usage_pct;
-                best_id = id;
-            }
-        }
-    }
-
-    Some(best_id)
+    lowest_usage_from_context(&contexts)
 }
 
 /// Select deployment with lowest average latency (LatencyBased)
@@ -151,47 +297,11 @@ pub fn lowest_latency<'a>(
     candidate_ids: &'a [DeploymentId],
     deployments: &DashMap<DeploymentId, Deployment>,
 ) -> Option<&'a DeploymentId> {
-    if candidate_ids.is_empty() {
-        return None;
+    let contexts = build_routing_contexts(candidate_ids, deployments);
+    if contexts.is_empty() {
+        return candidate_ids.first();
     }
-
-    // Calculate average latency across all candidates (for new deployments)
-    let latencies: Vec<u64> = candidate_ids
-        .iter()
-        .filter_map(|id| {
-            deployments
-                .get(id.as_str())
-                .map(|d| d.state.avg_latency_us.load(Relaxed))
-        })
-        .filter(|&lat| lat > 0)
-        .collect();
-
-    let avg_latency = if !latencies.is_empty() {
-        latencies.iter().sum::<u64>() / latencies.len() as u64
-    } else {
-        0
-    };
-
-    let mut best_id = &candidate_ids[0];
-    let mut best_latency = u64::MAX;
-
-    for id in candidate_ids {
-        if let Some(deployment) = deployments.get(id.as_str()) {
-            let mut latency = deployment.state.avg_latency_us.load(Relaxed);
-
-            // Treat new deployments (latency = 0) as having average latency
-            if latency == 0 {
-                latency = avg_latency;
-            }
-
-            if latency < best_latency {
-                best_latency = latency;
-                best_id = id;
-            }
-        }
-    }
-
-    Some(best_id)
+    lowest_latency_from_context(&contexts)
 }
 
 /// Select deployment with lowest cost (CostBased)
@@ -202,24 +312,11 @@ pub fn lowest_cost<'a>(
     candidate_ids: &'a [DeploymentId],
     deployments: &DashMap<DeploymentId, Deployment>,
 ) -> Option<&'a DeploymentId> {
-    if candidate_ids.is_empty() {
-        return None;
+    let contexts = build_routing_contexts(candidate_ids, deployments);
+    if contexts.is_empty() {
+        return candidate_ids.first();
     }
-
-    let mut best_id = &candidate_ids[0];
-    let mut best_priority = u32::MAX;
-
-    for id in candidate_ids {
-        if let Some(deployment) = deployments.get(id.as_str()) {
-            let priority = deployment.config.priority;
-            if priority < best_priority {
-                best_priority = priority;
-                best_id = id;
-            }
-        }
-    }
-
-    Some(best_id)
+    lowest_cost_from_context(&contexts)
 }
 
 /// Select deployment that is furthest from rate limits (RateLimitAware)
@@ -231,46 +328,11 @@ pub fn rate_limit_aware<'a>(
     candidate_ids: &'a [DeploymentId],
     deployments: &DashMap<DeploymentId, Deployment>,
 ) -> Option<&'a DeploymentId> {
-    if candidate_ids.is_empty() {
-        return None;
+    let contexts = build_routing_contexts(candidate_ids, deployments);
+    if contexts.is_empty() {
+        return candidate_ids.first();
     }
-
-    let mut best_id = &candidate_ids[0];
-    let mut best_distance: f64 = -1.0;
-
-    for id in candidate_ids {
-        if let Some(deployment) = deployments.get(id.as_str()) {
-            // Calculate TPM distance
-            let tpm_distance = match deployment.config.tpm_limit {
-                Some(limit) if limit > 0 => {
-                    let current = deployment.state.tpm_current.load(Relaxed);
-                    let remaining = limit.saturating_sub(current);
-                    remaining as f64 / limit as f64
-                }
-                _ => 1.0, // No limit = maximum distance
-            };
-
-            // Calculate RPM distance
-            let rpm_distance = match deployment.config.rpm_limit {
-                Some(limit) if limit > 0 => {
-                    let current = deployment.state.rpm_current.load(Relaxed);
-                    let remaining = limit.saturating_sub(current);
-                    remaining as f64 / limit as f64
-                }
-                _ => 1.0, // No limit = maximum distance
-            };
-
-            // Use minimum of TPM and RPM distance (most constrained)
-            let distance = tpm_distance.min(rpm_distance);
-
-            if distance > best_distance {
-                best_distance = distance;
-                best_id = id;
-            }
-        }
-    }
-
-    Some(best_id)
+    rate_limit_aware_from_context(&contexts)
 }
 
 /// Round-robin selection (RoundRobin)
@@ -332,6 +394,34 @@ mod tests {
             state: DeploymentState::new(),
             tags: vec![],
         }
+    }
+
+    #[tokio::test]
+    async fn test_build_routing_contexts_skips_missing_deployments() {
+        let deployments = DashMap::new();
+        let config = DeploymentConfig {
+            weight: 3,
+            priority: 7,
+            ..Default::default()
+        };
+        let deployment = create_test_deployment("d1", config).await;
+        deployment.state.active_requests.store(2, Relaxed);
+        deployment.state.tpm_current.store(120, Relaxed);
+        deployment.state.rpm_current.store(12, Relaxed);
+        deployment.state.avg_latency_us.store(55, Relaxed);
+        deployments.insert("d1".to_string(), deployment);
+
+        let candidates = vec!["d1".to_string(), "missing".to_string()];
+        let contexts = build_routing_contexts(&candidates, &deployments);
+
+        assert_eq!(contexts.len(), 1);
+        assert_eq!(contexts[0].deployment_id, "d1");
+        assert_eq!(contexts[0].weight, 3);
+        assert_eq!(contexts[0].priority, 7);
+        assert_eq!(contexts[0].active_requests, 2);
+        assert_eq!(contexts[0].tpm_current, 120);
+        assert_eq!(contexts[0].rpm_current, 12);
+        assert_eq!(contexts[0].avg_latency_us, 55);
     }
 
     // ====================================================================================

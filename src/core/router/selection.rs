@@ -89,26 +89,28 @@ impl Router {
             return Err(RouterError::NoAvailableDeployment(model_name.to_string()));
         }
 
-        // 4. Select based on routing strategy
+        // 4. Build immutable routing context once, then let strategies read that snapshot.
+        let routing_contexts =
+            strategy_impl::build_routing_contexts(&candidate_ids, &self.deployments);
+
+        // 5. Select based on routing strategy
         // Note: candidate_ids is guaranteed non-empty at this point (checked above)
         let selected_id = match self.config.routing_strategy {
             RoutingStrategy::SimpleShuffle => {
-                strategy_impl::weighted_random(&candidate_ids, &self.deployments)
+                strategy_impl::weighted_random_from_context(&routing_contexts)
             }
-            RoutingStrategy::LeastBusy => {
-                strategy_impl::least_busy(&candidate_ids, &self.deployments)
-            }
+            RoutingStrategy::LeastBusy => strategy_impl::least_busy_from_context(&routing_contexts),
             RoutingStrategy::UsageBased => {
-                strategy_impl::lowest_usage(&candidate_ids, &self.deployments)
+                strategy_impl::lowest_usage_from_context(&routing_contexts)
             }
             RoutingStrategy::LatencyBased => {
-                strategy_impl::lowest_latency(&candidate_ids, &self.deployments)
+                strategy_impl::lowest_latency_from_context(&routing_contexts)
             }
             RoutingStrategy::CostBased => {
-                strategy_impl::lowest_cost(&candidate_ids, &self.deployments)
+                strategy_impl::lowest_cost_from_context(&routing_contexts)
             }
             RoutingStrategy::RateLimitAware => {
-                strategy_impl::rate_limit_aware(&candidate_ids, &self.deployments)
+                strategy_impl::rate_limit_aware_from_context(&routing_contexts)
             }
             RoutingStrategy::RoundRobin => strategy_impl::round_robin(
                 &resolved_name,
@@ -119,7 +121,7 @@ impl Router {
         .cloned()
         .ok_or_else(|| RouterError::NoAvailableDeployment(model_name.to_string()))?;
 
-        // 5. Increment active_requests counter
+        // 6. Increment active_requests counter
         if let Some(deployment) = self.deployments.get(&selected_id) {
             deployment.state.active_requests.fetch_add(1, Relaxed);
         }
