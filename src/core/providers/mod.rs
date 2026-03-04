@@ -217,6 +217,7 @@ use crate::core::types::{context::RequestContext, model::ProviderCapability};
 use chrono::{DateTime, Utc};
 pub use contextual_error::ContextualError;
 pub use provider_registry::ProviderRegistry;
+use tracing::warn;
 pub use unified_provider::ProviderError;
 
 /// Returns true if a provider selector can be instantiated by the current runtime.
@@ -772,6 +773,8 @@ pub async fn create_provider(
         api_version,
         organization,
         project,
+        timeout,
+        max_retries,
         settings,
         ..
     } = config;
@@ -791,7 +794,34 @@ pub async fn create_provider(
         } else {
             Some(api_key.clone())
         };
-        let oai_config = def.to_openai_like_config(effective_key.as_deref(), base_url.as_deref());
+        let mut oai_config =
+            def.to_openai_like_config(effective_key.as_deref(), base_url.as_deref());
+        oai_config.base.timeout = timeout;
+        oai_config.base.max_retries = max_retries;
+
+        if let Some(version) = api_version.filter(|v| !v.trim().is_empty()) {
+            oai_config.base.api_version = Some(version);
+        }
+        if let Some(org) = organization.filter(|v| !v.trim().is_empty()) {
+            oai_config.base.organization = Some(org);
+        }
+
+        let ignored_settings = apply_tier1_openai_like_overrides(&mut oai_config, &settings);
+        if !ignored_settings.is_empty() {
+            warn!(
+                provider = def.name,
+                ignored_settings = ?ignored_settings,
+                "Tier-1 catalog provider has unsupported settings that were ignored"
+            );
+        }
+        if let Some(project) = project.filter(|v| !v.trim().is_empty()) {
+            warn!(
+                provider = def.name,
+                project = %project,
+                "Provider project field is ignored for Tier-1 catalog providers"
+            );
+        }
+
         let provider = openai_like::OpenAILikeProvider::new(oai_config)
             .await
             .map_err(|e| ProviderError::initialization(def.name, e.to_string()))?;
@@ -884,6 +914,107 @@ fn merge_string_headers(
             }
         }
     }
+}
+
+fn merge_string_headers_value(
+    target: &mut std::collections::HashMap<String, String>,
+    value: &serde_json::Value,
+) -> bool {
+    if let Some(header_map) = value.as_object() {
+        for (header_key, header_value) in header_map {
+            if let Some(header_value) = header_value.as_str() {
+                target.insert(header_key.clone(), header_value.to_string());
+            }
+        }
+        return true;
+    }
+    false
+}
+
+fn apply_tier1_openai_like_overrides(
+    config: &mut openai_like::OpenAILikeConfig,
+    settings: &std::collections::HashMap<String, serde_json::Value>,
+) -> Vec<String> {
+    let mut ignored = Vec::new();
+
+    for (key, value) in settings {
+        let consumed = match key.as_str() {
+            "headers" => merge_string_headers_value(&mut config.base.headers, value),
+            "custom_headers" => merge_string_headers_value(&mut config.custom_headers, value),
+            "model_prefix" => {
+                if let Some(v) = value.as_str().filter(|v| !v.trim().is_empty()) {
+                    config.model_prefix = Some(v.to_string());
+                    true
+                } else {
+                    false
+                }
+            }
+            "default_model" => {
+                if let Some(v) = value.as_str().filter(|v| !v.trim().is_empty()) {
+                    config.default_model = Some(v.to_string());
+                    true
+                } else {
+                    false
+                }
+            }
+            "pass_through_params" => {
+                if let Some(v) = value.as_bool() {
+                    config.pass_through_params = v;
+                    true
+                } else {
+                    false
+                }
+            }
+            "skip_api_key" => {
+                if let Some(v) = value.as_bool() {
+                    config.skip_api_key = v;
+                    true
+                } else {
+                    false
+                }
+            }
+            "timeout" => {
+                if let Some(v) = value.as_u64() {
+                    config.base.timeout = v;
+                    true
+                } else {
+                    false
+                }
+            }
+            "max_retries" => {
+                if let Some(v) = value.as_u64().and_then(|n| u32::try_from(n).ok()) {
+                    config.base.max_retries = v;
+                    true
+                } else {
+                    false
+                }
+            }
+            "organization" => {
+                if let Some(v) = value.as_str().filter(|v| !v.trim().is_empty()) {
+                    config.base.organization = Some(v.to_string());
+                    true
+                } else {
+                    false
+                }
+            }
+            "api_version" => {
+                if let Some(v) = value.as_str().filter(|v| !v.trim().is_empty()) {
+                    config.base.api_version = Some(v.to_string());
+                    true
+                } else {
+                    false
+                }
+            }
+            _ => false,
+        };
+
+        if !consumed {
+            ignored.push(key.clone());
+        }
+    }
+
+    ignored.sort();
+    ignored
 }
 
 fn build_openai_config_from_factory(
@@ -1945,6 +2076,67 @@ mod tests {
             .await
             .expect("Tier 1 provider should succeed");
         assert!(matches!(provider, Provider::OpenAILike(_)));
+    }
+
+    #[tokio::test]
+    async fn test_create_provider_tier1_catalog_applies_openai_like_overrides() {
+        let mut config = crate::config::models::provider::ProviderConfig {
+            name: "perplexity".to_string(),
+            provider_type: "".to_string(),
+            api_key: "test-key".to_string(),
+            timeout: 42,
+            max_retries: 6,
+            api_version: Some("2024-01-01".to_string()),
+            organization: Some("org-top-level".to_string()),
+            ..Default::default()
+        };
+        config
+            .settings
+            .insert("model_prefix".to_string(), serde_json::json!("pplx/"));
+        config.settings.insert(
+            "default_model".to_string(),
+            serde_json::json!("llama-3.1-sonar-small"),
+        );
+        config
+            .settings
+            .insert("pass_through_params".to_string(), serde_json::json!(false));
+        config.settings.insert(
+            "headers".to_string(),
+            serde_json::json!({"x-test-header": "ok"}),
+        );
+        config.settings.insert(
+            "custom_headers".to_string(),
+            serde_json::json!({"x-custom-header": "ok"}),
+        );
+
+        let provider = create_provider(config)
+            .await
+            .expect("Tier 1 provider should accept openai-like overrides");
+
+        match provider {
+            Provider::OpenAILike(provider) => {
+                let cfg = provider.config();
+                assert_eq!(cfg.provider_name, "perplexity");
+                assert_eq!(cfg.base.timeout, 42);
+                assert_eq!(cfg.base.max_retries, 6);
+                assert_eq!(cfg.base.api_version.as_deref(), Some("2024-01-01"));
+                assert_eq!(cfg.base.organization.as_deref(), Some("org-top-level"));
+                assert_eq!(cfg.model_prefix.as_deref(), Some("pplx/"));
+                assert_eq!(cfg.default_model.as_deref(), Some("llama-3.1-sonar-small"));
+                assert!(!cfg.pass_through_params);
+                assert_eq!(
+                    cfg.base.headers.get("x-test-header").map(String::as_str),
+                    Some("ok")
+                );
+                assert_eq!(
+                    cfg.custom_headers
+                        .get("x-custom-header")
+                        .map(String::as_str),
+                    Some("ok")
+                );
+            }
+            _ => panic!("Expected OpenAILike provider"),
+        }
     }
 
     #[test]
