@@ -10,6 +10,7 @@ use super::unified::Router;
 use crate::config::models::provider::ProviderConfig;
 use crate::config::models::router::GatewayRouterConfig;
 use crate::core::providers::{Provider, create_provider};
+use tracing::warn;
 
 /// Build runtime router config from gateway YAML router config.
 ///
@@ -18,6 +19,20 @@ use crate::core::providers::{Provider, create_provider};
 /// `load_balancer.session_timeout` are currently not mapped because runtime
 /// `RouterConfig` has no corresponding fields yet.
 pub fn runtime_router_config_from_gateway(config: &GatewayRouterConfig) -> RouterConfig {
+    let has_unmapped_fields = config.circuit_breaker.min_requests != 10
+        || config.circuit_breaker.success_threshold != 3
+        || config.load_balancer.sticky_sessions
+        || config.load_balancer.session_timeout != 3600;
+    if has_unmapped_fields {
+        warn!(
+            min_requests = config.circuit_breaker.min_requests,
+            success_threshold = config.circuit_breaker.success_threshold,
+            sticky_sessions = config.load_balancer.sticky_sessions,
+            session_timeout = config.load_balancer.session_timeout,
+            "Gateway router config contains fields not mapped to runtime RouterConfig yet; values are ignored"
+        );
+    }
+
     RouterConfig {
         routing_strategy: config.strategy,
         // Gateway circuit-breaker thresholds are the closest semantic mapping here.
