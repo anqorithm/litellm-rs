@@ -2,6 +2,7 @@
 //!
 //! JSON-RPC 2.0 message types for MCP communication.
 
+use super::error::McpError;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -169,6 +170,30 @@ impl JsonRpcError {
     pub fn server_error(code: i32, message: impl Into<String>) -> Self {
         let code = code.clamp(-32099, -32000);
         Self::new(code, message)
+    }
+
+    /// Build protocol error payload from typed MCP errors.
+    pub fn from_mcp_error(error: &McpError) -> Self {
+        use crate::utils::error::canonical::CanonicalError;
+
+        let code = match error {
+            McpError::ServerNotFound { .. } | McpError::ToolNotFound { .. } => -32001,
+            McpError::AuthenticationError { .. } | McpError::AuthorizationError { .. } => -32004,
+            McpError::RateLimitExceeded { .. } => -32029,
+            McpError::Timeout { .. } => -32008,
+            McpError::ConnectionError { .. } | McpError::TransportError { .. } => -32010,
+            McpError::InvalidUrl { .. } | McpError::ProtocolError { .. } => -32600,
+            McpError::ConfigurationError { .. } => -32602,
+            McpError::ToolExecutionError { .. } | McpError::SerializationError { .. } => -32603,
+            McpError::ServerAlreadyExists { .. } => -32009,
+        };
+
+        let mut rpc_error = Self::new(code, error.to_string());
+        rpc_error.data = Some(serde_json::json!({
+            "canonical_code": error.canonical_code().as_str(),
+            "retryable": error.canonical_retryable(),
+        }));
+        rpc_error
     }
 }
 
@@ -374,6 +399,20 @@ mod tests {
     fn test_jsonrpc_error_server_error_clamping() {
         let err = JsonRpcError::server_error(-99999, "test");
         assert!(err.code >= -32099 && err.code <= -32000);
+    }
+
+    #[test]
+    fn test_jsonrpc_error_from_mcp_error_includes_canonical_data() {
+        let error = McpError::RateLimitExceeded {
+            server_name: "github".to_string(),
+            retry_after_ms: Some(1000),
+        };
+
+        let rpc_error = JsonRpcError::from_mcp_error(&error);
+        assert_eq!(rpc_error.code, -32029);
+        let data = rpc_error.data.expect("canonical data should exist");
+        assert_eq!(data["canonical_code"], "RATE_LIMITED");
+        assert_eq!(data["retryable"], true);
     }
 
     #[test]

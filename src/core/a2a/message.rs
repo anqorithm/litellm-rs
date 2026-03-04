@@ -2,6 +2,7 @@
 //!
 //! JSON-RPC 2.0 message types for A2A protocol communication.
 
+use super::error::A2AError;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -440,6 +441,34 @@ impl A2AResponseError {
     pub fn task_cancelled() -> Self {
         Self::new(-32002, "Task cancelled")
     }
+
+    /// Build protocol error payload from a typed A2A error.
+    pub fn from_a2a_error(error: &A2AError) -> Self {
+        use crate::utils::error::canonical::CanonicalError;
+
+        let code = match error {
+            A2AError::AgentNotFound { .. } | A2AError::TaskNotFound { .. } => -32001,
+            A2AError::AgentBusy { .. } => -32002,
+            A2AError::AgentAlreadyExists { .. } => -32003,
+            A2AError::AuthenticationError { .. } => -32004,
+            A2AError::RateLimitExceeded { .. } => -32029,
+            A2AError::Timeout { .. } => -32008,
+            A2AError::ConnectionError { .. } => -32010,
+            A2AError::ProtocolError { .. } | A2AError::InvalidRequest { .. } => -32600,
+            A2AError::UnsupportedProvider { .. } => -32601,
+            A2AError::ContentBlocked { .. } => -32602,
+            A2AError::TaskFailed { .. }
+            | A2AError::ConfigurationError { .. }
+            | A2AError::SerializationError { .. } => -32603,
+        };
+
+        let mut response = Self::new(code, error.to_string());
+        response.data = Some(serde_json::json!({
+            "canonical_code": error.canonical_code().as_str(),
+            "retryable": error.canonical_retryable(),
+        }));
+        response
+    }
 }
 
 #[cfg(test)]
@@ -524,6 +553,21 @@ mod tests {
         assert_eq!(A2AResponseError::invalid_request().code, -32600);
         assert_eq!(A2AResponseError::method_not_found().code, -32601);
         assert_eq!(A2AResponseError::task_not_found().code, -32001);
+    }
+
+    #[test]
+    fn test_a2a_response_error_from_a2a_error_includes_canonical_data() {
+        let error = A2AError::RateLimitExceeded {
+            agent_name: "agent-a".to_string(),
+            retry_after_ms: Some(500),
+        };
+
+        let response_error = A2AResponseError::from_a2a_error(&error);
+        assert_eq!(response_error.code, -32029);
+
+        let data = response_error.data.expect("canonical data should exist");
+        assert_eq!(data["canonical_code"], "RATE_LIMITED");
+        assert_eq!(data["retryable"], true);
     }
 
     #[test]

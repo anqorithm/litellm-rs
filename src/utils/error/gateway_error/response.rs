@@ -2,6 +2,7 @@
 
 use super::types::GatewayError;
 use crate::core::providers::unified_provider::ProviderError;
+use crate::utils::error::canonical::CanonicalError;
 use actix_web::{HttpResponse, ResponseError};
 
 impl ResponseError for GatewayError {
@@ -166,9 +167,14 @@ impl ResponseError for GatewayError {
             ),
         };
 
+        let canonical_code = self.canonical_code().as_str().to_string();
+        let retryable = self.canonical_retryable();
+
         let error_response = GatewayErrorResponse {
             error: GatewayErrorDetail {
                 code: error_code.to_string(),
+                canonical_code,
+                retryable,
                 message,
                 timestamp: chrono::Utc::now().timestamp(),
                 request_id: None, // This should be set by middleware
@@ -189,6 +195,8 @@ pub struct GatewayErrorResponse {
 #[derive(serde::Serialize)]
 pub struct GatewayErrorDetail {
     pub code: String,
+    pub canonical_code: String,
+    pub retryable: bool,
     pub message: String,
     pub timestamp: i64,
     pub request_id: Option<String>,
@@ -205,12 +213,16 @@ mod tests {
     fn test_error_detail_creation() {
         let detail = GatewayErrorDetail {
             code: "AUTH_ERROR".to_string(),
+            canonical_code: "AUTHENTICATION".to_string(),
+            retryable: false,
             message: "Authentication failed".to_string(),
             timestamp: 1704067200,
             request_id: Some("req-12345".to_string()),
         };
 
         assert_eq!(detail.code, "AUTH_ERROR");
+        assert_eq!(detail.canonical_code, "AUTHENTICATION");
+        assert!(!detail.retryable);
         assert_eq!(detail.message, "Authentication failed");
         assert_eq!(detail.timestamp, 1704067200);
         assert_eq!(detail.request_id, Some("req-12345".to_string()));
@@ -220,6 +232,8 @@ mod tests {
     fn test_error_detail_without_request_id() {
         let detail = GatewayErrorDetail {
             code: "VALIDATION_ERROR".to_string(),
+            canonical_code: "INVALID_REQUEST".to_string(),
+            retryable: false,
             message: "Invalid input".to_string(),
             timestamp: chrono::Utc::now().timestamp(),
             request_id: None,
@@ -233,6 +247,8 @@ mod tests {
     fn test_error_detail_serialization() {
         let detail = GatewayErrorDetail {
             code: "NOT_FOUND".to_string(),
+            canonical_code: "NOT_FOUND".to_string(),
+            retryable: false,
             message: "Resource not found".to_string(),
             timestamp: 1704067200,
             request_id: Some("req-abc".to_string()),
@@ -240,6 +256,8 @@ mod tests {
 
         let json = serde_json::to_value(&detail).unwrap();
         assert_eq!(json["code"], "NOT_FOUND");
+        assert_eq!(json["canonical_code"], "NOT_FOUND");
+        assert_eq!(json["retryable"], false);
         assert_eq!(json["message"], "Resource not found");
         assert_eq!(json["timestamp"], 1704067200);
         assert_eq!(json["request_id"], "req-abc");
@@ -249,6 +267,8 @@ mod tests {
     fn test_error_detail_serialization_null_request_id() {
         let detail = GatewayErrorDetail {
             code: "ERROR".to_string(),
+            canonical_code: "INTERNAL".to_string(),
+            retryable: false,
             message: "Some error".to_string(),
             timestamp: 1704067200,
             request_id: None,
@@ -265,6 +285,8 @@ mod tests {
         let response = GatewayErrorResponse {
             error: GatewayErrorDetail {
                 code: "INTERNAL_ERROR".to_string(),
+                canonical_code: "INTERNAL".to_string(),
+                retryable: false,
                 message: "An internal error occurred".to_string(),
                 timestamp: 1704067200,
                 request_id: None,
@@ -279,6 +301,8 @@ mod tests {
         let response = GatewayErrorResponse {
             error: GatewayErrorDetail {
                 code: "BAD_REQUEST".to_string(),
+                canonical_code: "INVALID_REQUEST".to_string(),
+                retryable: false,
                 message: "Invalid parameters".to_string(),
                 timestamp: 1704067200,
                 request_id: Some("req-xyz".to_string()),
@@ -288,6 +312,8 @@ mod tests {
         let json = serde_json::to_value(&response).unwrap();
         assert!(json["error"].is_object());
         assert_eq!(json["error"]["code"], "BAD_REQUEST");
+        assert_eq!(json["error"]["canonical_code"], "INVALID_REQUEST");
+        assert_eq!(json["error"]["retryable"], false);
         assert_eq!(json["error"]["message"], "Invalid parameters");
     }
 
@@ -296,6 +322,8 @@ mod tests {
         let response = GatewayErrorResponse {
             error: GatewayErrorDetail {
                 code: "RATE_LIMIT".to_string(),
+                canonical_code: "RATE_LIMITED".to_string(),
+                retryable: true,
                 message: "Too many requests".to_string(),
                 timestamp: 1704067200,
                 request_id: None,
@@ -567,6 +595,8 @@ mod tests {
         let before = chrono::Utc::now().timestamp();
         let detail = GatewayErrorDetail {
             code: "TEST".to_string(),
+            canonical_code: "INTERNAL".to_string(),
+            retryable: false,
             message: "Test".to_string(),
             timestamp: chrono::Utc::now().timestamp(),
             request_id: None,
