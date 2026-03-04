@@ -44,6 +44,12 @@ jobs:
       - name: Run clippy
         run: cargo clippy --all-targets --features "$FEATURES" -- -D warnings
 
+      - name: Schema duplication guards
+        run: bash scripts/guards/check_schema_duplicates.sh
+
+      - name: API/runtime boundary guard
+        run: bash scripts/guards/check_api_runtime_boundary.sh
+
   test:
     name: Test
     runs-on: ubuntu-latest
