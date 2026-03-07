@@ -435,6 +435,20 @@ impl AtomicCacheStats {
         self.total_size_bytes.store(size, Ordering::Relaxed);
     }
 
+    /// Atomically add to total size
+    pub fn add_total_size(&self, size: usize) {
+        self.total_size_bytes.fetch_add(size, Ordering::Relaxed);
+    }
+
+    /// Atomically subtract from total size (saturating)
+    pub fn sub_total_size(&self, size: usize) {
+        let _ =
+            self.total_size_bytes
+                .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+                    Some(current.saturating_sub(size))
+                });
+    }
+
     /// Get a snapshot of current statistics
     pub fn snapshot(&self) -> CacheStatsSnapshot {
         CacheStatsSnapshot {

@@ -6,13 +6,12 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 impl RateLimiter {
-    /// Cleanup expired entries
+    /// Cleanup expired entries (background, no global lock — DashMap per-shard locks)
     pub async fn cleanup(&self) {
         let now = Instant::now();
         let window_start = now - self.window;
 
-        let mut entries = self.entries.write().await;
-        entries.retain(|_, entry| {
+        self.entries.retain(|_, entry| {
             entry.timestamps.retain(|&t| t > window_start);
             !entry.timestamps.is_empty() || entry.tokens > 0.0
         });

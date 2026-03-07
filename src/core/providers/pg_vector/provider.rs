@@ -104,8 +104,8 @@ CREATE TABLE IF NOT EXISTS {} (
 
     /// Generate SQL for creating an index on the vector column
     pub fn create_index_sql(&self) -> Option<String> {
-        let table_name = &self.config.table_name;
-        let index_name = format!("{}_embedding_idx", table_name);
+        let index_name = format!("{}_{}_embedding_idx", self.config.schema, self.config.table_name);
+        let quoted_index_name = format!("\"{}\"", index_name);
         let full_table = self.config.full_table_name();
         let ops_class = self
             .config
@@ -117,7 +117,7 @@ CREATE TABLE IF NOT EXISTS {} (
                 let lists = self.config.ivfflat_lists.unwrap_or(100);
                 Some(format!(
                     "CREATE INDEX IF NOT EXISTS {} ON {} USING ivfflat (embedding {}) WITH (lists = {})",
-                    index_name, full_table, ops_class, lists
+                    quoted_index_name, full_table, ops_class, lists
                 ))
             }
             IndexType::Hnsw => {
@@ -125,7 +125,7 @@ CREATE TABLE IF NOT EXISTS {} (
                 let ef_construction = self.config.hnsw_ef_construction.unwrap_or(64);
                 Some(format!(
                     "CREATE INDEX IF NOT EXISTS {} ON {} USING hnsw (embedding {}) WITH (m = {}, ef_construction = {})",
-                    index_name, full_table, ops_class, m, ef_construction
+                    quoted_index_name, full_table, ops_class, m, ef_construction
                 ))
             }
             IndexType::None => None,
@@ -276,17 +276,18 @@ ON CONFLICT (id) DO UPDATE SET
 
     /// Generate SQL for table statistics
     pub fn stats_sql(&self) -> String {
+        let full_table = self.config.full_table_name();
         format!(
             r#"
 SELECT
     (SELECT COUNT(*) FROM {table}) as total_vectors,
-    pg_total_relation_size('{table}') as table_size,
+    pg_total_relation_size({table}::regclass) as table_size,
     (SELECT pg_relation_size(indexrelid)
      FROM pg_index
-     WHERE indrelid = '{table}'::regclass
+     WHERE indrelid = {table}::regclass
      LIMIT 1) as index_size
 "#,
-            table = self.config.full_table_name()
+            table = full_table
         )
     }
 

@@ -291,9 +291,9 @@ impl PgVectorConfig {
         self
     }
 
-    /// Get the fully qualified table name
+    /// Get the fully qualified table name with PostgreSQL identifier quoting
     pub fn full_table_name(&self) -> String {
-        format!("{}.{}", self.schema, self.table_name)
+        format!("\"{}\".\"{}\"", self.schema, self.table_name)
     }
 
     /// Validate the configuration
@@ -318,6 +318,35 @@ impl PgVectorConfig {
             return Err(ProviderError::configuration(
                 PROVIDER_NAME,
                 "Table name cannot be empty",
+            ));
+        }
+
+        if !self
+            .table_name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_')
+        {
+            return Err(ProviderError::configuration(
+                PROVIDER_NAME,
+                "Table name must contain only alphanumeric characters and underscores",
+            ));
+        }
+
+        if self.schema.is_empty() {
+            return Err(ProviderError::configuration(
+                PROVIDER_NAME,
+                "Schema name cannot be empty",
+            ));
+        }
+
+        if !self
+            .schema
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_')
+        {
+            return Err(ProviderError::configuration(
+                PROVIDER_NAME,
+                "Schema name must contain only alphanumeric characters and underscores",
             ));
         }
 
@@ -479,6 +508,28 @@ mod tests {
         let config = PgVectorConfig::new("postgresql://localhost:5432/test")
             .with_schema("custom_schema")
             .with_table_name("custom_table");
-        assert_eq!(config.full_table_name(), "custom_schema.custom_table");
+        assert_eq!(config.full_table_name(), "\"custom_schema\".\"custom_table\"");
+    }
+
+    #[test]
+    fn test_validate_rejects_special_chars_in_table_name() {
+        let mut config = PgVectorConfig::new("postgresql://localhost:5432/test");
+        config.table_name = "bad; DROP TABLE users--".to_string();
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_validate_rejects_special_chars_in_schema() {
+        let mut config = PgVectorConfig::new("postgresql://localhost:5432/test");
+        config.schema = "public\"; DROP TABLE users--".to_string();
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_validate_accepts_valid_identifiers() {
+        let config = PgVectorConfig::new("postgresql://localhost:5432/test")
+            .with_schema("my_schema")
+            .with_table_name("my_table_123");
+        assert!(config.validate().is_ok());
     }
 }

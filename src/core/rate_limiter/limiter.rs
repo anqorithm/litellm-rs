@@ -2,17 +2,16 @@
 
 use super::types::{RateLimitEntry, RateLimitResult};
 use crate::core::types::config::rate_limit::{RateLimitConfig, RateLimitStrategy};
-use std::collections::HashMap;
+use dashmap::DashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::RwLock;
 
 /// Rate limiter implementation
 pub struct RateLimiter {
     /// Rate limit configuration
     pub(super) config: RateLimitConfig,
-    /// Rate limit entries by key (IP or API key)
-    pub(super) entries: Arc<RwLock<HashMap<String, RateLimitEntry>>>,
+    /// Rate limit entries by key (IP or API key) — per-key lock granularity
+    pub(super) entries: Arc<DashMap<String, RateLimitEntry>>,
     /// Window duration
     pub(super) window: Duration,
 }
@@ -22,7 +21,7 @@ impl RateLimiter {
     pub fn new(config: RateLimitConfig) -> Self {
         Self {
             config,
-            entries: Arc::new(RwLock::new(HashMap::new())),
+            entries: Arc::new(DashMap::new()),
             window: Duration::from_secs(60), // 1 minute window
         }
     }
@@ -31,7 +30,7 @@ impl RateLimiter {
     pub fn with_window(config: RateLimitConfig, window: Duration) -> Self {
         Self {
             config,
-            entries: Arc::new(RwLock::new(HashMap::new())),
+            entries: Arc::new(DashMap::new()),
             window,
         }
     }
@@ -92,13 +91,7 @@ impl RateLimiter {
             return;
         }
 
-        let mut entries = self.entries.write().await;
-        // Avoid String allocation if key already exists
-        let entry = if let Some(e) = entries.get_mut(key) {
-            e
-        } else {
-            entries.entry(key.to_string()).or_default()
-        };
+        let mut entry = self.entries.entry(key.to_string()).or_default();
 
         match self.config.strategy {
             RateLimitStrategy::SlidingWindow | RateLimitStrategy::FixedWindow => {

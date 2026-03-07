@@ -1,13 +1,87 @@
 //! Rate limiting middleware
 
+use crate::core::rate_limiter::get_global_rate_limiter;
 use crate::server::state::AppState;
 use actix_web::dev::{Service, ServiceRequest, ServiceResponse, Transform, forward_ready};
+use actix_web::http::StatusCode;
 use actix_web::web;
+use actix_web::{HttpResponse, ResponseError};
+use dashmap::DashMap;
 use futures::future::{Ready, ready};
+use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
-use std::time::Instant;
-use tracing::{debug, info};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+use tracing::{debug, info, warn};
+
+/// Fallback per-key tracker for sliding window when global rate limiter is unavailable
+struct KeyTracker {
+    timestamps: Vec<Instant>,
+}
+
+impl KeyTracker {
+    fn new() -> Self {
+        Self {
+            timestamps: Vec::new(),
+        }
+    }
+
+    /// Check-and-record atomically: returns (allowed, retry_after_secs)
+    fn check_and_record(&mut self, limit: u32, window: Duration) -> (bool, u64) {
+        let now = Instant::now();
+        // Evict timestamps outside the window
+        self.timestamps.retain(|&ts| now.duration_since(ts) < window);
+
+        let count = self.timestamps.len() as u32;
+        if count >= limit {
+            // Estimate when the oldest entry expires
+            let retry_after = self
+                .timestamps
+                .first()
+                .map(|&ts| {
+                    let age = now.duration_since(ts);
+                    window.saturating_sub(age).as_secs().max(1)
+                })
+                .unwrap_or(window.as_secs());
+            (false, retry_after)
+        } else {
+            self.timestamps.push(now);
+            (true, 0)
+        }
+    }
+}
+
+/// Lightweight in-process rate limit error for 429 responses
+#[derive(Debug)]
+struct RateLimitError {
+    retry_after: u64,
+}
+
+impl fmt::Display for RateLimitError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Too Many Requests")
+    }
+}
+
+impl ResponseError for RateLimitError {
+    fn status_code(&self) -> StatusCode {
+        StatusCode::TOO_MANY_REQUESTS
+    }
+
+    fn error_response(&self) -> HttpResponse {
+        HttpResponse::TooManyRequests()
+            .insert_header(("Retry-After", self.retry_after.to_string()))
+            .insert_header(("X-RateLimit-Limit", "rate_limited"))
+            .json(serde_json::json!({
+                "error": {
+                    "message": "Rate limit exceeded. Please retry after the indicated seconds.",
+                    "type": "rate_limit_error",
+                    "code": 429
+                }
+            }))
+    }
+}
 
 /// Rate limit middleware for Actix-web
 pub struct RateLimitMiddleware {
@@ -44,6 +118,7 @@ where
         ready(Ok(RateLimitMiddlewareService {
             service,
             requests_per_minute: self.requests_per_minute,
+            fallback_store: Arc::new(DashMap::new()),
         }))
     }
 }
@@ -52,6 +127,35 @@ where
 pub struct RateLimitMiddlewareService<S> {
     service: S,
     requests_per_minute: u32,
+    /// Fallback in-process store used when the global rate limiter is not initialized
+    fallback_store: Arc<DashMap<String, KeyTracker>>,
+}
+
+/// Extract a client identifier from the request.
+///
+/// Priority:
+/// 1. `Authorization` header value (API key / Bearer token) — identifies the authenticated caller
+/// 2. `X-Forwarded-For` first address
+/// 3. Direct peer IP from connection info
+fn extract_client_key(req: &ServiceRequest) -> String {
+    if let Some(auth) = req.headers().get("Authorization") {
+        if let Ok(val) = auth.to_str() {
+            // Use the raw header value so different keys map to different buckets.
+            return val.to_string();
+        }
+    }
+
+    let conn = req.connection_info();
+    if let Some(forwarded) = req.headers().get("X-Forwarded-For") {
+        if let Ok(val) = forwarded.to_str() {
+            let first = val.split(',').next().unwrap_or(val).trim();
+            if !first.is_empty() {
+                return first.to_string();
+            }
+        }
+    }
+
+    conn.peer_addr().unwrap_or("unknown").to_string()
 }
 
 impl<S, B> Service<ServiceRequest> for RateLimitMiddlewareService<S>
@@ -67,26 +171,87 @@ where
     forward_ready!(service);
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
-        let app_state = req.app_data::<web::Data<AppState>>().cloned();
-        let _requests_per_minute = self.requests_per_minute;
+        let _app_state = req.app_data::<web::Data<AppState>>().cloned();
+        let requests_per_minute = self.requests_per_minute;
         let start_time = Instant::now();
         let path = req.path().to_string();
         let method = req.method().to_string();
 
+        let client_key = extract_client_key(&req);
+
+        // --- Try global rate limiter first ---
+        if let Some(global_limiter) = get_global_rate_limiter() {
+            // The global limiter uses its own configured default_rpm.
+            // We hand off to it and treat its result as authoritative.
+            let fut = self.service.call(req);
+            let key = client_key.clone();
+
+            return Box::pin(async move {
+                let result = global_limiter.check_and_record(&key).await;
+
+                if !result.allowed {
+                    let retry_after = result.retry_after_secs.unwrap_or(60);
+                    warn!(
+                        client = %key,
+                        path = %path,
+                        "Rate limit exceeded (global limiter): retry after {}s",
+                        retry_after
+                    );
+                    let err = RateLimitError { retry_after };
+                    return Err(actix_web::Error::from(err));
+                }
+
+                debug!(
+                    client = %key,
+                    remaining = result.remaining,
+                    "Rate limit check passed (global limiter)"
+                );
+
+                let res = fut.await?;
+                let duration = start_time.elapsed();
+                info!(
+                    "{} {} completed in {:?} with status {}",
+                    method,
+                    path,
+                    duration,
+                    res.status()
+                );
+                Ok(res)
+            });
+        }
+
+        // --- Fallback: in-process sliding window using middleware's requests_per_minute ---
+        let fallback_store = self.fallback_store.clone();
         let fut = self.service.call(req);
+        let key = client_key.clone();
 
         Box::pin(async move {
-            if let Some(_state) = &app_state {
-                // Rate limiting logic would go here
-                // For now, just log and pass through
-                debug!(
-                    "Rate limit check for {} {} - start: {:?}",
-                    method, path, start_time
+            let window = Duration::from_secs(60);
+            let (allowed, retry_after) = {
+                let mut tracker = fallback_store
+                    .entry(key.clone())
+                    .or_insert_with(KeyTracker::new);
+                tracker.check_and_record(requests_per_minute, window)
+            };
+
+            if !allowed {
+                warn!(
+                    client = %key,
+                    path = %path,
+                    "Rate limit exceeded (fallback limiter): retry after {}s",
+                    retry_after
                 );
+                let err = RateLimitError { retry_after };
+                return Err(actix_web::Error::from(err));
             }
 
-            let res = fut.await?;
+            debug!(
+                client = %key,
+                limit = requests_per_minute,
+                "Rate limit check passed (fallback limiter)"
+            );
 
+            let res = fut.await?;
             let duration = start_time.elapsed();
             info!(
                 "{} {} completed in {:?} with status {}",
@@ -95,7 +260,6 @@ where
                 duration,
                 res.status()
             );
-
             Ok(res)
         })
     }

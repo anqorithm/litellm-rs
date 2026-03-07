@@ -10,7 +10,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use crate::core::providers::base::{
-    GlobalPoolManager, HeaderPair, HttpMethod, header, header_owned, streaming_client,
+    GlobalPoolManager, HeaderPair, HttpMethod, apply_headers, header, header_owned,
 };
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use crate::core::types::{
@@ -154,25 +154,11 @@ impl OpenAILikeProvider {
         let mut openai_request = self.transform_chat_request(request)?;
         openai_request["stream"] = Value::Bool(true);
 
-        // Execute streaming request
+        // Execute streaming request via pool_manager's client
         let url = format!("{}/chat/completions", self.config.get_api_base());
-        let client = streaming_client();
-        let mut req = client.post(&url).json(&openai_request);
-
-        // Add Authorization header if API key is provided
-        if let Some(api_key) = &self.config.base.api_key {
-            req = req.header("Authorization", format!("Bearer {}", api_key));
-        }
-
-        // Add organization header if present
-        if let Some(org) = &self.config.base.organization {
-            req = req.header("OpenAI-Organization", org);
-        }
-
-        // Add custom headers
-        for (key, value) in &self.config.custom_headers {
-            req = req.header(key, value);
-        }
+        let client = self.pool_manager.client();
+        let headers = self.get_request_headers();
+        let req = apply_headers(client.post(&url).json(&openai_request), headers);
 
         let response = req
             .send()
@@ -414,14 +400,11 @@ impl LLMProvider for OpenAILikeProvider {
     }
 
     async fn health_check(&self) -> HealthStatus {
-        // Try to connect to the API base
+        // Try to connect to the API base via pool_manager's client
         let url = format!("{}/models", self.config.get_api_base());
-        let client = reqwest::Client::new();
-        let mut req = client.get(&url);
-
-        if let Some(api_key) = &self.config.base.api_key {
-            req = req.header("Authorization", format!("Bearer {}", api_key));
-        }
+        let client = self.pool_manager.client();
+        let headers = self.get_request_headers();
+        let req = apply_headers(client.get(&url), headers);
 
         match req.send().await {
             Ok(response) if response.status().is_success() => HealthStatus::Healthy,

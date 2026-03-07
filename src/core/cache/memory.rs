@@ -5,8 +5,9 @@
 
 use super::types::{AtomicCacheStats, CacheEntry, CacheKey, DualCacheConfig, EvictionPolicy};
 use dashmap::DashMap;
-use parking_lot::RwLock;
-use std::collections::VecDeque;
+use lru::LruCache;
+use parking_lot::Mutex;
+use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -17,8 +18,8 @@ use tracing::{debug, trace};
 pub struct InMemoryCache<T> {
     /// Main cache storage using DashMap for lock-free access
     cache: Arc<DashMap<CacheKey, CacheEntry<T>>>,
-    /// LRU tracking: stores keys in access order
-    lru_order: Arc<RwLock<VecDeque<CacheKey>>>,
+    /// LRU tracking using O(1) LruCache (used as an ordered set, value is ())
+    lru_order: Arc<Mutex<LruCache<CacheKey, ()>>>,
     /// Configuration
     config: DualCacheConfig,
     /// Statistics
@@ -40,10 +41,11 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
         let cache = Arc::new(DashMap::with_capacity(config.max_size));
         let shutdown = Arc::new(AtomicBool::new(false));
         let shutdown_notify = Arc::new(Notify::new());
+        let lru_cap = NonZeroUsize::new(config.max_size).unwrap_or(NonZeroUsize::new(1).unwrap());
 
         Self {
             cache,
-            lru_order: Arc::new(RwLock::new(VecDeque::with_capacity(config.max_size))),
+            lru_order: Arc::new(Mutex::new(LruCache::new(lru_cap))),
             config,
             stats,
             shutdown,
@@ -78,15 +80,17 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
 
     /// Get a value from the cache
     pub fn get(&self, key: &CacheKey) -> Option<T> {
-        if let Some(mut entry) = self.cache.get_mut(key) {
-            if entry.is_expired() {
-                drop(entry);
-                self.cache.remove(key);
-                self.stats.record_memory_miss();
-                trace!(key = %key, "Cache entry expired");
-                return None;
-            }
+        // Atomically remove expired entries to avoid TOCTOU race
+        if let Some((_, removed)) = self.cache.remove_if(key, |_k, v| v.is_expired()) {
+            self.remove_from_lru(key);
+            self.stats.sub_total_size(removed.size_bytes);
+            self.stats.set_entry_count(self.cache.len());
+            self.stats.record_memory_miss();
+            trace!(key = %key, "Cache entry expired");
+            return None;
+        }
 
+        if let Some(mut entry) = self.cache.get_mut(key) {
             entry.touch();
             self.update_lru(key);
             self.stats.record_memory_hit();
@@ -101,14 +105,16 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
 
     /// Get an entry with metadata from the cache
     pub fn get_entry(&self, key: &CacheKey) -> Option<CacheEntry<T>> {
-        if let Some(mut entry) = self.cache.get_mut(key) {
-            if entry.is_expired() {
-                drop(entry);
-                self.cache.remove(key);
-                self.stats.record_memory_miss();
-                return None;
-            }
+        // Atomically remove expired entries to avoid TOCTOU race
+        if let Some((_, removed)) = self.cache.remove_if(key, |_k, v| v.is_expired()) {
+            self.remove_from_lru(key);
+            self.stats.sub_total_size(removed.size_bytes);
+            self.stats.set_entry_count(self.cache.len());
+            self.stats.record_memory_miss();
+            return None;
+        }
 
+        if let Some(mut entry) = self.cache.get_mut(key) {
             entry.touch();
             self.update_lru(key);
             self.stats.record_memory_hit();
@@ -132,18 +138,20 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
         }
 
         let entry = CacheEntry::new(value, ttl);
-        let is_new = !self.cache.contains_key(&key);
-
-        self.cache.insert(key.clone(), entry);
+        let new_size = entry.size_bytes;
+        // Atomic insert returns the old entry if key existed (no TOCTOU gap)
+        let old = self.cache.insert(key.clone(), entry);
         self.stats.record_write();
 
-        if is_new {
-            self.add_to_lru(&key);
-        } else {
+        if let Some(old_entry) = old {
+            self.stats.sub_total_size(old_entry.size_bytes);
             self.update_lru(&key);
+        } else {
+            self.add_to_lru(&key);
         }
 
-        self.update_stats();
+        self.stats.add_total_size(new_size);
+        self.stats.set_entry_count(self.cache.len());
         trace!(key = %key, ttl_secs = ttl.as_secs(), "Cache set");
     }
 
@@ -154,26 +162,29 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
         }
 
         let entry = CacheEntry::with_size(value, ttl, size_bytes);
-        let is_new = !self.cache.contains_key(&key);
-
-        self.cache.insert(key.clone(), entry);
+        let new_size = entry.size_bytes;
+        // Atomic insert returns the old entry if key existed (no TOCTOU gap)
+        let old = self.cache.insert(key.clone(), entry);
         self.stats.record_write();
 
-        if is_new {
-            self.add_to_lru(&key);
-        } else {
+        if let Some(old_entry) = old {
+            self.stats.sub_total_size(old_entry.size_bytes);
             self.update_lru(&key);
+        } else {
+            self.add_to_lru(&key);
         }
 
-        self.update_stats();
+        self.stats.add_total_size(new_size);
+        self.stats.set_entry_count(self.cache.len());
     }
 
     /// Delete a value from the cache
     pub fn delete(&self, key: &CacheKey) -> bool {
-        if self.cache.remove(key).is_some() {
+        if let Some((_, removed)) = self.cache.remove(key) {
             self.remove_from_lru(key);
             self.stats.record_deletion();
-            self.update_stats();
+            self.stats.sub_total_size(removed.size_bytes);
+            self.stats.set_entry_count(self.cache.len());
             trace!(key = %key, "Cache delete");
             true
         } else {
@@ -183,17 +194,13 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
 
     /// Check if a key exists in the cache
     pub fn exists(&self, key: &CacheKey) -> bool {
-        if let Some(entry) = self.cache.get(key) {
-            if entry.is_expired() {
-                drop(entry);
-                self.cache.remove(key);
-                false
-            } else {
-                true
-            }
-        } else {
-            false
+        // Atomically remove expired entries to avoid TOCTOU race
+        if self.cache.remove_if(key, |_k, v| v.is_expired()).is_some() {
+            self.remove_from_lru(key);
+            self.stats.set_entry_count(self.cache.len());
+            return false;
         }
+        self.cache.contains_key(key)
     }
 
     /// Get the remaining TTL for a key
@@ -208,7 +215,7 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
     /// Clear all entries from the cache
     pub fn clear(&self) {
         self.cache.clear();
-        self.lru_order.write().clear();
+        self.lru_order.lock().clear();
         self.stats.reset();
         debug!("Cache cleared");
     }
@@ -241,28 +248,25 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
 
     // ==================== Private Methods ====================
 
-    /// Update LRU order for a key
+    /// Update LRU order for a key (O(1) via lru::LruCache)
     fn update_lru(&self, key: &CacheKey) {
-        let mut lru = self.lru_order.write();
-        // Remove from current position if exists
-        if let Some(pos) = lru.iter().position(|k| k == key) {
-            lru.remove(pos);
+        let mut lru = self.lru_order.lock();
+        // promote re-inserts the key to most-recent in O(1)
+        if lru.promote(key) {
+            return;
         }
-        // Add to back (most recently used)
-        lru.push_back(key.clone());
+        // Key was not in LRU (shouldn't normally happen), add it
+        lru.push(key.clone(), ());
     }
 
-    /// Add a key to the LRU order
+    /// Add a key to the LRU order (O(1))
     fn add_to_lru(&self, key: &CacheKey) {
-        self.lru_order.write().push_back(key.clone());
+        self.lru_order.lock().push(key.clone(), ());
     }
 
-    /// Remove a key from the LRU order
+    /// Remove a key from the LRU order (O(1))
     fn remove_from_lru(&self, key: &CacheKey) {
-        let mut lru = self.lru_order.write();
-        if let Some(pos) = lru.iter().position(|k| k == key) {
-            lru.remove(pos);
-        }
+        self.lru_order.lock().pop_entry(key);
     }
 
     /// Evict one entry based on the eviction policy
@@ -278,13 +282,16 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
     /// Evict the least recently used entry
     fn evict_lru(&self) {
         let key = {
-            let mut lru = self.lru_order.write();
-            lru.pop_front()
+            let mut lru = self.lru_order.lock();
+            lru.pop_lru().map(|(k, _)| k)
         };
 
         if let Some(key) = key {
-            self.cache.remove(&key);
+            if let Some((_, removed)) = self.cache.remove(&key) {
+                self.stats.sub_total_size(removed.size_bytes);
+            }
             self.stats.record_eviction();
+            self.stats.set_entry_count(self.cache.len());
             trace!(key = %key, "LRU eviction");
         }
     }
@@ -299,9 +306,12 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
             .map(|entry| entry.key().clone());
 
         if let Some(key) = key_to_evict {
-            self.cache.remove(&key);
+            if let Some((_, removed)) = self.cache.remove(&key) {
+                self.stats.sub_total_size(removed.size_bytes);
+            }
             self.remove_from_lru(&key);
             self.stats.record_eviction();
+            self.stats.set_entry_count(self.cache.len());
             trace!(key = %key, "LFU eviction");
         }
     }
@@ -316,9 +326,12 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
             .map(|entry| entry.key().clone());
 
         if let Some(key) = expired_key {
-            self.cache.remove(&key);
+            if let Some((_, removed)) = self.cache.remove(&key) {
+                self.stats.sub_total_size(removed.size_bytes);
+            }
             self.remove_from_lru(&key);
             self.stats.record_eviction();
+            self.stats.set_entry_count(self.cache.len());
             return;
         }
 
@@ -330,9 +343,12 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
             .map(|entry| entry.key().clone());
 
         if let Some(key) = key_to_evict {
-            self.cache.remove(&key);
+            if let Some((_, removed)) = self.cache.remove(&key) {
+                self.stats.sub_total_size(removed.size_bytes);
+            }
             self.remove_from_lru(&key);
             self.stats.record_eviction();
+            self.stats.set_entry_count(self.cache.len());
             trace!(key = %key, "TTL eviction");
         }
     }
@@ -346,9 +362,12 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
             .map(|entry| entry.key().clone());
 
         if let Some(key) = key_to_evict {
-            self.cache.remove(&key);
+            if let Some((_, removed)) = self.cache.remove(&key) {
+                self.stats.sub_total_size(removed.size_bytes);
+            }
             self.remove_from_lru(&key);
             self.stats.record_eviction();
+            self.stats.set_entry_count(self.cache.len());
             trace!(key = %key, "FIFO eviction");
         }
     }
@@ -365,27 +384,17 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
 
         let count = expired_keys.len();
         for key in expired_keys {
-            self.cache.remove(&key);
+            if let Some((_, removed)) = self.cache.remove(&key) {
+                self.stats.sub_total_size(removed.size_bytes);
+            }
             self.remove_from_lru(&key);
             self.stats.record_eviction();
         }
 
         if count > 0 {
             debug!(count = count, "Cleaned up expired entries");
-            self.update_stats();
+            self.stats.set_entry_count(self.cache.len());
         }
-    }
-
-    /// Update statistics
-    fn update_stats(&self) {
-        self.stats.set_entry_count(self.cache.len());
-
-        let total_size: usize = self
-            .cache
-            .iter()
-            .map(|entry| entry.value().size_bytes)
-            .sum();
-        self.stats.set_total_size(total_size);
     }
 }
 

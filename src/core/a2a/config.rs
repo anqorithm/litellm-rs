@@ -5,6 +5,7 @@
 use crate::core::types::config::defaults::default_true;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::net::IpAddr;
 
 /// Agent provider type
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
@@ -226,7 +227,137 @@ impl AgentConfig {
                 self.url
             ));
         }
+
+        // SSRF protection: extract and validate the host
+        let host = extract_url_host(&self.url).ok_or_else(|| {
+            format!("Agent URL has an invalid or missing host: {}", self.url)
+        })?;
+
+        if is_private_or_reserved_host(&host) {
+            return Err(format!(
+                "Agent URL targets a private or reserved address '{}', which is not allowed (SSRF protection)",
+                host
+            ));
+        }
+
         Ok(())
+    }
+}
+
+/// Extract the host portion from a URL string.
+///
+/// Supports `http://` and `https://` schemes. Returns `None` if the host
+/// cannot be determined.
+fn extract_url_host(url: &str) -> Option<String> {
+    // Strip scheme
+    let after_scheme = url
+        .strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://"))?;
+
+    // Take everything up to the first '/', '?', or '#' to isolate host[:port]
+    let authority = after_scheme
+        .split(|c| c == '/' || c == '?' || c == '#')
+        .next()?;
+
+    if authority.is_empty() {
+        return None;
+    }
+
+    // Strip optional port number
+    // Handle IPv6 addresses like [::1]:8080
+    let host = if authority.starts_with('[') {
+        // IPv6 bracketed: [addr] or [addr]:port
+        let end_bracket = authority.find(']')?;
+        &authority[1..end_bracket]
+    } else {
+        // IPv4 or hostname: strip trailing :port
+        match authority.rfind(':') {
+            Some(pos) => &authority[..pos],
+            None => authority,
+        }
+    };
+
+    Some(host.to_lowercase())
+}
+
+/// Returns `true` if the host is a private, loopback, link-local, or otherwise
+/// reserved address that must not be reachable from the gateway (SSRF guard).
+///
+/// Covered ranges:
+/// - 127.0.0.0/8   — IPv4 loopback
+/// - 10.0.0.0/8    — RFC 1918 private
+/// - 172.16.0.0/12 — RFC 1918 private
+/// - 192.168.0.0/16 — RFC 1918 private
+/// - 169.254.0.0/16 — IPv4 link-local / cloud metadata (169.254.169.254)
+/// - 0.0.0.0        — unspecified
+/// - ::1            — IPv6 loopback
+/// - fc00::/7       — IPv6 unique-local (fc00:: – fdff::)
+/// - localhost and common internal hostnames
+fn is_private_or_reserved_host(host: &str) -> bool {
+    // Reject well-known internal hostnames directly
+    if host == "localhost"
+        || host.ends_with(".localhost")
+        || host == "metadata.google.internal"
+        || host == "169.254.169.254"
+    {
+        return true;
+    }
+
+    // Try to parse as an IP address and apply CIDR checks
+    if let Ok(ip) = host.parse::<IpAddr>() {
+        return is_private_or_reserved_ip(ip);
+    }
+
+    false
+}
+
+/// Check whether a parsed IP address falls within private or reserved ranges.
+fn is_private_or_reserved_ip(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => {
+            let octets = v4.octets();
+            // 0.0.0.0 — unspecified
+            if octets == [0, 0, 0, 0] {
+                return true;
+            }
+            // 127.0.0.0/8 — loopback
+            if octets[0] == 127 {
+                return true;
+            }
+            // 10.0.0.0/8 — RFC 1918
+            if octets[0] == 10 {
+                return true;
+            }
+            // 172.16.0.0/12 — RFC 1918 (172.16.x.x – 172.31.x.x)
+            if octets[0] == 172 && (16..=31).contains(&octets[1]) {
+                return true;
+            }
+            // 192.168.0.0/16 — RFC 1918
+            if octets[0] == 192 && octets[1] == 168 {
+                return true;
+            }
+            // 169.254.0.0/16 — link-local / AWS/GCP metadata endpoint
+            if octets[0] == 169 && octets[1] == 254 {
+                return true;
+            }
+            false
+        }
+        IpAddr::V6(v6) => {
+            // ::1 — loopback
+            if v6.is_loopback() {
+                return true;
+            }
+            // fc00::/7 — unique-local (covers fc00:: and fd00::)
+            let segments = v6.segments();
+            if (segments[0] & 0xfe00) == 0xfc00 {
+                return true;
+            }
+            // ::ffff:0:0/96 — IPv4-mapped; recurse with the embedded IPv4 address
+            if let Some(v4) = v6.to_ipv4_mapped() {
+                return is_private_or_reserved_ip(IpAddr::V4(v4));
+            }
+            false
+        }
     }
 }
 
@@ -426,6 +557,155 @@ mod tests {
         // Invalid URL
         let config = AgentConfig::new("test", "ftp://example.com");
         assert!(config.validate().is_err());
+    }
+
+    // ==================== SSRF protection tests ====================
+
+    #[test]
+    fn test_ssrf_loopback_ipv4_rejected() {
+        let config = AgentConfig::new("test", "http://127.0.0.1/api");
+        let err = config.validate().unwrap_err();
+        assert!(err.contains("private or reserved"), "got: {}", err);
+    }
+
+    #[test]
+    fn test_ssrf_loopback_ipv4_any_port_rejected() {
+        let config = AgentConfig::new("test", "https://127.0.0.1:8080/api");
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_ssrf_localhost_hostname_rejected() {
+        let config = AgentConfig::new("test", "http://localhost/api");
+        let err = config.validate().unwrap_err();
+        assert!(err.contains("private or reserved"), "got: {}", err);
+    }
+
+    #[test]
+    fn test_ssrf_localhost_subdomain_rejected() {
+        let config = AgentConfig::new("test", "http://my.localhost/api");
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_ssrf_rfc1918_10_rejected() {
+        let config = AgentConfig::new("test", "http://10.0.0.1/api");
+        assert!(config.validate().is_err());
+
+        let config = AgentConfig::new("test", "http://10.255.255.255/api");
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_ssrf_rfc1918_172_rejected() {
+        let config = AgentConfig::new("test", "http://172.16.0.1/api");
+        assert!(config.validate().is_err());
+
+        let config = AgentConfig::new("test", "http://172.31.255.255/api");
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_ssrf_rfc1918_172_boundary_allowed() {
+        // 172.15.x.x is NOT in RFC 1918 range
+        let config = AgentConfig::new("test", "https://172.15.0.1/api");
+        assert!(config.validate().is_ok());
+
+        // 172.32.x.x is NOT in RFC 1918 range
+        let config = AgentConfig::new("test", "https://172.32.0.1/api");
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_ssrf_rfc1918_192_168_rejected() {
+        let config = AgentConfig::new("test", "http://192.168.1.1/api");
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_ssrf_link_local_metadata_rejected() {
+        // Cloud metadata endpoint
+        let config = AgentConfig::new("test", "http://169.254.169.254/latest/meta-data/");
+        assert!(config.validate().is_err());
+
+        let config = AgentConfig::new("test", "http://169.254.0.1/api");
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_ssrf_unspecified_ipv4_rejected() {
+        let config = AgentConfig::new("test", "http://0.0.0.0/api");
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_ssrf_ipv6_loopback_rejected() {
+        let config = AgentConfig::new("test", "http://[::1]/api");
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_ssrf_ipv6_unique_local_rejected() {
+        let config = AgentConfig::new("test", "http://[fc00::1]/api");
+        assert!(config.validate().is_err());
+
+        let config = AgentConfig::new("test", "http://[fd00::1]/api");
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_ssrf_google_metadata_hostname_rejected() {
+        let config = AgentConfig::new("test", "http://metadata.google.internal/computeMetadata/v1/");
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_ssrf_public_ip_allowed() {
+        // 8.8.8.8 is a public Google DNS — should be allowed
+        let config = AgentConfig::new("test", "https://8.8.8.8/api");
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_ssrf_public_domain_allowed() {
+        let config = AgentConfig::new("test", "https://api.example.com/v1/agent");
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_extract_url_host_basic() {
+        assert_eq!(
+            extract_url_host("https://example.com/path"),
+            Some("example.com".to_string())
+        );
+        assert_eq!(
+            extract_url_host("http://10.0.0.1:8080/api"),
+            Some("10.0.0.1".to_string())
+        );
+        assert_eq!(
+            extract_url_host("http://[::1]:9000/api"),
+            Some("::1".to_string())
+        );
+        assert_eq!(extract_url_host("ftp://example.com"), None);
+        assert_eq!(extract_url_host("http://"), None);
+    }
+
+    #[test]
+    fn test_is_private_or_reserved_ip_public() {
+        use std::net::Ipv4Addr;
+        assert!(!is_private_or_reserved_ip(IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8))));
+        assert!(!is_private_or_reserved_ip(IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1))));
+    }
+
+    #[test]
+    fn test_is_private_or_reserved_ip_private() {
+        use std::net::Ipv4Addr;
+        assert!(is_private_or_reserved_ip(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))));
+        assert!(is_private_or_reserved_ip(IpAddr::V4(Ipv4Addr::new(10, 1, 2, 3))));
+        assert!(is_private_or_reserved_ip(IpAddr::V4(Ipv4Addr::new(172, 20, 0, 1))));
+        assert!(is_private_or_reserved_ip(IpAddr::V4(Ipv4Addr::new(192, 168, 0, 1))));
+        assert!(is_private_or_reserved_ip(IpAddr::V4(Ipv4Addr::new(169, 254, 169, 254))));
+        assert!(is_private_or_reserved_ip(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0))));
     }
 
     #[test]

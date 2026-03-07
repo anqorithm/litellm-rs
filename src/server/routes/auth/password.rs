@@ -14,13 +14,13 @@ pub async fn forgot_password(
     state: web::Data<AppState>,
     request: web::Json<ForgotPasswordRequest>,
 ) -> ActixResult<HttpResponse> {
-    info!("Password reset request for email: {}", request.email);
+    info!("Password reset request received");
 
     // Generate reset token
     match state.auth.request_password_reset(&request.email).await {
         Ok(_reset_token) => {
             // TODO: Send email with reset token
-            info!("Password reset token generated for: {}", request.email);
+            info!("Password reset token generated");
             Ok(HttpResponse::Ok().json(ApiResponse::success(())))
         }
         Err(e) => {

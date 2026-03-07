@@ -17,15 +17,9 @@ impl RateLimiter {
         let window_start = now - self.window;
         let limit = self.config.default_rpm;
 
-        let mut entries = self.entries.write().await;
-        // Avoid String allocation if key already exists
-        let entry = if let Some(e) = entries.get_mut(key) {
-            e
-        } else {
-            entries.entry(key.to_string()).or_default()
-        };
+        let mut entry = self.entries.entry(key.to_string()).or_default();
 
-        // Remove expired timestamps
+        // Lazily remove expired timestamps (per-key only, no global lock)
         entry.timestamps.retain(|&t| t > window_start);
 
         let current_count = entry.timestamps.len() as u32;
@@ -79,19 +73,14 @@ impl RateLimiter {
         let limit = self.config.default_rpm;
         let tokens_per_second = limit as f64 / 60.0;
 
-        let mut entries = self.entries.write().await;
-        // Avoid String allocation if key already exists
-        let entry = if let Some(e) = entries.get_mut(key) {
-            e
-        } else {
-            entries
-                .entry(key.to_string())
-                .or_insert_with(|| RateLimitEntry {
-                    tokens: limit as f64,
-                    last_refill: now,
-                    timestamps: Vec::new(),
-                })
-        };
+        let mut entry = self
+            .entries
+            .entry(key.to_string())
+            .or_insert_with(|| RateLimitEntry {
+                tokens: limit as f64,
+                last_refill: now,
+                timestamps: Vec::new(),
+            });
 
         // Refill tokens based on elapsed time
         let elapsed = now.duration_since(entry.last_refill);
@@ -141,13 +130,7 @@ impl RateLimiter {
         let now = Instant::now();
         let limit = self.config.default_rpm;
 
-        let mut entries = self.entries.write().await;
-        // Avoid String allocation if key already exists
-        let entry = if let Some(e) = entries.get_mut(key) {
-            e
-        } else {
-            entries.entry(key.to_string()).or_default()
-        };
+        let mut entry = self.entries.entry(key.to_string()).or_default();
 
         // Check if we need to reset the window
         let window_start = if let Some(&first) = entry.timestamps.first() {
