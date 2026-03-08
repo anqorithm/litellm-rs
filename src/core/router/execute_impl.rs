@@ -3,7 +3,7 @@
 //! This module contains the execute, execute_once, and execute_with_retry methods.
 
 use super::deployment::DeploymentId;
-use super::error::RouterError;
+use super::error::{CooldownReason, RouterError};
 use super::execution::{
     build_execution_result, calculate_retry_delay, infer_cooldown_reason, is_retryable_error,
     provider_error_to_router_error, router_error_to_provider_error,
@@ -63,9 +63,12 @@ impl Router {
                     self.release_deployment(&deployment_id);
 
                     if is_retryable_error(&err) && attempt < max_attempts {
+                        // Use ConsecutiveFailures so the deployment only enters
+                        // cooldown after exceeding allowed_fails threshold,
+                        // giving retries a chance to succeed.
                         self.record_failure_with_reason(
                             &deployment_id,
-                            infer_cooldown_reason(&err),
+                            CooldownReason::ConsecutiveFailures,
                         );
                         let delay = calculate_retry_delay(&self.config, attempt);
                         last_error = Some(err);
