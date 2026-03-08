@@ -63,9 +63,10 @@ impl Router {
                     self.release_deployment(&deployment_id);
 
                     if is_retryable_error(&err) && attempt < max_attempts {
-                        if let Some(d) = self.deployments.get(&deployment_id) {
-                            d.record_failure();
-                        }
+                        self.record_failure_with_reason(
+                            &deployment_id,
+                            infer_cooldown_reason(&err),
+                        );
                         let delay = calculate_retry_delay(&self.config, attempt);
                         last_error = Some(err);
                         tokio::time::sleep(delay).await;
