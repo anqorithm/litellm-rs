@@ -508,7 +508,10 @@ mod tests {
         let config = PgVectorConfig::new("postgresql://localhost:5432/test")
             .with_schema("custom_schema")
             .with_table_name("custom_table");
-        assert_eq!(config.full_table_name(), "\"custom_schema\".\"custom_table\"");
+        assert_eq!(
+            config.full_table_name(),
+            "\"custom_schema\".\"custom_table\""
+        );
     }
 
     #[test]
