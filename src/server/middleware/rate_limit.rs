@@ -31,7 +31,8 @@ impl KeyTracker {
     fn check_and_record(&mut self, limit: u32, window: Duration) -> (bool, u64) {
         let now = Instant::now();
         // Evict timestamps outside the window
-        self.timestamps.retain(|&ts| now.duration_since(ts) < window);
+        self.timestamps
+            .retain(|&ts| now.duration_since(ts) < window);
 
         let count = self.timestamps.len() as u32;
         if count >= limit {
