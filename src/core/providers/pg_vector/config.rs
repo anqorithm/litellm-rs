@@ -207,13 +207,19 @@ impl PgVectorConfig {
 
         if let Ok(index_type) = env::var("PG_VECTOR_INDEX_TYPE") {
             config.index_type = index_type.parse().map_err(|e| {
-                ProviderError::configuration(PROVIDER_NAME, format!("Invalid PG_VECTOR_INDEX_TYPE: {e}"))
+                ProviderError::configuration(
+                    PROVIDER_NAME,
+                    format!("Invalid PG_VECTOR_INDEX_TYPE: {e}"),
+                )
             })?;
         }
 
         if let Ok(metric) = env::var("PG_VECTOR_DISTANCE_METRIC") {
             config.distance_metric = metric.parse().map_err(|e| {
-                ProviderError::configuration(PROVIDER_NAME, format!("Invalid PG_VECTOR_DISTANCE_METRIC: {e}"))
+                ProviderError::configuration(
+                    PROVIDER_NAME,
+                    format!("Invalid PG_VECTOR_DISTANCE_METRIC: {e}"),
+                )
             })?;
         }
 
@@ -221,7 +227,9 @@ impl PgVectorConfig {
             config.max_connections = max_conn.parse().map_err(|_| {
                 ProviderError::configuration(
                     PROVIDER_NAME,
-                    format!("Invalid PG_VECTOR_MAX_CONNECTIONS value: '{max_conn}' (expected integer)"),
+                    format!(
+                        "Invalid PG_VECTOR_MAX_CONNECTIONS value: '{max_conn}' (expected integer)"
+                    ),
                 )
             })?;
         }
@@ -522,7 +530,10 @@ mod tests {
         let config = PgVectorConfig::new("postgresql://localhost:5432/test")
             .with_schema("custom_schema")
             .with_table_name("custom_table");
-        assert_eq!(config.full_table_name(), "\"custom_schema\".\"custom_table\"");
+        assert_eq!(
+            config.full_table_name(),
+            "\"custom_schema\".\"custom_table\""
+        );
     }
 
     #[test]
