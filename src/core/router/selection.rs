@@ -62,7 +62,9 @@ impl Router {
             .iter()
             .filter(|id| {
                 if let Some(deployment) = self.deployments.get(id.as_str()) {
-                    if !deployment.is_healthy() || deployment.is_in_cooldown() {
+                    // Check cooldown first: is_in_cooldown() resets health
+                    // from Cooldown to Degraded when the cooldown period expires.
+                    if deployment.is_in_cooldown() || !deployment.is_healthy() {
                         return false;
                     }
 
@@ -134,11 +136,10 @@ impl Router {
     /// Decrements the active_requests counter for the deployment.
     pub fn release_deployment(&self, deployment_id: &str) {
         if let Some(deployment) = self.deployments.get(deployment_id) {
-            let _ = deployment.state.active_requests.fetch_update(
-                Relaxed,
-                Relaxed,
-                |v| Some(v.saturating_sub(1)),
-            );
+            let _ = deployment
+                .state
+                .active_requests
+                .fetch_update(Relaxed, Relaxed, |v| Some(v.saturating_sub(1)));
         }
     }
 }
