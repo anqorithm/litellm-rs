@@ -32,7 +32,8 @@ impl KeyTracker {
     fn check_and_record(&mut self, limit: u32, window: Duration) -> (bool, u64) {
         let now = Instant::now();
         // Evict timestamps outside the window
-        self.timestamps.retain(|&ts| now.duration_since(ts) < window);
+        self.timestamps
+            .retain(|&ts| now.duration_since(ts) < window);
 
         let count = self.timestamps.len() as u32;
         if count >= limit {
@@ -246,7 +247,10 @@ where
                     "Rate limit exceeded (fallback limiter): retry after {}s",
                     retry_after
                 );
-                let err = RateLimitError { retry_after, limit: requests_per_minute };
+                let err = RateLimitError {
+                    retry_after,
+                    limit: requests_per_minute,
+                };
                 return Err(actix_web::Error::from(err));
             }
 

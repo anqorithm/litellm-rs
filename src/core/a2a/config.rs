@@ -229,9 +229,8 @@ impl AgentConfig {
         }
 
         // SSRF protection: extract and validate the host
-        let host = extract_url_host(&self.url).ok_or_else(|| {
-            format!("Agent URL has an invalid or missing host: {}", self.url)
-        })?;
+        let host = extract_url_host(&self.url)
+            .ok_or_else(|| format!("Agent URL has an invalid or missing host: {}", self.url))?;
 
         if is_private_or_reserved_host(&host) {
             return Err(format!(
@@ -655,7 +654,10 @@ mod tests {
 
     #[test]
     fn test_ssrf_google_metadata_hostname_rejected() {
-        let config = AgentConfig::new("test", "http://metadata.google.internal/computeMetadata/v1/");
+        let config = AgentConfig::new(
+            "test",
+            "http://metadata.google.internal/computeMetadata/v1/",
+        );
         assert!(config.validate().is_err());
     }
 
@@ -693,19 +695,35 @@ mod tests {
     #[test]
     fn test_is_private_or_reserved_ip_public() {
         use std::net::Ipv4Addr;
-        assert!(!is_private_or_reserved_ip(IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8))));
-        assert!(!is_private_or_reserved_ip(IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1))));
+        assert!(!is_private_or_reserved_ip(IpAddr::V4(Ipv4Addr::new(
+            8, 8, 8, 8
+        ))));
+        assert!(!is_private_or_reserved_ip(IpAddr::V4(Ipv4Addr::new(
+            1, 1, 1, 1
+        ))));
     }
 
     #[test]
     fn test_is_private_or_reserved_ip_private() {
         use std::net::Ipv4Addr;
-        assert!(is_private_or_reserved_ip(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))));
-        assert!(is_private_or_reserved_ip(IpAddr::V4(Ipv4Addr::new(10, 1, 2, 3))));
-        assert!(is_private_or_reserved_ip(IpAddr::V4(Ipv4Addr::new(172, 20, 0, 1))));
-        assert!(is_private_or_reserved_ip(IpAddr::V4(Ipv4Addr::new(192, 168, 0, 1))));
-        assert!(is_private_or_reserved_ip(IpAddr::V4(Ipv4Addr::new(169, 254, 169, 254))));
-        assert!(is_private_or_reserved_ip(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0))));
+        assert!(is_private_or_reserved_ip(IpAddr::V4(Ipv4Addr::new(
+            127, 0, 0, 1
+        ))));
+        assert!(is_private_or_reserved_ip(IpAddr::V4(Ipv4Addr::new(
+            10, 1, 2, 3
+        ))));
+        assert!(is_private_or_reserved_ip(IpAddr::V4(Ipv4Addr::new(
+            172, 20, 0, 1
+        ))));
+        assert!(is_private_or_reserved_ip(IpAddr::V4(Ipv4Addr::new(
+            192, 168, 0, 1
+        ))));
+        assert!(is_private_or_reserved_ip(IpAddr::V4(Ipv4Addr::new(
+            169, 254, 169, 254
+        ))));
+        assert!(is_private_or_reserved_ip(IpAddr::V4(Ipv4Addr::new(
+            0, 0, 0, 0
+        ))));
     }
 
     #[test]
