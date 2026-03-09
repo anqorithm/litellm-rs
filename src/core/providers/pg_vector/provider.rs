@@ -104,7 +104,10 @@ CREATE TABLE IF NOT EXISTS {} (
 
     /// Generate SQL for creating an index on the vector column
     pub fn create_index_sql(&self) -> Option<String> {
-        let index_name = format!("{}_{}_embedding_idx", self.config.schema, self.config.table_name);
+        let index_name = format!(
+            "{}_{}_embedding_idx",
+            self.config.schema, self.config.table_name
+        );
         let quoted_index_name = format!("\"{}\"", index_name);
         let full_table = self.config.full_table_name();
         let ops_class = self
