@@ -182,10 +182,9 @@ fn get_client_identifier(req: &ServiceRequest) -> String {
         .or_else(|| req.headers().get("authorization"))
         .and_then(|h| h.to_str().ok())
     {
-        use std::hash::{Hash, Hasher};
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        api_key.hash(&mut hasher);
-        format!("{}:{:x}", ip, hasher.finish())
+        use sha2::{Digest, Sha256};
+        let hash = Sha256::digest(api_key.as_bytes());
+        format!("{}:{:x}", ip, hash)
     } else {
         format!("ip:{}", ip)
     }
