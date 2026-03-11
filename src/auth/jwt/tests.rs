@@ -144,3 +144,24 @@ async fn test_invalid_token_verification() {
     let result = handler.verify_token(invalid_token).await;
     assert!(result.is_err());
 }
+
+/// Verify that a refresh token passes verify_token() but has TokenType::Refresh,
+/// which means authenticate_jwt() will reject it via the token_type guard.
+#[tokio::test]
+async fn test_refresh_token_rejected_as_access() {
+    let handler = create_test_handler().await;
+    let user_id = Uuid::new_v4();
+
+    let refresh_token = handler.create_refresh_token(user_id, None).await.unwrap();
+
+    // verify_token accepts refresh tokens (it allows both "api" and "refresh" audiences)
+    let claims = handler.verify_token(&refresh_token).await.unwrap();
+    assert_eq!(claims.sub, user_id);
+
+    // But the token_type is Refresh, NOT Access — authenticate_jwt rejects this
+    assert!(
+        !matches!(claims.token_type, TokenType::Access),
+        "refresh token must not be treated as an access token"
+    );
+    assert!(matches!(claims.token_type, TokenType::Refresh));
+}

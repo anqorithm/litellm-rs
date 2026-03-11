@@ -1,6 +1,7 @@
 //! Core authentication system implementation
 
 use super::types::{AuthMethod, AuthResult, AuthzResult};
+use crate::auth::jwt::types::TokenType;
 use crate::config::models::auth::AuthConfig;
 use crate::core::models::user::types::{User, UserRole};
 use crate::core::types::context::RequestContext;
@@ -85,6 +86,18 @@ impl AuthSystem {
     ) -> Result<AuthResult> {
         match self.jwt.verify_token(token).await {
             Ok(claims) => {
+                // Reject non-access tokens (e.g. refresh, password reset)
+                if !matches!(claims.token_type, TokenType::Access) {
+                    return Ok(AuthResult {
+                        success: false,
+                        user: None,
+                        api_key: None,
+                        session: None,
+                        error: Some("Invalid token type: expected access token".to_string()),
+                        context,
+                    });
+                }
+
                 // Get user from database
                 if let Ok(Some(user)) = self.storage.db().find_user_by_id(claims.sub).await {
                     if user.is_active() {
