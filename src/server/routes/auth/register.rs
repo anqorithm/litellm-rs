@@ -1,19 +1,71 @@
 //! User registration endpoint
 
+use crate::server::middleware::AuthRateLimiter;
 use crate::server::routes::ApiResponse;
 use crate::server::state::AppState;
 use crate::utils::auth::crypto::password::hash_password;
 use crate::utils::data::validation::DataValidator;
-use actix_web::{HttpResponse, Result as ActixResult, web};
-use tracing::{error, info};
+use actix_web::{HttpRequest, HttpResponse, Result as ActixResult, web};
+use std::sync::Arc;
+use tracing::{error, info, warn};
 
 use super::models::{RegisterRequest, RegisterResponse};
 
+/// Global registration rate limiter: 10 attempts per IP per hour
+static REGISTER_RATE_LIMITER: std::sync::OnceLock<Arc<AuthRateLimiter>> =
+    std::sync::OnceLock::new();
+
+fn get_register_rate_limiter() -> Arc<AuthRateLimiter> {
+    REGISTER_RATE_LIMITER
+        .get_or_init(|| Arc::new(AuthRateLimiter::new(10, 3600, 3600)))
+        .clone()
+}
+
+/// Extract client IP from the request for rate limiting
+fn extract_client_ip(req: &HttpRequest) -> String {
+    if let Some(forwarded) = req.headers().get("X-Forwarded-For") {
+        if let Ok(val) = forwarded.to_str() {
+            let first = val.split(',').next().unwrap_or(val).trim();
+            if !first.is_empty() {
+                return first.to_string();
+            }
+        }
+    }
+    req.connection_info()
+        .peer_addr()
+        .unwrap_or("unknown")
+        .to_string()
+}
+
+/// Generic error message for duplicate credentials to prevent enumeration
+const DUPLICATE_CREDENTIALS_ERROR: &str =
+    "Registration failed. An account with these credentials may already exist.";
+
 /// User registration endpoint
 pub async fn register(
+    req: HttpRequest,
     state: web::Data<AppState>,
     request: web::Json<RegisterRequest>,
 ) -> ActixResult<HttpResponse> {
+    let client_ip = extract_client_ip(&req);
+
+    // Rate limit: max 10 registration attempts per IP per hour
+    let limiter = get_register_rate_limiter();
+    if let Err(retry_after) = limiter.check_allowed(&client_ip) {
+        warn!(
+            "Registration rate limit exceeded for IP {}: retry after {}s",
+            client_ip, retry_after
+        );
+        return Ok(HttpResponse::TooManyRequests()
+            .insert_header(("Retry-After", retry_after.to_string()))
+            .json(ApiResponse::<()>::error(
+                "Too many registration attempts. Please try again later.".to_string(),
+            )));
+    }
+
+    // Count this attempt toward the rate limit
+    limiter.record_failure(&client_ip);
+
     info!("User registration attempt: {}", request.username);
 
     // Validate input
@@ -43,8 +95,8 @@ pub async fn register(
         .await
     {
         Ok(Some(_)) => {
-            return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
-                "Username already exists".to_string(),
+            return Ok(HttpResponse::Conflict().json(ApiResponse::<()>::error(
+                DUPLICATE_CREDENTIALS_ERROR.to_string(),
             )));
         }
         Ok(None) => {} // Continue with registration
@@ -63,8 +115,9 @@ pub async fn register(
         .await
     {
         Ok(Some(_)) => {
-            return Ok(HttpResponse::BadRequest()
-                .json(ApiResponse::<()>::error("Email already exists".to_string())));
+            return Ok(HttpResponse::Conflict().json(ApiResponse::<()>::error(
+                DUPLICATE_CREDENTIALS_ERROR.to_string(),
+            )));
         }
         Ok(None) => {} // Continue with registration
         Err(e) => {
@@ -97,6 +150,7 @@ pub async fn register(
     // Store user in database
     match state.storage.database.create_user(&user).await {
         Ok(created_user) => {
+            limiter.record_success(&client_ip);
             info!("User registered successfully: {}", created_user.username);
 
             let response = RegisterResponse {
