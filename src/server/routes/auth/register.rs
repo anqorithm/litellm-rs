@@ -7,6 +7,7 @@ use crate::utils::auth::crypto::password::hash_password;
 use crate::utils::data::validation::DataValidator;
 use actix_web::{HttpRequest, HttpResponse, Result as ActixResult, web};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use tracing::{error, info, warn};
 
 use super::models::{RegisterRequest, RegisterResponse};
@@ -21,21 +22,17 @@ fn get_register_rate_limiter() -> Arc<AuthRateLimiter> {
         .clone()
 }
 
-/// Extract client IP from the request for rate limiting
+/// Extract client IP from the request for rate limiting.
+/// Uses only the TCP peer address to prevent X-Forwarded-For spoofing.
 fn extract_client_ip(req: &HttpRequest) -> String {
-    if let Some(forwarded) = req.headers().get("X-Forwarded-For") {
-        if let Ok(val) = forwarded.to_str() {
-            let first = val.split(',').next().unwrap_or(val).trim();
-            if !first.is_empty() {
-                return first.to_string();
-            }
-        }
-    }
     req.connection_info()
         .peer_addr()
         .unwrap_or("unknown")
         .to_string()
 }
+
+/// Counter for probabilistic cleanup of rate limiter entries
+static REQUEST_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// Generic error message for duplicate credentials to prevent enumeration
 const DUPLICATE_CREDENTIALS_ERROR: &str =
@@ -51,6 +48,13 @@ pub async fn register(
 
     // Rate limit: max 10 registration attempts per IP per hour
     let limiter = get_register_rate_limiter();
+
+    // Probabilistic cleanup: every 100th request, purge stale entries
+    let count = REQUEST_COUNTER.fetch_add(1, Ordering::Relaxed);
+    if count % 100 == 0 {
+        limiter.cleanup_old_entries();
+    }
+
     if let Err(retry_after) = limiter.check_allowed(&client_ip) {
         warn!(
             "Registration rate limit exceeded for IP {}: retry after {}s",
@@ -95,7 +99,7 @@ pub async fn register(
         .await
     {
         Ok(Some(_)) => {
-            return Ok(HttpResponse::Conflict().json(ApiResponse::<()>::error(
+            return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
                 DUPLICATE_CREDENTIALS_ERROR.to_string(),
             )));
         }
@@ -115,7 +119,7 @@ pub async fn register(
         .await
     {
         Ok(Some(_)) => {
-            return Ok(HttpResponse::Conflict().json(ApiResponse::<()>::error(
+            return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
                 DUPLICATE_CREDENTIALS_ERROR.to_string(),
             )));
         }
@@ -150,7 +154,6 @@ pub async fn register(
     // Store user in database
     match state.storage.database.create_user(&user).await {
         Ok(created_user) => {
-            limiter.record_success(&client_ip);
             info!("User registered successfully: {}", created_user.username);
 
             let response = RegisterResponse {
