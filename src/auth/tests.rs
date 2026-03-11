@@ -168,3 +168,25 @@ fn test_auth_method_clone() {
         panic!("Clone failed");
     }
 }
+
+#[test]
+fn test_session_auth_always_rejected() {
+    let context = RequestContext::new();
+    // Session authentication must always fail until a proper session store is implemented.
+    // This prevents the JWT-as-session bypass (issue #37).
+    let result = AuthResult {
+        success: false,
+        user: None,
+        api_key: None,
+        session: None,
+        error: Some("Session authentication is not yet implemented".to_string()),
+        context,
+    };
+
+    assert!(!result.success);
+    assert!(result.user.is_none());
+    assert_eq!(
+        result.error.as_deref(),
+        Some("Session authentication is not yet implemented")
+    );
+}

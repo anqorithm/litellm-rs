@@ -195,58 +195,18 @@ impl AuthSystem {
     /// Authenticate using session
     async fn authenticate_session(
         &self,
-        session_id: &str,
-        mut context: RequestContext,
+        _session_id: &str,
+        context: RequestContext,
     ) -> Result<AuthResult> {
-        // TODO: Implement session verification
-        match self.jwt.verify_token(session_id).await {
-            Ok(claims) => {
-                // Try to find user by ID from claims
-                match self.storage.db().find_user_by_id(claims.sub).await {
-                    Ok(Some(user)) => {
-                        context.user_id = Some(user.id().to_string());
-                        if let Some(team_id) = user.team_ids.first().copied() {
-                            context.set_team_id(team_id);
-                        } else {
-                            context.clear_team_id();
-                        }
-
-                        Ok(AuthResult {
-                            success: true,
-                            user: Some(user),
-                            api_key: None,
-                            session: None, // TODO: Create proper session object
-                            error: None,
-                            context,
-                        })
-                    }
-                    Ok(None) => Ok(AuthResult {
-                        success: false,
-                        user: None,
-                        api_key: None,
-                        session: None,
-                        error: Some("User not found".to_string()),
-                        context,
-                    }),
-                    Err(e) => Ok(AuthResult {
-                        success: false,
-                        user: None,
-                        api_key: None,
-                        session: None,
-                        error: Some(format!("User lookup failed: {}", e)),
-                        context,
-                    }),
-                }
-            }
-            Err(e) => Ok(AuthResult {
-                success: false,
-                user: None,
-                api_key: None,
-                session: None,
-                error: Some(format!("Session verification failed: {}", e)),
-                context,
-            }),
-        }
+        // Sessions not yet implemented — reject to prevent JWT-as-session bypass
+        Ok(AuthResult {
+            success: false,
+            user: None,
+            api_key: None,
+            session: None,
+            error: Some("Session authentication is not yet implemented".to_string()),
+            context,
+        })
     }
 
     /// Authorize a user for specific permissions
