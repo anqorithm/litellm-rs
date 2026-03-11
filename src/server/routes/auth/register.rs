@@ -51,7 +51,7 @@ pub async fn register(
 
     // Probabilistic cleanup: every 100th request, purge stale entries
     let count = REQUEST_COUNTER.fetch_add(1, Ordering::Relaxed);
-    if count % 100 == 0 {
+    if count.is_multiple_of(100) {
         limiter.cleanup_old_entries();
     }
 
