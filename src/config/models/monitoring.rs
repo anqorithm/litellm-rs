@@ -68,7 +68,8 @@ impl Default for MetricsConfig {
 impl MetricsConfig {
     /// Merge metrics configurations
     pub fn merge(mut self, other: Self) -> Self {
-        if !other.enabled {
+        // MetricsConfig defaults to enabled=true, so we need bidirectional merge
+        if other.enabled != default_true() {
             self.enabled = other.enabled;
         }
         if other.port != default_metrics_port() {
