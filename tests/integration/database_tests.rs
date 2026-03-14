@@ -344,4 +344,155 @@ mod tests {
             .expect("Failed to clean expired keys");
         assert_eq!(deleted, 1);
     }
+
+    /// Helper: create an in-memory SQLite database with migrations applied.
+    async fn make_db() -> litellm_rs::storage::database::Database {
+        let config = DatabaseConfig {
+            url: "sqlite::memory:".to_string(),
+            max_connections: 1,
+            connection_timeout: 5,
+            ssl: false,
+            enabled: true,
+        };
+        let db = litellm_rs::storage::database::Database::new(&config)
+            .await
+            .expect("Failed to create database");
+        db.migrate().await.expect("Migration failed");
+        db
+    }
+
+    /// Helper: create a user in the database and return its ID.
+    async fn create_test_user(db: &litellm_rs::storage::database::Database) -> Uuid {
+        let mut user = litellm_rs::core::models::user::types::User::new(
+            "token-test-user".to_string(),
+            format!("token-test-{}@example.com", Uuid::new_v4()),
+            "hashed-password".to_string(),
+        );
+        user.metadata.id = Uuid::new_v4();
+        db.create_user(&user).await.expect("Failed to create user");
+        user.id()
+    }
+
+    /// A valid token can be stored and then verified (consumed) exactly once.
+    #[tokio::test]
+    async fn test_password_reset_token_verify_once() {
+        let db = make_db().await;
+        let user_id = create_test_user(&db).await;
+        let token = "test-reset-token-verify-once";
+        let expires_at = chrono::Utc::now() + chrono::Duration::minutes(15);
+
+        db.store_password_reset_token(user_id, token, expires_at)
+            .await
+            .expect("Failed to store token");
+
+        // First verify succeeds and returns the user id.
+        let result = db
+            .verify_password_reset_token(token)
+            .await
+            .expect("Failed to verify token");
+        assert_eq!(result, Some(user_id));
+
+        // Second verify must fail: token is already consumed.
+        let result2 = db
+            .verify_password_reset_token(token)
+            .await
+            .expect("Unexpected error on second verify");
+        assert_eq!(result2, None, "Token must not be reusable after consumption");
+    }
+
+    /// An expired token must not be accepted.
+    #[tokio::test]
+    async fn test_password_reset_token_expired() {
+        let db = make_db().await;
+        let user_id = create_test_user(&db).await;
+        let token = "test-reset-token-expired";
+        let expires_at = chrono::Utc::now() - chrono::Duration::seconds(1);
+
+        db.store_password_reset_token(user_id, token, expires_at)
+            .await
+            .expect("Failed to store expired token");
+
+        let result = db
+            .verify_password_reset_token(token)
+            .await
+            .expect("Failed to query expired token");
+        assert_eq!(result, None, "Expired token must be rejected");
+    }
+
+    /// Concurrent verify calls for the same token must not both succeed.
+    ///
+    /// This test exercises the TOCTOU fix: the transaction wrapping
+    /// validate + consume ensures at most one caller receives the user id.
+    ///
+    /// SQLite serializes writes, so the losing task will either receive `None`
+    /// (token already consumed) or a database-locked error. Both outcomes prove
+    /// that the token was not double-consumed.
+    #[tokio::test]
+    async fn test_password_reset_token_concurrent_usage() {
+        use std::sync::Arc;
+
+        // SQLite in-memory databases are per-connection; use a shared file-based
+        // temp DB so both tasks hit the same data store.
+        let tmp = tempfile::NamedTempFile::new().expect("tmp file");
+        let db_url = format!("sqlite://{}?mode=rwc", tmp.path().to_string_lossy());
+
+        let config = DatabaseConfig {
+            url: db_url,
+            max_connections: 5,
+            connection_timeout: 5,
+            ssl: false,
+            enabled: true,
+        };
+        let db = Arc::new(
+            litellm_rs::storage::database::Database::new(&config)
+                .await
+                .expect("Failed to create database"),
+        );
+        db.migrate().await.expect("Migration failed");
+
+        let user_id = {
+            let mut user = litellm_rs::core::models::user::types::User::new(
+                "concurrent-token-user".to_string(),
+                format!("concurrent-token-{}@example.com", Uuid::new_v4()),
+                "hashed-password".to_string(),
+            );
+            user.metadata.id = Uuid::new_v4();
+            db.create_user(&user).await.expect("Failed to create user");
+            user.id()
+        };
+
+        let token = format!("concurrent-reset-token-{}", Uuid::new_v4());
+        let expires_at = chrono::Utc::now() + chrono::Duration::minutes(15);
+        db.store_password_reset_token(user_id, &token, expires_at)
+            .await
+            .expect("Failed to store token");
+
+        // Spawn two tasks that race to consume the same token.
+        let db1 = Arc::clone(&db);
+        let db2 = Arc::clone(&db);
+        let token1 = token.clone();
+        let token2 = token.clone();
+
+        let (r1, r2) = tokio::join!(
+            tokio::spawn(async move { db1.verify_password_reset_token(&token1).await }),
+            tokio::spawn(async move { db2.verify_password_reset_token(&token2).await }),
+        );
+
+        let r1 = r1.expect("task 1 panicked");
+        let r2 = r2.expect("task 2 panicked");
+
+        // Count successes. A `Some(user_id)` means the token was consumed.
+        // An `Err` (database locked) or `Ok(None)` both mean the token was NOT
+        // double-consumed, which is the invariant we are protecting.
+        let successes = [&r1, &r2]
+            .iter()
+            .filter(|r| matches!(r, Ok(Some(_))))
+            .count();
+
+        assert_eq!(
+            successes, 1,
+            "Exactly one concurrent request should succeed; got r1={:?}, r2={:?}",
+            r1, r2
+        );
+    }
 }

@@ -41,29 +41,42 @@ impl SeaOrmDatabase {
     }
 
     /// Verify and consume password reset token
+    ///
+    /// Token validation and consumption are wrapped in a single database transaction
+    /// to prevent TOCTOU race conditions where the same token could be used multiple
+    /// times in concurrent requests.
     pub async fn verify_password_reset_token(&self, token: &str) -> Result<Option<uuid::Uuid>> {
         debug!("Verifying password reset token");
+
+        let tx = self
+            .db
+            .begin()
+            .await
+            .map_err(GatewayError::Database)?;
 
         let token_model = entities::PasswordResetToken::find()
             .filter(password_reset_token::Column::Token.eq(token))
             .filter(password_reset_token::Column::UsedAt.is_null())
             .filter(password_reset_token::Column::ExpiresAt.gt(chrono::Utc::now()))
-            .one(&self.db)
+            .one(&tx)
             .await
             .map_err(GatewayError::Database)?;
 
         if let Some(token_model) = token_model {
-            // Mark token as used
+            // Mark token as used within the same transaction
             let mut active_model: password_reset_token::ActiveModel = token_model.clone().into();
             active_model.used_at = Set(Some(chrono::Utc::now().into()));
 
             active_model
-                .update(&self.db)
+                .update(&tx)
                 .await
                 .map_err(GatewayError::Database)?;
 
+            tx.commit().await.map_err(GatewayError::Database)?;
+
             Ok(Some(token_model.user_id))
         } else {
+            tx.rollback().await.map_err(GatewayError::Database)?;
             Ok(None)
         }
     }
