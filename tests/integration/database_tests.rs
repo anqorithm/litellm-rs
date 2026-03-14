@@ -344,4 +344,142 @@ mod tests {
             .expect("Failed to clean expired keys");
         assert_eq!(deleted, 1);
     }
+
+    // -------------------------------------------------------------------------
+    // Password reset token tests (issue #61 — TOCTOU race condition fix)
+    // -------------------------------------------------------------------------
+
+    /// Helper: create an in-memory database with migrations applied.
+    async fn make_db() -> Database {
+        let config = DatabaseConfig {
+            url: "sqlite::memory:".to_string(),
+            max_connections: 1,
+            connection_timeout: 5,
+            ssl: false,
+            enabled: true,
+        };
+        let db = Database::new(&config)
+            .await
+            .expect("Failed to create database");
+        db.migrate().await.expect("Migration failed");
+        db
+    }
+
+    /// Helper: create a user and return its id.
+    async fn create_test_user(db: &Database) -> Uuid {
+        let mut user = User::new(
+            format!("user-{}", Uuid::new_v4()),
+            format!("{}@example.com", Uuid::new_v4()),
+            "initial-hash".to_string(),
+        );
+        user.metadata.id = Uuid::new_v4();
+        db.create_user(&user).await.expect("Failed to create user");
+        user.id()
+    }
+
+    /// A valid token allows password reset and is consumed atomically.
+    #[tokio::test]
+    async fn test_password_reset_token_happy_path() {
+        let db = make_db().await;
+        let user_id = create_test_user(&db).await;
+
+        let token = "valid-token-abc";
+        let expires_at = chrono::Utc::now() + chrono::Duration::hours(1);
+        db.store_password_reset_token(user_id, token, expires_at)
+            .await
+            .expect("Failed to store token");
+
+        let result = db
+            .reset_password_with_token(token, "new-password-hash")
+            .await
+            .expect("reset_password_with_token failed");
+        assert!(result, "expected Ok(true) for a valid token");
+
+        // The token must not be reusable after consumption.
+        let second = db
+            .reset_password_with_token(token, "another-hash")
+            .await
+            .expect("second call should not return Err");
+        assert!(
+            !second,
+            "consumed token must not be reusable — got Ok(true) on second call"
+        );
+    }
+
+    /// An expired token must not allow a password reset.
+    #[tokio::test]
+    async fn test_password_reset_token_expired() {
+        let db = make_db().await;
+        let user_id = create_test_user(&db).await;
+
+        let token = "expired-token-xyz";
+        // Place the expiry in the past.
+        let expires_at = chrono::Utc::now() - chrono::Duration::seconds(1);
+        db.store_password_reset_token(user_id, token, expires_at)
+            .await
+            .expect("Failed to store expired token");
+
+        let result = db
+            .reset_password_with_token(token, "some-hash")
+            .await
+            .expect("reset_password_with_token failed");
+        assert!(!result, "expired token must return Ok(false), got Ok(true)");
+    }
+
+    /// An unknown / non-existent token must return Ok(false).
+    #[tokio::test]
+    async fn test_password_reset_token_unknown() {
+        let db = make_db().await;
+
+        let result = db
+            .reset_password_with_token("non-existent-token", "some-hash")
+            .await
+            .expect("reset_password_with_token failed");
+        assert!(!result, "unknown token must return Ok(false)");
+    }
+
+    /// Simulate the TOCTOU scenario: two sequential calls with the same token.
+    /// After the first call succeeds the token is consumed; the second call must
+    /// fail.  This verifies the core correctness guarantee introduced by the fix
+    /// (true concurrent testing would require a multi-connection setup).
+    #[tokio::test]
+    async fn test_password_reset_token_second_use_rejected() {
+        let db = make_db().await;
+        let user_id = create_test_user(&db).await;
+
+        let token = "race-token-999";
+        let expires_at = chrono::Utc::now() + chrono::Duration::hours(1);
+        db.store_password_reset_token(user_id, token, expires_at)
+            .await
+            .expect("Failed to store token");
+
+        // First attempt — must succeed.
+        let first = db
+            .reset_password_with_token(token, "hash-from-first-request")
+            .await
+            .expect("first call failed");
+        assert!(first, "first call with a valid token must succeed");
+
+        // Second attempt with the same token — must be rejected because the
+        // token was consumed by the first call inside the transaction.
+        let second = db
+            .reset_password_with_token(token, "hash-from-second-request")
+            .await
+            .expect("second call returned Err");
+        assert!(
+            !second,
+            "second call with the same token must return Ok(false) after the token was consumed"
+        );
+
+        // Verify the password stored is the one set by the *first* winner.
+        let user = db
+            .find_user_by_id(user_id)
+            .await
+            .expect("find_user_by_id failed")
+            .expect("user not found");
+        assert_eq!(
+            user.password_hash, "hash-from-first-request",
+            "password must reflect only the first (winning) reset, not the second"
+        );
+    }
 }

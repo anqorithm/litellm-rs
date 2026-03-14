@@ -69,34 +69,32 @@ impl AuthSystem {
         Ok(reset_token)
     }
 
-    /// Reset password using token
+    /// Reset password using token.
+    ///
+    /// Token validation, consumption, and password update are performed inside a
+    /// single database transaction to eliminate the TOCTOU race condition that
+    /// previously allowed a token to be consumed by two concurrent requests.
     pub async fn reset_password(&self, token: &str, new_password: &str) -> Result<()> {
         info!("Resetting password with token");
 
-        // Verify reset token
-        let user_id = self
-            .storage
-            .db()
-            .verify_password_reset_token(token)
-            .await?
-            .ok_or_else(|| GatewayError::auth("Invalid or expired reset token"))?;
-
-        // Hash new password
+        // Hash new password before entering the transaction so that any error
+        // here does not require a rollback.
         let password_hash = hash_password(new_password)?;
 
-        // Update password
-        self.storage
+        // Atomically validate + consume the token and update the password in one
+        // database transaction.  Returns false when the token is invalid, already
+        // used, or expired.
+        let updated = self
+            .storage
             .db()
-            .update_user_password(user_id, &password_hash)
+            .reset_password_with_token(token, &password_hash)
             .await?;
 
-        // Invalidate reset token
-        self.storage
-            .db()
-            .invalidate_password_reset_token(token)
-            .await?;
+        if !updated {
+            return Err(GatewayError::auth("Invalid or expired reset token"));
+        }
 
-        info!("Password reset successfully for user: {}", user_id);
+        info!("Password reset successfully");
         Ok(())
     }
 }
