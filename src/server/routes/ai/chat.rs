@@ -153,6 +153,7 @@ async fn handle_streaming_chat_completion(
                 .insert_header((CONTENT_TYPE, "text/event-stream"))
                 .insert_header((CACHE_CONTROL, "no-cache"))
                 .insert_header(("Connection", "keep-alive"))
+                .insert_header(("X-Request-ID", context.request_id.as_str()))
                 .streaming(sse_stream))
         }
         Err((e, _)) => {

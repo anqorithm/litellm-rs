@@ -7,7 +7,6 @@ use crate::server::middleware::auth_rate_limiter::get_auth_rate_limiter;
 use crate::server::middleware::helpers::{extract_auth_method, is_public_route};
 use crate::server::state::AppState;
 use actix_web::dev::{Service, ServiceRequest, ServiceResponse, Transform, forward_ready};
-use actix_web::http::header::{HeaderName, HeaderValue};
 use actix_web::{HttpMessage, HttpRequest, web};
 use futures::future::{Ready, ready};
 use std::collections::HashMap;
@@ -15,7 +14,6 @@ use std::future::Future;
 use std::pin::Pin;
 use std::rc::Rc;
 use tracing::{debug, warn};
-use uuid::Uuid;
 
 /// Auth middleware for Actix-web
 pub struct AuthMiddleware;
@@ -193,25 +191,18 @@ fn get_client_identifier(req: &ServiceRequest) -> String {
 fn build_request_context(req: &mut ServiceRequest) -> RequestContext {
     let mut context = RequestContext::new();
 
-    let existing_id = req
+    // Use the request ID set by RequestIdMiddleware when present; otherwise keep
+    // the UUID that RequestContext::new() already generated so that AuthMiddleware
+    // remains self-sufficient when used without RequestIdMiddleware in the stack.
+    if let Some(id) = req
         .headers()
         .get("x-request-id")
         .and_then(|value| value.to_str().ok())
-        .map(str::to_string);
+        .filter(|s| !s.is_empty())
+    {
+        context.request_id = id.to_string();
+    }
 
-    let request_id = if let Some(id) = existing_id {
-        id
-    } else {
-        let id = Uuid::new_v4().to_string();
-        // UUID strings are always valid ASCII, but handle error gracefully
-        if let Ok(header_value) = HeaderValue::from_str(&id) {
-            req.headers_mut()
-                .insert(HeaderName::from_static("x-request-id"), header_value);
-        }
-        id
-    };
-
-    context.request_id = request_id;
     context.user_agent = req
         .headers()
         .get("user-agent")
