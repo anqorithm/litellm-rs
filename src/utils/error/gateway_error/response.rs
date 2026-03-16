@@ -898,8 +898,8 @@ mod tests {
 
     #[test]
     fn test_gateway_error_yaml_response() {
-        let yaml_err: serde_yaml::Error =
-            serde_yaml::from_str::<serde_yaml::Value>("key: [unclosed").unwrap_err();
+        let yaml_err: serde_yml::Error =
+            serde_yml::from_str::<serde_yml::Value>("key: [unclosed").unwrap_err();
         let error = GatewayError::Yaml(yaml_err);
         let response = error.error_response();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
