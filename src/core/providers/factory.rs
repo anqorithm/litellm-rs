@@ -207,6 +207,24 @@ fn merge_string_headers_value(
     false
 }
 
+fn apply_string_setting(value: &serde_json::Value, setter: impl FnOnce(String)) -> bool {
+    if let Some(v) = value.as_str().filter(|s| !s.trim().is_empty()) {
+        setter(v.to_string());
+        true
+    } else {
+        false
+    }
+}
+
+fn apply_bool_setting(value: &serde_json::Value, setter: impl FnOnce(bool)) -> bool {
+    if let Some(v) = value.as_bool() {
+        setter(v);
+        true
+    } else {
+        false
+    }
+}
+
 fn apply_tier1_openai_like_overrides(
     config: &mut openai_like::OpenAILikeConfig,
     settings: &std::collections::HashMap<String, serde_json::Value>,
@@ -217,38 +235,10 @@ fn apply_tier1_openai_like_overrides(
         let consumed = match key.as_str() {
             "headers" => merge_string_headers_value(&mut config.base.headers, value),
             "custom_headers" => merge_string_headers_value(&mut config.custom_headers, value),
-            "model_prefix" => {
-                if let Some(v) = value.as_str().filter(|v| !v.trim().is_empty()) {
-                    config.model_prefix = Some(v.to_string());
-                    true
-                } else {
-                    false
-                }
-            }
-            "default_model" => {
-                if let Some(v) = value.as_str().filter(|v| !v.trim().is_empty()) {
-                    config.default_model = Some(v.to_string());
-                    true
-                } else {
-                    false
-                }
-            }
-            "pass_through_params" => {
-                if let Some(v) = value.as_bool() {
-                    config.pass_through_params = v;
-                    true
-                } else {
-                    false
-                }
-            }
-            "skip_api_key" => {
-                if let Some(v) = value.as_bool() {
-                    config.skip_api_key = v;
-                    true
-                } else {
-                    false
-                }
-            }
+            "model_prefix" => apply_string_setting(value, |v| config.model_prefix = Some(v)),
+            "default_model" => apply_string_setting(value, |v| config.default_model = Some(v)),
+            "pass_through_params" => apply_bool_setting(value, |v| config.pass_through_params = v),
+            "skip_api_key" => apply_bool_setting(value, |v| config.skip_api_key = v),
             "timeout" => {
                 if let Some(v) = value.as_u64() {
                     config.base.timeout = v;
@@ -265,22 +255,8 @@ fn apply_tier1_openai_like_overrides(
                     false
                 }
             }
-            "organization" => {
-                if let Some(v) = value.as_str().filter(|v| !v.trim().is_empty()) {
-                    config.base.organization = Some(v.to_string());
-                    true
-                } else {
-                    false
-                }
-            }
-            "api_version" => {
-                if let Some(v) = value.as_str().filter(|v| !v.trim().is_empty()) {
-                    config.base.api_version = Some(v.to_string());
-                    true
-                } else {
-                    false
-                }
-            }
+            "organization" => apply_string_setting(value, |v| config.base.organization = Some(v)),
+            "api_version" => apply_string_setting(value, |v| config.base.api_version = Some(v)),
             _ => false,
         };
 
