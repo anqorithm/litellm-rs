@@ -82,10 +82,14 @@ impl ResponseError for GatewayError {
                     provider_error.to_string(),
                 ),
                 ProviderError::ContextLengthExceeded { .. }
-                | ProviderError::ContentFiltered { .. }
                 | ProviderError::TokenLimitExceeded { .. } => (
+                    actix_web::http::StatusCode::PAYLOAD_TOO_LARGE,
+                    "CONTEXT_LENGTH_EXCEEDED",
+                    provider_error.to_string(),
+                ),
+                ProviderError::ContentFiltered { .. } => (
                     actix_web::http::StatusCode::BAD_REQUEST,
-                    "PROVIDER_REQUEST_ERROR",
+                    "CONTENT_FILTERED",
                     provider_error.to_string(),
                 ),
                 ProviderError::NotSupported { .. }
@@ -244,6 +248,25 @@ impl ResponseError for GatewayError {
             tpm_limit,
             ..
         } = self
+        {
+            if let Some(secs) = retry_after {
+                builder.insert_header(("Retry-After", secs.to_string()));
+            }
+            if let Some(rpm) = rpm_limit {
+                builder.insert_header(("X-RateLimit-Limit-Requests", rpm.to_string()));
+            }
+            if let Some(tpm) = tpm_limit {
+                builder.insert_header(("X-RateLimit-Limit-Tokens", tpm.to_string()));
+            }
+        }
+
+        // Add rate limit headers for provider 429 responses
+        if let GatewayError::Provider(ProviderError::RateLimit {
+            retry_after,
+            rpm_limit,
+            tpm_limit,
+            ..
+        }) = self
         {
             if let Some(secs) = retry_after {
                 builder.insert_header(("Retry-After", secs.to_string()));
@@ -692,7 +715,7 @@ mod tests {
         };
         let error = GatewayError::Provider(provider_error);
         let response = error.error_response();
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
     }
 
     #[test]
@@ -750,6 +773,33 @@ mod tests {
         let error = GatewayError::Provider(provider_error);
         let response = error.error_response();
         assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+    }
+
+    #[test]
+    fn test_provider_rate_limit_headers() {
+        let provider_error = ProviderError::RateLimit {
+            provider: "openai",
+            message: "Rate limit exceeded".to_string(),
+            retry_after: Some(30),
+            rpm_limit: Some(200),
+            tpm_limit: Some(20000),
+            current_usage: Some(0.99),
+        };
+        let error = GatewayError::Provider(provider_error);
+        let response = error.error_response();
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(
+            response.headers().get("Retry-After").unwrap().to_str().unwrap(),
+            "30"
+        );
+        assert_eq!(
+            response.headers().get("X-RateLimit-Limit-Requests").unwrap().to_str().unwrap(),
+            "200"
+        );
+        assert_eq!(
+            response.headers().get("X-RateLimit-Limit-Tokens").unwrap().to_str().unwrap(),
+            "20000"
+        );
     }
 
     // ==================== Integration Tests ====================

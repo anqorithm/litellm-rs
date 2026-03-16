@@ -18,3 +18,5 @@ pub use types::{
     CostRange, CostResult, CostType, LiteLLMModelInfo, PricingEventType, PricingStatistics,
     PricingUpdateEvent,
 };
+
+pub type ModelInfo = LiteLLMModelInfo;
