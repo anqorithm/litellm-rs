@@ -39,6 +39,20 @@ pub struct OpenAILikeProvider {
     config: OpenAILikeConfig,
     /// Model registry
     model_registry: &'static OpenAILikeModelRegistry,
+    /// Interned provider name for `&'static str` return in `name()`
+    provider_name: &'static str,
+}
+
+/// Intern a provider name as `&'static str`.
+///
+/// Returns the pre-existing constant for the default name to avoid allocation,
+/// and leaks the string for custom names. Providers are long-lived singletons,
+/// so the small allocation is acceptable.
+fn intern_provider_name(name: &str) -> &'static str {
+    if name == PROVIDER_NAME {
+        return PROVIDER_NAME;
+    }
+    Box::leak(name.to_string().into_boxed_str())
 }
 
 impl OpenAILikeProvider {
@@ -54,11 +68,13 @@ impl OpenAILikeProvider {
                 .map_err(|e| OpenAILikeError::network(PROVIDER_NAME, e.to_string()))?,
         );
         let model_registry = get_openai_like_registry();
+        let provider_name = intern_provider_name(&config.provider_name);
 
         Ok(Self {
             pool_manager,
             config,
             model_registry,
+            provider_name,
         })
     }
 
@@ -358,7 +374,7 @@ impl LLMProvider for OpenAILikeProvider {
     type ErrorMapper = OpenAILikeErrorMapper;
 
     fn name(&self) -> &'static str {
-        PROVIDER_NAME
+        self.provider_name
     }
 
     fn capabilities(&self) -> &'static [ProviderCapability] {
@@ -588,5 +604,43 @@ mod tests {
         let err = OpenAILikeError::openai_like_rate_limit(Some(60));
         assert!(err.is_retryable());
         assert_eq!(err.retry_delay(), Some(60));
+    }
+
+    #[tokio::test]
+    async fn test_name_returns_default_for_default_config() {
+        let provider = OpenAILikeProvider::with_api_base("http://localhost:8000/v1")
+            .await
+            .unwrap();
+        assert_eq!(provider.name(), "openai_like");
+    }
+
+    #[tokio::test]
+    async fn test_name_returns_actual_provider_name() {
+        let config = OpenAILikeConfig::new("https://api.groq.com/openai/v1")
+            .with_provider_name("groq")
+            .with_skip_api_key(true);
+        let provider = OpenAILikeProvider::new(config).await.unwrap();
+        assert_eq!(provider.name(), "groq");
+    }
+
+    #[tokio::test]
+    async fn test_name_returns_deepseek_name() {
+        let config = OpenAILikeConfig::new("https://api.deepseek.com/v1")
+            .with_provider_name("deepseek")
+            .with_skip_api_key(true);
+        let provider = OpenAILikeProvider::new(config).await.unwrap();
+        assert_eq!(provider.name(), "deepseek");
+    }
+
+    #[test]
+    fn test_intern_provider_name_default() {
+        let name = intern_provider_name("openai_like");
+        assert_eq!(name, PROVIDER_NAME);
+    }
+
+    #[test]
+    fn test_intern_provider_name_custom() {
+        let name = intern_provider_name("xai");
+        assert_eq!(name, "xai");
     }
 }
