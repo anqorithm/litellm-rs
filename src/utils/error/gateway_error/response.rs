@@ -70,7 +70,7 @@ impl ResponseError for GatewayError {
                     provider_error.to_string(),
                 ),
                 ProviderError::Network { .. } => (
-                    actix_web::http::StatusCode::BAD_GATEWAY,
+                    actix_web::http::StatusCode::SERVICE_UNAVAILABLE,
                     "PROVIDER_NETWORK_ERROR",
                     provider_error.to_string(),
                 ),
@@ -82,17 +82,29 @@ impl ResponseError for GatewayError {
                     provider_error.to_string(),
                 ),
                 ProviderError::ContextLengthExceeded { .. }
-                | ProviderError::ContentFiltered { .. }
                 | ProviderError::TokenLimitExceeded { .. } => (
+                    actix_web::http::StatusCode::PAYLOAD_TOO_LARGE,
+                    "PROVIDER_REQUEST_ERROR",
+                    provider_error.to_string(),
+                ),
+                ProviderError::ContentFiltered { .. } => (
                     actix_web::http::StatusCode::BAD_REQUEST,
                     "PROVIDER_REQUEST_ERROR",
                     provider_error.to_string(),
                 ),
-                ProviderError::NotSupported { .. }
-                | ProviderError::NotImplemented { .. }
-                | ProviderError::FeatureDisabled { .. } => (
+                ProviderError::NotSupported { .. } => (
+                    actix_web::http::StatusCode::METHOD_NOT_ALLOWED,
+                    "PROVIDER_NOT_SUPPORTED",
+                    provider_error.to_string(),
+                ),
+                ProviderError::NotImplemented { .. } => (
                     actix_web::http::StatusCode::NOT_IMPLEMENTED,
                     "PROVIDER_NOT_IMPLEMENTED",
+                    provider_error.to_string(),
+                ),
+                ProviderError::FeatureDisabled { .. } => (
+                    actix_web::http::StatusCode::FORBIDDEN,
+                    "PROVIDER_FEATURE_DISABLED",
                     provider_error.to_string(),
                 ),
                 ProviderError::DeploymentError { .. } => (
@@ -100,9 +112,13 @@ impl ResponseError for GatewayError {
                     "DEPLOYMENT_NOT_FOUND",
                     provider_error.to_string(),
                 ),
-                ProviderError::ResponseParsing { .. }
-                | ProviderError::Streaming { .. } => (
+                ProviderError::ResponseParsing { .. } => (
                     actix_web::http::StatusCode::BAD_GATEWAY,
+                    "PROVIDER_RESPONSE_ERROR",
+                    provider_error.to_string(),
+                ),
+                ProviderError::Streaming { .. } => (
+                    actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
                     "PROVIDER_RESPONSE_ERROR",
                     provider_error.to_string(),
                 ),
@@ -238,22 +254,29 @@ impl ResponseError for GatewayError {
         let mut builder = HttpResponse::build(status_code);
 
         // Add rate limit headers for 429 responses
-        if let GatewayError::RateLimit {
-            retry_after,
-            rpm_limit,
-            tpm_limit,
-            ..
-        } = self
-        {
-            if let Some(secs) = retry_after {
-                builder.insert_header(("Retry-After", secs.to_string()));
-            }
-            if let Some(rpm) = rpm_limit {
-                builder.insert_header(("X-RateLimit-Limit-Requests", rpm.to_string()));
-            }
-            if let Some(tpm) = tpm_limit {
-                builder.insert_header(("X-RateLimit-Limit-Tokens", tpm.to_string()));
-            }
+        let (rl_retry_after, rl_rpm_limit, rl_tpm_limit) = match self {
+            GatewayError::RateLimit {
+                retry_after,
+                rpm_limit,
+                tpm_limit,
+                ..
+            } => (*retry_after, *rpm_limit, *tpm_limit),
+            GatewayError::Provider(ProviderError::RateLimit {
+                retry_after,
+                rpm_limit,
+                tpm_limit,
+                ..
+            }) => (*retry_after, *rpm_limit, *tpm_limit),
+            _ => (None, None, None),
+        };
+        if let Some(secs) = rl_retry_after {
+            builder.insert_header(("Retry-After", secs.to_string()));
+        }
+        if let Some(rpm) = rl_rpm_limit {
+            builder.insert_header(("X-RateLimit-Limit-Requests", rpm.to_string()));
+        }
+        if let Some(tpm) = rl_tpm_limit {
+            builder.insert_header(("X-RateLimit-Limit-Tokens", tpm.to_string()));
         }
 
         builder.json(error_response)
@@ -451,15 +474,30 @@ mod tests {
         let response = error.error_response();
         assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
         assert_eq!(
-            response.headers().get("Retry-After").unwrap().to_str().unwrap(),
+            response
+                .headers()
+                .get("Retry-After")
+                .unwrap()
+                .to_str()
+                .unwrap(),
             "60"
         );
         assert_eq!(
-            response.headers().get("X-RateLimit-Limit-Requests").unwrap().to_str().unwrap(),
+            response
+                .headers()
+                .get("X-RateLimit-Limit-Requests")
+                .unwrap()
+                .to_str()
+                .unwrap(),
             "100"
         );
         assert_eq!(
-            response.headers().get("X-RateLimit-Limit-Tokens").unwrap().to_str().unwrap(),
+            response
+                .headers()
+                .get("X-RateLimit-Limit-Tokens")
+                .unwrap()
+                .to_str()
+                .unwrap(),
             "50000"
         );
     }
@@ -692,7 +730,7 @@ mod tests {
         };
         let error = GatewayError::Provider(provider_error);
         let response = error.error_response();
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
     }
 
     #[test]
@@ -703,7 +741,7 @@ mod tests {
         };
         let error = GatewayError::Provider(provider_error);
         let response = error.error_response();
-        assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
+        assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
     }
 
     #[test]
@@ -790,10 +828,7 @@ mod tests {
                 GatewayError::Validation("test".to_string()),
             ),
             ("NOT_FOUND", GatewayError::NotFound("test".to_string())),
-            (
-                "RATE_LIMIT_EXCEEDED",
-                GatewayError::rate_limit("test"),
-            ),
+            ("RATE_LIMIT_EXCEEDED", GatewayError::rate_limit("test")),
         ];
 
         for (_expected_code, error) in error_codes {

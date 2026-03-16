@@ -42,6 +42,11 @@ name = "pricing-tool"
 path = "src/bin/pricing-tool.rs"
 required-features = ["gateway"]
 
+[[example]]
+name = "azure_ai_chat"
+path = "examples/azure_ai_chat.rs"
+required-features = ["providers-extra"]
+
 [dependencies]
 # Web framework and async runtime
 actix-web = { version = "4.9", features = ["rustls-0_23"], optional = true }

@@ -55,10 +55,7 @@ impl From<crate::core::types::responses::Usage> for UsageTokens {
                 .as_ref()
                 .and_then(|d| d.audio_tokens),
             image_tokens: None,
-            reasoning_tokens: usage
-                .completion_tokens_details
-                .as_ref()
-                .and_then(|d| d.reasoning_tokens),
+            reasoning_tokens: usage.thinking_tokens(),
         }
     }
 }
@@ -426,9 +423,7 @@ mod tests {
 
     #[test]
     fn test_usage_to_usage_tokens_with_details() {
-        use crate::core::types::responses::{
-            CompletionTokensDetails, PromptTokensDetails, Usage,
-        };
+        use crate::core::types::responses::{CompletionTokensDetails, PromptTokensDetails, Usage};
         let usage = Usage {
             prompt_tokens: 200,
             completion_tokens: 100,
