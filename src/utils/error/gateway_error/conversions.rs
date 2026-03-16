@@ -211,7 +211,7 @@ impl From<A2AError> for GatewayError {
                 };
                 GatewayError::RateLimit {
                     message: msg,
-                    retry_after: retry_after_ms.map(|ms| ms / 1000),
+                    retry_after: retry_after_ms.map(|ms| ms.div_ceil(1000)),
                     rpm_limit: None,
                     tpm_limit: None,
                 }
@@ -329,7 +329,7 @@ impl From<McpError> for GatewayError {
                 };
                 GatewayError::RateLimit {
                     message: msg,
-                    retry_after: retry_after_ms.map(|ms| ms / 1000),
+                    retry_after: retry_after_ms.map(|ms| ms.div_ceil(1000)),
                     rpm_limit: None,
                     tpm_limit: None,
                 }
@@ -943,7 +943,7 @@ mod tests {
         match gateway_err {
             GatewayError::RateLimit {
                 message: msg,
-                retry_after: Some(1),
+                retry_after: Some(2),
                 rpm_limit: None,
                 tpm_limit: None,
             } => {
@@ -1259,7 +1259,7 @@ mod tests {
         match gateway_err {
             GatewayError::RateLimit {
                 message: msg,
-                retry_after: Some(0),
+                retry_after: Some(1),
                 rpm_limit: None,
                 tpm_limit: None,
             } => {

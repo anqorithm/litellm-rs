@@ -18,3 +18,6 @@ pub use types::{
     CostRange, CostResult, CostType, LiteLLMModelInfo, PricingEventType, PricingStatistics,
     PricingUpdateEvent,
 };
+
+/// Backward-compatible alias for [`LiteLLMModelInfo`].
+pub type ModelInfo = LiteLLMModelInfo;

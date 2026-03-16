@@ -82,8 +82,12 @@ impl ResponseError for GatewayError {
                     provider_error.to_string(),
                 ),
                 ProviderError::ContextLengthExceeded { .. }
-                | ProviderError::ContentFiltered { .. }
                 | ProviderError::TokenLimitExceeded { .. } => (
+                    actix_web::http::StatusCode::PAYLOAD_TOO_LARGE,
+                    "PROVIDER_PAYLOAD_TOO_LARGE",
+                    provider_error.to_string(),
+                ),
+                ProviderError::ContentFiltered { .. } => (
                     actix_web::http::StatusCode::BAD_REQUEST,
                     "PROVIDER_REQUEST_ERROR",
                     provider_error.to_string(),
@@ -724,7 +728,7 @@ mod tests {
         };
         let error = GatewayError::Provider(provider_error);
         let response = error.error_response();
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
     }
 
     #[test]

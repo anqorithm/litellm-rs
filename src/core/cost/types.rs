@@ -56,9 +56,15 @@ impl From<crate::core::types::responses::Usage> for UsageTokens {
                 .and_then(|d| d.audio_tokens),
             image_tokens: None,
             reasoning_tokens: usage
-                .completion_tokens_details
+                .thinking_usage
                 .as_ref()
-                .and_then(|d| d.reasoning_tokens),
+                .and_then(|t| t.thinking_tokens)
+                .or_else(|| {
+                    usage
+                        .completion_tokens_details
+                        .as_ref()
+                        .and_then(|d| d.reasoning_tokens)
+                }),
         }
     }
 }
@@ -426,9 +432,7 @@ mod tests {
 
     #[test]
     fn test_usage_to_usage_tokens_with_details() {
-        use crate::core::types::responses::{
-            CompletionTokensDetails, PromptTokensDetails, Usage,
-        };
+        use crate::core::types::responses::{CompletionTokensDetails, PromptTokensDetails, Usage};
         let usage = Usage {
             prompt_tokens: 200,
             completion_tokens: 100,
@@ -448,6 +452,27 @@ mod tests {
         assert_eq!(tokens.audio_tokens, Some(10));
         assert_eq!(tokens.reasoning_tokens, Some(30));
         assert!(tokens.image_tokens.is_none());
+    }
+
+    #[test]
+    fn test_usage_to_usage_tokens_from_thinking_usage() {
+        use crate::core::types::responses::Usage;
+        use crate::core::types::thinking::ThinkingUsage;
+        let usage = Usage {
+            prompt_tokens: 100,
+            completion_tokens: 50,
+            total_tokens: 150,
+            prompt_tokens_details: None,
+            completion_tokens_details: None,
+            thinking_usage: Some(ThinkingUsage {
+                thinking_tokens: Some(42),
+                budget_tokens: None,
+                thinking_cost: None,
+                provider: None,
+            }),
+        };
+        let tokens: UsageTokens = usage.into();
+        assert_eq!(tokens.reasoning_tokens, Some(42));
     }
 
     // ==================== UsageTokens Tests ====================

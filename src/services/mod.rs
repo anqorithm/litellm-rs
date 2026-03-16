@@ -5,6 +5,6 @@
 pub mod pricing;
 
 pub use pricing::{
-    CostRange, CostResult, CostType, LiteLLMModelInfo, PricingEventType, PricingService,
+    CostRange, CostResult, CostType, LiteLLMModelInfo, ModelInfo, PricingEventType, PricingService,
     PricingStatistics, PricingUpdateEvent,
 };
