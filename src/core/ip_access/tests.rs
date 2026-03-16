@@ -202,7 +202,7 @@ blocked_status: 403
 log_blocked: true
 "#;
 
-    let config: IpAccessConfig = serde_yaml::from_str(yaml).unwrap();
+    let config: IpAccessConfig = serde_yml::from_str(yaml).unwrap();
     assert!(config.enabled);
     assert_eq!(config.mode, IpAccessMode::Allowlist);
     assert_eq!(config.allowlist.len(), 2);

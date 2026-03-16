@@ -242,7 +242,7 @@ prompt_injection:
   action: block
 "#;
 
-    let config: GuardrailConfig = serde_yaml::from_str(yaml).unwrap();
+    let config: GuardrailConfig = serde_yml::from_str(yaml).unwrap();
     assert!(config.enabled);
     assert!(config.pii.is_some());
     assert!(config.prompt_injection.is_some());

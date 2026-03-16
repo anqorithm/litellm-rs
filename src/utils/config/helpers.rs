@@ -147,7 +147,7 @@ impl ConfigFileUtils {
         P: AsRef<Path>,
     {
         let content = Self::read_file(path).await?;
-        serde_yaml::from_str(&content)
+        serde_yml::from_str(&content)
             .map_err(|e| GatewayError::Config(format!("Failed to parse YAML: {}", e)))
     }
 
@@ -168,7 +168,7 @@ impl ConfigFileUtils {
         T: serde::Serialize,
         P: AsRef<Path>,
     {
-        let content = serde_yaml::to_string(data)
+        let content = serde_yml::to_string(data)
             .map_err(|e| GatewayError::Config(format!("Failed to serialize YAML: {}", e)))?;
         Self::write_file(path, &content).await
     }

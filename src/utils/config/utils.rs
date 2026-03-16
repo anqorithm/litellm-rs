@@ -16,7 +16,7 @@ pub struct ConfigUtils;
 impl ConfigUtils {
     pub fn read_config_args(
         config_path: &str,
-    ) -> Result<HashMap<String, serde_yaml::Value>, ProviderError> {
+    ) -> Result<HashMap<String, serde_yml::Value>, ProviderError> {
         if !Path::new(config_path).exists() {
             return Err(ProviderError::InvalidRequest {
                 provider: "config",
@@ -30,8 +30,8 @@ impl ConfigUtils {
                 message: format!("Failed to read config file: {}", e),
             })?;
 
-        let config: HashMap<String, serde_yaml::Value> =
-            serde_yaml::from_str(&content).map_err(|e| ProviderError::InvalidRequest {
+        let config: HashMap<String, serde_yml::Value> =
+            serde_yml::from_str(&content).map_err(|e| ProviderError::InvalidRequest {
                 provider: "config",
                 message: format!("Failed to parse YAML config: {}", e),
             })?;

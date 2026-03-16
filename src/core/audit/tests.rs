@@ -186,7 +186,7 @@ retention_days: 30
 redact_sensitive: true
 "#;
 
-    let config: AuditConfig = serde_yaml::from_str(yaml).unwrap();
+    let config: AuditConfig = serde_yml::from_str(yaml).unwrap();
     assert!(config.enabled);
     assert!(config.file_output.is_some());
     assert_eq!(config.retention_days, 30);

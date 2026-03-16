@@ -222,7 +222,7 @@ global:
   reset_check_interval_secs: 120
 "#;
 
-        let config: BudgetConfiguration = serde_yaml::from_str(yaml).unwrap();
+        let config: BudgetConfiguration = serde_yml::from_str(yaml).unwrap();
 
         assert!(config.enabled);
         assert_eq!(config.providers.len(), 2);
@@ -251,7 +251,7 @@ provider: openai
 max_budget: 1000.0
 "#;
 
-        let config: ProviderBudgetConfig = serde_yaml::from_str(yaml).unwrap();
+        let config: ProviderBudgetConfig = serde_yml::from_str(yaml).unwrap();
 
         assert_eq!(config.provider, "openai");
         assert_eq!(config.max_budget, 1000.0);
@@ -268,7 +268,7 @@ model: gpt-4
 max_budget: 500.0
 "#;
 
-        let config: ModelBudgetConfig = serde_yaml::from_str(yaml).unwrap();
+        let config: ModelBudgetConfig = serde_yml::from_str(yaml).unwrap();
 
         assert_eq!(config.model, "gpt-4");
         assert_eq!(config.max_budget, 500.0);
@@ -279,19 +279,19 @@ max_budget: 500.0
     #[test]
     fn test_reset_period_config() {
         assert_eq!(
-            serde_yaml::from_str::<ResetPeriodConfig>("daily").unwrap(),
+            serde_yml::from_str::<ResetPeriodConfig>("daily").unwrap(),
             ResetPeriodConfig::Daily
         );
         assert_eq!(
-            serde_yaml::from_str::<ResetPeriodConfig>("weekly").unwrap(),
+            serde_yml::from_str::<ResetPeriodConfig>("weekly").unwrap(),
             ResetPeriodConfig::Weekly
         );
         assert_eq!(
-            serde_yaml::from_str::<ResetPeriodConfig>("monthly").unwrap(),
+            serde_yml::from_str::<ResetPeriodConfig>("monthly").unwrap(),
             ResetPeriodConfig::Monthly
         );
         assert_eq!(
-            serde_yaml::from_str::<ResetPeriodConfig>("never").unwrap(),
+            serde_yml::from_str::<ResetPeriodConfig>("never").unwrap(),
             ResetPeriodConfig::Never
         );
     }

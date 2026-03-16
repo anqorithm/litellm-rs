@@ -258,7 +258,7 @@ impl ClientConfig {
             ))
         })?;
 
-        serde_yaml::from_str(&content).map_err(|e| {
+        serde_yml::from_str(&content).map_err(|e| {
             crate::sdk::errors::SDKError::ConfigError(format!(
                 "Failed to parse config file {}: {}",
                 path, e
@@ -677,11 +677,11 @@ mod tests {
     fn test_yaml_serialization() {
         let config = ConfigBuilder::new().add_openai("openai", "sk-test").build();
 
-        let yaml = serde_yaml::to_string(&config).unwrap();
+        let yaml = serde_yml::to_string(&config).unwrap();
         assert!(yaml.contains("providers"));
         assert!(yaml.contains("settings"));
 
-        let restored: ClientConfig = serde_yaml::from_str(&yaml).unwrap();
+        let restored: ClientConfig = serde_yml::from_str(&yaml).unwrap();
         assert_eq!(config.providers.len(), restored.providers.len());
     }
 }

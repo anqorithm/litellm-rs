@@ -142,7 +142,7 @@ impl OptimizedConfigManager {
             .unwrap_or("yaml");
 
         match extension {
-            "yaml" | "yml" => serde_yaml::from_str(&content)
+            "yaml" | "yml" => serde_yml::from_str(&content)
                 .map_err(|e| GatewayError::Config(format!("Failed to parse YAML config: {}", e))),
             "json" => serde_json::from_str(&content)
                 .map_err(|e| GatewayError::Config(format!("Failed to parse JSON config: {}", e))),
@@ -268,7 +268,7 @@ impl OptimizedConfigManager {
             GatewayError::Config(format!("Failed to read config file {}: {}", file_path, e))
         })?;
 
-        serde_yaml::from_str(&content)
+        serde_yml::from_str(&content)
             .map_err(|e| GatewayError::Config(format!("Failed to parse config: {}", e)))
     }
 

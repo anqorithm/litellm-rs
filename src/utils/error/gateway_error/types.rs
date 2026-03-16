@@ -44,7 +44,7 @@ pub enum GatewayError {
 
     /// YAML parsing errors
     #[error("YAML error: {0}")]
-    Yaml(#[from] serde_yaml::Error),
+    Yaml(#[from] serde_yml::Error),
 
     /// IO errors
     #[error("IO error: {0}")]

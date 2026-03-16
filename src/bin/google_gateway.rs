@@ -419,7 +419,7 @@ fn load_config(
     let config_content = std::fs::read_to_string(config_path)
         .map_err(|e| format!("Unable to read config file {}: {}", config_path, e))?;
 
-    let config: GatewayConfig = serde_yaml::from_str(&config_content)
+    let config: GatewayConfig = serde_yml::from_str(&config_content)
         .map_err(|e| format!("Config file format error: {}", e))?;
 
     Ok(config)
