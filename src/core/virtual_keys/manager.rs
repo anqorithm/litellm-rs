@@ -168,6 +168,10 @@ impl VirtualKeyManager {
                 state.window_start = now;
             }
 
+            // Remaining seconds in the current 60-second window
+            let elapsed_secs = now.signed_duration_since(state.window_start).num_seconds();
+            let window_retry_after = (60i64 - elapsed_secs).max(1) as u64;
+
             // Check RPM
             if let Some(rpm) = rate_limits.rpm {
                 if state.request_count >= rpm {
@@ -176,7 +180,7 @@ impl VirtualKeyManager {
                             "Rate limit exceeded: {} requests per minute",
                             rpm
                         ),
-                        retry_after: Some(60),
+                        retry_after: Some(window_retry_after),
                         rpm_limit: Some(rpm),
                         tpm_limit: rate_limits.tpm,
                     });
@@ -191,7 +195,7 @@ impl VirtualKeyManager {
                             "Token rate limit exceeded: {} tokens per minute",
                             tpm
                         ),
-                        retry_after: Some(60),
+                        retry_after: Some(window_retry_after),
                         rpm_limit: rate_limits.rpm,
                         tpm_limit: Some(tpm),
                     });

@@ -51,10 +51,11 @@ impl From<ProviderError> for GatewayError {
                 max,
                 actual,
                 provider,
-            } => GatewayError::BadRequest(format!(
-                "Context length exceeded for {}: max {} tokens, got {} tokens",
-                provider, max, actual
-            )),
+            } => GatewayError::Provider(ProviderError::ContextLengthExceeded {
+                max,
+                actual,
+                provider,
+            }),
             ProviderError::ContentFiltered {
                 reason, provider, ..
             } => GatewayError::BadRequest(format!(
@@ -77,9 +78,9 @@ impl From<ProviderError> for GatewayError {
                 400..=499 => GatewayError::BadRequest(format!("{}: {}", provider, message)),
                 _ => GatewayError::Internal(format!("{}: {}", provider, message)),
             },
-            ProviderError::TokenLimitExceeded { message, provider } => GatewayError::BadRequest(
-                format!("Token limit exceeded for {}: {}", provider, message),
-            ),
+            ProviderError::TokenLimitExceeded { message, provider } => {
+                GatewayError::Provider(ProviderError::TokenLimitExceeded { message, provider })
+            }
             ProviderError::FeatureDisabled { feature, provider } => GatewayError::NotImplemented(
                 format!("Feature '{}' disabled for {}", feature, provider),
             ),
@@ -468,11 +469,11 @@ mod tests {
         let gateway_err: GatewayError = provider_err.into();
 
         match gateway_err {
-            GatewayError::BadRequest(msg) => {
-                assert!(msg.contains("100000"));
-                assert!(msg.contains("150000"));
+            GatewayError::Provider(ProviderError::ContextLengthExceeded { max, actual, .. }) => {
+                assert_eq!(max, 100000);
+                assert_eq!(actual, 150000);
             }
-            _ => panic!("Expected BadRequest error"),
+            _ => panic!("Expected Provider(ContextLengthExceeded) error"),
         }
     }
 
@@ -659,8 +660,10 @@ mod tests {
         };
         let gateway_err: GatewayError = provider_err.into();
         match gateway_err {
-            GatewayError::BadRequest(msg) => assert!(msg.contains("Token limit exceeded")),
-            _ => panic!("Expected BadRequest error"),
+            GatewayError::Provider(ProviderError::TokenLimitExceeded { message, .. }) => {
+                assert!(message.contains("Max tokens exceeded"));
+            }
+            _ => panic!("Expected Provider(TokenLimitExceeded) error"),
         }
     }
 

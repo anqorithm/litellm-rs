@@ -70,12 +70,16 @@ impl ResponseError for GatewayError {
                     provider_error.to_string(),
                 ),
                 ProviderError::Network { .. } => (
-                    actix_web::http::StatusCode::BAD_GATEWAY,
+                    actix_web::http::StatusCode::SERVICE_UNAVAILABLE,
                     "PROVIDER_NETWORK_ERROR",
                     provider_error.to_string(),
                 ),
-                ProviderError::Configuration { .. }
-                | ProviderError::Serialization { .. }
+                ProviderError::Configuration { .. } => (
+                    actix_web::http::StatusCode::BAD_REQUEST,
+                    "PROVIDER_INTERNAL_ERROR",
+                    provider_error.to_string(),
+                ),
+                ProviderError::Serialization { .. }
                 | ProviderError::TransformationError { .. } => (
                     actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
                     "PROVIDER_INTERNAL_ERROR",
@@ -92,10 +96,18 @@ impl ResponseError for GatewayError {
                     "CONTENT_FILTERED",
                     provider_error.to_string(),
                 ),
-                ProviderError::NotSupported { .. }
-                | ProviderError::NotImplemented { .. }
-                | ProviderError::FeatureDisabled { .. } => (
+                ProviderError::NotSupported { .. } => (
+                    actix_web::http::StatusCode::METHOD_NOT_ALLOWED,
+                    "PROVIDER_NOT_IMPLEMENTED",
+                    provider_error.to_string(),
+                ),
+                ProviderError::NotImplemented { .. } => (
                     actix_web::http::StatusCode::NOT_IMPLEMENTED,
+                    "PROVIDER_NOT_IMPLEMENTED",
+                    provider_error.to_string(),
+                ),
+                ProviderError::FeatureDisabled { .. } => (
+                    actix_web::http::StatusCode::FORBIDDEN,
                     "PROVIDER_NOT_IMPLEMENTED",
                     provider_error.to_string(),
                 ),
@@ -726,7 +738,7 @@ mod tests {
         };
         let error = GatewayError::Provider(provider_error);
         let response = error.error_response();
-        assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
+        assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
     }
 
     #[test]
@@ -737,7 +749,7 @@ mod tests {
         };
         let error = GatewayError::Provider(provider_error);
         let response = error.error_response();
-        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 
     #[test]
