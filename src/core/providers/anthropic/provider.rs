@@ -178,17 +178,28 @@ impl LLMProvider for AnthropicProvider {
         }
 
         if let Some(temperature) = request.temperature {
+            let temp_f64: f64 = temperature.into();
             anthropic_request["temperature"] = Value::Number(
-                serde_json::Number::from_f64(temperature.into())
-                    .unwrap_or_else(|| serde_json::Number::from(0)),
+                serde_json::Number::from_f64(temp_f64).ok_or_else(|| {
+                    ProviderError::invalid_request(
+                        "anthropic",
+                        format!("invalid temperature value: {temp_f64} (NaN and Infinity are not allowed)"),
+                    )
+                })?,
             );
         }
 
         if let Some(top_p) = request.top_p {
-            anthropic_request["top_p"] = Value::Number(
-                serde_json::Number::from_f64(top_p.into())
-                    .unwrap_or_else(|| serde_json::Number::from(0)),
-            );
+            let top_p_f64: f64 = top_p.into();
+            anthropic_request["top_p"] =
+                Value::Number(serde_json::Number::from_f64(top_p_f64).ok_or_else(|| {
+                    ProviderError::invalid_request(
+                        "anthropic",
+                        format!(
+                            "invalid top_p value: {top_p_f64} (NaN and Infinity are not allowed)"
+                        ),
+                    )
+                })?);
         }
 
         if request.stream {

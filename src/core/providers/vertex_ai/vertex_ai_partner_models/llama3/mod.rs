@@ -25,7 +25,7 @@ impl Llama3Handler {
                 "messages": request.get("messages").unwrap_or(&serde_json::Value::Null)
             }],
             "parameters": {
-                "temperature": request.get("temperature").unwrap_or(&serde_json::Value::Number(serde_json::Number::from_f64(0.7).unwrap())),
+                "temperature": request.get("temperature").unwrap_or(&serde_json::json!(0.7)),
                 "maxOutputTokens": request.get("max_tokens").unwrap_or(&serde_json::Value::Number(2048.into())),
             }
         }))

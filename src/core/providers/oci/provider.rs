@@ -169,8 +169,14 @@ impl OciProvider {
         })?;
 
         if let Some(temp) = request.temperature {
+            let temp_f64 = temp as f64;
             chat_request["temperature"] = serde_json::Value::Number(
-                serde_json::Number::from_f64(temp as f64).unwrap_or_else(|| 0.into()),
+                serde_json::Number::from_f64(temp_f64).ok_or_else(|| {
+                    ProviderError::invalid_request(
+                        "oci",
+                        format!("invalid temperature value: {temp_f64} (NaN and Infinity are not allowed)"),
+                    )
+                })?,
             );
         }
 
@@ -179,8 +185,16 @@ impl OciProvider {
         }
 
         if let Some(top_p) = request.top_p {
+            let top_p_f64 = top_p as f64;
             chat_request["topP"] = serde_json::Value::Number(
-                serde_json::Number::from_f64(top_p as f64).unwrap_or_else(|| 1.into()),
+                serde_json::Number::from_f64(top_p_f64).ok_or_else(|| {
+                    ProviderError::invalid_request(
+                        "oci",
+                        format!(
+                            "invalid top_p value: {top_p_f64} (NaN and Infinity are not allowed)"
+                        ),
+                    )
+                })?,
             );
         }
 
@@ -189,14 +203,26 @@ impl OciProvider {
         }
 
         if let Some(freq_penalty) = request.frequency_penalty {
+            let freq_f64 = freq_penalty as f64;
             chat_request["frequencyPenalty"] = serde_json::Value::Number(
-                serde_json::Number::from_f64(freq_penalty as f64).unwrap_or_else(|| 0.into()),
+                serde_json::Number::from_f64(freq_f64).ok_or_else(|| {
+                    ProviderError::invalid_request(
+                        "oci",
+                        format!("invalid frequency_penalty value: {freq_f64} (NaN and Infinity are not allowed)"),
+                    )
+                })?,
             );
         }
 
         if let Some(presence_penalty) = request.presence_penalty {
+            let pres_f64 = presence_penalty as f64;
             chat_request["presencePenalty"] = serde_json::Value::Number(
-                serde_json::Number::from_f64(presence_penalty as f64).unwrap_or_else(|| 0.into()),
+                serde_json::Number::from_f64(pres_f64).ok_or_else(|| {
+                    ProviderError::invalid_request(
+                        "oci",
+                        format!("invalid presence_penalty value: {pres_f64} (NaN and Infinity are not allowed)"),
+                    )
+                })?,
             );
         }
 
