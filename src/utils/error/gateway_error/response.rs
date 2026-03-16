@@ -74,8 +74,12 @@ impl ResponseError for GatewayError {
                     "PROVIDER_NETWORK_ERROR",
                     provider_error.to_string(),
                 ),
-                ProviderError::Configuration { .. }
-                | ProviderError::Serialization { .. }
+                ProviderError::Configuration { .. } => (
+                    actix_web::http::StatusCode::BAD_REQUEST,
+                    "PROVIDER_CONFIG_ERROR",
+                    provider_error.to_string(),
+                ),
+                ProviderError::Serialization { .. }
                 | ProviderError::TransformationError { .. } => (
                     actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
                     "PROVIDER_INTERNAL_ERROR",
@@ -140,7 +144,7 @@ impl ResponseError for GatewayError {
                     provider_error.to_string(),
                 ),
                 ProviderError::Other { .. } => (
-                    actix_web::http::StatusCode::BAD_GATEWAY,
+                    actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
                     "PROVIDER_ERROR",
                     provider_error.to_string(),
                 ),
@@ -752,7 +756,7 @@ mod tests {
         };
         let error = GatewayError::Provider(provider_error);
         let response = error.error_response();
-        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 
     #[test]
@@ -787,7 +791,7 @@ mod tests {
         };
         let error = GatewayError::Provider(provider_error);
         let response = error.error_response();
-        assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
     }
 
     // ==================== Integration Tests ====================
