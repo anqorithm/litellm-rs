@@ -4,8 +4,7 @@
 
 use crate::config::Config;
 use crate::config::models::server::ServerConfig;
-use crate::server::handlers::health_check;
-use crate::server::middleware::{AuthMiddleware, RequestIdMiddleware};
+use crate::server::middleware::{AuthMiddleware, RequestIdMiddleware, SecurityHeadersMiddleware};
 use crate::server::routes;
 use crate::server::state::AppState;
 use crate::services::pricing::PricingService;
@@ -134,14 +133,22 @@ impl HttpServer {
             }
         }
 
+        let budget_limits = web::Data::new(Arc::clone(&state.budget_limits));
+
         App::new()
             .app_data(state)
+            .app_data(budget_limits)
             .wrap(cors)
             .wrap(Logger::default())
             .wrap(DefaultHeaders::new().add(("Server", "LiteLLM-RS")))
+            .wrap(SecurityHeadersMiddleware)
             .wrap(AuthMiddleware)
             .wrap(RequestIdMiddleware)
-            .route("/health", web::get().to(health_check))
+            .configure(routes::health::configure_routes)
+            .configure(routes::auth::configure_routes)
+            .configure(routes::keys::configure_routes)
+            .configure(routes::teams::configure_routes)
+            .configure(routes::budget::configure_budget_routes)
             .configure(routes::ai::configure_routes)
             .configure(routes::pricing::configure_pricing_routes)
     }

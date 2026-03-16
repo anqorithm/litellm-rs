@@ -3,6 +3,7 @@
 //! This module provides the AppState struct and its implementations.
 
 use crate::config::Config;
+use crate::core::budget::UnifiedBudgetLimits;
 use crate::services::pricing::PricingService;
 use std::sync::Arc;
 
@@ -23,6 +24,8 @@ pub struct AppState {
     pub storage: Arc<crate::storage::StorageLayer>,
     /// Unified pricing service
     pub pricing: Arc<PricingService>,
+    /// Budget limits for provider and model cost tracking
+    pub budget_limits: Arc<UnifiedBudgetLimits>,
 }
 
 impl AppState {
@@ -40,6 +43,7 @@ impl AppState {
             unified_router: Arc::new(unified_router),
             storage: Arc::new(storage),
             pricing,
+            budget_limits: Arc::new(UnifiedBudgetLimits::new()),
         }
     }
 
