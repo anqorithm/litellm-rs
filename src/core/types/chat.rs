@@ -7,6 +7,14 @@ use super::tools::{FunctionCall, ResponseFormat, Tool, ToolCall, ToolChoice};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+/// Stream options for controlling streaming behavior
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StreamOptions {
+    /// Whether to include usage information in the stream's final chunk
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub include_usage: Option<bool>,
+}
+
 /// Chat message
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
@@ -95,6 +103,9 @@ pub struct ChatRequest {
     /// Enable streaming
     #[serde(default)]
     pub stream: bool,
+    /// Stream options (e.g., include_usage)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stream_options: Option<StreamOptions>,
     /// Tool list
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tools: Option<Vec<Tool>>,

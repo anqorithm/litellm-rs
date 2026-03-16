@@ -24,6 +24,7 @@ pub fn convert_to_chat_completion_request(
         presence_penalty: options.presence_penalty,
         stop: options.stop,
         stream: options.stream,
+        stream_options: None,
         tools: None,
         tool_choice: None,
         parallel_tool_calls: None,

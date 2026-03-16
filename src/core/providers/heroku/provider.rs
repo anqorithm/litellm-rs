@@ -463,6 +463,7 @@ mod tests {
             frequency_penalty: None,
             presence_penalty: None,
             stream: false,
+            stream_options: None,
             tools: None,
             tool_choice: None,
             user: None,
