@@ -72,8 +72,7 @@ where
         let http_req = req.request().clone();
         let fut = self.service.call(req);
         Box::pin(async move {
-            let header_name =
-                actix_web::http::header::HeaderName::from_static("x-request-id");
+            let header_name = actix_web::http::header::HeaderName::from_static("x-request-id");
             let header_value = HeaderValue::from_str(&request_id)
                 .unwrap_or_else(|_| HeaderValue::from_static("invalid"));
 
