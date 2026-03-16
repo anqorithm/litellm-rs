@@ -202,8 +202,10 @@ impl OpenAIProvider {
         // Add optional parameters
         if let Some(temp) = request.temperature {
             openai_request["temperature"] = Value::Number(
-                serde_json::Number::from_f64(temp as f64)
-                    .unwrap_or_else(|| serde_json::Number::from(0)),
+                serde_json::Number::from_f64(temp as f64).unwrap_or_else(|| {
+                    tracing::warn!(temperature = temp, "Invalid temperature value, defaulting to 0");
+                    serde_json::Number::from(0)
+                }),
             );
         }
 
@@ -218,8 +220,10 @@ impl OpenAIProvider {
 
         if let Some(top_p) = request.top_p {
             openai_request["top_p"] = Value::Number(
-                serde_json::Number::from_f64(top_p as f64)
-                    .unwrap_or_else(|| serde_json::Number::from(0)),
+                serde_json::Number::from_f64(top_p as f64).unwrap_or_else(|| {
+                    tracing::warn!(top_p = top_p, "Invalid top_p value, defaulting to 0");
+                    serde_json::Number::from(0)
+                }),
             );
         }
 

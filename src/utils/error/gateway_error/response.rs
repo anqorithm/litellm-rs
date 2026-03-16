@@ -241,40 +241,31 @@ impl ResponseError for GatewayError {
         let mut builder = HttpResponse::build(status_code);
 
         // Add rate limit headers for 429 responses
-        match self {
+        let rate_limit_headers = match self {
             GatewayError::RateLimit {
                 retry_after,
                 rpm_limit,
                 tpm_limit,
                 ..
-            } => {
-                if let Some(secs) = retry_after {
-                    builder.insert_header(("Retry-After", secs.to_string()));
-                }
-                if let Some(rpm) = rpm_limit {
-                    builder.insert_header(("X-RateLimit-Limit-Requests", rpm.to_string()));
-                }
-                if let Some(tpm) = tpm_limit {
-                    builder.insert_header(("X-RateLimit-Limit-Tokens", tpm.to_string()));
-                }
-            }
+            } => Some((*retry_after, *rpm_limit, *tpm_limit)),
             GatewayError::Provider(ProviderError::RateLimit {
                 retry_after,
                 rpm_limit,
                 tpm_limit,
                 ..
-            }) => {
-                if let Some(secs) = retry_after {
-                    builder.insert_header(("Retry-After", secs.to_string()));
-                }
-                if let Some(rpm) = rpm_limit {
-                    builder.insert_header(("X-RateLimit-Limit-Requests", rpm.to_string()));
-                }
-                if let Some(tpm) = tpm_limit {
-                    builder.insert_header(("X-RateLimit-Limit-Tokens", tpm.to_string()));
-                }
+            }) => Some((*retry_after, *rpm_limit, *tpm_limit)),
+            _ => None,
+        };
+        if let Some((retry_after, rpm_limit, tpm_limit)) = rate_limit_headers {
+            if let Some(secs) = retry_after {
+                builder.insert_header(("Retry-After", secs.to_string()));
             }
-            _ => {}
+            if let Some(rpm) = rpm_limit {
+                builder.insert_header(("X-RateLimit-Limit-Requests", rpm.to_string()));
+            }
+            if let Some(tpm) = tpm_limit {
+                builder.insert_header(("X-RateLimit-Limit-Tokens", tpm.to_string()));
+            }
         }
 
         builder.json(error_response)
