@@ -279,6 +279,12 @@ fn build_core_chat_request(
         extra_params.insert("audio".to_string(), json!(audio));
     }
 
+    let stream_options = request
+        .stream_options
+        .map(|so| crate::core::types::chat::StreamOptions {
+            include_usage: so.include_usage,
+        });
+
     Ok(CoreChatRequest {
         model,
         messages: request.messages.into_iter().map(Into::into).collect(),
@@ -290,6 +296,7 @@ fn build_core_chat_request(
         presence_penalty: request.presence_penalty,
         stop: request.stop,
         stream,
+        stream_options,
         tools,
         tool_choice,
         parallel_tool_calls: None,

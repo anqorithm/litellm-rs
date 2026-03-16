@@ -251,6 +251,10 @@ impl OpenAIProvider {
             openai_request["n"] = Value::Number(serde_json::Number::from(n));
         }
 
+        if let Some(stream_options) = request.stream_options {
+            openai_request["stream_options"] = serde_json::to_value(stream_options)?;
+        }
+
         // Add extra parameters from config
         // Skip extra_params as BaseConfig doesn't have it
 
