@@ -191,15 +191,18 @@ fn get_client_identifier(req: &ServiceRequest) -> String {
 fn build_request_context(req: &mut ServiceRequest) -> RequestContext {
     let mut context = RequestContext::new();
 
-    // RequestIdMiddleware runs before AuthMiddleware and is the single generation point.
-    let request_id = req
+    // Use the request ID set by RequestIdMiddleware when present; otherwise keep
+    // the UUID that RequestContext::new() already generated so that AuthMiddleware
+    // remains self-sufficient when used without RequestIdMiddleware in the stack.
+    if let Some(id) = req
         .headers()
         .get("x-request-id")
         .and_then(|value| value.to_str().ok())
-        .unwrap_or("")
-        .to_string();
+        .filter(|s| !s.is_empty())
+    {
+        context.request_id = id.to_string();
+    }
 
-    context.request_id = request_id;
     context.user_agent = req
         .headers()
         .get("user-agent")
