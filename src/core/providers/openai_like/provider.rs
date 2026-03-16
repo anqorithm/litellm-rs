@@ -255,6 +255,11 @@ impl OpenAILikeProvider {
             openai_request["n"] = Value::Number(serde_json::Number::from(n));
         }
 
+        if let Some(stream_options) = request.stream_options {
+            openai_request["stream_options"] = serde_json::to_value(stream_options)
+                .map_err(|e| OpenAILikeError::serialization(PROVIDER_NAME, e.to_string()))?;
+        }
+
         Ok(openai_request)
     }
 
