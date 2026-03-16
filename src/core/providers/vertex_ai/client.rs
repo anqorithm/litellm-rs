@@ -681,7 +681,8 @@ impl LLMProvider for VertexAIProvider {
 
         params.insert(
             "messages".to_string(),
-            serde_json::to_value(request.messages).unwrap(),
+            serde_json::to_value(request.messages)
+                .map_err(|e| ProviderError::serialization("vertex_ai", e.to_string()))?,
         );
         params.insert("model".to_string(), Value::String(request.model.clone()));
 
@@ -711,7 +712,11 @@ impl LLMProvider for VertexAIProvider {
         }
 
         if let Some(stop) = request.stop {
-            params.insert("stop".to_string(), serde_json::to_value(stop).unwrap());
+            params.insert(
+                "stop".to_string(),
+                serde_json::to_value(stop)
+                    .map_err(|e| ProviderError::serialization("vertex_ai", e.to_string()))?,
+            );
         }
 
         if request.stream {
@@ -719,18 +724,24 @@ impl LLMProvider for VertexAIProvider {
         }
 
         if let Some(tools) = request.tools {
-            params.insert("tools".to_string(), serde_json::to_value(tools).unwrap());
+            params.insert(
+                "tools".to_string(),
+                serde_json::to_value(tools)
+                    .map_err(|e| ProviderError::serialization("vertex_ai", e.to_string()))?,
+            );
         }
 
         if let Some(tool_choice) = request.tool_choice {
             params.insert(
                 "tool_choice".to_string(),
-                serde_json::to_value(tool_choice).unwrap(),
+                serde_json::to_value(tool_choice)
+                    .map_err(|e| ProviderError::serialization("vertex_ai", e.to_string()))?,
             );
         }
 
         let vertex_params = self.map_openai_params(params, &request.model).await?;
-        Ok(serde_json::to_value(vertex_params).unwrap())
+        Ok(serde_json::to_value(vertex_params)
+            .map_err(|e| ProviderError::serialization("vertex_ai", e.to_string()))?)
     }
 
     /// Response
