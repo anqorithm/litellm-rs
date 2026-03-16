@@ -163,7 +163,7 @@ mod tests {
 
         for i in 0..50 {
             let key = CacheKey::new(format!("key-{}", i));
-            cache.set(key, i);
+            cache.set(key, i).await;
         }
 
         assert_eq!(cache.len(), 50);
@@ -171,7 +171,7 @@ mod tests {
         // Verify values
         for i in 0..50 {
             let key = CacheKey::new(format!("key-{}", i));
-            assert_eq!(cache.get(&key), Some(i));
+            assert_eq!(cache.get(&key).await, Some(i));
         }
     }
 
