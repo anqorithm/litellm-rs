@@ -42,6 +42,37 @@ impl UsageTokens {
 
 impl From<crate::core::types::responses::Usage> for UsageTokens {
     fn from(usage: crate::core::types::responses::Usage) -> Self {
+        // Combine prompt-side and completion-side audio tokens so the calculator
+        // bills the full audio load (both input and output audio are charged).
+        let prompt_audio = usage
+            .prompt_tokens_details
+            .as_ref()
+            .and_then(|d| d.audio_tokens);
+        let completion_audio = usage
+            .completion_tokens_details
+            .as_ref()
+            .and_then(|d| d.audio_tokens);
+        let audio_tokens = match (prompt_audio, completion_audio) {
+            (None, None) => None,
+            (Some(p), None) => Some(p),
+            (None, Some(c)) => Some(c),
+            (Some(p), Some(c)) => Some(p + c),
+        };
+
+        // Prefer completion_tokens_details.reasoning_tokens; fall back to
+        // thinking_usage.thinking_tokens (Anthropic / DeepSeek thinking models
+        // report reasoning under thinking_usage rather than completion details).
+        let reasoning_tokens = usage
+            .completion_tokens_details
+            .as_ref()
+            .and_then(|d| d.reasoning_tokens)
+            .or_else(|| {
+                usage
+                    .thinking_usage
+                    .as_ref()
+                    .and_then(|t| t.thinking_tokens)
+            });
+
         Self {
             prompt_tokens: usage.prompt_tokens,
             completion_tokens: usage.completion_tokens,
@@ -50,15 +81,9 @@ impl From<crate::core::types::responses::Usage> for UsageTokens {
                 .prompt_tokens_details
                 .as_ref()
                 .and_then(|d| d.cached_tokens),
-            audio_tokens: usage
-                .prompt_tokens_details
-                .as_ref()
-                .and_then(|d| d.audio_tokens),
+            audio_tokens,
             image_tokens: None,
-            reasoning_tokens: usage
-                .completion_tokens_details
-                .as_ref()
-                .and_then(|d| d.reasoning_tokens),
+            reasoning_tokens,
         }
     }
 }
@@ -448,6 +473,78 @@ mod tests {
         assert_eq!(tokens.audio_tokens, Some(10));
         assert_eq!(tokens.reasoning_tokens, Some(30));
         assert!(tokens.image_tokens.is_none());
+    }
+
+    #[test]
+    fn test_usage_to_usage_tokens_completion_audio_combined() {
+        use crate::core::types::responses::{
+            CompletionTokensDetails, PromptTokensDetails, Usage,
+        };
+        // Both prompt-side and completion-side audio tokens must be summed.
+        let usage = Usage {
+            prompt_tokens: 100,
+            completion_tokens: 50,
+            total_tokens: 150,
+            prompt_tokens_details: Some(PromptTokensDetails {
+                cached_tokens: None,
+                audio_tokens: Some(20),
+            }),
+            completion_tokens_details: Some(CompletionTokensDetails {
+                reasoning_tokens: None,
+                audio_tokens: Some(15),
+            }),
+            thinking_usage: None,
+        };
+        let tokens: UsageTokens = usage.into();
+        assert_eq!(tokens.audio_tokens, Some(35));
+    }
+
+    #[test]
+    fn test_usage_to_usage_tokens_thinking_usage_fallback() {
+        use crate::core::types::responses::Usage;
+        use crate::core::types::thinking::ThinkingUsage;
+        // When completion_tokens_details has no reasoning_tokens, fall back to
+        // thinking_usage.thinking_tokens so costs aren't undercounted.
+        let usage = Usage {
+            prompt_tokens: 100,
+            completion_tokens: 300,
+            total_tokens: 400,
+            prompt_tokens_details: None,
+            completion_tokens_details: None,
+            thinking_usage: Some(ThinkingUsage {
+                thinking_tokens: Some(200),
+                budget_tokens: None,
+                thinking_cost: None,
+                provider: None,
+            }),
+        };
+        let tokens: UsageTokens = usage.into();
+        assert_eq!(tokens.reasoning_tokens, Some(200));
+    }
+
+    #[test]
+    fn test_usage_to_usage_tokens_reasoning_tokens_preferred_over_thinking_usage() {
+        use crate::core::types::responses::{CompletionTokensDetails, Usage};
+        use crate::core::types::thinking::ThinkingUsage;
+        // completion_tokens_details.reasoning_tokens takes priority.
+        let usage = Usage {
+            prompt_tokens: 100,
+            completion_tokens: 300,
+            total_tokens: 400,
+            prompt_tokens_details: None,
+            completion_tokens_details: Some(CompletionTokensDetails {
+                reasoning_tokens: Some(50),
+                audio_tokens: None,
+            }),
+            thinking_usage: Some(ThinkingUsage {
+                thinking_tokens: Some(200),
+                budget_tokens: None,
+                thinking_cost: None,
+                provider: None,
+            }),
+        };
+        let tokens: UsageTokens = usage.into();
+        assert_eq!(tokens.reasoning_tokens, Some(50));
     }
 
     // ==================== UsageTokens Tests ====================

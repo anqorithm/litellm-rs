@@ -111,12 +111,16 @@ impl ResponseError for GatewayError {
                     "PROVIDER_ROUTING_ERROR",
                     provider_error.to_string(),
                 ),
-                ProviderError::ApiError { status, .. } => (
-                    actix_web::http::StatusCode::from_u16(*status)
-                        .unwrap_or(actix_web::http::StatusCode::BAD_GATEWAY),
-                    "PROVIDER_API_ERROR",
-                    provider_error.to_string(),
-                ),
+                ProviderError::ApiError { status, .. } => {
+                    // Never emit 2xx from the error path — a provider that constructs
+                    // ApiError with a 200 status (e.g. Gemini STOP finish-reason) must
+                    // not propagate that as a successful HTTP response to callers.
+                    let http_status = actix_web::http::StatusCode::from_u16(*status)
+                        .ok()
+                        .filter(|s| !s.is_success())
+                        .unwrap_or(actix_web::http::StatusCode::BAD_GATEWAY);
+                    (http_status, "PROVIDER_API_ERROR", provider_error.to_string())
+                }
                 ProviderError::Cancelled { .. } => (
                     actix_web::http::StatusCode::from_u16(499)
                         .unwrap_or(actix_web::http::StatusCode::BAD_REQUEST),
@@ -696,6 +700,20 @@ mod tests {
             provider: "unknown",
             status: 0,
             message: "Invalid status".to_string(),
+        };
+        let error = GatewayError::Provider(provider_error);
+        let response = error.error_response();
+        assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+    }
+
+    #[test]
+    fn test_provider_error_api_error_2xx_clamped_to_bad_gateway() {
+        // Gemini constructs ApiError(200) for STOP finish reason — must not
+        // propagate as HTTP 200 from the error path.
+        let provider_error = ProviderError::ApiError {
+            provider: "gemini",
+            status: 200,
+            message: "Generation completed".to_string(),
         };
         let error = GatewayError::Provider(provider_error);
         let response = error.error_response();
