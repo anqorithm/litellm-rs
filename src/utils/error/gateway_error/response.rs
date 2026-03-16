@@ -100,8 +100,7 @@ impl ResponseError for GatewayError {
                     "DEPLOYMENT_NOT_FOUND",
                     provider_error.to_string(),
                 ),
-                ProviderError::ResponseParsing { .. }
-                | ProviderError::Streaming { .. } => (
+                ProviderError::ResponseParsing { .. } | ProviderError::Streaming { .. } => (
                     actix_web::http::StatusCode::BAD_GATEWAY,
                     "PROVIDER_RESPONSE_ERROR",
                     provider_error.to_string(),
@@ -238,22 +237,40 @@ impl ResponseError for GatewayError {
         let mut builder = HttpResponse::build(status_code);
 
         // Add rate limit headers for 429 responses
-        if let GatewayError::RateLimit {
-            retry_after,
-            rpm_limit,
-            tpm_limit,
-            ..
-        } = self
-        {
-            if let Some(secs) = retry_after {
-                builder.insert_header(("Retry-After", secs.to_string()));
+        match self {
+            GatewayError::RateLimit {
+                retry_after,
+                rpm_limit,
+                tpm_limit,
+                ..
+            } => {
+                if let Some(secs) = retry_after {
+                    builder.insert_header(("Retry-After", secs.to_string()));
+                }
+                if let Some(rpm) = rpm_limit {
+                    builder.insert_header(("X-RateLimit-Limit-Requests", rpm.to_string()));
+                }
+                if let Some(tpm) = tpm_limit {
+                    builder.insert_header(("X-RateLimit-Limit-Tokens", tpm.to_string()));
+                }
             }
-            if let Some(rpm) = rpm_limit {
-                builder.insert_header(("X-RateLimit-Limit-Requests", rpm.to_string()));
+            GatewayError::Provider(ProviderError::RateLimit {
+                retry_after,
+                rpm_limit,
+                tpm_limit,
+                ..
+            }) => {
+                if let Some(secs) = retry_after {
+                    builder.insert_header(("Retry-After", secs.to_string()));
+                }
+                if let Some(rpm) = rpm_limit {
+                    builder.insert_header(("X-RateLimit-Limit-Requests", rpm.to_string()));
+                }
+                if let Some(tpm) = tpm_limit {
+                    builder.insert_header(("X-RateLimit-Limit-Tokens", tpm.to_string()));
+                }
             }
-            if let Some(tpm) = tpm_limit {
-                builder.insert_header(("X-RateLimit-Limit-Tokens", tpm.to_string()));
-            }
+            _ => {}
         }
 
         builder.json(error_response)
@@ -451,15 +468,30 @@ mod tests {
         let response = error.error_response();
         assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
         assert_eq!(
-            response.headers().get("Retry-After").unwrap().to_str().unwrap(),
+            response
+                .headers()
+                .get("Retry-After")
+                .unwrap()
+                .to_str()
+                .unwrap(),
             "60"
         );
         assert_eq!(
-            response.headers().get("X-RateLimit-Limit-Requests").unwrap().to_str().unwrap(),
+            response
+                .headers()
+                .get("X-RateLimit-Limit-Requests")
+                .unwrap()
+                .to_str()
+                .unwrap(),
             "100"
         );
         assert_eq!(
-            response.headers().get("X-RateLimit-Limit-Tokens").unwrap().to_str().unwrap(),
+            response
+                .headers()
+                .get("X-RateLimit-Limit-Tokens")
+                .unwrap()
+                .to_str()
+                .unwrap(),
             "50000"
         );
     }
@@ -790,10 +822,7 @@ mod tests {
                 GatewayError::Validation("test".to_string()),
             ),
             ("NOT_FOUND", GatewayError::NotFound("test".to_string())),
-            (
-                "RATE_LIMIT_EXCEEDED",
-                GatewayError::rate_limit("test"),
-            ),
+            ("RATE_LIMIT_EXCEEDED", GatewayError::rate_limit("test")),
         ];
 
         for (_expected_code, error) in error_codes {

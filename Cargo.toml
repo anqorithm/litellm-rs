@@ -149,8 +149,8 @@ opt-level = 0
 
 # Feature flags
 [features]
-# Default: gateway with SQLite storage (use --all-features or --features providers-extra,providers-extended for full provider set)
-default = ["sqlite", "redis", "metrics", "tracing"]
+# Default: gateway with SQLite storage and full provider set
+default = ["sqlite", "redis", "metrics", "tracing", "providers-extra", "providers-extended"]
 
 # Gateway mode: HTTP server with full middleware stack
 gateway = [
