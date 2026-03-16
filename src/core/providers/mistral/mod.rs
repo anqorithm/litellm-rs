@@ -315,10 +315,10 @@ impl LLMProvider for MistralProvider {
         let mut body = OpenAIRequestTransformer::transform_chat_request(&request);
 
         // Mistral-specific adjustments
-        if let Some(seed) = body.get("seed") {
-            let seed_value = seed.clone();
-            body.as_object_mut().unwrap().remove("seed");
-            body["random_seed"] = seed_value;
+        if let Some(obj) = body.as_object_mut() {
+            if let Some(seed_value) = obj.remove("seed") {
+                obj.insert("random_seed".to_string(), seed_value);
+            }
         }
 
         Ok(body)
