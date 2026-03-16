@@ -67,7 +67,12 @@ where
 
         let fut = self.service.call(req);
         Box::pin(async move {
-            let res = fut.await?;
+            let mut res = fut.await?;
+            res.headers_mut().insert(
+                actix_web::http::header::HeaderName::from_static("x-request-id"),
+                HeaderValue::from_str(&request_id)
+                    .unwrap_or_else(|_| HeaderValue::from_static("invalid")),
+            );
             Ok(res)
         })
     }
