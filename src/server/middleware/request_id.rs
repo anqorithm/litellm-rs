@@ -51,6 +51,7 @@ where
             .headers()
             .get("x-request-id")
             .and_then(|value| value.to_str().ok())
+            .filter(|s| !s.is_empty())
             .map(str::to_string);
 
         let request_id = if let Some(id) = existing {
