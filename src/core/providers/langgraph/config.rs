@@ -148,7 +148,19 @@ impl LangGraphConfig {
 
 impl ProviderConfig for LangGraphConfig {
     fn validate(&self) -> Result<(), String> {
-        self.validate_standard("LangGraph")
+        if self.api_key().is_none_or(|k| k.is_empty()) {
+            return Err(
+                "LangGraph API key is required. Set LANGGRAPH_API_KEY or LANGSMITH_API_KEY"
+                    .to_string(),
+            );
+        }
+        if self.timeout().as_secs() == 0 {
+            return Err("Timeout must be greater than 0".to_string());
+        }
+        if self.max_retries() > 10 {
+            return Err("Max retries should not exceed 10".to_string());
+        }
+        Ok(())
     }
 
     fn api_key(&self) -> Option<&str> {

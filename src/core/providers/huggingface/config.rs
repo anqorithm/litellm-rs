@@ -167,7 +167,16 @@ impl HuggingFaceConfig {
 
 impl ProviderConfig for HuggingFaceConfig {
     fn validate(&self) -> Result<(), String> {
-        self.validate_standard("HuggingFace")
+        if self.api_key.is_empty() {
+            return Err("HuggingFace API token (HF_TOKEN) is required".to_string());
+        }
+        if self.timeout_seconds == 0 {
+            return Err("Timeout must be greater than 0".to_string());
+        }
+        if self.max_retries > 10 {
+            return Err("Max retries should not exceed 10".to_string());
+        }
+        Ok(())
     }
 
     fn api_key(&self) -> Option<&str> {
