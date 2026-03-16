@@ -5,7 +5,7 @@
 
 use super::trait_def::Validate;
 use crate::config::models::cache::CacheConfig;
-use crate::core::types::config::rate_limit::RateLimitConfig;
+use crate::config::models::rate_limit::RateLimitConfig;
 
 impl Validate for CacheConfig {
     fn validate(&self) -> Result<(), String> {

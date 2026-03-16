@@ -1,6 +1,6 @@
 //! Core types for the IP Access Control system
 
-use crate::core::types::config::defaults::default_true;
+use crate::config::models::defaults::default_true;
 use serde::{Deserialize, Serialize};
 use std::net::IpAddr;
 use std::str::FromStr;

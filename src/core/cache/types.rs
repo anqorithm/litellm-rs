@@ -3,7 +3,7 @@
 //! This module contains core type definitions for the dual cache system,
 //! including cache keys, entries, configuration, and eviction policies.
 
-use crate::core::types::config::defaults::default_true;
+use crate::config::models::defaults::default_true;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};

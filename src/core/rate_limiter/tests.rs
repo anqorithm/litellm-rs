@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 use super::limiter::RateLimiter;
-use crate::core::types::config::rate_limit::{RateLimitConfig, RateLimitStrategy};
+use crate::config::models::rate_limit::{RateLimitConfig, RateLimitStrategy};
 use std::time::Duration;
 
 fn test_config(enabled: bool, rpm: u32) -> RateLimitConfig {

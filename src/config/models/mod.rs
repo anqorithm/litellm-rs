@@ -4,8 +4,11 @@
 
 #![allow(missing_docs)]
 
+pub mod defaults;
+pub mod retry;
+
 // Re-export shared default functions so submodules using `use super::*` get them
-pub use crate::core::types::config::defaults::{
+pub use self::defaults::{
     default_api_key_header, default_failure_threshold, default_health_check_interval,
     default_jwt_expiration, default_max_retries, default_recovery_timeout, default_true,
 };

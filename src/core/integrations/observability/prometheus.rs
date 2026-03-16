@@ -2,7 +2,7 @@
 //!
 //! Exports LLM metrics to Prometheus for monitoring and alerting.
 
-use crate::core::types::config::defaults::default_true;
+use crate::config::models::defaults::default_true;
 use async_trait::async_trait;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};

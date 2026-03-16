@@ -1,6 +1,6 @@
 //! OAuth configuration types and provider definitions
 
-use crate::core::types::config::defaults::default_true;
+use crate::config::models::defaults::default_true;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

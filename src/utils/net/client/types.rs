@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 // Re-export canonical RetryConfig
-pub use crate::core::types::config::retry::RetryConfig;
+pub use crate::config::models::retry::RetryConfig;
 
 /// Configuration for HTTP client behavior
 #[derive(Debug, Clone)]

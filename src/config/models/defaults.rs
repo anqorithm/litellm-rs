@@ -1,6 +1,6 @@
 //! Default value functions for configuration
 
-use super::observability::LogFormat;
+use super::monitoring::LogFormat;
 
 pub fn default_true() -> bool {
     true

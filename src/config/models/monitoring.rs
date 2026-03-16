@@ -1,8 +1,6 @@
 //! Monitoring and observability configuration
 //!
 //! Unified configuration for metrics, tracing, health checks, and logging.
-//! This is the canonical location — the legacy `core::types::config::observability`
-//! module re-exports types from here.
 
 use super::*;
 use serde::{Deserialize, Serialize};

@@ -21,8 +21,6 @@ pub mod thinking;
 pub mod tools;
 
 // Original files kept as-is
-#[doc(hidden)]
-pub mod config;
 pub mod errors;
 pub mod responses;
 

@@ -2,7 +2,7 @@
 //!
 //! This module provides unified pricing management for all providers
 
-use crate::core::types::config::defaults::default_true;
+use crate::config::models::defaults::default_true;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use chrono::{DateTime, Utc};
