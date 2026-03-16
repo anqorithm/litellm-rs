@@ -143,28 +143,32 @@ pub fn build_gemini_request(
     safety_settings: Option<Vec<SafetySettings>>,
     tools: Option<Vec<Tool>>,
     tool_config: Option<ToolConfig>,
-) -> Value {
+) -> Result<Value, ProviderError> {
     let mut request = serde_json::json!({
         "contents": contents,
     });
 
     if let Some(config) = generation_config {
-        request["generationConfig"] = serde_json::to_value(config).unwrap();
+        request["generationConfig"] = serde_json::to_value(config)
+            .map_err(|e| ProviderError::serialization("vertex_ai", e.to_string()))?;
     }
 
     if let Some(settings) = safety_settings {
-        request["safetySettings"] = serde_json::to_value(settings).unwrap();
+        request["safetySettings"] = serde_json::to_value(settings)
+            .map_err(|e| ProviderError::serialization("vertex_ai", e.to_string()))?;
     }
 
     if let Some(tools) = tools {
-        request["tools"] = serde_json::to_value(tools).unwrap();
+        request["tools"] = serde_json::to_value(tools)
+            .map_err(|e| ProviderError::serialization("vertex_ai", e.to_string()))?;
     }
 
     if let Some(tool_config) = tool_config {
-        request["toolConfig"] = serde_json::to_value(tool_config).unwrap();
+        request["toolConfig"] = serde_json::to_value(tool_config)
+            .map_err(|e| ProviderError::serialization("vertex_ai", e.to_string()))?;
     }
 
-    request
+    Ok(request)
 }
 
 /// Convert OpenAI-style role to Vertex AI role
