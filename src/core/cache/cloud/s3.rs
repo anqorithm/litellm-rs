@@ -269,7 +269,9 @@ mod implementation {
                 .bucket(&self.config.base.bucket)
                 .key(&s3_key)
                 .body(ByteStream::from(bytes))
-                .storage_class(self.config.storage_class.as_str().parse().unwrap())
+                .storage_class(self.config.storage_class.as_str().parse().map_err(|e| {
+                    GatewayError::Config(format!("Invalid S3 storage class: {}", e))
+                })?)
                 .content_type("application/json")
                 .send()
                 .await
