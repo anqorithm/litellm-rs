@@ -1,5 +1,5 @@
 use crate::utils::error::gateway_error::{GatewayError, Result};
-use sea_orm::*;
+use sea_orm::{sea_query::Expr, *};
 use tracing::debug;
 
 use super::super::entities::{self, password_reset_token};
@@ -91,8 +91,27 @@ impl SeaOrmDatabase {
         Ok(())
     }
 
+    /// Check whether a password reset token is valid (unused, not expired)
+    /// without consuming it. Used as a cheap pre-validation to avoid
+    /// Argon2 CPU cost on invalid tokens.
+    pub async fn is_reset_token_valid(&self, token: &str) -> Result<bool> {
+        let count = entities::PasswordResetToken::find()
+            .filter(password_reset_token::Column::Token.eq(token))
+            .filter(password_reset_token::Column::UsedAt.is_null())
+            .filter(password_reset_token::Column::ExpiresAt.gt(chrono::Utc::now()))
+            .count(&self.db)
+            .await
+            .map_err(GatewayError::Database)?;
+        Ok(count > 0)
+    }
+
     /// Atomically validate, consume a password reset token and update the user's password
     /// in a single database transaction to eliminate the TOCTOU race condition.
+    ///
+    /// The token is consumed via a single conditional UPDATE statement
+    /// (`WHERE used_at IS NULL AND expires_at > now`). Only the request
+    /// that gets `rows_affected == 1` proceeds; concurrent requests get
+    /// `rows_affected == 0` and return `false` without updating the password.
     ///
     /// Returns `true` if the token was valid and the password was updated,
     /// or `false` if the token was not found, already used, or expired.
@@ -103,33 +122,34 @@ impl SeaOrmDatabase {
     ) -> Result<bool> {
         debug!("Atomically consuming password reset token and updating password");
 
+        let now: chrono::DateTime<chrono::FixedOffset> = chrono::Utc::now().into();
         let txn = self.db.begin().await.map_err(GatewayError::Database)?;
 
-        let token_model = entities::PasswordResetToken::find()
+        // Single conditional UPDATE: only succeeds if token is unused and not expired.
+        // Two concurrent requests cannot both succeed — only one gets rows_affected == 1.
+        let update_result = password_reset_token::Entity::update_many()
+            .col_expr(password_reset_token::Column::UsedAt, Expr::value(now))
             .filter(password_reset_token::Column::Token.eq(token))
             .filter(password_reset_token::Column::UsedAt.is_null())
-            .filter(password_reset_token::Column::ExpiresAt.gt(chrono::Utc::now()))
+            .filter(password_reset_token::Column::ExpiresAt.gt(now))
+            .exec(&txn)
+            .await
+            .map_err(GatewayError::Database)?;
+
+        if update_result.rows_affected == 0 {
+            txn.rollback().await.map_err(GatewayError::Database)?;
+            return Ok(false);
+        }
+
+        // Token is already consumed; fetch user_id — no race possible here.
+        let token_model = entities::PasswordResetToken::find()
+            .filter(password_reset_token::Column::Token.eq(token))
             .one(&txn)
             .await
-            .map_err(GatewayError::Database)?;
-
-        let token_model = match token_model {
-            Some(m) => m,
-            None => {
-                txn.rollback().await.map_err(GatewayError::Database)?;
-                return Ok(false);
-            }
-        };
+            .map_err(GatewayError::Database)?
+            .ok_or_else(|| GatewayError::internal("Token disappeared after update"))?;
 
         let user_id = token_model.user_id;
-
-        // Mark token as used inside the transaction
-        let mut token_active: password_reset_token::ActiveModel = token_model.into();
-        token_active.used_at = Set(Some(chrono::Utc::now().into()));
-        token_active
-            .update(&txn)
-            .await
-            .map_err(GatewayError::Database)?;
 
         // Update the user's password inside the same transaction
         let user_model = entities::User::find_by_id(user_id)

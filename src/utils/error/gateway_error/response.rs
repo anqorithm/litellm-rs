@@ -237,13 +237,32 @@ impl ResponseError for GatewayError {
 
         let mut builder = HttpResponse::build(status_code);
 
-        // Add rate limit headers for 429 responses
+        // Add rate limit headers for 429 responses (gateway-level)
         if let GatewayError::RateLimit {
             retry_after,
             rpm_limit,
             tpm_limit,
             ..
         } = self
+        {
+            if let Some(secs) = retry_after {
+                builder.insert_header(("Retry-After", secs.to_string()));
+            }
+            if let Some(rpm) = rpm_limit {
+                builder.insert_header(("X-RateLimit-Limit-Requests", rpm.to_string()));
+            }
+            if let Some(tpm) = tpm_limit {
+                builder.insert_header(("X-RateLimit-Limit-Tokens", tpm.to_string()));
+            }
+        }
+
+        // Propagate rate limit headers from provider 429 responses
+        if let GatewayError::Provider(ProviderError::RateLimit {
+            retry_after,
+            rpm_limit,
+            tpm_limit,
+            ..
+        }) = self
         {
             if let Some(secs) = retry_after {
                 builder.insert_header(("Retry-After", secs.to_string()));

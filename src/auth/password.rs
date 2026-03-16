@@ -73,7 +73,14 @@ impl AuthSystem {
     pub async fn reset_password(&self, token: &str, new_password: &str) -> Result<()> {
         info!("Resetting password with token");
 
-        // Hash new password before entering the transaction
+        // Cheap pre-validation: reject invalid/expired tokens before paying the
+        // Argon2 hashing cost. Prevents CPU-amplified DoS on this unauthenticated
+        // endpoint. The atomic consume below still handles any race window.
+        if !self.storage.db().is_reset_token_valid(token).await? {
+            return Err(GatewayError::auth("Invalid or expired reset token"));
+        }
+
+        // Hash new password only after confirming the token is likely valid
         let password_hash = hash_password(new_password)?;
 
         // Atomically validate token, consume it, and update the password in one transaction
