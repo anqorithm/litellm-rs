@@ -24,7 +24,7 @@ mod tests {
         let def = registry::get_definition("groq").unwrap();
         let config = def.to_openai_like_config(Some("test-key"), None);
         let provider = OpenAILikeProvider::new(config).await.unwrap();
-        assert_eq!(provider.name(), "openai_like");
+        assert_eq!(provider.name(), "groq");
     }
 
     // E2E tests that require real API keys
