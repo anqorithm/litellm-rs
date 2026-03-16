@@ -100,7 +100,7 @@ where
     /// populates memory cache for future reads.
     pub async fn get(&self, key: &CacheKey) -> Result<Option<T>> {
         match self.config.mode {
-            CacheMode::MemoryOnly => Ok(self.memory.get(key)),
+            CacheMode::MemoryOnly => Ok(self.memory.get(key).await),
             CacheMode::RedisOnly => {
                 if let Some(ref redis) = self.redis {
                     redis.get(key).await
@@ -115,7 +115,7 @@ where
     /// Get from dual cache with read-through pattern
     async fn get_dual(&self, key: &CacheKey) -> Result<Option<T>> {
         // L1: Check memory cache first (fastest path)
-        if let Some(value) = self.memory.get(key) {
+        if let Some(value) = self.memory.get(key).await {
             trace!(key = %key, "Dual cache L1 hit");
             return Ok(Some(value));
         }
@@ -125,7 +125,7 @@ where
             && let Some(value) = redis.get(key).await?
         {
             // Populate memory cache with the value from Redis
-            self.memory.set(key.clone(), value.clone());
+            self.memory.set(key.clone(), value.clone()).await;
             trace!(key = %key, "Dual cache L2 hit, populated L1");
             return Ok(Some(value));
         }
@@ -137,7 +137,7 @@ where
     /// Get an entry with metadata from the cache
     pub async fn get_entry(&self, key: &CacheKey) -> Result<Option<CacheEntry<T>>> {
         match self.config.mode {
-            CacheMode::MemoryOnly => Ok(self.memory.get_entry(key)),
+            CacheMode::MemoryOnly => Ok(self.memory.get_entry(key).await),
             CacheMode::RedisOnly => {
                 if let Some(ref redis) = self.redis {
                     redis.get_entry(key).await
@@ -147,7 +147,7 @@ where
             }
             CacheMode::Dual => {
                 // Check memory first
-                if let Some(entry) = self.memory.get_entry(key) {
+                if let Some(entry) = self.memory.get_entry(key).await {
                     return Ok(Some(entry));
                 }
 
@@ -156,12 +156,14 @@ where
                     && let Some(entry) = redis.get_entry(key).await?
                 {
                     // Populate memory cache
-                    self.memory.set_with_size(
-                        key.clone(),
-                        entry.value.clone(),
-                        entry.ttl,
-                        entry.size_bytes,
-                    );
+                    self.memory
+                        .set_with_size(
+                            key.clone(),
+                            entry.value.clone(),
+                            entry.ttl,
+                            entry.size_bytes,
+                        )
+                        .await;
                     return Ok(Some(entry));
                 }
 
@@ -179,7 +181,7 @@ where
     pub async fn set_with_ttl(&self, key: CacheKey, value: T, ttl: Duration) -> Result<()> {
         match self.config.mode {
             CacheMode::MemoryOnly => {
-                self.memory.set_with_ttl(key, value, ttl);
+                self.memory.set_with_ttl(key, value, ttl).await;
                 Ok(())
             }
             CacheMode::RedisOnly => {
@@ -195,8 +197,10 @@ where
 
     /// Set in both cache layers
     async fn set_dual(&self, key: CacheKey, value: T, ttl: Duration) -> Result<()> {
-        // Write to memory cache (synchronous, fast)
-        self.memory.set_with_ttl(key.clone(), value.clone(), ttl);
+        // Write to memory cache
+        self.memory
+            .set_with_ttl(key.clone(), value.clone(), ttl)
+            .await;
 
         // Write to Redis cache (asynchronous)
         if let Some(ref redis) = self.redis
@@ -220,7 +224,7 @@ where
     ) -> Result<()> {
         match self.config.mode {
             CacheMode::MemoryOnly => {
-                self.memory.set_with_size(key, value, ttl, size_bytes);
+                self.memory.set_with_size(key, value, ttl, size_bytes).await;
                 Ok(())
             }
             CacheMode::RedisOnly => {
@@ -232,7 +236,8 @@ where
             }
             CacheMode::Dual => {
                 self.memory
-                    .set_with_size(key.clone(), value.clone(), ttl, size_bytes);
+                    .set_with_size(key.clone(), value.clone(), ttl, size_bytes)
+                    .await;
                 if let Some(ref redis) = self.redis
                     && let Err(e) = redis
                         .set_with_size(key.clone(), value, ttl, size_bytes)
@@ -251,7 +256,7 @@ where
 
         match self.config.mode {
             CacheMode::MemoryOnly => {
-                deleted = self.memory.delete(key);
+                deleted = self.memory.delete(key).await;
             }
             CacheMode::RedisOnly => {
                 if let Some(ref redis) = self.redis {
@@ -260,7 +265,7 @@ where
             }
             CacheMode::Dual => {
                 // Delete from memory
-                if self.memory.delete(key) {
+                if self.memory.delete(key).await {
                     deleted = true;
                 }
 
@@ -280,7 +285,7 @@ where
     /// Check if a key exists in either cache layer
     pub async fn exists(&self, key: &CacheKey) -> Result<bool> {
         match self.config.mode {
-            CacheMode::MemoryOnly => Ok(self.memory.exists(key)),
+            CacheMode::MemoryOnly => Ok(self.memory.exists(key).await),
             CacheMode::RedisOnly => {
                 if let Some(ref redis) = self.redis {
                     redis.exists(key).await
@@ -290,7 +295,7 @@ where
             }
             CacheMode::Dual => {
                 // Check memory first
-                if self.memory.exists(key) {
+                if self.memory.exists(key).await {
                     return Ok(true);
                 }
 
@@ -334,7 +339,7 @@ where
     /// Clear all entries from both cache layers
     pub async fn clear(&self) -> Result<()> {
         // Clear memory cache
-        self.memory.clear();
+        self.memory.clear().await;
 
         // Note: We don't clear Redis cache as it may be shared across instances
         // Use delete_by_prefix for Redis if needed
@@ -441,14 +446,15 @@ where
 
         for key in keys {
             // Skip if already in memory
-            if self.memory.exists(key) {
+            if self.memory.exists(key).await {
                 continue;
             }
 
             // Try to load from Redis
             if let Ok(Some(entry)) = redis.get_entry(key).await {
                 self.memory
-                    .set_with_size(key.clone(), entry.value, entry.ttl, entry.size_bytes);
+                    .set_with_size(key.clone(), entry.value, entry.ttl, entry.size_bytes)
+                    .await;
                 warmed += 1;
             }
         }
@@ -458,12 +464,14 @@ where
     }
 
     /// Warm the memory cache with provided entries
-    pub fn warm_with_entries(&self, entries: &[(CacheKey, T, Duration)]) -> usize {
+    pub async fn warm_with_entries(&self, entries: &[(CacheKey, T, Duration)]) -> usize {
         let mut warmed = 0;
 
         for (key, value, ttl) in entries {
-            if !self.memory.exists(key) {
-                self.memory.set_with_ttl(key.clone(), value.clone(), *ttl);
+            if !self.memory.exists(key).await {
+                self.memory
+                    .set_with_ttl(key.clone(), value.clone(), *ttl)
+                    .await;
                 warmed += 1;
             }
         }
@@ -658,11 +666,11 @@ mod tests {
             ),
         ];
 
-        let warmed = cache.warm_with_entries(&entries);
+        let warmed = cache.warm_with_entries(&entries).await;
         assert_eq!(warmed, 2);
 
         // Warming again should not add duplicates
-        let warmed_again = cache.warm_with_entries(&entries);
+        let warmed_again = cache.warm_with_entries(&entries).await;
         assert_eq!(warmed_again, 0);
     }
 
