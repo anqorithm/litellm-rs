@@ -304,8 +304,14 @@ impl WatsonxProvider {
 
         // Add optional parameters
         if let Some(temp) = request.temperature {
+            let temp_f64 = temp as f64;
             payload["temperature"] = serde_json::Value::Number(
-                serde_json::Number::from_f64(temp as f64).unwrap_or_else(|| 0.into()),
+                serde_json::Number::from_f64(temp_f64).ok_or_else(|| {
+                    ProviderError::invalid_request(
+                        "watsonx",
+                        format!("invalid temperature value: {temp_f64} (NaN and Infinity are not allowed)"),
+                    )
+                })?,
             );
         }
 
@@ -314,8 +320,16 @@ impl WatsonxProvider {
         }
 
         if let Some(top_p) = request.top_p {
+            let top_p_f64 = top_p as f64;
             payload["top_p"] = serde_json::Value::Number(
-                serde_json::Number::from_f64(top_p as f64).unwrap_or_else(|| 1.into()),
+                serde_json::Number::from_f64(top_p_f64).ok_or_else(|| {
+                    ProviderError::invalid_request(
+                        "watsonx",
+                        format!(
+                            "invalid top_p value: {top_p_f64} (NaN and Infinity are not allowed)"
+                        ),
+                    )
+                })?,
             );
         }
 
@@ -324,8 +338,14 @@ impl WatsonxProvider {
         }
 
         if let Some(freq_penalty) = request.frequency_penalty {
+            let freq_f64 = freq_penalty as f64;
             payload["repetition_penalty"] = serde_json::Value::Number(
-                serde_json::Number::from_f64(freq_penalty as f64).unwrap_or_else(|| 1.into()),
+                serde_json::Number::from_f64(freq_f64).ok_or_else(|| {
+                    ProviderError::invalid_request(
+                        "watsonx",
+                        format!("invalid frequency_penalty value: {freq_f64} (NaN and Infinity are not allowed)"),
+                    )
+                })?,
             );
         }
 

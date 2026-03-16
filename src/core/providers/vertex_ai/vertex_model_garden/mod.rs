@@ -127,7 +127,7 @@ impl ModelGardenHandler {
                         input
                             .get("temperature")
                             .unwrap_or(&serde_json::Value::Number(
-                                serde_json::Number::from_f64(0.7).unwrap(),
+                                serde_json::Number::from_f64(0.7).unwrap_or_else(|| 0.into()),
                             ))
                             .clone(),
                     ),
@@ -151,7 +151,7 @@ impl ModelGardenHandler {
                         input
                             .get("temperature")
                             .unwrap_or(&serde_json::Value::Number(
-                                serde_json::Number::from_f64(0.7).unwrap(),
+                                serde_json::Number::from_f64(0.7).unwrap_or_else(|| 0.into()),
                             ))
                             .clone(),
                     ),

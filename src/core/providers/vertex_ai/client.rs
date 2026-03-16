@@ -694,20 +694,30 @@ impl LLMProvider for VertexAIProvider {
         }
 
         if let Some(temperature) = request.temperature {
+            let temp_f64 = temperature as f64;
             params.insert(
                 "temperature".to_string(),
-                serde_json::Number::from_f64(temperature as f64)
-                    .map(Value::Number)
-                    .unwrap_or(Value::Null),
+                Value::Number(serde_json::Number::from_f64(temp_f64).ok_or_else(|| {
+                    ProviderError::invalid_request(
+                        "vertex_ai",
+                        format!("invalid temperature value: {temp_f64} (NaN and Infinity are not allowed)"),
+                    )
+                })?),
             );
         }
 
         if let Some(top_p) = request.top_p {
+            let top_p_f64 = top_p as f64;
             params.insert(
                 "top_p".to_string(),
-                serde_json::Number::from_f64(top_p as f64)
-                    .map(Value::Number)
-                    .unwrap_or(Value::Null),
+                Value::Number(serde_json::Number::from_f64(top_p_f64).ok_or_else(|| {
+                    ProviderError::invalid_request(
+                        "vertex_ai",
+                        format!(
+                            "invalid top_p value: {top_p_f64} (NaN and Infinity are not allowed)"
+                        ),
+                    )
+                })?),
             );
         }
 
