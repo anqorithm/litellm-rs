@@ -10,21 +10,29 @@ use super::types::{
 use crate::utils::auth::crypto::keys::{extract_api_key_prefix, generate_api_key, hash_api_key};
 use crate::utils::error::gateway_error::{GatewayError, Result};
 use chrono::Utc;
+use dashmap::DashMap;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tracing::{debug, info, warn};
 use uuid::Uuid;
+
+/// Minimum interval between DB writes for the same key's last_used timestamp.
+const LAST_USED_THROTTLE: Duration = Duration::from_secs(5 * 60);
 
 /// API Key Manager for handling all key operations
 #[derive(Clone)]
 pub struct KeyManager {
     /// Repository for key storage
     repository: Arc<dyn KeyRepository>,
+    /// Tracks when each key's `last_used_at` was last persisted.
+    last_used_cache: Arc<DashMap<Uuid, Instant>>,
 }
 
 impl std::fmt::Debug for KeyManager {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("KeyManager")
             .field("repository", &"<KeyRepository>")
+            .field("last_used_cache_size", &self.last_used_cache.len())
             .finish()
     }
 }
@@ -34,12 +42,16 @@ impl KeyManager {
     pub fn new<R: KeyRepository + 'static>(repository: R) -> Self {
         Self {
             repository: Arc::new(repository),
+            last_used_cache: Arc::new(DashMap::new()),
         }
     }
 
     /// Create a new KeyManager with an Arc repository
     pub fn with_arc_repository(repository: Arc<dyn KeyRepository>) -> Self {
-        Self { repository }
+        Self {
+            repository,
+            last_used_cache: Arc::new(DashMap::new()),
+        }
     }
 
     /// Generate a new API key
@@ -135,14 +147,23 @@ impl KeyManager {
             });
         }
 
-        // Update last used (fire and forget)
-        let repo = self.repository.clone();
+        // Update last used (throttled to once per 5 minutes per key)
         let key_id = key.id;
-        tokio::spawn(async move {
-            if let Err(e) = repo.update_last_used(key_id).await {
-                warn!("Failed to update last used timestamp: {}", e);
-            }
-        });
+        let now = Instant::now();
+        let should_update = match self.last_used_cache.get(&key_id) {
+            Some(last_persisted) => now.duration_since(*last_persisted) >= LAST_USED_THROTTLE,
+            None => true,
+        };
+
+        if should_update {
+            self.last_used_cache.insert(key_id, now);
+            let repo = self.repository.clone();
+            tokio::spawn(async move {
+                if let Err(e) = repo.update_last_used(key_id).await {
+                    warn!("Failed to update last used timestamp: {}", e);
+                }
+            });
+        }
 
         debug!("API key validated successfully");
         Ok(VerifyKeyResult {

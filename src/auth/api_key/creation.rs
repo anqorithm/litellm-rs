@@ -9,21 +9,31 @@ use crate::storage::StorageLayer;
 use crate::utils::auth::crypto::keys::{extract_api_key_prefix, generate_api_key, hash_api_key};
 use crate::utils::error::gateway_error::Result;
 use chrono::Utc;
+use dashmap::DashMap;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tracing::{debug, info, warn};
 use uuid::Uuid;
+
+/// Minimum interval between DB writes for the same key's last_used timestamp.
+const LAST_USED_THROTTLE: Duration = Duration::from_secs(5 * 60);
 
 /// API key handler for authentication and management
 #[derive(Debug, Clone)]
 pub struct ApiKeyHandler {
     /// Storage layer for persistence
     pub(super) storage: Arc<StorageLayer>,
+    /// Tracks when each key's `last_used_at` was last persisted to the DB.
+    last_used_cache: Arc<DashMap<Uuid, Instant>>,
 }
 
 impl ApiKeyHandler {
     /// Create a new API key handler
     pub async fn new(storage: Arc<StorageLayer>) -> Result<Self> {
-        Ok(Self { storage })
+        Ok(Self {
+            storage,
+            last_used_cache: Arc::new(DashMap::new()),
+        })
     }
 
     /// Create a new API key
@@ -224,8 +234,19 @@ impl ApiKeyHandler {
         })
     }
 
-    /// Update last used timestamp
+    /// Update last used timestamp, throttled to at most once per 5 minutes per key.
     pub(super) async fn update_last_used(&self, key_id: Uuid) -> Result<()> {
+        let now = Instant::now();
+
+        // Skip the DB write if we persisted this key's last_used within the throttle window.
+        if let Some(last_persisted) = self.last_used_cache.get(&key_id)
+            && now.duration_since(*last_persisted) < LAST_USED_THROTTLE
+        {
+            return Ok(());
+        }
+
+        self.last_used_cache.insert(key_id, now);
+
         // Use a background task to avoid blocking the request
         let storage = self.storage.clone();
         tokio::spawn(async move {

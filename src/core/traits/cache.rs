@@ -107,11 +107,11 @@ where
     T: Serialize + for<'de> Deserialize<'de> + Send + Sync + Clone + std::fmt::Debug,
 {
     fn to_bytes(&self) -> Result<Vec<u8>, CacheError> {
-        bincode::serialize(self).map_err(CacheError::Serialization)
+        rmp_serde::to_vec(self).map_err(CacheError::Serialization)
     }
 
     fn from_bytes(bytes: &[u8]) -> Result<Self, CacheError> {
-        bincode::deserialize(bytes).map_err(CacheError::Deserialization)
+        rmp_serde::from_slice(bytes).map_err(CacheError::Deserialization)
     }
 }
 
@@ -204,10 +204,10 @@ pub enum CacheError {
     Connection(String),
 
     #[error("Serialization failed: {0}")]
-    Serialization(#[from] Box<bincode::ErrorKind>),
+    Serialization(#[from] rmp_serde::encode::Error),
 
     #[error("Deserialization failed: {0}")]
-    Deserialization(Box<bincode::ErrorKind>),
+    Deserialization(rmp_serde::decode::Error),
 
     #[error("Key not found: {key}")]
     KeyNotFound { key: String },
