@@ -38,18 +38,14 @@ impl Default for CacheConfig {
 impl CacheConfig {
     /// Merge cache configurations
     pub fn merge(mut self, other: Self) -> Self {
-        if other.enabled {
-            self.enabled = true;
-        }
+        self.enabled = other.enabled;
         if other.ttl != default_cache_ttl() {
             self.ttl = other.ttl;
         }
         if other.max_size != default_cache_max_size() {
             self.max_size = other.max_size;
         }
-        if other.semantic_cache {
-            self.semantic_cache = true;
-        }
+        self.semantic_cache = other.semantic_cache;
         if other.similarity_threshold != default_similarity_threshold() {
             self.similarity_threshold = other.similarity_threshold;
         }
@@ -163,6 +159,34 @@ mod tests {
         };
         let merged = base.merge(other);
         assert!((merged.similarity_threshold - 0.8).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_cache_config_merge_disable_enabled() {
+        let base = CacheConfig {
+            enabled: true,
+            ..CacheConfig::default()
+        };
+        let other = CacheConfig {
+            enabled: false,
+            ..CacheConfig::default()
+        };
+        let merged = base.merge(other);
+        assert!(!merged.enabled);
+    }
+
+    #[test]
+    fn test_cache_config_merge_disable_semantic() {
+        let base = CacheConfig {
+            semantic_cache: true,
+            ..CacheConfig::default()
+        };
+        let other = CacheConfig {
+            semantic_cache: false,
+            ..CacheConfig::default()
+        };
+        let merged = base.merge(other);
+        assert!(!merged.semantic_cache);
     }
 
     #[test]

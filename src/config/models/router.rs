@@ -172,10 +172,10 @@ mod tests {
     }
 
     #[test]
-    fn test_routing_strategy_cost_based_serialization() {
-        let strategy = RoutingStrategyConfig::CostBased;
+    fn test_routing_strategy_priority_based_serialization() {
+        let strategy = RoutingStrategyConfig::PriorityBased;
         let json = serde_json::to_value(strategy).unwrap();
-        assert_eq!(json, serde_json::json!("cost_based"));
+        assert_eq!(json, serde_json::json!("priority_based"));
     }
 
     #[test]
@@ -194,9 +194,9 @@ mod tests {
 
     #[test]
     fn test_routing_strategy_clone() {
-        let strategy = RoutingStrategyConfig::CostBased;
+        let strategy = RoutingStrategyConfig::PriorityBased;
         let copied = strategy;
-        assert_eq!(copied, RoutingStrategyConfig::CostBased);
+        assert_eq!(copied, RoutingStrategyConfig::PriorityBased);
     }
 
     // ==================== CircuitBreakerConfig Tests ====================
@@ -347,12 +347,12 @@ mod tests {
     #[test]
     fn test_router_config_serialization() {
         let config = GatewayRouterConfig {
-            strategy: RoutingStrategyConfig::CostBased,
+            strategy: RoutingStrategyConfig::PriorityBased,
             circuit_breaker: CircuitBreakerConfig::default(),
             load_balancer: LoadBalancerConfig::default(),
         };
         let json = serde_json::to_value(&config).unwrap();
-        assert_eq!(json["strategy"], "cost_based");
+        assert_eq!(json["strategy"], "priority_based");
     }
 
     #[test]

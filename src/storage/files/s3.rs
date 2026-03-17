@@ -161,32 +161,164 @@ impl S3Storage {
         }
     }
 
-    /// Check if file exists (placeholder implementation)
-    pub async fn exists(&self, _file_id: &str) -> Result<bool> {
-        Err(GatewayError::Internal(
-            "S3 storage not implemented yet".to_string(),
-        ))
+    /// Check if file exists in S3
+    #[allow(unused_variables)]
+    pub async fn exists(&self, file_id: &str) -> Result<bool> {
+        #[cfg(feature = "s3")]
+        {
+            if let Some(client) = &self.client {
+                match client
+                    .head_object()
+                    .bucket(&self.bucket)
+                    .key(file_id)
+                    .send()
+                    .await
+                {
+                    Ok(_) => Ok(true),
+                    Err(e) => {
+                        let service_err = e.into_service_error();
+                        if service_err.is_not_found() {
+                            Ok(false)
+                        } else {
+                            Err(GatewayError::Internal(format!(
+                                "S3 exists check failed: {}",
+                                service_err
+                            )))
+                        }
+                    }
+                }
+            } else {
+                Err(GatewayError::Internal(
+                    "S3 client not initialized".to_string(),
+                ))
+            }
+        }
+
+        #[cfg(not(feature = "s3"))]
+        {
+            Err(GatewayError::Internal("S3 feature not enabled".to_string()))
+        }
     }
 
-    /// Get file metadata (placeholder implementation)
-    pub async fn metadata(&self, _file_id: &str) -> Result<FileMetadata> {
-        Err(GatewayError::Internal(
-            "S3 storage not implemented yet".to_string(),
-        ))
+    /// Get file metadata from S3
+    #[allow(unused_variables)]
+    pub async fn metadata(&self, file_id: &str) -> Result<FileMetadata> {
+        #[cfg(feature = "s3")]
+        {
+            if let Some(client) = &self.client {
+                let head = client
+                    .head_object()
+                    .bucket(&self.bucket)
+                    .key(file_id)
+                    .send()
+                    .await
+                    .map_err(|e| {
+                        GatewayError::Internal(format!("S3 metadata fetch failed: {}", e))
+                    })?;
+
+                let content_type = head
+                    .content_type()
+                    .unwrap_or("application/octet-stream")
+                    .to_string();
+                let size = head.content_length().unwrap_or(0) as u64;
+                let created_at = head
+                    .last_modified()
+                    .and_then(|t| chrono::DateTime::from_timestamp(t.secs(), t.subsec_nanos()))
+                    .unwrap_or_else(chrono::Utc::now);
+
+                // Extract filename from the key (last path segment)
+                let filename = file_id.rsplit('/').next().unwrap_or(file_id).to_string();
+
+                let checksum = head.e_tag().unwrap_or("").trim_matches('"').to_string();
+
+                Ok(FileMetadata {
+                    id: file_id.to_string(),
+                    filename,
+                    content_type,
+                    size,
+                    created_at,
+                    checksum,
+                })
+            } else {
+                Err(GatewayError::Internal(
+                    "S3 client not initialized".to_string(),
+                ))
+            }
+        }
+
+        #[cfg(not(feature = "s3"))]
+        {
+            Err(GatewayError::Internal("S3 feature not enabled".to_string()))
+        }
     }
 
-    /// List files (placeholder implementation)
-    pub async fn list(&self, _prefix: Option<&str>, _limit: Option<usize>) -> Result<Vec<String>> {
-        Err(GatewayError::Internal(
-            "S3 storage not implemented yet".to_string(),
-        ))
+    /// List files in S3 with optional prefix and limit
+    #[allow(unused_variables)]
+    pub async fn list(&self, prefix: Option<&str>, limit: Option<usize>) -> Result<Vec<String>> {
+        #[cfg(feature = "s3")]
+        {
+            if let Some(client) = &self.client {
+                let mut request = client.list_objects_v2().bucket(&self.bucket);
+
+                if let Some(prefix) = prefix {
+                    request = request.prefix(prefix);
+                }
+
+                if let Some(limit) = limit {
+                    request = request.max_keys(limit as i32);
+                }
+
+                let result = request
+                    .send()
+                    .await
+                    .map_err(|e| GatewayError::Internal(format!("S3 list failed: {}", e)))?;
+
+                let keys = result
+                    .contents()
+                    .iter()
+                    .filter_map(|obj| obj.key().map(|k| k.to_string()))
+                    .collect();
+
+                Ok(keys)
+            } else {
+                Err(GatewayError::Internal(
+                    "S3 client not initialized".to_string(),
+                ))
+            }
+        }
+
+        #[cfg(not(feature = "s3"))]
+        {
+            Err(GatewayError::Internal("S3 feature not enabled".to_string()))
+        }
     }
 
-    /// Health check (placeholder implementation)
+    /// Health check via head_bucket
     pub async fn health_check(&self) -> Result<()> {
-        Err(GatewayError::Internal(
-            "S3 storage not implemented yet".to_string(),
-        ))
+        #[cfg(feature = "s3")]
+        {
+            if let Some(client) = &self.client {
+                client
+                    .head_bucket()
+                    .bucket(&self.bucket)
+                    .send()
+                    .await
+                    .map_err(|e| {
+                        GatewayError::Internal(format!("S3 health check failed: {}", e))
+                    })?;
+
+                Ok(())
+            } else {
+                Err(GatewayError::Internal(
+                    "S3 client not initialized".to_string(),
+                ))
+            }
+        }
+
+        #[cfg(not(feature = "s3"))]
+        {
+            Err(GatewayError::Internal("S3 feature not enabled".to_string()))
+        }
     }
 
     /// Close storage (placeholder implementation)

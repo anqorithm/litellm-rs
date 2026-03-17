@@ -16,10 +16,14 @@ impl FileStorage {
 
         match config.storage_type.as_str() {
             "local" => {
-                let path = config
-                    .local_path
-                    .as_ref()
-                    .ok_or_else(|| GatewayError::Config("Local path not specified".to_string()))?;
+                let default_path;
+                let path = match config.local_path.as_ref() {
+                    Some(p) => p.as_str(),
+                    None => {
+                        default_path = super::default_data_path();
+                        default_path.to_str().unwrap_or("/tmp/litellm-rs/data")
+                    }
+                };
                 Ok(FileStorage::Local(LocalStorage::new(path).await?))
             }
             "s3" => {
