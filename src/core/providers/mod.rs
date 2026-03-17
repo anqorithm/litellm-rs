@@ -60,8 +60,7 @@ pub mod fal_ai;
 // featherless: Tier 1 → registry/catalog.rs
 #[cfg(feature = "providers-extended")]
 pub mod firecrawl;
-#[cfg(feature = "providers-extended")]
-pub mod fireworks;
+// fireworks: Tier 1 → registry/catalog.rs
 // friendliai: Tier 1 → registry/catalog.rs
 // galadriel: Tier 1 → registry/catalog.rs
 #[cfg(feature = "providers-extended")]
@@ -77,8 +76,7 @@ pub mod google_pse;
 #[cfg(feature = "providers-extended")]
 pub mod gradient_ai;
 // groq: Tier 1 → registry/catalog.rs
-#[cfg(feature = "providers-extended")]
-pub mod heroku;
+// heroku: Tier 1 → registry/catalog.rs
 // hosted_vllm: Tier 1 → registry/catalog.rs
 #[cfg(feature = "providers-extended")]
 pub mod huggingface;
@@ -111,8 +109,7 @@ pub mod morph;
 pub mod nlp_cloud;
 // novita: Tier 1 → registry/catalog.rs
 // nscale: Tier 1 → registry/catalog.rs
-#[cfg(feature = "providers-extended")]
-pub mod nvidia_nim;
+// nvidia_nim: Tier 1 → registry/catalog.rs
 #[cfg(feature = "providers-extended")]
 pub mod oci;
 #[cfg(feature = "providers-extended")]
@@ -155,8 +152,7 @@ pub mod spark;
 pub mod stability;
 #[cfg(feature = "providers-extended")]
 pub mod tavily;
-#[cfg(feature = "providers-extended")]
-pub mod together;
+// together: Tier 1 → registry/catalog.rs
 #[cfg(feature = "providers-extended")]
 pub mod topaz;
 #[cfg(feature = "providers-extended")]
@@ -168,12 +164,10 @@ pub mod vercel_ai;
 #[cfg(feature = "providers-extra")]
 pub mod vertex_ai;
 // vllm: Tier 1 → registry/catalog.rs
-#[cfg(feature = "providers-extended")]
-pub mod volcengine;
+// volcengine: Tier 1 → registry/catalog.rs
 #[cfg(feature = "providers-extended")]
 pub mod voyage;
-#[cfg(feature = "providers-extended")]
-pub mod wandb;
+// wandb: Tier 1 → registry/catalog.rs
 #[cfg(feature = "providers-extended")]
 pub mod watsonx;
 // xai: Tier 1 → registry/catalog.rs
