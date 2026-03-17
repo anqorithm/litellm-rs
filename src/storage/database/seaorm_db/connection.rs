@@ -54,9 +54,7 @@ impl SeaOrmDatabase {
             .max_lifetime(Duration::from_secs(3600))
             .sqlx_logging(false);
 
-        let db = Database::connect(opt)
-            .await
-            .map_err(GatewayError::Database)?;
+        let db = Database::connect(opt).await.map_err(GatewayError::from)?;
         Ok(Self {
             db,
             backend_type: DatabaseBackendType::SQLite,
@@ -74,7 +72,7 @@ impl SeaOrmDatabase {
             .max_lifetime(Duration::from_secs(3600))
             .sqlx_logging(false);
 
-        Database::connect(opt).await.map_err(GatewayError::Database)
+        Database::connect(opt).await.map_err(GatewayError::from)
     }
 
     /// Fallback to SQLite database
@@ -100,9 +98,7 @@ impl SeaOrmDatabase {
             .max_lifetime(Duration::from_secs(3600))
             .sqlx_logging(false);
 
-        let db = Database::connect(opt)
-            .await
-            .map_err(GatewayError::Database)?;
+        let db = Database::connect(opt).await.map_err(GatewayError::from)?;
 
         info!("SQLite fallback connection established successfully");
         Ok(Self {
@@ -126,7 +122,7 @@ impl SeaOrmDatabase {
         info!("Running database migrations...");
         Migrator::up(&self.db, None).await.map_err(|e| {
             warn!("Migration failed: {}", e);
-            GatewayError::Database(e)
+            GatewayError::Storage(e.to_string())
         })?;
         info!("Database migrations completed successfully");
         Ok(())
@@ -141,7 +137,7 @@ impl SeaOrmDatabase {
     /// Close the database connection
     #[allow(dead_code)] // Reserved for future connection cleanup
     pub async fn close(self) -> Result<()> {
-        self.db.close().await.map_err(GatewayError::Database)?;
+        self.db.close().await.map_err(GatewayError::from)?;
         Ok(())
     }
 
@@ -154,7 +150,7 @@ impl SeaOrmDatabase {
             .limit(1)
             .all(&self.db)
             .await
-            .map_err(GatewayError::Database)?;
+            .map_err(GatewayError::from)?;
 
         debug!("Database health check passed");
         Ok(())

@@ -108,10 +108,9 @@ impl OidcDiscovery {
             )));
         }
 
-        let discovery: OidcDiscovery = response
-            .json()
-            .await
-            .map_err(|e| GatewayError::Parsing(format!("Failed to parse OIDC discovery: {}", e)))?;
+        let discovery: OidcDiscovery = response.json().await.map_err(|e| {
+            GatewayError::Validation(format!("Failed to parse OIDC discovery: {}", e))
+        })?;
 
         info!(
             "Successfully fetched OIDC discovery for issuer: {}",
@@ -416,8 +415,9 @@ impl OidcProvider {
             )));
         }
 
-        let token_response: TokenResponse = serde_json::from_str(&body)
-            .map_err(|e| GatewayError::Parsing(format!("Failed to parse token response: {}", e)))?;
+        let token_response: TokenResponse = serde_json::from_str(&body).map_err(|e| {
+            GatewayError::Validation(format!("Failed to parse token response: {}", e))
+        })?;
 
         debug!("Successfully obtained tokens from {}", self.config.name);
         Ok(token_response)
@@ -456,7 +456,7 @@ impl OidcProvider {
         }
 
         let json: serde_json::Value = serde_json::from_str(&body)
-            .map_err(|e| GatewayError::Parsing(format!("Failed to parse user info: {}", e)))?;
+            .map_err(|e| GatewayError::Validation(format!("Failed to parse user info: {}", e)))?;
 
         // Extract standard OIDC claims
         let id = json
@@ -563,8 +563,9 @@ impl OidcProvider {
             )));
         }
 
-        let token_response: TokenResponse = serde_json::from_str(&body)
-            .map_err(|e| GatewayError::Parsing(format!("Failed to parse token response: {}", e)))?;
+        let token_response: TokenResponse = serde_json::from_str(&body).map_err(|e| {
+            GatewayError::Validation(format!("Failed to parse token response: {}", e))
+        })?;
 
         debug!("Successfully refreshed tokens");
         Ok(token_response)

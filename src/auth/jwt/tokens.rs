@@ -30,7 +30,7 @@ impl JwtHandler {
         };
 
         let header = Header::new(self.algorithm);
-        let token = encode(&header, &claims, &self.encoding_key).map_err(GatewayError::Jwt)?;
+        let token = encode(&header, &claims, &self.encoding_key).map_err(GatewayError::from)?;
 
         debug!("Created password reset token for user: {}", user_id);
         Ok(token)
@@ -43,7 +43,7 @@ impl JwtHandler {
         validation.set_audience(&["password_reset"]);
 
         let token_data =
-            decode::<Claims>(token, &self.decoding_key, &validation).map_err(GatewayError::Jwt)?;
+            decode::<Claims>(token, &self.decoding_key, &validation).map_err(GatewayError::from)?;
 
         if !matches!(token_data.claims.token_type, TokenType::PasswordReset) {
             return Err(GatewayError::auth("Invalid token type for password reset"));
@@ -74,7 +74,7 @@ impl JwtHandler {
         };
 
         let header = Header::new(self.algorithm);
-        let token = encode(&header, &claims, &self.encoding_key).map_err(GatewayError::Jwt)?;
+        let token = encode(&header, &claims, &self.encoding_key).map_err(GatewayError::from)?;
 
         debug!("Created email verification token for user: {}", user_id);
         Ok(token)
@@ -87,7 +87,7 @@ impl JwtHandler {
         validation.set_audience(&["email_verification"]);
 
         let token_data =
-            decode::<Claims>(token, &self.decoding_key, &validation).map_err(GatewayError::Jwt)?;
+            decode::<Claims>(token, &self.decoding_key, &validation).map_err(GatewayError::from)?;
 
         if !matches!(token_data.claims.token_type, TokenType::EmailVerification) {
             return Err(GatewayError::auth(
@@ -125,7 +125,7 @@ impl JwtHandler {
         };
 
         let header = Header::new(self.algorithm);
-        let token = encode(&header, &claims, &self.encoding_key).map_err(GatewayError::Jwt)?;
+        let token = encode(&header, &claims, &self.encoding_key).map_err(GatewayError::from)?;
 
         debug!(
             "Created invitation token for user: {} team: {}",
@@ -141,7 +141,7 @@ impl JwtHandler {
         validation.set_audience(&["invitation"]);
 
         let token_data =
-            decode::<Claims>(token, &self.decoding_key, &validation).map_err(GatewayError::Jwt)?;
+            decode::<Claims>(token, &self.decoding_key, &validation).map_err(GatewayError::from)?;
 
         if !matches!(token_data.claims.token_type, TokenType::Invitation) {
             return Err(GatewayError::auth("Invalid token type for invitation"));

@@ -121,38 +121,18 @@ impl CanonicalError for GatewayError {
             GatewayError::Forbidden(_) => ErrorCode::Authorization,
             GatewayError::Provider(provider_error) => provider_error.canonical_code(),
             GatewayError::RateLimit { .. } => ErrorCode::RateLimited,
-            GatewayError::Validation(_)
-            | GatewayError::BadRequest(_)
-            | GatewayError::NoProvidersForModel(_) => ErrorCode::InvalidRequest,
-            GatewayError::NotFound(_) | GatewayError::ProviderNotFound(_) => ErrorCode::NotFound,
+            GatewayError::Validation(_) | GatewayError::BadRequest(_) => ErrorCode::InvalidRequest,
+            GatewayError::NotFound(_) => ErrorCode::NotFound,
             GatewayError::Conflict(_) => ErrorCode::Conflict,
             GatewayError::Timeout(_) => ErrorCode::Timeout,
-            GatewayError::ProviderUnavailable(_)
-            | GatewayError::NoProvidersAvailable(_)
-            | GatewayError::NoHealthyProviders(_)
-            | GatewayError::CircuitBreaker(_) => ErrorCode::Unavailable,
-            GatewayError::Network(_) | GatewayError::External(_) => ErrorCode::Network,
-            GatewayError::Parsing(_) => ErrorCode::Parsing,
+            GatewayError::Unavailable(_) => ErrorCode::Unavailable,
+            GatewayError::Network(_) => ErrorCode::Network,
             GatewayError::NotImplemented(_) => ErrorCode::NotImplemented,
-            GatewayError::Database(_)
-            | GatewayError::Redis(_)
+            GatewayError::Storage(_)
             | GatewayError::HttpClient(_)
             | GatewayError::Serialization(_)
-            | GatewayError::Yaml(_)
             | GatewayError::Io(_)
-            | GatewayError::Internal(_)
-            | GatewayError::Jwt(_)
-            | GatewayError::Crypto(_)
-            | GatewayError::FileStorage(_)
-            | GatewayError::VectorDb(_)
-            | GatewayError::Alert(_)
-            | GatewayError::Cache(_) => ErrorCode::Internal,
-            #[cfg(feature = "s3")]
-            GatewayError::S3(_) => ErrorCode::Internal,
-            #[cfg(feature = "vector-db")]
-            GatewayError::Qdrant(_) => ErrorCode::Internal,
-            #[cfg(feature = "websockets")]
-            GatewayError::WebSocket(_) => ErrorCode::Network,
+            | GatewayError::Internal(_) => ErrorCode::Internal,
         }
     }
 
@@ -262,7 +242,7 @@ mod tests {
     #[cfg(feature = "s3")]
     #[test]
     fn test_gateway_s3_mapping() {
-        let err = GatewayError::S3("bucket error".to_string());
+        let err = GatewayError::Storage("bucket error".to_string());
         assert_eq!(err.canonical_code(), ErrorCode::Internal);
         assert!(!err.canonical_retryable());
     }
@@ -270,7 +250,7 @@ mod tests {
     #[cfg(feature = "vector-db")]
     #[test]
     fn test_gateway_qdrant_mapping() {
-        let err = GatewayError::Qdrant("connection failed".to_string());
+        let err = GatewayError::Storage("connection failed".to_string());
         assert_eq!(err.canonical_code(), ErrorCode::Internal);
         assert!(!err.canonical_retryable());
     }
@@ -278,7 +258,7 @@ mod tests {
     #[cfg(feature = "websockets")]
     #[test]
     fn test_gateway_websocket_mapping() {
-        let err = GatewayError::WebSocket("connection closed".to_string());
+        let err = GatewayError::Network("connection closed".to_string());
         assert_eq!(err.canonical_code(), ErrorCode::Network);
         assert!(err.canonical_retryable());
     }

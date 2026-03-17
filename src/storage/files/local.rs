@@ -24,7 +24,7 @@ impl LocalStorage {
         // Create directory if it doesn't exist
         if !path.exists() {
             fs::create_dir_all(&path).await.map_err(|e| {
-                GatewayError::FileStorage(format!("Failed to create storage directory: {}", e))
+                GatewayError::Internal(format!("Failed to create storage directory: {}", e))
             })?;
         }
 
@@ -40,18 +40,18 @@ impl LocalStorage {
         // Create subdirectories if needed
         if let Some(parent) = file_path.parent() {
             fs::create_dir_all(parent).await.map_err(|e| {
-                GatewayError::FileStorage(format!("Failed to create directory: {}", e))
+                GatewayError::Internal(format!("Failed to create directory: {}", e))
             })?;
         }
 
         // Write file content
         let mut file = fs::File::create(&file_path)
             .await
-            .map_err(|e| GatewayError::FileStorage(format!("Failed to create file: {}", e)))?;
+            .map_err(|e| GatewayError::Internal(format!("Failed to create file: {}", e)))?;
 
         file.write_all(content)
             .await
-            .map_err(|e| GatewayError::FileStorage(format!("Failed to write file: {}", e)))?;
+            .map_err(|e| GatewayError::Internal(format!("Failed to write file: {}", e)))?;
 
         // Store metadata
         let metadata = FileMetadata {
@@ -82,12 +82,12 @@ impl LocalStorage {
 
         let mut file = fs::File::open(&file_path)
             .await
-            .map_err(|e| GatewayError::FileStorage(format!("Failed to open file: {}", e)))?;
+            .map_err(|e| GatewayError::Internal(format!("Failed to open file: {}", e)))?;
 
         let mut content = Vec::new();
         file.read_to_end(&mut content)
             .await
-            .map_err(|e| GatewayError::FileStorage(format!("Failed to read file: {}", e)))?;
+            .map_err(|e| GatewayError::Internal(format!("Failed to read file: {}", e)))?;
 
         Ok(content)
     }
@@ -101,14 +101,14 @@ impl LocalStorage {
         if file_path.exists() {
             fs::remove_file(&file_path)
                 .await
-                .map_err(|e| GatewayError::FileStorage(format!("Failed to delete file: {}", e)))?;
+                .map_err(|e| GatewayError::Internal(format!("Failed to delete file: {}", e)))?;
         }
 
         // Delete metadata
         if metadata_path.exists() {
-            fs::remove_file(&metadata_path).await.map_err(|e| {
-                GatewayError::FileStorage(format!("Failed to delete metadata: {}", e))
-            })?;
+            fs::remove_file(&metadata_path)
+                .await
+                .map_err(|e| GatewayError::Internal(format!("Failed to delete metadata: {}", e)))?;
         }
 
         debug!("File deleted: {}", file_id);
@@ -134,10 +134,10 @@ impl LocalStorage {
 
         let content = fs::read_to_string(&metadata_path)
             .await
-            .map_err(|e| GatewayError::FileStorage(format!("Failed to read metadata: {}", e)))?;
+            .map_err(|e| GatewayError::Internal(format!("Failed to read metadata: {}", e)))?;
 
         let metadata: FileMetadata = serde_json::from_str(&content)
-            .map_err(|e| GatewayError::FileStorage(format!("Failed to parse metadata: {}", e)))?;
+            .map_err(|e| GatewayError::Internal(format!("Failed to parse metadata: {}", e)))?;
 
         Ok(metadata)
     }
@@ -147,12 +147,12 @@ impl LocalStorage {
         let mut files = Vec::new();
         let mut entries = fs::read_dir(&self.base_path)
             .await
-            .map_err(|e| GatewayError::FileStorage(format!("Failed to read directory: {}", e)))?;
+            .map_err(|e| GatewayError::Internal(format!("Failed to read directory: {}", e)))?;
 
         while let Some(entry) = entries
             .next_entry()
             .await
-            .map_err(|e| GatewayError::FileStorage(format!("Failed to read entry: {}", e)))?
+            .map_err(|e| GatewayError::Internal(format!("Failed to read entry: {}", e)))?
         {
             let file_name = entry.file_name().to_string_lossy().to_string();
 
@@ -185,7 +185,7 @@ impl LocalStorage {
     pub async fn health_check(&self) -> Result<()> {
         // Check if base directory is accessible
         if !self.base_path.exists() {
-            return Err(GatewayError::FileStorage(
+            return Err(GatewayError::Internal(
                 "Storage directory does not exist".to_string(),
             ));
         }
@@ -194,7 +194,7 @@ impl LocalStorage {
         let test_file = self.base_path.join(".health_check");
         fs::write(&test_file, b"health_check")
             .await
-            .map_err(|e| GatewayError::FileStorage(format!("Storage not writable: {}", e)))?;
+            .map_err(|e| GatewayError::Internal(format!("Storage not writable: {}", e)))?;
 
         // Clean up test file
         let _ = fs::remove_file(&test_file).await;
@@ -228,17 +228,16 @@ impl LocalStorage {
 
         if let Some(parent) = metadata_path.parent() {
             fs::create_dir_all(parent).await.map_err(|e| {
-                GatewayError::FileStorage(format!("Failed to create metadata directory: {}", e))
+                GatewayError::Internal(format!("Failed to create metadata directory: {}", e))
             })?;
         }
 
-        let content = serde_json::to_string_pretty(metadata).map_err(|e| {
-            GatewayError::FileStorage(format!("Failed to serialize metadata: {}", e))
-        })?;
+        let content = serde_json::to_string_pretty(metadata)
+            .map_err(|e| GatewayError::Internal(format!("Failed to serialize metadata: {}", e)))?;
 
         fs::write(&metadata_path, content)
             .await
-            .map_err(|e| GatewayError::FileStorage(format!("Failed to write metadata: {}", e)))?;
+            .map_err(|e| GatewayError::Internal(format!("Failed to write metadata: {}", e)))?;
 
         Ok(())
     }

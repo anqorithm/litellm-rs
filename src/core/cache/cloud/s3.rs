@@ -177,13 +177,13 @@ mod implementation {
                         .collect()
                         .await
                         .map_err(|e| {
-                            GatewayError::FileStorage(format!("Failed to read metadata: {}", e))
+                            GatewayError::Internal(format!("Failed to read metadata: {}", e))
                         })?
                         .into_bytes();
 
                     let metadata: CacheMetadata =
                         serde_json::from_slice(&meta_bytes).map_err(|e| {
-                            GatewayError::FileStorage(format!("Failed to parse metadata: {}", e))
+                            GatewayError::Internal(format!("Failed to parse metadata: {}", e))
                         })?;
 
                     if metadata.is_expired() {
@@ -218,13 +218,11 @@ mod implementation {
                         .body
                         .collect()
                         .await
-                        .map_err(|e| {
-                            GatewayError::FileStorage(format!("Failed to read body: {}", e))
-                        })?
+                        .map_err(|e| GatewayError::Internal(format!("Failed to read body: {}", e)))?
                         .into_bytes();
 
                     let value: T = serde_json::from_slice(&bytes).map_err(|e| {
-                        GatewayError::FileStorage(format!("Failed to deserialize: {}", e))
+                        GatewayError::Internal(format!("Failed to deserialize: {}", e))
                     })?;
 
                     debug!(key = %s3_key, "S3 cache hit");
@@ -237,7 +235,7 @@ mod implementation {
                         Ok(None)
                     } else {
                         error!(key = %s3_key, error = %err, "Failed to read from S3");
-                        Err(GatewayError::FileStorage(format!("S3 read error: {}", err)))
+                        Err(GatewayError::Internal(format!("S3 read error: {}", err)))
                     }
                 }
             }
@@ -255,12 +253,12 @@ mod implementation {
 
             // Serialize the value
             let bytes = serde_json::to_vec(value)
-                .map_err(|e| GatewayError::FileStorage(format!("Failed to serialize: {}", e)))?;
+                .map_err(|e| GatewayError::Internal(format!("Failed to serialize: {}", e)))?;
 
             // Create metadata
             let metadata = CacheMetadata::new(ttl, bytes.len(), false);
             let meta_bytes = serde_json::to_vec(&metadata).map_err(|e| {
-                GatewayError::FileStorage(format!("Failed to serialize metadata: {}", e))
+                GatewayError::Internal(format!("Failed to serialize metadata: {}", e))
             })?;
 
             // Write the value
@@ -275,7 +273,7 @@ mod implementation {
                 .content_type("application/json")
                 .send()
                 .await
-                .map_err(|e| GatewayError::FileStorage(format!("Failed to write to S3: {}", e)))?;
+                .map_err(|e| GatewayError::Internal(format!("Failed to write to S3: {}", e)))?;
 
             // Write metadata
             self.client
@@ -286,9 +284,7 @@ mod implementation {
                 .content_type("application/json")
                 .send()
                 .await
-                .map_err(|e| {
-                    GatewayError::FileStorage(format!("Failed to write metadata: {}", e))
-                })?;
+                .map_err(|e| GatewayError::Internal(format!("Failed to write metadata: {}", e)))?;
 
             debug!(key = %s3_key, "S3 cache write successful");
             Ok(())
@@ -342,7 +338,7 @@ mod implementation {
                     if err_str.contains("NotFound") || err_str.contains("404") {
                         Ok(false)
                     } else {
-                        Err(GatewayError::FileStorage(format!("S3 head error: {}", err)))
+                        Err(GatewayError::Internal(format!("S3 head error: {}", err)))
                     }
                 }
             }
@@ -358,7 +354,7 @@ mod implementation {
                 .prefix(&full_prefix)
                 .send()
                 .await
-                .map_err(|e| GatewayError::FileStorage(format!("Failed to list objects: {}", e)))?;
+                .map_err(|e| GatewayError::Internal(format!("Failed to list objects: {}", e)))?;
 
             let mut keys = Vec::new();
             for obj in response.contents().iter() {

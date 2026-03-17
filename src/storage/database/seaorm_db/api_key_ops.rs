@@ -17,7 +17,7 @@ impl SeaOrmDatabase {
         entities::ApiKey::insert(active_model)
             .exec(&self.db)
             .await
-            .map_err(GatewayError::Database)?;
+            .map_err(GatewayError::from)?;
 
         Ok(api_key.clone())
     }
@@ -33,7 +33,7 @@ impl SeaOrmDatabase {
             .filter(api_key::Column::KeyHash.eq(key_hash))
             .one(&self.db)
             .await
-            .map_err(GatewayError::Database)?;
+            .map_err(GatewayError::from)?;
 
         Ok(model.map(|m| m.to_domain_api_key()))
     }
@@ -48,7 +48,7 @@ impl SeaOrmDatabase {
         let model = entities::ApiKey::find_by_id(key_id)
             .one(&self.db)
             .await
-            .map_err(GatewayError::Database)?;
+            .map_err(GatewayError::from)?;
 
         Ok(model.map(|m| m.to_domain_api_key()))
     }
@@ -60,7 +60,7 @@ impl SeaOrmDatabase {
         let model = entities::ApiKey::find_by_id(key_id)
             .one(&self.db)
             .await
-            .map_err(GatewayError::Database)?
+            .map_err(GatewayError::from)?
             .ok_or_else(|| GatewayError::NotFound("API key not found".to_string()))?;
 
         let next_version = model.version + 1;
@@ -71,7 +71,7 @@ impl SeaOrmDatabase {
         active_model
             .update(&self.db)
             .await
-            .map_err(GatewayError::Database)?;
+            .map_err(GatewayError::from)?;
 
         Ok(())
     }
@@ -88,7 +88,7 @@ impl SeaOrmDatabase {
             .filter(api_key::Column::UserId.eq(user_id))
             .all(&self.db)
             .await
-            .map_err(GatewayError::Database)?;
+            .map_err(GatewayError::from)?;
 
         Ok(models.into_iter().map(|m| m.to_domain_api_key()).collect())
     }
@@ -104,7 +104,7 @@ impl SeaOrmDatabase {
             .filter(api_key::Column::TeamId.eq(team_id))
             .all(&self.db)
             .await
-            .map_err(GatewayError::Database)?;
+            .map_err(GatewayError::from)?;
 
         Ok(models.into_iter().map(|m| m.to_domain_api_key()).collect())
     }
@@ -120,7 +120,7 @@ impl SeaOrmDatabase {
         let model = entities::ApiKey::find_by_id(key_id)
             .one(&self.db)
             .await
-            .map_err(GatewayError::Database)?
+            .map_err(GatewayError::from)?
             .ok_or_else(|| GatewayError::NotFound("API key not found".to_string()))?;
 
         let serialized = serde_json::to_string(permissions)
@@ -134,7 +134,7 @@ impl SeaOrmDatabase {
         active_model
             .update(&self.db)
             .await
-            .map_err(GatewayError::Database)?;
+            .map_err(GatewayError::from)?;
 
         Ok(())
     }
@@ -150,7 +150,7 @@ impl SeaOrmDatabase {
         let model = entities::ApiKey::find_by_id(key_id)
             .one(&self.db)
             .await
-            .map_err(GatewayError::Database)?
+            .map_err(GatewayError::from)?
             .ok_or_else(|| GatewayError::NotFound("API key not found".to_string()))?;
 
         let serialized = serde_json::to_string(rate_limits)
@@ -164,7 +164,7 @@ impl SeaOrmDatabase {
         active_model
             .update(&self.db)
             .await
-            .map_err(GatewayError::Database)?;
+            .map_err(GatewayError::from)?;
 
         Ok(())
     }
@@ -180,7 +180,7 @@ impl SeaOrmDatabase {
         let model = entities::ApiKey::find_by_id(key_id)
             .one(&self.db)
             .await
-            .map_err(GatewayError::Database)?
+            .map_err(GatewayError::from)?
             .ok_or_else(|| GatewayError::NotFound("API key not found".to_string()))?;
 
         let next_version = model.version + 1;
@@ -191,7 +191,7 @@ impl SeaOrmDatabase {
         active_model
             .update(&self.db)
             .await
-            .map_err(GatewayError::Database)?;
+            .map_err(GatewayError::from)?;
 
         Ok(())
     }
@@ -209,7 +209,7 @@ impl SeaOrmDatabase {
         let model = entities::ApiKey::find_by_id(key_id)
             .one(&self.db)
             .await
-            .map_err(GatewayError::Database)?
+            .map_err(GatewayError::from)?
             .ok_or_else(|| GatewayError::NotFound("API key not found".to_string()))?;
 
         let mut api_key = model.to_domain_api_key();
@@ -238,7 +238,7 @@ impl SeaOrmDatabase {
         active_model
             .update(&self.db)
             .await
-            .map_err(GatewayError::Database)?;
+            .map_err(GatewayError::from)?;
 
         Ok(())
     }
@@ -250,7 +250,7 @@ impl SeaOrmDatabase {
         let model = entities::ApiKey::find_by_id(key_id)
             .one(&self.db)
             .await
-            .map_err(GatewayError::Database)?
+            .map_err(GatewayError::from)?
             .ok_or_else(|| GatewayError::NotFound("API key not found".to_string()))?;
 
         let next_version = model.version + 1;
@@ -261,7 +261,7 @@ impl SeaOrmDatabase {
         active_model
             .update(&self.db)
             .await
-            .map_err(GatewayError::Database)?;
+            .map_err(GatewayError::from)?;
 
         Ok(())
     }
@@ -274,7 +274,7 @@ impl SeaOrmDatabase {
             .filter(api_key::Column::ExpiresAt.lt(chrono::Utc::now()))
             .exec(&self.db)
             .await
-            .map_err(GatewayError::Database)?;
+            .map_err(GatewayError::from)?;
 
         Ok(result.rows_affected)
     }

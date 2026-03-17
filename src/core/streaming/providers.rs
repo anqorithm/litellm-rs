@@ -20,7 +20,8 @@ impl OpenAIStreaming {
             chunk_result
                 .map_err(|e| GatewayError::Network(e.to_string()))
                 .and_then(|chunk| {
-                    bytes_to_utf8_string(&chunk).map_err(|e| GatewayError::Parsing(e.to_string()))
+                    bytes_to_utf8_string(&chunk)
+                        .map_err(|e| GatewayError::Validation(e.to_string()))
                 })
         });
 

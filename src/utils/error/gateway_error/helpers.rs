@@ -47,7 +47,7 @@ impl GatewayError {
     }
 
     pub fn service_unavailable<S: Into<String>>(message: S) -> Self {
-        Self::ProviderUnavailable(message.into())
+        Self::Unavailable(message.into())
     }
 
     pub fn server<S: Into<String>>(message: S) -> Self {
@@ -67,11 +67,11 @@ impl GatewayError {
     }
 
     pub fn parsing<S: Into<String>>(message: S) -> Self {
-        Self::Parsing(message.into())
+        Self::Validation(message.into())
     }
 
     pub fn alert<S: Into<String>>(message: S) -> Self {
-        Self::Alert(message.into())
+        Self::Internal(message.into())
     }
 
     pub fn not_implemented<S: Into<String>>(message: S) -> Self {
@@ -87,7 +87,7 @@ impl GatewayError {
     }
 
     pub fn external<S: Into<String>>(message: S) -> Self {
-        Self::External(message.into())
+        Self::Network(message.into())
     }
 
     pub fn invalid_request_error<S: Into<String>>(message: S) -> Self {
@@ -95,19 +95,19 @@ impl GatewayError {
     }
 
     pub fn no_providers_available<S: Into<String>>(message: S) -> Self {
-        Self::NoProvidersAvailable(message.into())
+        Self::Unavailable(message.into())
     }
 
     pub fn provider_not_found<S: Into<String>>(message: S) -> Self {
-        Self::ProviderNotFound(message.into())
+        Self::NotFound(message.into())
     }
 
     pub fn no_providers_for_model<S: Into<String>>(message: S) -> Self {
-        Self::NoProvidersForModel(message.into())
+        Self::BadRequest(message.into())
     }
 
     pub fn no_healthy_providers<S: Into<String>>(message: S) -> Self {
-        Self::NoHealthyProviders(message.into())
+        Self::Unavailable(message.into())
     }
 }
 
@@ -119,7 +119,7 @@ impl GatewayError {
     }
 
     pub fn unavailable<S: Into<String>>(message: S) -> Self {
-        Self::ProviderUnavailable(message.into())
+        Self::Unavailable(message.into())
     }
 }
 
@@ -235,44 +235,40 @@ mod tests {
     fn test_service_unavailable_error() {
         let error = GatewayError::service_unavailable("Service under maintenance");
         assert!(
-            matches!(error, GatewayError::ProviderUnavailable(msg) if msg == "Service under maintenance")
+            matches!(error, GatewayError::Unavailable(msg) if msg == "Service under maintenance")
         );
     }
 
     #[test]
     fn test_unavailable_error() {
         let error = GatewayError::unavailable("Provider unavailable");
-        assert!(
-            matches!(error, GatewayError::ProviderUnavailable(msg) if msg == "Provider unavailable")
-        );
+        assert!(matches!(error, GatewayError::Unavailable(msg) if msg == "Provider unavailable"));
     }
 
     #[test]
     fn test_no_providers_available() {
         let error = GatewayError::no_providers_available("No providers configured");
         assert!(
-            matches!(error, GatewayError::NoProvidersAvailable(msg) if msg == "No providers configured")
+            matches!(error, GatewayError::Unavailable(msg) if msg == "No providers configured")
         );
     }
 
     #[test]
     fn test_provider_not_found() {
         let error = GatewayError::provider_not_found("openai");
-        assert!(matches!(error, GatewayError::ProviderNotFound(msg) if msg == "openai"));
+        assert!(matches!(error, GatewayError::NotFound(msg) if msg == "openai"));
     }
 
     #[test]
     fn test_no_providers_for_model() {
         let error = GatewayError::no_providers_for_model("gpt-5");
-        assert!(matches!(error, GatewayError::NoProvidersForModel(msg) if msg == "gpt-5"));
+        assert!(matches!(error, GatewayError::BadRequest(msg) if msg == "gpt-5"));
     }
 
     #[test]
     fn test_no_healthy_providers() {
         let error = GatewayError::no_healthy_providers("All providers are down");
-        assert!(
-            matches!(error, GatewayError::NoHealthyProviders(msg) if msg == "All providers are down")
-        );
+        assert!(matches!(error, GatewayError::Unavailable(msg) if msg == "All providers are down"));
     }
 
     // ==================== Network Error Tests ====================
@@ -288,7 +284,7 @@ mod tests {
     #[test]
     fn test_parsing_error() {
         let error = GatewayError::parsing("Invalid JSON syntax");
-        assert!(matches!(error, GatewayError::Parsing(msg) if msg == "Invalid JSON syntax"));
+        assert!(matches!(error, GatewayError::Validation(msg) if msg == "Invalid JSON syntax"));
     }
 
     // ==================== Alert Error Tests ====================
@@ -296,7 +292,9 @@ mod tests {
     #[test]
     fn test_alert_error() {
         let error = GatewayError::alert("Critical threshold exceeded");
-        assert!(matches!(error, GatewayError::Alert(msg) if msg == "Critical threshold exceeded"));
+        assert!(
+            matches!(error, GatewayError::Internal(msg) if msg == "Critical threshold exceeded")
+        );
     }
 
     // ==================== Not Implemented Error Tests ====================
@@ -328,7 +326,7 @@ mod tests {
     #[test]
     fn test_external_error() {
         let error = GatewayError::external("Third-party service error");
-        assert!(matches!(error, GatewayError::External(msg) if msg == "Third-party service error"));
+        assert!(matches!(error, GatewayError::Network(msg) if msg == "Third-party service error"));
     }
 
     // ==================== String Conversion Tests ====================
@@ -350,7 +348,7 @@ mod tests {
     fn test_error_with_format_string() {
         let model = "gpt-4";
         let error = GatewayError::no_providers_for_model(format!("No provider supports {}", model));
-        assert!(matches!(error, GatewayError::NoProvidersForModel(msg) if msg.contains("gpt-4")));
+        assert!(matches!(error, GatewayError::BadRequest(msg) if msg.contains("gpt-4")));
     }
 
     // ==================== Edge Case Tests ====================
@@ -370,7 +368,7 @@ mod tests {
     #[test]
     fn test_error_with_special_characters() {
         let error = GatewayError::parsing("JSON error at line 5: unexpected '}'");
-        assert!(matches!(error, GatewayError::Parsing(msg) if msg.contains("unexpected '}'")));
+        assert!(matches!(error, GatewayError::Validation(msg) if msg.contains("unexpected '}'")));
     }
 
     #[test]
@@ -387,8 +385,8 @@ mod tests {
         let error2 = GatewayError::unavailable("test");
 
         // Both should produce ProviderUnavailable
-        assert!(matches!(error1, GatewayError::ProviderUnavailable(_)));
-        assert!(matches!(error2, GatewayError::ProviderUnavailable(_)));
+        assert!(matches!(error1, GatewayError::Unavailable(_)));
+        assert!(matches!(error2, GatewayError::Unavailable(_)));
     }
 
     #[test]

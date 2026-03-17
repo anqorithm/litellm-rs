@@ -19,7 +19,7 @@ impl RedisPool {
             match result {
                 Ok(value) => Ok(Some(value)),
                 Err(e) if e.kind() == redis::ErrorKind::TypeError => Ok(None),
-                Err(e) => Err(GatewayError::Redis(e)),
+                Err(e) => Err(GatewayError::from(e)),
             }
         } else {
             Ok(None)
@@ -38,9 +38,9 @@ impl RedisPool {
                 let _: () = c
                     .set_ex(key, value, ttl_seconds)
                     .await
-                    .map_err(GatewayError::Redis)?;
+                    .map_err(GatewayError::from)?;
             } else {
-                let _: () = c.set(key, value).await.map_err(GatewayError::Redis)?;
+                let _: () = c.set(key, value).await.map_err(GatewayError::from)?;
             }
         }
         Ok(())
@@ -54,7 +54,7 @@ impl RedisPool {
 
         let mut conn = self.get_connection().await?;
         if let Some(ref mut c) = conn.conn {
-            let _: () = c.del(key).await.map_err(GatewayError::Redis)?;
+            let _: () = c.del(key).await.map_err(GatewayError::from)?;
         }
         Ok(())
     }
@@ -67,7 +67,7 @@ impl RedisPool {
 
         let mut conn = self.get_connection().await?;
         if let Some(ref mut c) = conn.conn {
-            let exists: bool = c.exists(key).await.map_err(GatewayError::Redis)?;
+            let exists: bool = c.exists(key).await.map_err(GatewayError::from)?;
             Ok(exists)
         } else {
             Ok(false)
@@ -85,7 +85,7 @@ impl RedisPool {
             let _: () = c
                 .expire(key, ttl as i64)
                 .await
-                .map_err(GatewayError::Redis)?;
+                .map_err(GatewayError::from)?;
         }
         Ok(())
     }
@@ -98,7 +98,7 @@ impl RedisPool {
 
         let mut conn = self.get_connection().await?;
         if let Some(ref mut c) = conn.conn {
-            let ttl: i64 = c.ttl(key).await.map_err(GatewayError::Redis)?;
+            let ttl: i64 = c.ttl(key).await.map_err(GatewayError::from)?;
             Ok(ttl)
         } else {
             Ok(-2)

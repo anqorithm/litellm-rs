@@ -21,7 +21,7 @@ impl RedisPool {
             let _: () = c
                 .hset(key, field, value)
                 .await
-                .map_err(GatewayError::Redis)?;
+                .map_err(GatewayError::from)?;
         }
         Ok(())
     }
@@ -38,7 +38,7 @@ impl RedisPool {
             match result {
                 Ok(value) => Ok(Some(value)),
                 Err(e) if e.kind() == redis::ErrorKind::TypeError => Ok(None),
-                Err(e) => Err(GatewayError::Redis(e)),
+                Err(e) => Err(GatewayError::from(e)),
             }
         } else {
             Ok(None)
@@ -53,7 +53,7 @@ impl RedisPool {
 
         let mut conn = self.get_connection().await?;
         if let Some(ref mut c) = conn.conn {
-            let _: () = c.hdel(key, field).await.map_err(GatewayError::Redis)?;
+            let _: () = c.hdel(key, field).await.map_err(GatewayError::from)?;
         }
         Ok(())
     }
@@ -66,8 +66,7 @@ impl RedisPool {
 
         let mut conn = self.get_connection().await?;
         if let Some(ref mut c) = conn.conn {
-            let hash: HashMap<String, String> =
-                c.hgetall(key).await.map_err(GatewayError::Redis)?;
+            let hash: HashMap<String, String> = c.hgetall(key).await.map_err(GatewayError::from)?;
             Ok(hash)
         } else {
             Ok(HashMap::new())
@@ -82,7 +81,7 @@ impl RedisPool {
 
         let mut conn = self.get_connection().await?;
         if let Some(ref mut c) = conn.conn {
-            let exists: bool = c.hexists(key, field).await.map_err(GatewayError::Redis)?;
+            let exists: bool = c.hexists(key, field).await.map_err(GatewayError::from)?;
             Ok(exists)
         } else {
             Ok(false)
@@ -102,7 +101,7 @@ impl RedisPool {
             let _: () = c
                 .zadd(key, score, member)
                 .await
-                .map_err(GatewayError::Redis)?;
+                .map_err(GatewayError::from)?;
         }
         Ok(())
     }
@@ -123,7 +122,7 @@ impl RedisPool {
             let members: Vec<String> = c
                 .zrange(key, start, stop)
                 .await
-                .map_err(GatewayError::Redis)?;
+                .map_err(GatewayError::from)?;
             Ok(members)
         } else {
             Ok(vec![])
@@ -138,7 +137,7 @@ impl RedisPool {
 
         let mut conn = self.get_connection().await?;
         if let Some(ref mut c) = conn.conn {
-            let _: () = c.zrem(key, member).await.map_err(GatewayError::Redis)?;
+            let _: () = c.zrem(key, member).await.map_err(GatewayError::from)?;
         }
         Ok(())
     }

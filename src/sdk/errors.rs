@@ -84,7 +84,7 @@ impl From<crate::utils::error::gateway_error::GatewayError> for SDKError {
             crate::utils::error::gateway_error::GatewayError::RateLimit { message, .. } => {
                 SDKError::RateLimitError(message)
             }
-            crate::utils::error::gateway_error::GatewayError::ProviderUnavailable(msg) => {
+            crate::utils::error::gateway_error::GatewayError::Unavailable(msg) => {
                 SDKError::ProviderError(msg)
             }
             crate::utils::error::gateway_error::GatewayError::Internal(msg) => {
@@ -95,9 +95,6 @@ impl From<crate::utils::error::gateway_error::GatewayError> for SDKError {
             }
             crate::utils::error::gateway_error::GatewayError::Validation(msg) => {
                 SDKError::InvalidRequest(msg)
-            }
-            crate::utils::error::gateway_error::GatewayError::Parsing(msg) => {
-                SDKError::Internal(msg)
             }
             // Handle
             _ => SDKError::Internal(error.to_string()),
@@ -387,7 +384,7 @@ mod tests {
 
     #[test]
     fn test_from_gateway_error_provider_unavailable() {
-        let gateway_error = GatewayError::ProviderUnavailable("OpenAI down".to_string());
+        let gateway_error = GatewayError::Unavailable("OpenAI down".to_string());
         let sdk_error: SDKError = gateway_error.into();
         assert!(matches!(sdk_error, SDKError::ProviderError(_)));
     }
@@ -416,9 +413,9 @@ mod tests {
 
     #[test]
     fn test_from_gateway_error_parsing() {
-        let gateway_error = GatewayError::Parsing("Invalid JSON".to_string());
+        let gateway_error = GatewayError::Validation("Invalid JSON".to_string());
         let sdk_error: SDKError = gateway_error.into();
-        assert!(matches!(sdk_error, SDKError::Internal(_)));
+        assert!(matches!(sdk_error, SDKError::InvalidRequest(_)));
     }
 
     // ==================== SDKError Debug Tests ====================

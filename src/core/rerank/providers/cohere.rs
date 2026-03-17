@@ -82,7 +82,7 @@ impl RerankProvider for CohereRerankProvider {
         if !response.status().is_success() {
             let status = response.status();
             let error_text = response.text().await.unwrap_or_default();
-            return Err(GatewayError::External(format!(
+            return Err(GatewayError::Network(format!(
                 "Cohere rerank error ({}): {}",
                 status, error_text
             )));
@@ -90,13 +90,13 @@ impl RerankProvider for CohereRerankProvider {
 
         // Parse response
         let cohere_response: serde_json::Value = response.json().await.map_err(|e| {
-            GatewayError::Parsing(format!("Failed to parse Cohere response: {}", e))
+            GatewayError::Validation(format!("Failed to parse Cohere response: {}", e))
         })?;
 
         // Convert to our response format
         let results = cohere_response["results"]
             .as_array()
-            .ok_or_else(|| GatewayError::Parsing("Missing results in response".to_string()))?
+            .ok_or_else(|| GatewayError::Validation("Missing results in response".to_string()))?
             .iter()
             .map(|r| {
                 let index = r["index"].as_u64().unwrap_or(0) as usize;

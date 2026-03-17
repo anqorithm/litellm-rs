@@ -175,9 +175,9 @@ impl RerankService {
 
     /// Get provider by name
     fn get_provider(&self, name: &str) -> Result<&Arc<dyn RerankProvider>> {
-        self.providers.get(name).ok_or_else(|| {
-            GatewayError::ProviderNotFound(format!("Rerank provider not found: {}", name))
-        })
+        self.providers
+            .get(name)
+            .ok_or_else(|| GatewayError::NotFound(format!("Rerank provider not found: {}", name)))
     }
 
     /// Get all registered providers

@@ -48,13 +48,13 @@ impl QdrantStore {
         let response = request
             .send()
             .await
-            .map_err(|e| GatewayError::VectorDb(format!("Failed to check collection: {}", e)))?;
+            .map_err(|e| GatewayError::Storage(format!("Failed to check collection: {}", e)))?;
 
         if response.status() == 404 {
             // Collection doesn't exist, create it
             self.create_collection().await?;
         } else if !response.status().is_success() {
-            return Err(GatewayError::VectorDb(format!(
+            return Err(GatewayError::Storage(format!(
                 "Failed to check collection: {}",
                 response.status()
             )));
@@ -82,10 +82,10 @@ impl QdrantStore {
         let response = request
             .send()
             .await
-            .map_err(|e| GatewayError::VectorDb(format!("Failed to create collection: {}", e)))?;
+            .map_err(|e| GatewayError::Storage(format!("Failed to create collection: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(GatewayError::VectorDb(format!(
+            return Err(GatewayError::Storage(format!(
                 "Failed to create collection: {}",
                 response.status()
             )));
@@ -120,10 +120,10 @@ impl QdrantStore {
         let response = request
             .send()
             .await
-            .map_err(|e| GatewayError::VectorDb(format!("Failed to store vector: {}", e)))?;
+            .map_err(|e| GatewayError::Storage(format!("Failed to store vector: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(GatewayError::VectorDb(format!(
+            return Err(GatewayError::Storage(format!(
                 "Failed to store vector: {}",
                 response.status()
             )));
@@ -152,7 +152,7 @@ impl QdrantStore {
             payload["score_threshold"] = serde_json::Number::from_f64(threshold as f64)
                 .map(serde_json::Value::Number)
                 .ok_or_else(|| {
-                    GatewayError::VectorDb(format!(
+                    GatewayError::Storage(format!(
                         "Invalid score threshold: {} (NaN/Infinity not allowed)",
                         threshold
                     ))
@@ -168,17 +168,17 @@ impl QdrantStore {
         let response = request
             .send()
             .await
-            .map_err(|e| GatewayError::VectorDb(format!("Failed to search vectors: {}", e)))?;
+            .map_err(|e| GatewayError::Storage(format!("Failed to search vectors: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(GatewayError::VectorDb(format!(
+            return Err(GatewayError::Storage(format!(
                 "Failed to search vectors: {}",
                 response.status()
             )));
         }
 
         let result: serde_json::Value = response.json().await.map_err(|e| {
-            GatewayError::VectorDb(format!("Failed to parse search response: {}", e))
+            GatewayError::Storage(format!("Failed to parse search response: {}", e))
         })?;
 
         let mut search_results = Vec::new();
@@ -214,10 +214,10 @@ impl QdrantStore {
         let response = request
             .send()
             .await
-            .map_err(|e| GatewayError::VectorDb(format!("Failed to delete vector: {}", e)))?;
+            .map_err(|e| GatewayError::Storage(format!("Failed to delete vector: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(GatewayError::VectorDb(format!(
+            return Err(GatewayError::Storage(format!(
                 "Failed to delete vector: {}",
                 response.status()
             )));
@@ -239,14 +239,14 @@ impl QdrantStore {
         let response = request
             .send()
             .await
-            .map_err(|e| GatewayError::VectorDb(format!("Failed to get vector: {}", e)))?;
+            .map_err(|e| GatewayError::Storage(format!("Failed to get vector: {}", e)))?;
 
         if response.status() == 404 {
             return Ok(None);
         }
 
         if !response.status().is_success() {
-            return Err(GatewayError::VectorDb(format!(
+            return Err(GatewayError::Storage(format!(
                 "Failed to get vector: {}",
                 response.status()
             )));
@@ -255,7 +255,7 @@ impl QdrantStore {
         let result: serde_json::Value = response
             .json()
             .await
-            .map_err(|e| GatewayError::VectorDb(format!("Failed to parse get response: {}", e)))?;
+            .map_err(|e| GatewayError::Storage(format!("Failed to parse get response: {}", e)))?;
 
         if let Some(point) = result["result"].as_object()
             && let (Some(id), Some(vector)) = (point["id"].as_str(), point["vector"].as_array())
@@ -287,10 +287,10 @@ impl QdrantStore {
         let response = request
             .send()
             .await
-            .map_err(|e| GatewayError::VectorDb(format!("Qdrant health check failed: {}", e)))?;
+            .map_err(|e| GatewayError::Storage(format!("Qdrant health check failed: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(GatewayError::VectorDb(format!(
+            return Err(GatewayError::Storage(format!(
                 "Qdrant health check failed: {}",
                 response.status()
             )));
@@ -332,10 +332,10 @@ impl QdrantStore {
         let response = request
             .send()
             .await
-            .map_err(|e| GatewayError::VectorDb(format!("Failed to batch store vectors: {}", e)))?;
+            .map_err(|e| GatewayError::Storage(format!("Failed to batch store vectors: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(GatewayError::VectorDb(format!(
+            return Err(GatewayError::Storage(format!(
                 "Failed to batch store vectors: {}",
                 response.status()
             )));
@@ -357,17 +357,17 @@ impl QdrantStore {
         let response = request
             .send()
             .await
-            .map_err(|e| GatewayError::VectorDb(format!("Failed to get collection info: {}", e)))?;
+            .map_err(|e| GatewayError::Storage(format!("Failed to get collection info: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(GatewayError::VectorDb(format!(
+            return Err(GatewayError::Storage(format!(
                 "Failed to get collection info: {}",
                 response.status()
             )));
         }
 
         let result: serde_json::Value = response.json().await.map_err(|e| {
-            GatewayError::VectorDb(format!("Failed to parse collection info: {}", e))
+            GatewayError::Storage(format!("Failed to parse collection info: {}", e))
         })?;
 
         if let Some(count) = result["result"]["points_count"].as_u64() {

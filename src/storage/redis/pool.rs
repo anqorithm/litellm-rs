@@ -52,7 +52,7 @@ impl RedisPool {
             config.max_connections, config.connection_timeout
         );
 
-        let client = Client::open(config.url.as_str()).map_err(GatewayError::Redis)?;
+        let client = Client::open(config.url.as_str()).map_err(GatewayError::from)?;
 
         let async_config = AsyncConnectionConfig::new()
             .set_connection_timeout(std::time::Duration::from_secs(config.connection_timeout));
@@ -60,7 +60,7 @@ impl RedisPool {
         let connection_manager = client
             .get_multiplexed_async_connection_with_config(&async_config)
             .await
-            .map_err(GatewayError::Redis)?;
+            .map_err(GatewayError::from)?;
 
         let max_connections = config.max_connections.max(1) as usize;
 
@@ -139,7 +139,7 @@ impl RedisPool {
             let _: String = redis::cmd("PING")
                 .query_async(c)
                 .await
-                .map_err(GatewayError::Redis)?;
+                .map_err(GatewayError::from)?;
         }
 
         debug!("Redis health check passed");

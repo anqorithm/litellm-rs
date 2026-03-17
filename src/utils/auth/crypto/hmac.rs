@@ -9,7 +9,7 @@ type HmacSha256 = Hmac<Sha256>;
 /// Create HMAC signature
 pub fn create_hmac_signature(secret: &str, data: &str) -> Result<String> {
     let mut mac = <HmacSha256 as HmacKeyInit>::new_from_slice(secret.as_bytes())
-        .map_err(|e| GatewayError::Crypto(format!("Invalid HMAC key: {}", e)))?;
+        .map_err(|e| GatewayError::Auth(format!("Invalid HMAC key: {}", e)))?;
 
     mac.update(data.as_bytes());
     let result = mac.finalize();

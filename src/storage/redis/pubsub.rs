@@ -27,7 +27,7 @@ impl RedisPool {
             let _: () = c
                 .publish(channel, message)
                 .await
-                .map_err(GatewayError::Redis)?;
+                .map_err(GatewayError::from)?;
         }
         Ok(())
     }
@@ -36,10 +36,9 @@ impl RedisPool {
     /// Note: Temporarily disabled due to Redis API compatibility issues
     pub async fn subscribe(&self, _channels: &[String]) -> Result<Subscription> {
         // TODO: Fix when Redis API is updated to compatible version
-        Err(GatewayError::Redis(redis::RedisError::from((
-            redis::ErrorKind::IoError,
-            "PubSub temporarily disabled due to API compatibility",
-        ))))
+        Err(GatewayError::Storage(
+            "PubSub temporarily disabled due to API compatibility".to_string(),
+        ))
     }
 }
 
@@ -48,17 +47,16 @@ impl Subscription {
     /// Note: Temporarily disabled due to Redis API compatibility issues
     pub async fn next_message(&mut self) -> Result<redis::Msg> {
         // TODO: Fix when Redis API is updated to compatible version
-        Err(GatewayError::Redis(redis::RedisError::from((
-            redis::ErrorKind::IoError,
-            "PubSub temporarily disabled due to API compatibility",
-        ))))
+        Err(GatewayError::Storage(
+            "PubSub temporarily disabled due to API compatibility".to_string(),
+        ))
     }
 
     /// Unsubscribe from all channels
     pub async fn unsubscribe_all(&mut self) -> Result<()> {
         // Note: Redis 0.24 doesn't have unsubscribe_all, we'll need to track channels manually
         // For now, just return Ok
-        // self.pubsub.unsubscribe_all().await.map_err(GatewayError::Redis)?;
+        // self.pubsub.unsubscribe_all().await.map_err(GatewayError::from)?;
         Ok(())
     }
 }

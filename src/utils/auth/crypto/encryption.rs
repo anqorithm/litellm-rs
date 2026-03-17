@@ -44,7 +44,7 @@ pub fn encrypt_data(key: &[u8], data: &str) -> Result<String> {
     // Encrypt the data
     let ciphertext = cipher
         .encrypt(nonce, data.as_bytes())
-        .map_err(|e| GatewayError::Crypto(format!("Encryption failed: {}", e)))?;
+        .map_err(|e| GatewayError::Auth(format!("Encryption failed: {}", e)))?;
 
     // Prepend nonce to ciphertext for storage
     let mut output = Vec::with_capacity(AES_GCM_NONCE_SIZE + ciphertext.len());
@@ -66,11 +66,11 @@ pub fn decrypt_data(key: &[u8], encrypted_data: &str) -> Result<String> {
     // Decode base64 encrypted data
     let encrypted_bytes = general_purpose::STANDARD
         .decode(encrypted_data)
-        .map_err(|e| GatewayError::Crypto(format!("Failed to decode encrypted data: {}", e)))?;
+        .map_err(|e| GatewayError::Auth(format!("Failed to decode encrypted data: {}", e)))?;
 
     // Validate minimum length (nonce + at least 16-byte auth tag)
     if encrypted_bytes.len() < AES_GCM_NONCE_SIZE + 16 {
-        return Err(GatewayError::Crypto(
+        return Err(GatewayError::Auth(
             "Encrypted data too short - possible corruption or tampering".to_string(),
         ));
     }
@@ -86,13 +86,13 @@ pub fn decrypt_data(key: &[u8], encrypted_data: &str) -> Result<String> {
 
     // Decrypt and verify authentication tag
     let plaintext = cipher.decrypt(nonce, ciphertext).map_err(|_| {
-        GatewayError::Crypto(
+        GatewayError::Auth(
             "Decryption failed - data may have been tampered with or wrong key".to_string(),
         )
     })?;
 
     String::from_utf8(plaintext).map_err(|e| {
-        GatewayError::Crypto(format!("Failed to convert decrypted data to string: {}", e))
+        GatewayError::Auth(format!("Failed to convert decrypted data to string: {}", e))
     })
 }
 

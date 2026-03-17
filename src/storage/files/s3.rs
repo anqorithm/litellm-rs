@@ -83,12 +83,12 @@ impl S3Storage {
                     .body(ByteStream::from(content.to_vec()))
                     .send()
                     .await
-                    .map_err(|e| GatewayError::FileStorage(format!("S3 upload failed: {}", e)))?;
+                    .map_err(|e| GatewayError::Internal(format!("S3 upload failed: {}", e)))?;
 
                 debug!("File uploaded to S3: {}", key);
                 Ok(file_id)
             } else {
-                Err(GatewayError::FileStorage(
+                Err(GatewayError::Internal(
                     "S3 client not initialized".to_string(),
                 ))
             }
@@ -96,9 +96,7 @@ impl S3Storage {
 
         #[cfg(not(feature = "s3"))]
         {
-            Err(GatewayError::FileStorage(
-                "S3 feature not enabled".to_string(),
-            ))
+            Err(GatewayError::Internal("S3 feature not enabled".to_string()))
         }
     }
 
@@ -114,15 +112,15 @@ impl S3Storage {
                     .key(file_id)
                     .send()
                     .await
-                    .map_err(|e| GatewayError::FileStorage(format!("S3 download failed: {}", e)))?;
+                    .map_err(|e| GatewayError::Internal(format!("S3 download failed: {}", e)))?;
 
                 let bytes = result.body.collect().await.map_err(|e| {
-                    GatewayError::FileStorage(format!("Failed to read S3 content: {}", e))
+                    GatewayError::Internal(format!("Failed to read S3 content: {}", e))
                 })?;
 
                 Ok(bytes.to_vec())
             } else {
-                Err(GatewayError::FileStorage(
+                Err(GatewayError::Internal(
                     "S3 client not initialized".to_string(),
                 ))
             }
@@ -130,9 +128,7 @@ impl S3Storage {
 
         #[cfg(not(feature = "s3"))]
         {
-            Err(GatewayError::FileStorage(
-                "S3 feature not enabled".to_string(),
-            ))
+            Err(GatewayError::Internal("S3 feature not enabled".to_string()))
         }
     }
 
@@ -148,12 +144,12 @@ impl S3Storage {
                     .key(file_id)
                     .send()
                     .await
-                    .map_err(|e| GatewayError::FileStorage(format!("S3 deletion failed: {}", e)))?;
+                    .map_err(|e| GatewayError::Internal(format!("S3 deletion failed: {}", e)))?;
 
                 debug!("File deleted from S3: {}", file_id);
                 Ok(())
             } else {
-                Err(GatewayError::FileStorage(
+                Err(GatewayError::Internal(
                     "S3 client not initialized".to_string(),
                 ))
             }
@@ -161,36 +157,34 @@ impl S3Storage {
 
         #[cfg(not(feature = "s3"))]
         {
-            Err(GatewayError::FileStorage(
-                "S3 feature not enabled".to_string(),
-            ))
+            Err(GatewayError::Internal("S3 feature not enabled".to_string()))
         }
     }
 
     /// Check if file exists (placeholder implementation)
     pub async fn exists(&self, _file_id: &str) -> Result<bool> {
-        Err(GatewayError::FileStorage(
+        Err(GatewayError::Internal(
             "S3 storage not implemented yet".to_string(),
         ))
     }
 
     /// Get file metadata (placeholder implementation)
     pub async fn metadata(&self, _file_id: &str) -> Result<FileMetadata> {
-        Err(GatewayError::FileStorage(
+        Err(GatewayError::Internal(
             "S3 storage not implemented yet".to_string(),
         ))
     }
 
     /// List files (placeholder implementation)
     pub async fn list(&self, _prefix: Option<&str>, _limit: Option<usize>) -> Result<Vec<String>> {
-        Err(GatewayError::FileStorage(
+        Err(GatewayError::Internal(
             "S3 storage not implemented yet".to_string(),
         ))
     }
 
     /// Health check (placeholder implementation)
     pub async fn health_check(&self) -> Result<()> {
-        Err(GatewayError::FileStorage(
+        Err(GatewayError::Internal(
             "S3 storage not implemented yet".to_string(),
         ))
     }

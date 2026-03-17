@@ -14,7 +14,7 @@ impl SeaOrmDatabase {
         let user_model = entities::User::find_by_id(user_id)
             .one(&self.db)
             .await
-            .map_err(GatewayError::Database)?;
+            .map_err(GatewayError::from)?;
 
         Ok(user_model.map(|model| model.to_domain_user()))
     }
@@ -27,7 +27,7 @@ impl SeaOrmDatabase {
             .filter(user::Column::Username.eq(username))
             .one(&self.db)
             .await
-            .map_err(GatewayError::Database)?;
+            .map_err(GatewayError::from)?;
 
         Ok(user_model.map(|model| model.to_domain_user()))
     }
@@ -40,7 +40,7 @@ impl SeaOrmDatabase {
             .filter(user::Column::Email.eq(email))
             .one(&self.db)
             .await
-            .map_err(GatewayError::Database)?;
+            .map_err(GatewayError::from)?;
 
         Ok(user_model.map(|model| model.to_domain_user()))
     }
@@ -54,7 +54,7 @@ impl SeaOrmDatabase {
         let _result = entities::User::insert(active_model)
             .exec(&self.db)
             .await
-            .map_err(GatewayError::Database)?;
+            .map_err(GatewayError::from)?;
 
         // Return the created user
         Ok(user.clone())
@@ -71,16 +71,14 @@ impl SeaOrmDatabase {
         let mut user: user::ActiveModel = entities::User::find_by_id(user_id)
             .one(&self.db)
             .await
-            .map_err(GatewayError::Database)?
+            .map_err(GatewayError::from)?
             .ok_or_else(|| GatewayError::NotFound("User not found".to_string()))?
             .into();
 
         user.password_hash = Set(password_hash.to_string());
         user.updated_at = Set(chrono::Utc::now().into());
 
-        user.update(&self.db)
-            .await
-            .map_err(GatewayError::Database)?;
+        user.update(&self.db).await.map_err(GatewayError::from)?;
 
         Ok(())
     }
@@ -92,7 +90,7 @@ impl SeaOrmDatabase {
         let user_model = entities::User::find_by_id(user_id)
             .one(&self.db)
             .await
-            .map_err(GatewayError::Database)?
+            .map_err(GatewayError::from)?
             .ok_or_else(|| GatewayError::NotFound("User not found".to_string()))?;
 
         let mut active_model: user::ActiveModel = user_model.into();
@@ -102,7 +100,7 @@ impl SeaOrmDatabase {
         active_model
             .update(&self.db)
             .await
-            .map_err(GatewayError::Database)?;
+            .map_err(GatewayError::from)?;
 
         Ok(())
     }
@@ -114,7 +112,7 @@ impl SeaOrmDatabase {
         let user_model = entities::User::find_by_id(user_id)
             .one(&self.db)
             .await
-            .map_err(GatewayError::Database)?
+            .map_err(GatewayError::from)?
             .ok_or_else(|| GatewayError::NotFound("User not found".to_string()))?;
 
         let mut active_model: user::ActiveModel = user_model.into();
@@ -124,7 +122,7 @@ impl SeaOrmDatabase {
         active_model
             .update(&self.db)
             .await
-            .map_err(GatewayError::Database)?;
+            .map_err(GatewayError::from)?;
 
         Ok(())
     }

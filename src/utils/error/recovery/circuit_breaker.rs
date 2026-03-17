@@ -67,7 +67,7 @@ impl CircuitBreaker {
     {
         // Check if circuit should allow the request
         if !self.can_execute().await {
-            return Err(GatewayError::ProviderUnavailable(
+            return Err(GatewayError::Unavailable(
                 "Circuit breaker is open".to_string(),
             ));
         }
@@ -81,7 +81,7 @@ impl CircuitBreaker {
             }
             Err(error) => {
                 self.on_failure().await;
-                Err(GatewayError::External(format!(
+                Err(GatewayError::Network(format!(
                     "Circuit breaker protected call failed: {}",
                     error
                 )))
@@ -480,7 +480,7 @@ mod tests {
         let result: Result<()> = cb.call(async { Ok::<(), String>(()) }).await;
         assert!(result.is_err());
 
-        if let Err(GatewayError::ProviderUnavailable(msg)) = result {
+        if let Err(GatewayError::Unavailable(msg)) = result {
             assert!(msg.contains("Circuit breaker is open"));
         } else {
             panic!("Expected ProviderUnavailable error");
@@ -646,7 +646,7 @@ mod tests {
             .call(async { Err::<(), _>("specific error message") })
             .await;
 
-        if let Err(GatewayError::External(msg)) = result {
+        if let Err(GatewayError::Network(msg)) = result {
             assert!(msg.contains("specific error message"));
         } else {
             panic!("Expected External error");
@@ -671,7 +671,7 @@ mod tests {
         // Next request should fail with ProviderUnavailable
         let result: Result<()> = cb.call(async { Ok::<(), String>(()) }).await;
 
-        assert!(matches!(result, Err(GatewayError::ProviderUnavailable(_))));
+        assert!(matches!(result, Err(GatewayError::Unavailable(_))));
     }
 
     // ==================== Window Size Tests ====================

@@ -51,7 +51,7 @@ impl JwtHandler {
         };
 
         let header = Header::new(self.algorithm);
-        let token = encode(&header, &claims, &self.encoding_key).map_err(GatewayError::Jwt)?;
+        let token = encode(&header, &claims, &self.encoding_key).map_err(GatewayError::from)?;
 
         debug!("Created access token for user: {}", user_id);
         Ok(token)
@@ -83,7 +83,7 @@ impl JwtHandler {
         };
 
         let header = Header::new(self.algorithm);
-        let token = encode(&header, &claims, &self.encoding_key).map_err(GatewayError::Jwt)?;
+        let token = encode(&header, &claims, &self.encoding_key).map_err(GatewayError::from)?;
 
         debug!("Created refresh token for user: {}", user_id);
         Ok(token)
@@ -122,7 +122,7 @@ impl JwtHandler {
 
         let token_data = decode::<Claims>(token, &self.decoding_key, &validation).map_err(|e| {
             warn!("JWT verification failed: {}", e);
-            GatewayError::Jwt(e)
+            GatewayError::Auth(format!("JWT error: {}", e))
         })?;
 
         debug!("Token verified for user: {}", token_data.claims.sub);

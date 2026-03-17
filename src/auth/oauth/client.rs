@@ -215,7 +215,7 @@ impl OAuthClient {
             });
         }
 
-        Err(GatewayError::Parsing(format!(
+        Err(GatewayError::Validation(format!(
             "Failed to parse token response: {}",
             body
         )))
@@ -315,7 +315,7 @@ impl OAuthClient {
     /// Parse user info response handling different provider formats
     fn parse_user_info(&self, body: &str) -> Result<UserInfo> {
         let json: serde_json::Value = serde_json::from_str(body)
-            .map_err(|e| GatewayError::Parsing(format!("Failed to parse user info: {}", e)))?;
+            .map_err(|e| GatewayError::Validation(format!("Failed to parse user info: {}", e)))?;
 
         let provider = self.config.provider.to_string();
 

@@ -118,7 +118,7 @@ mod implementation {
             }
 
             let store = builder.build().map_err(|e| {
-                GatewayError::FileStorage(format!("Failed to create Azure Blob client: {}", e))
+                GatewayError::Internal(format!("Failed to create Azure Blob client: {}", e))
             })?;
 
             Ok(Self {
@@ -157,12 +157,12 @@ mod implementation {
             match self.store.get(&meta_path).await {
                 Ok(meta_result) => {
                     let meta_bytes = meta_result.bytes().await.map_err(|e| {
-                        GatewayError::FileStorage(format!("Failed to read metadata: {}", e))
+                        GatewayError::Internal(format!("Failed to read metadata: {}", e))
                     })?;
 
                     let metadata: CacheMetadata =
                         serde_json::from_slice(&meta_bytes).map_err(|e| {
-                            GatewayError::FileStorage(format!("Failed to parse metadata: {}", e))
+                            GatewayError::Internal(format!("Failed to parse metadata: {}", e))
                         })?;
 
                     if metadata.is_expired() {
@@ -185,11 +185,11 @@ mod implementation {
             match self.store.get(&path).await {
                 Ok(result) => {
                     let bytes = result.bytes().await.map_err(|e| {
-                        GatewayError::FileStorage(format!("Failed to read body: {}", e))
+                        GatewayError::Internal(format!("Failed to read body: {}", e))
                     })?;
 
                     let value: T = serde_json::from_slice(&bytes).map_err(|e| {
-                        GatewayError::FileStorage(format!("Failed to deserialize: {}", e))
+                        GatewayError::Internal(format!("Failed to deserialize: {}", e))
                     })?;
 
                     debug!(key = %path, "Azure Blob cache hit");
@@ -201,7 +201,7 @@ mod implementation {
                 }
                 Err(err) => {
                     error!(key = %path, error = %err, "Failed to read from Azure Blob");
-                    Err(GatewayError::FileStorage(format!(
+                    Err(GatewayError::Internal(format!(
                         "Azure Blob read error: {}",
                         err
                     )))
@@ -221,26 +221,24 @@ mod implementation {
 
             // Serialize the value
             let bytes = serde_json::to_vec(value)
-                .map_err(|e| GatewayError::FileStorage(format!("Failed to serialize: {}", e)))?;
+                .map_err(|e| GatewayError::Internal(format!("Failed to serialize: {}", e)))?;
 
             // Create metadata
             let metadata = CacheMetadata::new(ttl, bytes.len(), false);
             let meta_bytes = serde_json::to_vec(&metadata).map_err(|e| {
-                GatewayError::FileStorage(format!("Failed to serialize metadata: {}", e))
+                GatewayError::Internal(format!("Failed to serialize metadata: {}", e))
             })?;
 
             // Write the value
             self.store.put(&path, bytes.into()).await.map_err(|e| {
-                GatewayError::FileStorage(format!("Failed to write to Azure Blob: {}", e))
+                GatewayError::Internal(format!("Failed to write to Azure Blob: {}", e))
             })?;
 
             // Write metadata
             self.store
                 .put(&meta_path, meta_bytes.into())
                 .await
-                .map_err(|e| {
-                    GatewayError::FileStorage(format!("Failed to write metadata: {}", e))
-                })?;
+                .map_err(|e| GatewayError::Internal(format!("Failed to write metadata: {}", e)))?;
 
             debug!(key = %path, "Azure Blob cache write successful");
             Ok(())
@@ -269,7 +267,7 @@ mod implementation {
             match self.store.head(&path).await {
                 Ok(_) => Ok(true),
                 Err(object_store::Error::NotFound { .. }) => Ok(false),
-                Err(err) => Err(GatewayError::FileStorage(format!(
+                Err(err) => Err(GatewayError::Internal(format!(
                     "Azure Blob head error: {}",
                     err
                 ))),

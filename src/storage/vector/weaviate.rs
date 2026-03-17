@@ -20,7 +20,7 @@ pub struct WeaviateStore {
 impl WeaviateStore {
     /// Create new Weaviate store (not implemented)
     pub async fn new(_config: &VectorDbConfig) -> Result<Self> {
-        Err(GatewayError::VectorDb(
+        Err(GatewayError::Storage(
             "Weaviate not implemented yet".to_string(),
         ))
     }
@@ -32,7 +32,7 @@ impl WeaviateStore {
         _vector: &[f32],
         _metadata: Option<serde_json::Value>,
     ) -> Result<()> {
-        Err(GatewayError::VectorDb(
+        Err(GatewayError::Storage(
             "Weaviate not implemented yet".to_string(),
         ))
     }
@@ -44,28 +44,28 @@ impl WeaviateStore {
         _limit: usize,
         _threshold: Option<f32>,
     ) -> Result<Vec<SearchResult>> {
-        Err(GatewayError::VectorDb(
+        Err(GatewayError::Storage(
             "Weaviate not implemented yet".to_string(),
         ))
     }
 
     /// Delete vector (not implemented)
     pub async fn delete(&self, _id: &str) -> Result<()> {
-        Err(GatewayError::VectorDb(
+        Err(GatewayError::Storage(
             "Weaviate not implemented yet".to_string(),
         ))
     }
 
     /// Get vector by ID (not implemented)
     pub async fn get(&self, _id: &str) -> Result<Option<VectorPoint>> {
-        Err(GatewayError::VectorDb(
+        Err(GatewayError::Storage(
             "Weaviate not implemented yet".to_string(),
         ))
     }
 
     /// Health check (not implemented)
     pub async fn health_check(&self) -> Result<()> {
-        Err(GatewayError::VectorDb(
+        Err(GatewayError::Storage(
             "Weaviate not implemented yet".to_string(),
         ))
     }
@@ -77,14 +77,14 @@ impl WeaviateStore {
 
     /// Batch store vectors (not implemented)
     pub async fn batch_store(&self, _points: &[VectorPoint]) -> Result<()> {
-        Err(GatewayError::VectorDb(
+        Err(GatewayError::Storage(
             "Weaviate not implemented yet".to_string(),
         ))
     }
 
     /// Count vectors (not implemented)
     pub async fn count(&self) -> Result<u64> {
-        Err(GatewayError::VectorDb(
+        Err(GatewayError::Storage(
             "Weaviate not implemented yet".to_string(),
         ))
     }

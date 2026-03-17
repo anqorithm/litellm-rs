@@ -156,7 +156,7 @@ impl WebhookManager {
             );
             Ok(())
         } else {
-            Err(GatewayError::External(format!(
+            Err(GatewayError::Network(format!(
                 "Webhook returned status {}: {}",
                 status_code, response_body
             )))
@@ -174,10 +174,10 @@ impl WebhookManager {
 
         type HmacSha256 = Hmac<Sha256>;
 
-        let payload_json = serde_json::to_string(payload).map_err(GatewayError::Serialization)?;
+        let payload_json = serde_json::to_string(payload).map_err(GatewayError::from)?;
 
         let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
-            .map_err(|e| GatewayError::Crypto(e.to_string()))?;
+            .map_err(|e| GatewayError::Auth(e.to_string()))?;
 
         mac.update(payload_json.as_bytes());
         let result = mac.finalize();

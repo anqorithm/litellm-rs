@@ -53,7 +53,7 @@ pub(crate) async fn perform_health_check(provider_id: &str) -> Result<Duration> 
 
     // Simulate occasional failures
     if rand::random::<f64>() < 0.05 {
-        return Err(GatewayError::External(
+        return Err(GatewayError::Network(
             "Simulated health check failure".to_string(),
         ));
     }

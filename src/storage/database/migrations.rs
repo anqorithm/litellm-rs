@@ -54,7 +54,7 @@ async fn create_migrations_table(pool: &PgPool) -> Result<()> {
     sqlx::query(sql)
         .execute(pool)
         .await
-        .map_err(GatewayError::Database)?;
+        .map_err(GatewayError::from)?;
 
     Ok(())
 }
@@ -64,20 +64,20 @@ async fn get_current_version(pool: &PgPool) -> Result<i32> {
     let row = sqlx::query("SELECT COALESCE(MAX(version), 0) as version FROM schema_migrations")
         .fetch_one(pool)
         .await
-        .map_err(GatewayError::Database)?;
+        .map_err(GatewayError::from)?;
 
     Ok(row.get("version"))
 }
 
 /// Run a single migration
 async fn run_migration(pool: &PgPool, migration: &Migration) -> Result<()> {
-    let mut tx = pool.begin().await.map_err(GatewayError::Database)?;
+    let mut tx = pool.begin().await.map_err(GatewayError::from)?;
 
     // Execute the migration SQL
     sqlx::query(migration.up_sql)
         .execute(&mut *tx)
         .await
-        .map_err(GatewayError::Database)?;
+        .map_err(GatewayError::from)?;
 
     // Record the migration
     sqlx::query("INSERT INTO schema_migrations (version, name) VALUES ($1, $2)")
@@ -85,9 +85,9 @@ async fn run_migration(pool: &PgPool, migration: &Migration) -> Result<()> {
         .bind(&migration.name)
         .execute(&mut *tx)
         .await
-        .map_err(GatewayError::Database)?;
+        .map_err(GatewayError::from)?;
 
-    tx.commit().await.map_err(GatewayError::Database)?;
+    tx.commit().await.map_err(GatewayError::from)?;
 
     info!("Migration {} completed successfully", migration.version);
     Ok(())
@@ -353,22 +353,22 @@ pub async fn rollback_to_version(pool: &PgPool, target_version: i32) -> Result<(
 
 /// Rollback a single migration
 async fn rollback_migration(pool: &PgPool, migration: &Migration) -> Result<()> {
-    let mut tx = pool.begin().await.map_err(GatewayError::Database)?;
+    let mut tx = pool.begin().await.map_err(GatewayError::from)?;
 
     // Execute the rollback SQL
     sqlx::query(migration.down_sql)
         .execute(&mut *tx)
         .await
-        .map_err(GatewayError::Database)?;
+        .map_err(GatewayError::from)?;
 
     // Remove the migration record
     sqlx::query("DELETE FROM schema_migrations WHERE version = $1")
         .bind(migration.version)
         .execute(&mut *tx)
         .await
-        .map_err(GatewayError::Database)?;
+        .map_err(GatewayError::from)?;
 
-    tx.commit().await.map_err(GatewayError::Database)?;
+    tx.commit().await.map_err(GatewayError::from)?;
 
     info!("Migration {} rolled back successfully", migration.version);
     Ok(())

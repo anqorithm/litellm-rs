@@ -111,11 +111,11 @@ impl NotificationChannel for SlackChannel {
             .send()
             .await
             .map_err(|e| {
-                GatewayError::Alert(format!("Failed to send Slack notification: {}", e))
+                GatewayError::Internal(format!("Failed to send Slack notification: {}", e))
             })?;
 
         if !response.status().is_success() {
-            return Err(GatewayError::Alert(format!(
+            return Err(GatewayError::Internal(format!(
                 "Slack webhook returned status: {}",
                 response.status()
             )));

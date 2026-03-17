@@ -15,7 +15,7 @@ impl RedisPool {
 
         let mut conn = self.get_connection().await?;
         if let Some(ref mut c) = conn.conn {
-            let values: Vec<Option<String>> = c.mget(keys).await.map_err(GatewayError::Redis)?;
+            let values: Vec<Option<String>> = c.mget(keys).await.map_err(GatewayError::from)?;
             Ok(values)
         } else {
             Ok(vec![None; keys.len()])
@@ -42,7 +42,7 @@ impl RedisPool {
                 }
             }
 
-            let _: () = pipe.query_async(c).await.map_err(GatewayError::Redis)?;
+            let _: () = pipe.query_async(c).await.map_err(GatewayError::from)?;
         }
         Ok(())
     }

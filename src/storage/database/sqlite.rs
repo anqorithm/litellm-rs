@@ -39,7 +39,7 @@ impl SqliteDatabase {
             .map_err(|e| {
                 warn!("Failed to connect to SQLite database: {}", e);
                 warn!("Database URL: {}", Self::sanitize_url(&config.url));
-                GatewayError::Database(e)
+                GatewayError::Storage(e)
             })?;
 
         info!("SQLite database connection pool created successfully");
@@ -65,7 +65,7 @@ impl SqliteDatabase {
         let result = sqlx::query(query)
             .execute(&self.pool)
             .await
-            .map_err(GatewayError::Database)?;
+            .map_err(GatewayError::from)?;
         Ok(result.rows_affected())
     }
 
@@ -145,7 +145,7 @@ impl SqliteDatabase {
         sqlx::query("SELECT 1")
             .execute(&self.pool)
             .await
-            .map_err(GatewayError::Database)?;
+            .map_err(GatewayError::from)?;
         
         debug!("SQLite database health check passed");
         Ok(())

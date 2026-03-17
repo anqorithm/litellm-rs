@@ -85,7 +85,7 @@ fn test_timeout_helper() {
 #[test]
 fn test_service_unavailable_helper() {
     let error = GatewayError::service_unavailable("Service down");
-    assert!(matches!(error, GatewayError::ProviderUnavailable(msg) if msg == "Service down"));
+    assert!(matches!(error, GatewayError::Unavailable(msg) if msg == "Service down"));
 }
 
 #[test]
@@ -115,13 +115,13 @@ fn test_invalid_request_helper() {
 #[test]
 fn test_parsing_helper() {
     let error = GatewayError::parsing("Invalid format");
-    assert!(matches!(error, GatewayError::Parsing(msg) if msg == "Invalid format"));
+    assert!(matches!(error, GatewayError::Validation(msg) if msg == "Invalid format"));
 }
 
 #[test]
 fn test_alert_helper() {
     let error = GatewayError::alert("Critical alert");
-    assert!(matches!(error, GatewayError::Alert(msg) if msg == "Critical alert"));
+    assert!(matches!(error, GatewayError::Internal(msg) if msg == "Critical alert"));
 }
 
 #[test]
@@ -145,7 +145,7 @@ fn test_forbidden_helper() {
 #[test]
 fn test_external_helper() {
     let error = GatewayError::external("External error");
-    assert!(matches!(error, GatewayError::External(msg) if msg == "External error"));
+    assert!(matches!(error, GatewayError::Network(msg) if msg == "External error"));
 }
 
 #[test]
@@ -157,25 +157,25 @@ fn test_invalid_request_error_helper() {
 #[test]
 fn test_no_providers_available_helper() {
     let error = GatewayError::no_providers_available("No providers");
-    assert!(matches!(error, GatewayError::NoProvidersAvailable(msg) if msg == "No providers"));
+    assert!(matches!(error, GatewayError::Unavailable(msg) if msg == "No providers"));
 }
 
 #[test]
 fn test_provider_not_found_helper() {
     let error = GatewayError::provider_not_found("openai");
-    assert!(matches!(error, GatewayError::ProviderNotFound(msg) if msg == "openai"));
+    assert!(matches!(error, GatewayError::NotFound(msg) if msg == "openai"));
 }
 
 #[test]
 fn test_no_providers_for_model_helper() {
     let error = GatewayError::no_providers_for_model("gpt-5");
-    assert!(matches!(error, GatewayError::NoProvidersForModel(msg) if msg == "gpt-5"));
+    assert!(matches!(error, GatewayError::BadRequest(msg) if msg == "gpt-5"));
 }
 
 #[test]
 fn test_no_healthy_providers_helper() {
     let error = GatewayError::no_healthy_providers("All providers down");
-    assert!(matches!(error, GatewayError::NoHealthyProviders(msg) if msg == "All providers down"));
+    assert!(matches!(error, GatewayError::Unavailable(msg) if msg == "All providers down"));
 }
 
 #[test]
@@ -187,9 +187,7 @@ fn test_api_error_helper() {
 #[test]
 fn test_unavailable_helper() {
     let error = GatewayError::unavailable("Provider unavailable");
-    assert!(
-        matches!(error, GatewayError::ProviderUnavailable(msg) if msg == "Provider unavailable")
-    );
+    assert!(matches!(error, GatewayError::Unavailable(msg) if msg == "Provider unavailable"));
 }
 
 // ==================== Error Display Tests ====================
@@ -209,27 +207,27 @@ fn test_all_error_variants_display() {
         GatewayError::Auth("auth error".to_string()),
         GatewayError::rate_limit("rate limit"),
         GatewayError::Validation("validation".to_string()),
-        GatewayError::Cache("cache".to_string()),
-        GatewayError::CircuitBreaker("circuit breaker".to_string()),
+        GatewayError::Storage("cache".to_string()),
+        GatewayError::Unavailable("circuit breaker".to_string()),
         GatewayError::Timeout("timeout".to_string()),
         GatewayError::NotFound("not found".to_string()),
         GatewayError::Conflict("conflict".to_string()),
         GatewayError::BadRequest("bad request".to_string()),
         GatewayError::Internal("internal".to_string()),
-        GatewayError::ProviderUnavailable("unavailable".to_string()),
-        GatewayError::Crypto("crypto".to_string()),
-        GatewayError::FileStorage("file storage".to_string()),
-        GatewayError::VectorDb("vector db".to_string()),
+        GatewayError::Unavailable("unavailable".to_string()),
+        GatewayError::Auth("crypto".to_string()),
+        GatewayError::Internal("file storage".to_string()),
+        GatewayError::Storage("vector db".to_string()),
         GatewayError::Network("network".to_string()),
-        GatewayError::Parsing("parsing".to_string()),
-        GatewayError::Alert("alert".to_string()),
+        GatewayError::Validation("parsing".to_string()),
+        GatewayError::Internal("alert".to_string()),
         GatewayError::NotImplemented("not impl".to_string()),
         GatewayError::Forbidden("forbidden".to_string()),
-        GatewayError::External("external".to_string()),
-        GatewayError::NoProvidersAvailable("no providers".to_string()),
-        GatewayError::ProviderNotFound("provider not found".to_string()),
-        GatewayError::NoProvidersForModel("no model".to_string()),
-        GatewayError::NoHealthyProviders("no healthy".to_string()),
+        GatewayError::Network("external".to_string()),
+        GatewayError::Unavailable("no providers".to_string()),
+        GatewayError::NotFound("provider not found".to_string()),
+        GatewayError::BadRequest("no model".to_string()),
+        GatewayError::Unavailable("no healthy".to_string()),
     ];
 
     for error in errors {

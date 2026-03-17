@@ -54,7 +54,7 @@ async fn test_redis_pool_creation_returns_error_for_unreachable_endpoint() {
     };
 
     let result = RedisPool::new(&config).await;
-    assert!(matches!(result, Err(GatewayError::Redis(_))));
+    assert!(matches!(result, Err(GatewayError::Storage(_))));
 }
 
 #[tokio::test]

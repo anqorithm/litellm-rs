@@ -45,7 +45,7 @@ impl SeaOrmDatabase {
         entities::Batch::insert(active_model)
             .exec(&self.db)
             .await
-            .map_err(GatewayError::Database)?;
+            .map_err(GatewayError::from)?;
 
         Ok(batch.batch_id.clone())
     }
@@ -57,7 +57,7 @@ impl SeaOrmDatabase {
         let batch_model = entities::Batch::find_by_id(batch_id)
             .one(&self.db)
             .await
-            .map_err(GatewayError::Database)?
+            .map_err(GatewayError::from)?
             .ok_or_else(|| GatewayError::NotFound("Batch not found".to_string()))?;
 
         let mut active_model: entities::batch::ActiveModel = batch_model.into();
@@ -79,7 +79,7 @@ impl SeaOrmDatabase {
         active_model
             .update(&self.db)
             .await
-            .map_err(GatewayError::Database)?;
+            .map_err(GatewayError::from)?;
 
         Ok(())
     }
@@ -109,7 +109,7 @@ impl SeaOrmDatabase {
             .order_by_desc(entities::batch::Column::CreatedAt)
             .all(&self.db)
             .await
-            .map_err(GatewayError::Database)?;
+            .map_err(GatewayError::from)?;
 
         let batch_records = batch_models
             .into_iter()
@@ -204,7 +204,7 @@ impl SeaOrmDatabase {
         let batch_model = entities::Batch::find_by_id(batch_id)
             .one(&self.db)
             .await
-            .map_err(GatewayError::Database)?
+            .map_err(GatewayError::from)?
             .ok_or_else(|| GatewayError::NotFound("Batch not found".to_string()))?;
 
         let mut active_model: entities::batch::ActiveModel = batch_model.into();
@@ -214,7 +214,7 @@ impl SeaOrmDatabase {
         active_model
             .update(&self.db)
             .await
-            .map_err(GatewayError::Database)?;
+            .map_err(GatewayError::from)?;
 
         Ok(())
     }
@@ -226,7 +226,7 @@ impl SeaOrmDatabase {
         let batch_model = entities::Batch::find_by_id(batch_id)
             .one(&self.db)
             .await
-            .map_err(GatewayError::Database)?
+            .map_err(GatewayError::from)?
             .ok_or_else(|| GatewayError::NotFound("Batch not found".to_string()))?;
 
         let mut active_model: entities::batch::ActiveModel = batch_model.into();
@@ -236,7 +236,7 @@ impl SeaOrmDatabase {
         active_model
             .update(&self.db)
             .await
-            .map_err(GatewayError::Database)?;
+            .map_err(GatewayError::from)?;
 
         Ok(())
     }

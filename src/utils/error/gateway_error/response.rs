@@ -13,15 +13,10 @@ impl ResponseError for GatewayError {
                 "CONFIG_ERROR",
                 self.to_string(),
             ),
-            GatewayError::Database(_) => (
-                actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
-                "DATABASE_ERROR",
-                "Database operation failed".to_string(),
-            ),
-            GatewayError::Redis(_) => (
-                actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
-                "CACHE_ERROR",
-                "Cache operation failed".to_string(),
+            GatewayError::Storage(_) => (
+                actix_web::http::StatusCode::SERVICE_UNAVAILABLE,
+                "STORAGE_ERROR",
+                self.to_string(),
             ),
             GatewayError::Auth(_) => (
                 actix_web::http::StatusCode::UNAUTHORIZED,
@@ -158,14 +153,9 @@ impl ResponseError for GatewayError {
                 "TIMEOUT",
                 self.to_string(),
             ),
-            GatewayError::ProviderUnavailable(_) => (
+            GatewayError::Unavailable(_) => (
                 actix_web::http::StatusCode::SERVICE_UNAVAILABLE,
                 "SERVICE_UNAVAILABLE",
-                self.to_string(),
-            ),
-            GatewayError::CircuitBreaker(_) => (
-                actix_web::http::StatusCode::SERVICE_UNAVAILABLE,
-                "CIRCUIT_BREAKER_OPEN",
                 self.to_string(),
             ),
             GatewayError::Network(_) => (
@@ -173,14 +163,9 @@ impl ResponseError for GatewayError {
                 "NETWORK_ERROR",
                 self.to_string(),
             ),
-            GatewayError::Parsing(_) => (
-                actix_web::http::StatusCode::BAD_REQUEST,
-                "PARSING_ERROR",
-                self.to_string(),
-            ),
-            GatewayError::Alert(_) => (
+            GatewayError::Internal(_) => (
                 actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
-                "ALERT_ERROR",
+                "INTERNAL_ERROR",
                 self.to_string(),
             ),
             GatewayError::NotImplemented(_) => (
@@ -188,59 +173,9 @@ impl ResponseError for GatewayError {
                 "NOT_IMPLEMENTED",
                 self.to_string(),
             ),
-            GatewayError::External(_) => (
-                actix_web::http::StatusCode::BAD_GATEWAY,
-                "EXTERNAL_ERROR",
-                self.to_string(),
-            ),
-            GatewayError::NoProvidersAvailable(_) => (
-                actix_web::http::StatusCode::SERVICE_UNAVAILABLE,
-                "NO_PROVIDERS_AVAILABLE",
-                self.to_string(),
-            ),
-            GatewayError::ProviderNotFound(_) => (
-                actix_web::http::StatusCode::NOT_FOUND,
-                "PROVIDER_NOT_FOUND",
-                self.to_string(),
-            ),
-            GatewayError::NoProvidersForModel(_) => (
-                actix_web::http::StatusCode::BAD_REQUEST,
-                "NO_PROVIDERS_FOR_MODEL",
-                self.to_string(),
-            ),
-            GatewayError::NoHealthyProviders(_) => (
-                actix_web::http::StatusCode::SERVICE_UNAVAILABLE,
-                "NO_HEALTHY_PROVIDERS",
-                self.to_string(),
-            ),
-            GatewayError::Internal(_) => (
-                actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
-                "INTERNAL_ERROR",
-                self.to_string(),
-            ),
-            GatewayError::Jwt(_) => (
-                actix_web::http::StatusCode::UNAUTHORIZED,
-                "JWT_ERROR",
-                self.to_string(),
-            ),
             GatewayError::Serialization(_) => (
                 actix_web::http::StatusCode::BAD_REQUEST,
                 "SERIALIZATION_ERROR",
-                self.to_string(),
-            ),
-            GatewayError::Cache(_) => (
-                actix_web::http::StatusCode::SERVICE_UNAVAILABLE,
-                "CACHE_ERROR",
-                self.to_string(),
-            ),
-            GatewayError::Crypto(_) => (
-                actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
-                "CRYPTO_ERROR",
-                self.to_string(),
-            ),
-            GatewayError::FileStorage(_) => (
-                actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
-                "FILE_STORAGE_ERROR",
                 self.to_string(),
             ),
             GatewayError::HttpClient(_) => (
@@ -251,34 +186,6 @@ impl ResponseError for GatewayError {
             GatewayError::Io(_) => (
                 actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
                 "IO_ERROR",
-                self.to_string(),
-            ),
-            GatewayError::VectorDb(_) => (
-                actix_web::http::StatusCode::SERVICE_UNAVAILABLE,
-                "VECTOR_DB_ERROR",
-                self.to_string(),
-            ),
-            GatewayError::Yaml(_) => (
-                actix_web::http::StatusCode::BAD_REQUEST,
-                "YAML_ERROR",
-                self.to_string(),
-            ),
-            #[cfg(feature = "s3")]
-            GatewayError::S3(_) => (
-                actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
-                "S3_ERROR",
-                self.to_string(),
-            ),
-            #[cfg(feature = "vector-db")]
-            GatewayError::Qdrant(_) => (
-                actix_web::http::StatusCode::SERVICE_UNAVAILABLE,
-                "QDRANT_ERROR",
-                self.to_string(),
-            ),
-            #[cfg(feature = "websockets")]
-            GatewayError::WebSocket(_) => (
-                actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
-                "WEBSOCKET_ERROR",
                 self.to_string(),
             ),
         };
@@ -578,14 +485,14 @@ mod tests {
 
     #[test]
     fn test_gateway_error_provider_unavailable_response() {
-        let error = GatewayError::ProviderUnavailable("Provider down".to_string());
+        let error = GatewayError::Unavailable("Provider down".to_string());
         let response = error.error_response();
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
     }
 
     #[test]
     fn test_gateway_error_circuit_breaker_response() {
-        let error = GatewayError::CircuitBreaker("Circuit open".to_string());
+        let error = GatewayError::Unavailable("Circuit open".to_string());
         let response = error.error_response();
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
     }
@@ -599,7 +506,7 @@ mod tests {
 
     #[test]
     fn test_gateway_error_parsing_response() {
-        let error = GatewayError::Parsing("Parse error".to_string());
+        let error = GatewayError::Validation("Parse error".to_string());
         let response = error.error_response();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
@@ -620,35 +527,35 @@ mod tests {
 
     #[test]
     fn test_gateway_error_external_response() {
-        let error = GatewayError::External("External service error".to_string());
+        let error = GatewayError::Network("External service error".to_string());
         let response = error.error_response();
         assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
     }
 
     #[test]
     fn test_gateway_error_no_providers_available_response() {
-        let error = GatewayError::NoProvidersAvailable("No providers".to_string());
+        let error = GatewayError::Unavailable("No providers".to_string());
         let response = error.error_response();
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
     }
 
     #[test]
     fn test_gateway_error_provider_not_found_response() {
-        let error = GatewayError::ProviderNotFound("Provider not found".to_string());
+        let error = GatewayError::NotFound("Provider not found".to_string());
         let response = error.error_response();
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 
     #[test]
     fn test_gateway_error_no_providers_for_model_response() {
-        let error = GatewayError::NoProvidersForModel("No providers for model".to_string());
+        let error = GatewayError::BadRequest("No providers for model".to_string());
         let response = error.error_response();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 
     #[test]
     fn test_gateway_error_no_healthy_providers_response() {
-        let error = GatewayError::NoHealthyProviders("No healthy providers".to_string());
+        let error = GatewayError::Unavailable("No healthy providers".to_string());
         let response = error.error_response();
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
     }
@@ -835,7 +742,7 @@ mod tests {
     fn test_gateway_error_jwt_response() {
         use jsonwebtoken::{errors::Error as JwtError, errors::ErrorKind};
         let jwt_error = JwtError::from(ErrorKind::InvalidToken);
-        let error = GatewayError::Jwt(jwt_error);
+        let error = GatewayError::Auth(format!("JWT error: {}", jwt_error));
         let response = error.error_response();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
@@ -844,28 +751,28 @@ mod tests {
     fn test_gateway_error_serialization_response() {
         let json_err: serde_json::Error =
             serde_json::from_str::<serde_json::Value>("bad").unwrap_err();
-        let error = GatewayError::Serialization(json_err);
+        let error: GatewayError = json_err.into();
         let response = error.error_response();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 
     #[test]
     fn test_gateway_error_cache_response() {
-        let error = GatewayError::Cache("Cache unavailable".to_string());
+        let error = GatewayError::Storage("Cache unavailable".to_string());
         let response = error.error_response();
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
     }
 
     #[test]
     fn test_gateway_error_crypto_response() {
-        let error = GatewayError::Crypto("Encryption failed".to_string());
+        let error = GatewayError::Auth("Encryption failed".to_string());
         let response = error.error_response();
-        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[test]
     fn test_gateway_error_file_storage_response() {
-        let error = GatewayError::FileStorage("Write failed".to_string());
+        let error = GatewayError::Internal("Write failed".to_string());
         let response = error.error_response();
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
     }
@@ -891,7 +798,7 @@ mod tests {
 
     #[test]
     fn test_gateway_error_vector_db_response() {
-        let error = GatewayError::VectorDb("Vector search failed".to_string());
+        let error = GatewayError::Storage("Vector search failed".to_string());
         let response = error.error_response();
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
     }
@@ -900,7 +807,7 @@ mod tests {
     fn test_gateway_error_yaml_response() {
         let yaml_err: serde_yml::Error =
             serde_yml::from_str::<serde_yml::Value>("key: [unclosed").unwrap_err();
-        let error = GatewayError::Yaml(yaml_err);
+        let error = GatewayError::Serialization(yaml_err.to_string());
         let response = error.error_response();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
@@ -908,7 +815,7 @@ mod tests {
     #[cfg(feature = "vector-db")]
     #[test]
     fn test_gateway_error_qdrant_response() {
-        let error = GatewayError::Qdrant("Qdrant unavailable".to_string());
+        let error = GatewayError::Storage("Qdrant unavailable".to_string());
         let response = error.error_response();
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
     }
@@ -916,17 +823,17 @@ mod tests {
     #[cfg(feature = "websockets")]
     #[test]
     fn test_gateway_error_websocket_response() {
-        let error = GatewayError::WebSocket("WS connection failed".to_string());
+        let error = GatewayError::Network("WS connection failed".to_string());
         let response = error.error_response();
-        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
     }
 
     #[cfg(feature = "s3")]
     #[test]
     fn test_gateway_error_s3_response() {
-        let error = GatewayError::S3("Bucket not found".to_string());
+        let error = GatewayError::Storage("Bucket not found".to_string());
         let response = error.error_response();
-        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
     }
 
     // ==================== Integration Tests ====================

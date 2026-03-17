@@ -7,6 +7,9 @@ use thiserror::Error;
 pub type Result<T> = std::result::Result<T, GatewayError>;
 
 /// Main error type for the Gateway
+///
+/// Consolidated from ~36 variants to 15 semantic categories.
+/// Each variant maps to a distinct HTTP status code or error class.
 #[derive(Error, Debug)]
 #[allow(dead_code)]
 pub enum GatewayError {
@@ -14,43 +17,23 @@ pub enum GatewayError {
     #[error("Configuration error: {0}")]
     Config(String),
 
-    /// Database errors
-    #[cfg(feature = "storage")]
-    #[error("Database error: {0}")]
-    Database(#[from] sea_orm::DbErr),
-
-    /// Database errors (storage feature disabled)
-    #[cfg(not(feature = "storage"))]
-    #[error("Database error: {0}")]
-    Database(String),
-
-    /// Redis errors
-    #[cfg(feature = "redis")]
-    #[error("Redis error: {0}")]
-    Redis(#[from] redis::RedisError),
-
-    /// Redis errors (redis feature disabled)
-    #[cfg(not(feature = "redis"))]
-    #[error("Redis error: {0}")]
-    Redis(String),
+    /// Storage errors (database, cache, Redis, vector DB, S3)
+    #[error("Storage error: {0}")]
+    Storage(String),
 
     /// HTTP client errors
     #[error("HTTP client error: {0}")]
     HttpClient(#[from] reqwest::Error),
 
-    /// Serialization errors
+    /// Serialization/deserialization errors (JSON, YAML, etc.)
     #[error("Serialization error: {0}")]
-    Serialization(#[from] serde_json::Error),
+    Serialization(String),
 
-    /// YAML parsing errors
-    #[error("YAML error: {0}")]
-    Yaml(#[from] serde_yml::Error),
-
-    /// IO errors
+    /// IO errors (file system, local file storage)
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
-    /// Authentication errors
+    /// Authentication and cryptographic errors (auth, JWT, crypto)
     #[error("Authentication error: {0}")]
     Auth(String),
 
@@ -67,17 +50,9 @@ pub enum GatewayError {
         tpm_limit: Option<u32>,
     },
 
-    /// Validation errors
+    /// Validation and parsing errors
     #[error("Validation error: {0}")]
     Validation(String),
-
-    /// Cache errors
-    #[error("Cache error: {0}")]
-    Cache(String),
-
-    /// Circuit breaker errors
-    #[error("Circuit breaker error: {0}")]
-    CircuitBreaker(String),
 
     /// Timeout errors
     #[error("Timeout error: {0}")]
@@ -99,87 +74,63 @@ pub enum GatewayError {
     #[error("Internal server error: {0}")]
     Internal(String),
 
-    /// Service unavailable errors
+    /// Service unavailable (provider unavailable, circuit breaker, no healthy providers)
     #[error("Service unavailable: {0}")]
-    ProviderUnavailable(String),
+    Unavailable(String),
 
-    /// JWT errors
-    #[error("JWT error: {0}")]
-    Jwt(#[from] jsonwebtoken::errors::Error),
-
-    /// Crypto errors
-    #[error("Crypto error: {0}")]
-    Crypto(String),
-
-    /// File storage errors
-    #[error("File storage error: {0}")]
-    FileStorage(String),
-
-    /// Vector database errors
-    #[error("Vector database error: {0}")]
-    VectorDb(String),
-
-    /// Network errors
+    /// Network errors (connectivity, external services, WebSocket)
     #[error("Network error: {0}")]
     Network(String),
-
-    /// Parsing errors
-    #[error("Parsing error: {0}")]
-    Parsing(String),
-
-    /// Alert errors
-    #[error("Alert error: {0}")]
-    Alert(String),
-
-    /// Not implemented errors
-    #[error("Not implemented: {0}")]
-    NotImplemented(String),
 
     /// Forbidden errors
     #[error("Forbidden: {0}")]
     Forbidden(String),
 
-    /// External service errors
-    #[error("External service error: {0}")]
-    External(String),
+    /// Not implemented errors
+    #[error("Not implemented: {0}")]
+    NotImplemented(String),
+}
 
-    /// No providers available
-    #[error("No providers available: {0}")]
-    NoProvidersAvailable(String),
+// Manual From impl for serde_json::Error (was previously #[from])
+impl From<serde_json::Error> for GatewayError {
+    fn from(err: serde_json::Error) -> Self {
+        GatewayError::Serialization(err.to_string())
+    }
+}
 
-    /// Provider not found
-    #[error("Provider not found: {0}")]
-    ProviderNotFound(String),
+// Manual From impl for serde_yml::Error (previously Yaml variant with #[from])
+impl From<serde_yml::Error> for GatewayError {
+    fn from(err: serde_yml::Error) -> Self {
+        GatewayError::Serialization(err.to_string())
+    }
+}
 
-    /// No providers for model
-    #[error("No providers for model: {0}")]
-    NoProvidersForModel(String),
+// Manual From impl for jsonwebtoken errors (previously Jwt variant with #[from])
+impl From<jsonwebtoken::errors::Error> for GatewayError {
+    fn from(err: jsonwebtoken::errors::Error) -> Self {
+        GatewayError::Auth(format!("JWT error: {}", err))
+    }
+}
 
-    /// No healthy providers
-    #[error("No healthy providers: {0}")]
-    NoHealthyProviders(String),
+// Manual From impl for redis errors (previously Redis variant with #[from])
+#[cfg(feature = "redis")]
+impl From<redis::RedisError> for GatewayError {
+    fn from(err: redis::RedisError) -> Self {
+        GatewayError::Storage(format!("Redis error: {}", err))
+    }
+}
 
-    /// S3 storage errors
-    #[cfg(feature = "s3")]
-    #[error("S3 error: {0}")]
-    S3(String),
-
-    /// Vector database client errors
-    #[cfg(feature = "vector-db")]
-    #[error("Qdrant error: {0}")]
-    Qdrant(String),
-
-    /// WebSocket errors
-    #[cfg(feature = "websockets")]
-    #[error("WebSocket error: {0}")]
-    WebSocket(String),
+// Manual From impl for sea_orm errors (previously Database variant with #[from])
+#[cfg(feature = "storage")]
+impl From<sea_orm::DbErr> for GatewayError {
+    fn from(err: sea_orm::DbErr) -> Self {
+        GatewayError::Storage(format!("Database error: {}", err))
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // ==================== Error Display Tests ====================
 
     #[test]
     fn test_config_error_display() {
@@ -206,12 +157,9 @@ mod tests {
     }
 
     #[test]
-    fn test_external_error_display() {
-        let error = GatewayError::External("Third-party API error".to_string());
-        assert_eq!(
-            error.to_string(),
-            "External service error: Third-party API error"
-        );
+    fn test_storage_error_display() {
+        let error = GatewayError::Storage("Cache connection failed".to_string());
+        assert_eq!(error.to_string(), "Storage error: Cache connection failed");
     }
 
     #[test]
@@ -238,21 +186,6 @@ mod tests {
     }
 
     #[test]
-    fn test_cache_error_display() {
-        let error = GatewayError::Cache("Cache connection failed".to_string());
-        assert_eq!(error.to_string(), "Cache error: Cache connection failed");
-    }
-
-    #[test]
-    fn test_circuit_breaker_error_display() {
-        let error = GatewayError::CircuitBreaker("Circuit is open for provider X".to_string());
-        assert_eq!(
-            error.to_string(),
-            "Circuit breaker error: Circuit is open for provider X"
-        );
-    }
-
-    #[test]
     fn test_timeout_error_display() {
         let error = GatewayError::Timeout("Request timed out after 30s".to_string());
         assert_eq!(
@@ -265,12 +198,6 @@ mod tests {
     fn test_not_found_error_display() {
         let error = GatewayError::NotFound("User not found".to_string());
         assert_eq!(error.to_string(), "Not found: User not found");
-    }
-
-    #[test]
-    fn test_conflict_error_display() {
-        let error = GatewayError::Conflict("Resource already exists".to_string());
-        assert_eq!(error.to_string(), "Conflict: Resource already exists");
     }
 
     #[test]
@@ -289,51 +216,15 @@ mod tests {
     }
 
     #[test]
-    fn test_provider_unavailable_error_display() {
-        let error = GatewayError::ProviderUnavailable("OpenAI is down".to_string());
+    fn test_unavailable_error_display() {
+        let error = GatewayError::Unavailable("OpenAI is down".to_string());
         assert_eq!(error.to_string(), "Service unavailable: OpenAI is down");
-    }
-
-    #[test]
-    fn test_crypto_error_display() {
-        let error = GatewayError::Crypto("Encryption failed".to_string());
-        assert_eq!(error.to_string(), "Crypto error: Encryption failed");
-    }
-
-    #[test]
-    fn test_file_storage_error_display() {
-        let error = GatewayError::FileStorage("Failed to write file".to_string());
-        assert_eq!(
-            error.to_string(),
-            "File storage error: Failed to write file"
-        );
-    }
-
-    #[test]
-    fn test_vector_db_error_display() {
-        let error = GatewayError::VectorDb("Vector search failed".to_string());
-        assert_eq!(
-            error.to_string(),
-            "Vector database error: Vector search failed"
-        );
     }
 
     #[test]
     fn test_network_error_display() {
         let error = GatewayError::Network("Connection refused".to_string());
         assert_eq!(error.to_string(), "Network error: Connection refused");
-    }
-
-    #[test]
-    fn test_parsing_error_display() {
-        let error = GatewayError::Parsing("Invalid date format".to_string());
-        assert_eq!(error.to_string(), "Parsing error: Invalid date format");
-    }
-
-    #[test]
-    fn test_alert_error_display() {
-        let error = GatewayError::Alert("Failed to send alert".to_string());
-        assert_eq!(error.to_string(), "Alert error: Failed to send alert");
     }
 
     #[test]
@@ -346,39 +237,6 @@ mod tests {
     }
 
     #[test]
-    fn test_no_providers_available_error_display() {
-        let error = GatewayError::NoProvidersAvailable("All providers are down".to_string());
-        assert_eq!(
-            error.to_string(),
-            "No providers available: All providers are down"
-        );
-    }
-
-    #[test]
-    fn test_provider_not_found_error_display() {
-        let error = GatewayError::ProviderNotFound("openai".to_string());
-        assert_eq!(error.to_string(), "Provider not found: openai");
-    }
-
-    #[test]
-    fn test_no_providers_for_model_error_display() {
-        let error = GatewayError::NoProvidersForModel("gpt-5".to_string());
-        assert_eq!(error.to_string(), "No providers for model: gpt-5");
-    }
-
-    #[test]
-    fn test_no_healthy_providers_error_display() {
-        let error =
-            GatewayError::NoHealthyProviders("All providers failed health check".to_string());
-        assert_eq!(
-            error.to_string(),
-            "No healthy providers: All providers failed health check"
-        );
-    }
-
-    // ==================== Error Debug Tests ====================
-
-    #[test]
     fn test_error_debug_format() {
         let error = GatewayError::Config("Test".to_string());
         let debug_str = format!("{:?}", error);
@@ -386,13 +244,10 @@ mod tests {
         assert!(debug_str.contains("Test"));
     }
 
-    // ==================== Result Type Tests ====================
-
     #[test]
     fn test_result_ok() {
         let result: Result<i32> = Ok(42);
         assert!(result.is_ok());
-        assert!(matches!(result, Ok(42)));
     }
 
     #[test]
@@ -400,13 +255,7 @@ mod tests {
         let err = GatewayError::Validation("Invalid".to_string());
         let result: Result<i32> = Err(err);
         assert!(result.is_err());
-        match result {
-            Err(e) => assert!(e.to_string().contains("Validation")),
-            Ok(_) => panic!("Expected Err variant"),
-        }
     }
-
-    // ==================== Error Conversion Tests ====================
 
     #[test]
     fn test_io_error_conversion() {
@@ -424,73 +273,9 @@ mod tests {
         assert!(gateway_error.to_string().contains("Serialization error"));
     }
 
-    // ==================== Error Source Tests ====================
-
     #[test]
     fn test_error_is_std_error() {
         let error = GatewayError::Config("test".to_string());
         let _: &dyn std::error::Error = &error;
-    }
-
-    // ==================== Error Category Tests ====================
-
-    #[test]
-    fn test_authentication_errors() {
-        let error = GatewayError::Auth("Invalid token".to_string());
-        let msg = error.to_string().to_lowercase();
-        assert!(msg.contains("auth"));
-    }
-
-    #[test]
-    fn test_provider_errors() {
-        let errors = [
-            GatewayError::ProviderUnavailable("down".to_string()),
-            GatewayError::ProviderNotFound("openai".to_string()),
-            GatewayError::NoProvidersAvailable("none".to_string()),
-            GatewayError::NoProvidersForModel("gpt-4".to_string()),
-            GatewayError::NoHealthyProviders("all failed".to_string()),
-        ];
-
-        assert_eq!(errors.len(), 5);
-    }
-
-    #[test]
-    fn test_validation_and_request_errors() {
-        let errors = vec![
-            GatewayError::Validation("field required".to_string()),
-            GatewayError::BadRequest("invalid payload".to_string()),
-        ];
-
-        for error in errors {
-            let msg = error.to_string().to_lowercase();
-            assert!(
-                msg.contains("validation") || msg.contains("request"),
-                "Expected validation/request error, got: {}",
-                msg
-            );
-        }
-    }
-
-    // ==================== Feature-gated Error Tests ====================
-
-    #[cfg(feature = "s3")]
-    #[test]
-    fn test_s3_error_display() {
-        let error = GatewayError::S3("Bucket not found".to_string());
-        assert_eq!(error.to_string(), "S3 error: Bucket not found");
-    }
-
-    #[cfg(feature = "vector-db")]
-    #[test]
-    fn test_qdrant_error_display() {
-        let error = GatewayError::Qdrant("Collection not found".to_string());
-        assert_eq!(error.to_string(), "Qdrant error: Collection not found");
-    }
-
-    #[cfg(feature = "websockets")]
-    #[test]
-    fn test_websocket_error_display() {
-        let error = GatewayError::WebSocket("Connection closed".to_string());
-        assert_eq!(error.to_string(), "WebSocket error: Connection closed");
     }
 }

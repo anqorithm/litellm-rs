@@ -30,7 +30,7 @@ impl From<ProviderError> for GatewayError {
             ProviderError::InvalidRequest { message, .. } => GatewayError::BadRequest(message),
             ProviderError::Network { message, .. } => GatewayError::network(message),
             ProviderError::ProviderUnavailable { message, .. } => {
-                GatewayError::ProviderUnavailable(message)
+                GatewayError::Unavailable(message)
             }
             ProviderError::NotSupported { feature, provider } => GatewayError::NotImplemented(
                 format!("Feature '{}' not supported by {}", feature, provider),
@@ -99,7 +99,7 @@ impl From<ProviderError> for GatewayError {
                 attempted_providers,
                 message,
                 provider,
-            } => GatewayError::ProviderUnavailable(format!(
+            } => GatewayError::Unavailable(format!(
                 "Routing error from {}: tried {:?}, final error: {}",
                 provider, attempted_providers, message
             )),
@@ -192,7 +192,7 @@ impl From<A2AError> for GatewayError {
                 GatewayError::Config(format!("A2A configuration error: {}", message))
             }
             A2AError::SerializationError { message } => {
-                GatewayError::Parsing(format!("A2A serialization error: {}", message))
+                GatewayError::Validation(format!("A2A serialization error: {}", message))
             }
             A2AError::UnsupportedProvider { provider } => {
                 GatewayError::NotImplemented(format!("A2A provider not supported: {}", provider))
@@ -219,7 +219,7 @@ impl From<A2AError> for GatewayError {
             A2AError::AgentBusy {
                 agent_name,
                 message,
-            } => GatewayError::ProviderUnavailable(format!(
+            } => GatewayError::Unavailable(format!(
                 "A2A agent '{}' is busy: {}",
                 agent_name, message
             )),
@@ -307,7 +307,7 @@ impl From<McpError> for GatewayError {
                 GatewayError::Config(format!("MCP configuration error: {}", message))
             }
             McpError::SerializationError { message } => {
-                GatewayError::Parsing(format!("MCP serialization error: {}", message))
+                GatewayError::Validation(format!("MCP serialization error: {}", message))
             }
             McpError::ServerAlreadyExists { server_name } => {
                 GatewayError::Conflict(format!("MCP server already registered: {}", server_name))
@@ -524,7 +524,7 @@ mod tests {
         };
         let gateway_err: GatewayError = provider_err.into();
 
-        assert!(matches!(gateway_err, GatewayError::ProviderUnavailable(_)));
+        assert!(matches!(gateway_err, GatewayError::Unavailable(_)));
     }
 
     #[test]
@@ -578,7 +578,7 @@ mod tests {
             message: "Service down".to_string(),
         };
         let gateway_err: GatewayError = provider_err.into();
-        assert!(matches!(gateway_err, GatewayError::ProviderUnavailable(_)));
+        assert!(matches!(gateway_err, GatewayError::Unavailable(_)));
     }
 
     #[test]
@@ -605,7 +605,7 @@ mod tests {
         };
         let gateway_err: GatewayError = provider_err.into();
         match gateway_err {
-            GatewayError::Parsing { .. } => {}
+            GatewayError::Validation { .. } => {}
             _ => panic!("Expected Parsing error"),
         }
     }
@@ -705,7 +705,7 @@ mod tests {
         };
         let gateway_err: GatewayError = provider_err.into();
         match gateway_err {
-            GatewayError::Parsing { .. } => {}
+            GatewayError::Validation { .. } => {}
             _ => panic!("Expected Parsing error"),
         }
     }
@@ -892,7 +892,7 @@ mod tests {
         };
         let gateway_err: GatewayError = a2a_err.into();
         match gateway_err {
-            GatewayError::Parsing(msg) => assert!(msg.contains("A2A")),
+            GatewayError::Validation(msg) => assert!(msg.contains("A2A")),
             _ => panic!("Expected Parsing error"),
         }
     }
@@ -985,7 +985,7 @@ mod tests {
         };
         let gateway_err: GatewayError = a2a_err.into();
         match gateway_err {
-            GatewayError::ProviderUnavailable(msg) => {
+            GatewayError::Unavailable(msg) => {
                 assert!(msg.contains("A2A"));
                 assert!(msg.contains("busy-agent"));
             }
@@ -1192,7 +1192,7 @@ mod tests {
         };
         let gateway_err: GatewayError = mcp_err.into();
         match gateway_err {
-            GatewayError::Parsing(msg) => assert!(msg.contains("MCP")),
+            GatewayError::Validation(msg) => assert!(msg.contains("MCP")),
             _ => panic!("Expected Parsing error"),
         }
     }

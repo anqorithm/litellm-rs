@@ -20,7 +20,7 @@ impl SeaOrmDatabase {
             .filter(password_reset_token::Column::UserId.eq(user_id))
             .exec(&self.db)
             .await
-            .map_err(GatewayError::Database)?;
+            .map_err(GatewayError::from)?;
 
         // Insert new token
         let active_model = password_reset_token::ActiveModel {
@@ -35,7 +35,7 @@ impl SeaOrmDatabase {
         entities::PasswordResetToken::insert(active_model)
             .exec(&self.db)
             .await
-            .map_err(GatewayError::Database)?;
+            .map_err(GatewayError::from)?;
 
         Ok(())
     }
@@ -50,7 +50,7 @@ impl SeaOrmDatabase {
             .filter(password_reset_token::Column::ExpiresAt.gt(chrono::Utc::now()))
             .one(&self.db)
             .await
-            .map_err(GatewayError::Database)?;
+            .map_err(GatewayError::from)?;
 
         if let Some(token_model) = token_model {
             // Mark token as used
@@ -60,7 +60,7 @@ impl SeaOrmDatabase {
             active_model
                 .update(&self.db)
                 .await
-                .map_err(GatewayError::Database)?;
+                .map_err(GatewayError::from)?;
 
             Ok(Some(token_model.user_id))
         } else {
@@ -76,7 +76,7 @@ impl SeaOrmDatabase {
             .filter(password_reset_token::Column::Token.eq(token))
             .one(&self.db)
             .await
-            .map_err(GatewayError::Database)?;
+            .map_err(GatewayError::from)?;
 
         if let Some(token_model) = token_model {
             let mut active_model: password_reset_token::ActiveModel = token_model.into();
@@ -85,7 +85,7 @@ impl SeaOrmDatabase {
             active_model
                 .update(&self.db)
                 .await
-                .map_err(GatewayError::Database)?;
+                .map_err(GatewayError::from)?;
         }
 
         Ok(())
@@ -100,7 +100,7 @@ impl SeaOrmDatabase {
             .filter(password_reset_token::Column::ExpiresAt.lt(chrono::Utc::now()))
             .exec(&self.db)
             .await
-            .map_err(GatewayError::Database)?;
+            .map_err(GatewayError::from)?;
 
         Ok(result.rows_affected)
     }
@@ -117,7 +117,7 @@ impl SeaOrmDatabase {
     ) -> Result<bool> {
         debug!("Atomically consuming password reset token and updating password");
 
-        let txn = self.db.begin().await.map_err(GatewayError::Database)?;
+        let txn = self.db.begin().await.map_err(GatewayError::from)?;
 
         let token_model = entities::PasswordResetToken::find()
             .filter(password_reset_token::Column::Token.eq(token))
@@ -125,12 +125,12 @@ impl SeaOrmDatabase {
             .filter(password_reset_token::Column::ExpiresAt.gt(chrono::Utc::now()))
             .one(&txn)
             .await
-            .map_err(GatewayError::Database)?;
+            .map_err(GatewayError::from)?;
 
         let token_model = match token_model {
             Some(m) => m,
             None => {
-                txn.rollback().await.map_err(GatewayError::Database)?;
+                txn.rollback().await.map_err(GatewayError::from)?;
                 return Ok(false);
             }
         };
@@ -143,24 +143,21 @@ impl SeaOrmDatabase {
         token_active
             .update(&txn)
             .await
-            .map_err(GatewayError::Database)?;
+            .map_err(GatewayError::from)?;
 
         // Update the user's password inside the same transaction
         let user_model = entities::User::find_by_id(user_id)
             .one(&txn)
             .await
-            .map_err(GatewayError::Database)?
+            .map_err(GatewayError::from)?
             .ok_or_else(|| GatewayError::NotFound("User not found".to_string()))?;
 
         let mut user_active: user::ActiveModel = user_model.into();
         user_active.password_hash = Set(password_hash.to_string());
         user_active.updated_at = Set(chrono::Utc::now().into());
-        user_active
-            .update(&txn)
-            .await
-            .map_err(GatewayError::Database)?;
+        user_active.update(&txn).await.map_err(GatewayError::from)?;
 
-        txn.commit().await.map_err(GatewayError::Database)?;
+        txn.commit().await.map_err(GatewayError::from)?;
 
         Ok(true)
     }

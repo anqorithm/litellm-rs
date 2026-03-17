@@ -15,7 +15,7 @@ impl RedisPool {
 
         let mut conn = self.get_connection().await?;
         if let Some(ref mut c) = conn.conn {
-            let new_value: i64 = c.incr(key, delta).await.map_err(GatewayError::Redis)?;
+            let new_value: i64 = c.incr(key, delta).await.map_err(GatewayError::from)?;
             Ok(new_value)
         } else {
             Ok(delta)
@@ -30,7 +30,7 @@ impl RedisPool {
 
         let mut conn = self.get_connection().await?;
         if let Some(ref mut c) = conn.conn {
-            let new_value: i64 = c.decr(key, delta).await.map_err(GatewayError::Redis)?;
+            let new_value: i64 = c.decr(key, delta).await.map_err(GatewayError::from)?;
             Ok(new_value)
         } else {
             Ok(-delta)
@@ -48,7 +48,7 @@ impl RedisPool {
             let info: String = redis::cmd("INFO")
                 .query_async(c)
                 .await
-                .map_err(GatewayError::Redis)?;
+                .map_err(GatewayError::from)?;
             Ok(info)
         } else {
             Ok("Redis unavailable".to_string())
@@ -66,7 +66,7 @@ impl RedisPool {
             let _: () = redis::cmd("FLUSHDB")
                 .query_async(c)
                 .await
-                .map_err(GatewayError::Redis)?;
+                .map_err(GatewayError::from)?;
         }
         Ok(())
     }
