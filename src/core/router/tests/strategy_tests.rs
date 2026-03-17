@@ -180,9 +180,9 @@ async fn test_select_deployment_round_robin() {
 }
 
 #[tokio::test]
-async fn test_select_deployment_cost_based() {
+async fn test_select_deployment_priority_based() {
     let config = RouterConfig {
-        routing_strategy: RoutingStrategy::CostBased,
+        routing_strategy: RoutingStrategy::PriorityBased,
         ..Default::default()
     };
     let router = Router::new(config);

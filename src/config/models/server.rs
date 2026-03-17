@@ -115,7 +115,7 @@ impl ServerConfig {
     /// Validate server configuration
     pub fn validate(&self) -> Result<(), String> {
         if self.port == 0 {
-            return Err("Port cannot be 0".to_string());
+            return Err("Port must be between 1 and 65535".to_string());
         }
 
         if self.timeout == 0 {
@@ -383,7 +383,27 @@ mod tests {
         };
         let result = config.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Port"));
+        assert!(result.unwrap_err().contains("between 1 and 65535"));
+    }
+
+    #[test]
+    fn test_server_config_deserialize_rejects_port_above_65535() {
+        let json = r#"{"port": 70000}"#;
+        let result = serde_json::from_str::<ServerConfig>(json);
+        assert!(
+            result.is_err(),
+            "port 70000 should be rejected by u16 deserialization"
+        );
+    }
+
+    #[test]
+    fn test_server_config_deserialize_rejects_negative_port() {
+        let json = r#"{"port": -1}"#;
+        let result = serde_json::from_str::<ServerConfig>(json);
+        assert!(
+            result.is_err(),
+            "negative port should be rejected by u16 deserialization"
+        );
     }
 
     #[test]
