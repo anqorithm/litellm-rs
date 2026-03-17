@@ -17,6 +17,7 @@ use crate::utils::data::validation::RequestValidator;
 use crate::utils::error::gateway_error::GatewayError;
 use actix_web::http::header::{CACHE_CONTROL, CONTENT_TYPE};
 use actix_web::{HttpRequest, HttpResponse, ResponseError, Result as ActixResult, web};
+use bytes::Bytes;
 use futures::StreamExt;
 use serde_json::json;
 use tracing::{error, info, warn};
@@ -131,22 +132,36 @@ async fn handle_streaming_chat_completion(
                             match serde_json::to_string(&chat_chunk) {
                                 Ok(json) => {
                                     let event = Event::default().data(&json);
-                                    yield Ok::<_, GatewayError>(event.to_bytes());
+                                    yield Ok::<_, actix_web::error::Error>(event.to_bytes());
                                 }
                                 Err(e) => {
-                                    yield Err(GatewayError::internal(format!("Serialization error: {}", e)));
+                                    error!("Stream serialization error: {}", e);
+                                    let error_bytes = format_sse_error(
+                                        &format!("Serialization error: {}", e),
+                                        "server_error",
+                                        "internal_error",
+                                    );
+                                    yield Ok::<_, actix_web::error::Error>(error_bytes);
+                                    break;
                                 }
                             }
                         }
                         Err(e) => {
                             error!("Stream chunk error: {}", e);
-                            yield Err(GatewayError::Provider(e));
+                            let (error_type, error_code) = sse_error_classification(&e);
+                            let error_bytes = format_sse_error(
+                                &e.to_string(),
+                                error_type,
+                                error_code,
+                            );
+                            yield Ok::<_, actix_web::error::Error>(error_bytes);
+                            break;
                         }
                     }
                 }
 
                 let done_event = Event::default().data("[DONE]");
-                yield Ok::<_, GatewayError>(done_event.to_bytes());
+                yield Ok::<_, actix_web::error::Error>(done_event.to_bytes());
             };
 
             Ok(HttpResponse::Ok()
@@ -424,6 +439,48 @@ fn convert_usage(usage: types::responses::Usage) -> Usage {
     }
 }
 
+/// Format a provider error into SSE error type and code for OpenAI-compatible responses.
+fn sse_error_classification(error: &ProviderError) -> (&'static str, &'static str) {
+    match error {
+        ProviderError::Authentication { .. } => ("invalid_request_error", "authentication_error"),
+        ProviderError::RateLimit { .. } => ("rate_limit_error", "rate_limit_exceeded"),
+        ProviderError::InvalidRequest { .. } => ("invalid_request_error", "invalid_request"),
+        ProviderError::ModelNotFound { .. } => ("invalid_request_error", "model_not_found"),
+        ProviderError::Timeout { .. } => ("server_error", "timeout"),
+        ProviderError::ContentFiltered { .. } => ("invalid_request_error", "content_filter"),
+        ProviderError::ContextLengthExceeded { .. } => {
+            ("invalid_request_error", "context_length_exceeded")
+        }
+        ProviderError::TokenLimitExceeded { .. } => {
+            ("invalid_request_error", "token_limit_exceeded")
+        }
+        _ => ("server_error", "internal_error"),
+    }
+}
+
+/// Format an error as an SSE event matching OpenAI's streaming error format.
+///
+/// Produces:
+/// ```text
+/// data: {"error":{"message":"...","type":"server_error","code":"internal_error"}}
+///
+/// data: [DONE]
+/// ```
+fn format_sse_error(message: &str, error_type: &str, code: &str) -> Bytes {
+    let error_json = json!({
+        "error": {
+            "message": message,
+            "type": error_type,
+            "code": code,
+        }
+    });
+    let error_event = Event::default().data(&error_json.to_string());
+    let done_event = Event::default().data("[DONE]");
+    let mut combined = error_event.to_bytes().to_vec();
+    combined.extend_from_slice(&done_event.to_bytes());
+    Bytes::from(combined)
+}
+
 fn convert_core_chunk_to_streaming(chunk: types::responses::ChatChunk) -> ChatCompletionChunk {
     ChatCompletionChunk {
         id: chunk.id,
@@ -489,6 +546,76 @@ mod tests {
             convert_finish_reason(types::responses::FinishReason::ToolCalls),
             "tool_calls"
         );
+    }
+
+    #[test]
+    fn test_format_sse_error_produces_openai_format() {
+        let bytes = format_sse_error("something went wrong", "server_error", "internal_error");
+        let text = String::from_utf8(bytes.to_vec()).unwrap();
+
+        // Should contain an error event followed by a DONE event
+        assert!(text.contains("data: {"));
+        assert!(text.contains("data: [DONE]"));
+
+        // Extract the JSON from the first data line
+        let first_data = text
+            .lines()
+            .find(|l| l.starts_with("data: {"))
+            .unwrap()
+            .strip_prefix("data: ")
+            .unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(first_data).unwrap();
+        assert_eq!(parsed["error"]["message"], "something went wrong");
+        assert_eq!(parsed["error"]["type"], "server_error");
+        assert_eq!(parsed["error"]["code"], "internal_error");
+    }
+
+    #[test]
+    fn test_sse_error_classification_auth() {
+        let err = ProviderError::Authentication {
+            provider: "openai",
+            message: "bad key".to_string(),
+        };
+        let (t, c) = sse_error_classification(&err);
+        assert_eq!(t, "invalid_request_error");
+        assert_eq!(c, "authentication_error");
+    }
+
+    #[test]
+    fn test_sse_error_classification_rate_limit() {
+        let err = ProviderError::RateLimit {
+            provider: "openai",
+            message: "too many".to_string(),
+            retry_after: None,
+            rpm_limit: None,
+            tpm_limit: None,
+            current_usage: None,
+        };
+        let (t, c) = sse_error_classification(&err);
+        assert_eq!(t, "rate_limit_error");
+        assert_eq!(c, "rate_limit_exceeded");
+    }
+
+    #[test]
+    fn test_sse_error_classification_timeout() {
+        let err = ProviderError::Timeout {
+            provider: "openai",
+            message: "timed out".to_string(),
+        };
+        let (t, c) = sse_error_classification(&err);
+        assert_eq!(t, "server_error");
+        assert_eq!(c, "timeout");
+    }
+
+    #[test]
+    fn test_sse_error_classification_fallback() {
+        let err = ProviderError::Network {
+            provider: "openai",
+            message: "dns failed".to_string(),
+        };
+        let (t, c) = sse_error_classification(&err);
+        assert_eq!(t, "server_error");
+        assert_eq!(c, "internal_error");
     }
 
     #[test]
