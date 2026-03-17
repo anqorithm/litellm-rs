@@ -178,8 +178,8 @@ pub fn lowest_latency_from_context<'id>(
     Some(best_id)
 }
 
-/// Select deployment with lowest cost (CostBased) using snapshot contexts.
-pub fn lowest_cost_from_context<'id>(
+/// Select deployment with lowest priority value (PriorityBased) using snapshot contexts.
+pub fn lowest_priority_from_context<'id>(
     contexts: &[RoutingContext<'id>],
 ) -> Option<&'id DeploymentId> {
     if contexts.is_empty() {
