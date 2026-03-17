@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// Provider configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct ProviderConfig {
     /// Provider name
     pub name: String,
@@ -57,6 +57,32 @@ pub struct ProviderConfig {
     /// Whether provider is enabled
     #[serde(default = "default_true")]
     pub enabled: bool,
+}
+
+impl std::fmt::Debug for ProviderConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ProviderConfig")
+            .field("name", &self.name)
+            .field("provider_type", &self.provider_type)
+            .field("api_key", &"[REDACTED]")
+            .field("base_url", &self.base_url)
+            .field("api_version", &self.api_version)
+            .field("organization", &self.organization)
+            .field("project", &self.project)
+            .field("weight", &self.weight)
+            .field("rpm", &self.rpm)
+            .field("tpm", &self.tpm)
+            .field("max_concurrent_requests", &self.max_concurrent_requests)
+            .field("timeout", &self.timeout)
+            .field("max_retries", &self.max_retries)
+            .field("retry", &self.retry)
+            .field("health_check", &self.health_check)
+            .field("settings", &self.settings)
+            .field("models", &self.models)
+            .field("tags", &self.tags)
+            .field("enabled", &self.enabled)
+            .finish()
+    }
 }
 
 impl Default for ProviderConfig {

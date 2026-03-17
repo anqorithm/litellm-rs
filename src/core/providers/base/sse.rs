@@ -222,6 +222,10 @@ impl<T: SSETransformer> UnifiedSSEParser<T> {
     }
 }
 
+/// Maximum number of chunks allowed in the buffer to prevent OOM from slow clients
+/// or malicious actors. At ~1KB per chunk, 10,000 chunks ≈ 10MB upper bound.
+const MAX_CHUNK_BUFFER_SIZE: usize = 10_000;
+
 /// Streaming wrapper that uses UnifiedSSEParser
 ///
 /// Uses `VecDeque` for buffered chunks to enable O(1) pop_front instead of O(n) Vec::remove(0).
@@ -274,6 +278,16 @@ where
                             cx.waker().wake_by_ref();
                             Poll::Pending
                         } else {
+                            // Guard against unbounded buffer growth (slow client / malicious actor)
+                            if this.chunk_buffer.len() + chunks.len() > MAX_CHUNK_BUFFER_SIZE {
+                                return Poll::Ready(Some(Err(ProviderError::network(
+                                    this.parser.transformer.provider_name(),
+                                    format!(
+                                        "SSE chunk buffer exceeded limit of {} chunks",
+                                        MAX_CHUNK_BUFFER_SIZE
+                                    ),
+                                ))));
+                            }
                             // Buffer chunks and return first one
                             this.chunk_buffer.extend(chunks);
                             if let Some(chunk) = this.chunk_buffer.pop_front() {
