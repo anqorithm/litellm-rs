@@ -101,6 +101,7 @@ regex = "1.10"
 hex = "0.4"
 url = "2.5"
 base64 = "0.22"
+dirs = "6"
 
 # Monitoring and tracing
 tracing = "0.1"
