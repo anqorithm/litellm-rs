@@ -7,13 +7,69 @@ use crate::core::models::user::types::User;
 use crate::core::models::{ApiKey, Metadata, UsageStats};
 use crate::storage::StorageLayer;
 use crate::utils::auth::crypto::keys::{extract_api_key_prefix, generate_api_key, hash_api_key};
-use crate::utils::error::gateway_error::Result;
+use crate::utils::error::gateway_error::{GatewayError, Result};
 use chrono::Utc;
 use dashmap::DashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tracing::{debug, info, warn};
 use uuid::Uuid;
+
+/// Known valid permission strings for API keys.
+///
+/// These match the default permissions defined in [`crate::auth::rbac::system`].
+const VALID_PERMISSIONS: &[&str] = &[
+    "*",
+    "users.read",
+    "users.write",
+    "users.delete",
+    "teams.read",
+    "teams.write",
+    "teams.delete",
+    "api.chat",
+    "api.embeddings",
+    "api.images",
+    "api_keys.read",
+    "api_keys.write",
+    "api_keys.delete",
+    "analytics.read",
+    "system.admin",
+];
+
+/// Validate name and permissions for API key creation.
+fn validate_create_key_input(name: &str, permissions: &[String]) -> Result<()> {
+    // Validate name length (1-255 chars)
+    if name.is_empty() {
+        return Err(GatewayError::Validation(
+            "API key name must not be empty".to_string(),
+        ));
+    }
+    if name.len() > 255 {
+        return Err(GatewayError::Validation(
+            "API key name must not exceed 255 characters".to_string(),
+        ));
+    }
+
+    // Validate name contains no control characters
+    if name.chars().any(|c| c.is_control()) {
+        return Err(GatewayError::Validation(
+            "API key name must not contain control characters".to_string(),
+        ));
+    }
+
+    // Validate permissions against known set
+    for perm in permissions {
+        if !VALID_PERMISSIONS.contains(&perm.as_str()) {
+            return Err(GatewayError::Validation(format!(
+                "Unknown permission: '{}'. Valid permissions: {}",
+                perm,
+                VALID_PERMISSIONS[1..].join(", "),
+            )));
+        }
+    }
+
+    Ok(())
+}
 
 /// Minimum interval between DB writes for the same key's last_used timestamp.
 const LAST_USED_THROTTLE: Duration = Duration::from_secs(5 * 60);
@@ -44,6 +100,8 @@ impl ApiKeyHandler {
         name: String,
         permissions: Vec<String>,
     ) -> Result<(ApiKey, String)> {
+        validate_create_key_input(&name, &permissions)?;
+
         info!("Creating API key: {}", name);
 
         // Generate API key
@@ -79,6 +137,8 @@ impl ApiKeyHandler {
         &self,
         request: CreateApiKeyRequest,
     ) -> Result<(ApiKey, String)> {
+        validate_create_key_input(&request.name, &request.permissions)?;
+
         info!("Creating API key with options: {}", request.name);
 
         // Generate API key

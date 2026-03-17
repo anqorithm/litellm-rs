@@ -14,7 +14,7 @@
 /// - **LeastBusy**: Select deployment with fewest active requests (good for balanced load)
 /// - **UsageBased**: Select deployment with lowest TPM usage rate (good for rate limit optimization)
 /// - **LatencyBased**: Select deployment with lowest average latency (good for performance)
-/// - **CostBased**: Select deployment with lowest cost (good for cost optimization)
+/// - **PriorityBased**: Select deployment with lowest priority value (good for priority-based routing)
 /// - **RateLimitAware**: Avoid deployments near rate limits (good for avoiding 429s)
 /// - **RoundRobin**: Simple round-robin selection (good for predictable distribution)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
@@ -29,8 +29,9 @@ pub enum RoutingStrategy {
     UsageBased,
     /// Select deployment with lowest average latency
     LatencyBased,
-    /// Select deployment with lowest cost
-    CostBased,
+    /// Select deployment with lowest priority value
+    #[serde(alias = "cost_based")]
+    PriorityBased,
     /// Avoid deployments near rate limits
     RateLimitAware,
     /// Simple round-robin selection
@@ -113,7 +114,7 @@ mod tests {
             RoutingStrategy::LeastBusy,
             RoutingStrategy::UsageBased,
             RoutingStrategy::LatencyBased,
-            RoutingStrategy::CostBased,
+            RoutingStrategy::PriorityBased,
             RoutingStrategy::RateLimitAware,
             RoutingStrategy::RoundRobin,
         ];
@@ -133,7 +134,7 @@ mod tests {
 
     #[test]
     fn test_routing_strategy_clone() {
-        let original = RoutingStrategy::CostBased;
+        let original = RoutingStrategy::PriorityBased;
         let cloned = original;
         assert_eq!(original, cloned);
     }
@@ -245,10 +246,10 @@ mod tests {
     }
 
     #[test]
-    fn test_router_config_cost_optimized() {
-        // Configuration for cost optimization
+    fn test_router_config_priority_based() {
+        // Configuration for priority-based routing
         let config = RouterConfig {
-            routing_strategy: RoutingStrategy::CostBased,
+            routing_strategy: RoutingStrategy::PriorityBased,
             num_retries: 3,
             retry_after_secs: 5,
             allowed_fails: 5,
@@ -258,7 +259,7 @@ mod tests {
             enable_pre_call_checks: true,
         };
 
-        assert_eq!(config.routing_strategy, RoutingStrategy::CostBased);
+        assert_eq!(config.routing_strategy, RoutingStrategy::PriorityBased);
     }
 
     #[test]
@@ -288,7 +289,7 @@ mod tests {
             RoutingStrategy::LeastBusy,
             RoutingStrategy::UsageBased,
             RoutingStrategy::LatencyBased,
-            RoutingStrategy::CostBased,
+            RoutingStrategy::PriorityBased,
             RoutingStrategy::RateLimitAware,
             RoutingStrategy::RoundRobin,
         ];
