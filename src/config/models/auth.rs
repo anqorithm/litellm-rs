@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use tracing::warn;
 
 /// Authentication configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct AuthConfig {
     /// Enable JWT authentication
     #[serde(default = "default_true")]
@@ -24,6 +24,19 @@ pub struct AuthConfig {
     /// RBAC configuration
     #[serde(default)]
     pub rbac: RbacConfig,
+}
+
+impl std::fmt::Debug for AuthConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AuthConfig")
+            .field("enable_jwt", &self.enable_jwt)
+            .field("enable_api_key", &self.enable_api_key)
+            .field("jwt_secret", &"[REDACTED]")
+            .field("jwt_expiration", &self.jwt_expiration)
+            .field("api_key_header", &self.api_key_header)
+            .field("rbac", &self.rbac)
+            .finish()
+    }
 }
 
 impl Default for AuthConfig {
