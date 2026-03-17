@@ -17,7 +17,7 @@ impl Default for FileStorageConfig {
     fn default() -> Self {
         Self {
             storage_type: "local".to_string(),
-            local_path: Some("./data".to_string()),
+            local_path: None,
             s3: None,
         }
     }
@@ -101,7 +101,8 @@ mod tests {
     fn test_file_storage_config_default() {
         let config = FileStorageConfig::default();
         assert_eq!(config.storage_type, "local");
-        assert_eq!(config.local_path, Some("./data".to_string()));
+        // local_path is None by default; resolved to absolute path at runtime
+        assert!(config.local_path.is_none());
         assert!(config.s3.is_none());
     }
 
@@ -140,7 +141,7 @@ mod tests {
         let config = FileStorageConfig::default();
         let json = serde_json::to_value(&config).unwrap();
         assert_eq!(json["storage_type"], "local");
-        assert_eq!(json["local_path"], "./data");
+        assert!(json["local_path"].is_null());
     }
 
     #[test]
