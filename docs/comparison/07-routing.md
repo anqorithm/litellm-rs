@@ -36,7 +36,7 @@ This document provides an in-depth analysis of the routing strategies between th
 | Simple Shuffle / Weighted Random | `simple-shuffle` | `SimpleShuffle` | Default in both |
 | Least Busy | `least-busy` | `LeastBusy` | Active request tracking |
 | Latency Based | `latency-based-routing` | `LatencyBased` | P50/average latency |
-| Cost Based | `cost-based-routing` | `CostBased` | Token cost optimization |
+| Priority Based | `cost-based-routing` | `PriorityBased` | Priority-based routing (uses priority field) |
 | Usage Based (TPM/RPM) | `usage-based-routing` | `UsageBased` | Rate limit optimization |
 | Usage Based V2 | `usage-based-routing-v2` | N/A | Enhanced TPM/RPM tracking |
 | Provider Budget | `provider-budget-routing` | N/A | $ budget limits |
@@ -75,7 +75,7 @@ pub enum RoutingStrategy {
     LeastBusy,
     UsageBased,
     LatencyBased,
-    CostBased,
+    PriorityBased,
     RateLimitAware,
     RoundRobin,
 }
