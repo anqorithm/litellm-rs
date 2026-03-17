@@ -79,15 +79,16 @@ impl SeaOrmDatabase {
 
     /// Fallback to SQLite database
     async fn fallback_to_sqlite() -> Result<Self> {
-        // Create data directory if it doesn't exist
-        let data_dir = std::path::Path::new("data");
-        if !data_dir.exists() {
-            std::fs::create_dir_all(data_dir).map_err(|e| {
+        let db_path = super::super::default_sqlite_path();
+        if let Some(parent) = db_path.parent()
+            && !parent.exists()
+        {
+            std::fs::create_dir_all(parent).map_err(|e| {
                 GatewayError::Internal(format!("Failed to create data directory: {}", e))
             })?;
         }
 
-        let sqlite_path = "sqlite://data/gateway.db?mode=rwc";
+        let sqlite_path = format!("sqlite://{}?mode=rwc", db_path.display());
         info!("Falling back to SQLite database: {}", sqlite_path);
 
         let mut opt = ConnectOptions::new(sqlite_path.to_string());

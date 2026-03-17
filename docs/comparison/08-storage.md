@@ -95,7 +95,8 @@ async def _token_refresh_loop(self):
 ```rust
 // Automatic fallback when PostgreSQL unavailable
 async fn fallback_to_sqlite() -> Result<Self> {
-    let sqlite_path = "sqlite://data/gateway.db?mode=rwc";
+    let db_path = default_sqlite_path(); // XDG-compatible, env var override
+    let sqlite_path = format!("sqlite://{}?mode=rwc", db_path.display());
     let mut opt = ConnectOptions::new(sqlite_path.to_string());
     opt.max_connections(5)
        .sqlx_logging(true);
