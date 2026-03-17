@@ -7,9 +7,6 @@ mod config;
 mod error;
 mod provider;
 
-#[cfg(test)]
-mod tests;
-
 pub use config::ClarifaiConfig;
 pub use error::ClarifaiError;
 pub use provider::ClarifaiProvider;

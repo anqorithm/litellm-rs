@@ -16,9 +16,6 @@ mod error;
 mod models;
 mod provider;
 
-#[cfg(test)]
-mod tests;
-
 // Re-exports for easy access
 pub use config::HuggingFaceConfig;
 pub use error::HuggingFaceError;

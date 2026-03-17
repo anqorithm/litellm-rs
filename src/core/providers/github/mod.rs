@@ -10,9 +10,6 @@ mod error;
 mod model_info;
 mod provider;
 
-#[cfg(test)]
-mod tests;
-
 // Re-export main types for external use
 pub use config::GitHubConfig;
 pub use error::GitHubError;

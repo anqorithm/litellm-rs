@@ -2,32 +2,21 @@
 //!
 //! Implements the LLMProvider trait for IBM Watsonx.ai platform.
 
-use async_trait::async_trait;
-use futures::Stream;
 use std::collections::HashMap;
-use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::debug;
 
 use super::config::WatsonxConfig;
 use super::error::{WatsonxError, WatsonxErrorMapper};
-use super::model_info::{get_available_models, get_model_info, supports_tools};
+use super::model_info::get_available_models;
 use crate::core::providers::base::{GlobalPoolManager, HttpMethod, header_owned};
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::error_mapper::trait_def::ErrorMapper;
 use crate::core::traits::{
     provider::ProviderConfig as _, provider::llm_provider::trait_definition::LLMProvider,
 };
-use crate::core::types::{
-    chat::ChatRequest,
-    context::RequestContext,
-    embedding::EmbeddingRequest,
-    health::HealthStatus,
-    model::ModelInfo,
-    model::ProviderCapability,
-    responses::{ChatChunk, ChatResponse, EmbeddingResponse},
-};
+use crate::core::types::{chat::ChatRequest, model::ModelInfo, model::ProviderCapability};
 
 /// API endpoints for Watsonx
 mod endpoints {
@@ -414,201 +403,5 @@ impl WatsonxProvider {
         serde_json::from_slice(&response_bytes).map_err(|e| {
             ProviderError::response_parsing("watsonx", format!("Failed to parse response: {}", e))
         })
-    }
-}
-
-#[async_trait]
-impl LLMProvider for WatsonxProvider {
-    type Config = WatsonxConfig;
-    type Error = WatsonxError;
-    type ErrorMapper = WatsonxErrorMapper;
-
-    fn name(&self) -> &'static str {
-        "watsonx"
-    }
-
-    fn capabilities(&self) -> &'static [ProviderCapability] {
-        WATSONX_CAPABILITIES
-    }
-
-    fn models(&self) -> &[ModelInfo] {
-        &self.models
-    }
-
-    fn get_supported_openai_params(&self, model: &str) -> &'static [&'static str] {
-        if supports_tools(model) {
-            &[
-                "temperature",
-                "max_tokens",
-                "top_p",
-                "frequency_penalty",
-                "stop",
-                "seed",
-                "stream",
-                "tools",
-                "tool_choice",
-                "logprobs",
-                "top_logprobs",
-                "n",
-                "presence_penalty",
-                "response_format",
-                "reasoning_effort",
-            ]
-        } else {
-            &[
-                "temperature",
-                "max_tokens",
-                "top_p",
-                "frequency_penalty",
-                "stop",
-                "seed",
-                "stream",
-                "logprobs",
-                "top_logprobs",
-                "n",
-                "presence_penalty",
-                "response_format",
-            ]
-        }
-    }
-
-    async fn map_openai_params(
-        &self,
-        params: HashMap<String, serde_json::Value>,
-        _model: &str,
-    ) -> Result<HashMap<String, serde_json::Value>, Self::Error> {
-        // Watsonx uses similar parameters to OpenAI with some mapping
-        let mut mapped = HashMap::new();
-
-        for (key, value) in params {
-            let mapped_key = match key.as_str() {
-                "max_tokens" => "max_new_tokens".to_string(),
-                "frequency_penalty" => "repetition_penalty".to_string(),
-                "stop" => "stop_sequences".to_string(),
-                "seed" => "random_seed".to_string(),
-                _ => key,
-            };
-            mapped.insert(mapped_key, value);
-        }
-
-        Ok(mapped)
-    }
-
-    async fn transform_request(
-        &self,
-        request: ChatRequest,
-        _context: RequestContext,
-    ) -> Result<serde_json::Value, Self::Error> {
-        self.prepare_payload(&request.model, &request)
-    }
-
-    async fn transform_response(
-        &self,
-        raw_response: &[u8],
-        _model: &str,
-        _request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
-        serde_json::from_slice(raw_response).map_err(|e| {
-            ProviderError::response_parsing("watsonx", format!("Failed to parse response: {}", e))
-        })
-    }
-
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        WatsonxErrorMapper
-    }
-
-    async fn chat_completion(
-        &self,
-        request: ChatRequest,
-        _context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
-        debug!("Watsonx chat request: model={}", request.model);
-
-        let url = self.get_endpoint_url(&request.model, false)?;
-        let payload = self.prepare_payload(&request.model, &request)?;
-
-        let response = self.execute_request(&url, payload).await?;
-
-        serde_json::from_value(response).map_err(|e| {
-            ProviderError::response_parsing(
-                "watsonx",
-                format!("Failed to parse chat response: {}", e),
-            )
-        })
-    }
-
-    async fn chat_completion_stream(
-        &self,
-        request: ChatRequest,
-        _context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
-    {
-        debug!("Watsonx streaming request: model={}", request.model);
-
-        let url = self.get_endpoint_url(&request.model, true)?;
-        let headers = self.build_headers().await?;
-        let payload = self.prepare_payload(&request.model, &request)?;
-
-        // Execute streaming request using reqwest directly for SSE
-        let client = reqwest::Client::new();
-        let mut req_builder = client.post(&url);
-
-        for (key, value) in headers {
-            req_builder = req_builder.header(key, value);
-        }
-
-        let response = req_builder
-            .json(&payload)
-            .send()
-            .await
-            .map_err(|e| ProviderError::network("watsonx", e.to_string()))?;
-
-        // Check status
-        if !response.status().is_success() {
-            let status = response.status().as_u16();
-            let body = response.text().await.ok();
-            let mapper = WatsonxErrorMapper;
-            return Err(mapper.map_http_error(status, &body.unwrap_or_default()));
-        }
-
-        // Create SSE stream
-        let stream = super::streaming::create_watsonx_stream(response.bytes_stream());
-        Ok(Box::pin(stream))
-    }
-
-    async fn embeddings(
-        &self,
-        _request: EmbeddingRequest,
-        _context: RequestContext,
-    ) -> Result<EmbeddingResponse, Self::Error> {
-        Err(ProviderError::not_supported(
-            "watsonx",
-            "Embeddings are available through a separate Watsonx embeddings API. \
-            Use the watsonx_embed provider for embeddings.",
-        ))
-    }
-
-    async fn health_check(&self) -> HealthStatus {
-        // Try to get a token as a health check
-        match self.get_token().await {
-            Ok(_) => HealthStatus::Healthy,
-            Err(_) => HealthStatus::Unhealthy,
-        }
-    }
-
-    async fn calculate_cost(
-        &self,
-        model: &str,
-        input_tokens: u32,
-        output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
-        let model_info = get_model_info(model).ok_or_else(|| {
-            ProviderError::model_not_found("watsonx", format!("Unknown model: {}", model))
-        })?;
-
-        let input_cost = (input_tokens as f64) * (model_info.input_cost_per_million / 1_000_000.0);
-        let output_cost =
-            (output_tokens as f64) * (model_info.output_cost_per_million / 1_000_000.0);
-        Ok(input_cost + output_cost)
     }
 }

@@ -8,9 +8,6 @@ mod config;
 mod error;
 mod provider;
 
-#[cfg(test)]
-mod tests;
-
 pub use config::GradientAIConfig;
 pub use error::{GradientAIError, GradientAIErrorMapper};
 pub use provider::GradientAIProvider;

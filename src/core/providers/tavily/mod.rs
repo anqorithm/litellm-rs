@@ -2,28 +2,12 @@
 //!
 //! Tavily AI search API integration
 
-use async_trait::async_trait;
-use futures::Stream;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::pin::Pin;
 
 use crate::core::providers::base::{BaseConfig, BaseHttpClient, HttpErrorMapper};
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::traits::{
-    error_mapper::trait_def::ErrorMapper, provider::ProviderConfig,
-    provider::llm_provider::trait_definition::LLMProvider,
-};
-use crate::core::types::{
-    chat::ChatRequest,
-    context::RequestContext,
-    embedding::EmbeddingRequest,
-    health::HealthStatus,
-    image::ImageGenerationRequest,
-    model::ModelInfo,
-    model::ProviderCapability,
-    responses::{ChatChunk, ChatResponse, EmbeddingResponse, ImageGenerationResponse},
-};
+use crate::core::traits::{error_mapper::trait_def::ErrorMapper, provider::ProviderConfig};
 
 /// Tavily configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -107,114 +91,6 @@ pub struct TavilyErrorMapper;
 impl ErrorMapper<TavilyError> for TavilyErrorMapper {
     fn map_http_error(&self, status_code: u16, response_body: &str) -> TavilyError {
         HttpErrorMapper::map_status_code("tavily", status_code, response_body)
-    }
-}
-
-#[async_trait]
-impl LLMProvider for TavilyProvider {
-    type Config = TavilyConfig;
-    type Error = TavilyError;
-    type ErrorMapper = TavilyErrorMapper;
-
-    fn name(&self) -> &'static str {
-        "tavily"
-    }
-
-    fn capabilities(&self) -> &'static [ProviderCapability] {
-        static CAPABILITIES: &[ProviderCapability] = &[];
-        CAPABILITIES
-    }
-
-    fn models(&self) -> &[ModelInfo] {
-        &[]
-    }
-
-    fn get_supported_openai_params(&self, _model: &str) -> &'static [&'static str] {
-        &["query", "search_depth", "max_results"]
-    }
-
-    async fn map_openai_params(
-        &self,
-        params: std::collections::HashMap<String, serde_json::Value>,
-        _model: &str,
-    ) -> Result<std::collections::HashMap<String, serde_json::Value>, Self::Error> {
-        Ok(params)
-    }
-
-    async fn transform_request(
-        &self,
-        request: ChatRequest,
-        _context: RequestContext,
-    ) -> Result<serde_json::Value, Self::Error> {
-        use serde_json::json;
-        Ok(json!({ "model": request.model }))
-    }
-
-    async fn transform_response(
-        &self,
-        _raw_response: &[u8],
-        _model: &str,
-        _request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
-        Err(ProviderError::not_supported("tavily", "Chat completion"))
-    }
-
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        TavilyErrorMapper
-    }
-
-    async fn calculate_cost(
-        &self,
-        _model: &str,
-        _input_tokens: u32,
-        _output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
-        Ok(0.0)
-    }
-
-    fn supports_model(&self, _model: &str) -> bool {
-        false
-    }
-
-    async fn health_check(&self) -> HealthStatus {
-        if self.config.api_key.is_some() {
-            HealthStatus::Healthy
-        } else {
-            HealthStatus::Unhealthy
-        }
-    }
-
-    async fn chat_completion(
-        &self,
-        _request: ChatRequest,
-        _context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
-        Err(ProviderError::not_supported("tavily", "Chat completion"))
-    }
-
-    async fn chat_completion_stream(
-        &self,
-        _request: ChatRequest,
-        _context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
-    {
-        Err(ProviderError::not_supported("tavily", "Streaming"))
-    }
-
-    async fn embeddings(
-        &self,
-        _request: EmbeddingRequest,
-        _context: RequestContext,
-    ) -> Result<EmbeddingResponse, Self::Error> {
-        Err(ProviderError::not_supported("tavily", "Embeddings"))
-    }
-
-    async fn image_generation(
-        &self,
-        _request: ImageGenerationRequest,
-        _context: RequestContext,
-    ) -> Result<ImageGenerationResponse, Self::Error> {
-        Err(ProviderError::not_supported("tavily", "Image generation"))
     }
 }
 

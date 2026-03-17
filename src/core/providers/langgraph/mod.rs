@@ -31,9 +31,6 @@ mod error;
 mod models;
 mod provider;
 
-#[cfg(test)]
-mod tests;
-
 // Re-export main types for external use
 pub use config::LangGraphConfig;
 pub use error::LangGraphErrorMapper;

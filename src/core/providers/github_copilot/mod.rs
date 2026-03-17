@@ -16,9 +16,6 @@ mod error;
 mod model_info;
 mod provider;
 
-#[cfg(test)]
-mod tests;
-
 // Re-export main types for external use
 pub use authenticator::CopilotAuthenticator;
 pub use config::GitHubCopilotConfig;

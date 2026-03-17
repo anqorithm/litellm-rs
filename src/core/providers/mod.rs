@@ -8,10 +8,12 @@ pub mod base;
 // Provider modules - alphabetically ordered
 // Tier 1 providers removed in favor of registry/catalog.rs are commented with their tier.
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod ai21;
 // aiml_api: Tier 1 → registry/catalog.rs
 // aleph_alpha: Tier 1 → registry/catalog.rs
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod amazon_nova;
 pub mod anthropic;
 // anyscale: Tier 1 → registry/catalog.rs
@@ -21,101 +23,133 @@ pub mod azure;
 pub mod azure_ai;
 // baichuan: Tier 1 → registry/catalog.rs
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod baseten;
 #[cfg(feature = "providers-extra")]
 pub mod bedrock;
 // bytez: Tier 1 → registry/catalog.rs
 // cerebras: Tier 1 → registry/catalog.rs
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod clarifai;
 pub mod cloudflare;
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod codestral;
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod cohere;
 // comet_api: Tier 1 → registry/catalog.rs
 // compactifai: Tier 1 → registry/catalog.rs
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod custom_api;
 // dashscope: Tier 1 → registry/catalog.rs
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod databricks;
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod datarobot;
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod deepgram;
 // deepinfra: Tier 1 → registry/catalog.rs
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod deepl;
 // deepseek: Tier 1 → registry/catalog.rs
 // docker_model_runner: Tier 1 → registry/catalog.rs
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod elevenlabs;
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod empower;
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod exa_ai;
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod fal_ai;
 // featherless: Tier 1 → registry/catalog.rs
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod firecrawl;
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod fireworks;
 // friendliai: Tier 1 → registry/catalog.rs
 // galadriel: Tier 1 → registry/catalog.rs
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod gemini;
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod gigachat;
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod github;
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod github_copilot;
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod google_pse;
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod gradient_ai;
 // groq: Tier 1 → registry/catalog.rs
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod heroku;
 // hosted_vllm: Tier 1 → registry/catalog.rs
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod huggingface;
 // hyperbolic: Tier 1 → registry/catalog.rs
 // infinity: Tier 1 → registry/catalog.rs
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod jina;
 // lambda_ai: Tier 1 → registry/catalog.rs
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod langgraph;
 // lemonade: Tier 1 → registry/catalog.rs
 // linkup: Tier 1 → registry/catalog.rs
 // llamafile: Tier 1 → registry/catalog.rs
 // lm_studio: Tier 1 → registry/catalog.rs
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod manus;
 // maritalk: Tier 1 → registry/catalog.rs
 #[cfg(feature = "providers-extra")]
 pub mod meta_llama;
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod milvus;
 // minimax: Tier 1 → registry/catalog.rs
 pub mod mistral;
 // moonshot: Tier 1 → registry/catalog.rs
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod morph;
 // nanogpt: Tier 1 → registry/catalog.rs
 // nebius: Tier 1 → registry/catalog.rs
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod nlp_cloud;
 // novita: Tier 1 → registry/catalog.rs
 // nscale: Tier 1 → registry/catalog.rs
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod nvidia_nim;
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod oci;
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod ollama;
 // oobabooga: Tier 1 → registry/catalog.rs
 pub mod openai;
@@ -124,57 +158,79 @@ pub mod openai_like;
 // ovhcloud: Tier 1 → registry/catalog.rs
 // perplexity: Tier 1 → registry/catalog.rs
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod petals;
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod pg_vector;
 // poe: Tier 1 → registry/catalog.rs
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod predibase;
 // qwen: Tier 1 → registry/catalog.rs
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod ragflow;
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod recraft;
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod replicate;
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod runwayml;
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod sagemaker;
 // sambanova: Tier 1 → registry/catalog.rs
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod sap_ai;
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod searxng;
 // siliconflow: Tier 1 → registry/catalog.rs
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod snowflake;
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod spark;
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod stability;
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod tavily;
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod together;
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod topaz;
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod triton;
 #[cfg(feature = "providers-extra")]
 pub mod v0;
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod vercel_ai;
 #[cfg(feature = "providers-extra")]
 pub mod vertex_ai;
 // vllm: Tier 1 → registry/catalog.rs
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod volcengine;
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod voyage;
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod wandb;
 #[cfg(feature = "providers-extended")]
+#[allow(dead_code, unused_imports)]
 pub mod watsonx;
 // xai: Tier 1 → registry/catalog.rs
 // xiaomi_mimo: Tier 1 → registry/catalog.rs

@@ -2,35 +2,24 @@
 //!
 //! Implements the LLMProvider trait for Ollama's local inference server.
 
-use async_trait::async_trait;
-use futures::Stream;
 use std::collections::HashMap;
-use std::pin::Pin;
 use std::sync::Arc;
-use tracing::debug;
 
 use super::config::OllamaConfig;
 use super::model_info::{OllamaModelInfo, OllamaShowResponse, OllamaTagsResponse, get_model_info};
-use super::streaming::OllamaStream;
-use crate::core::providers::base::{GlobalPoolManager, HttpErrorMapper, HttpMethod, header};
+use crate::core::providers::base::{GlobalPoolManager, HttpMethod, header};
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::traits::error_mapper::types::GenericErrorMapper;
 use crate::core::traits::{
     provider::ProviderConfig as _, provider::llm_provider::trait_definition::LLMProvider,
 };
 use crate::core::types::{
     chat::ChatMessage,
     chat::ChatRequest,
-    context::RequestContext,
-    embedding::EmbeddingRequest,
-    health::HealthStatus,
     message::MessageContent,
     message::MessageRole,
     model::ModelInfo,
     model::ProviderCapability,
-    responses::{
-        ChatChoice, ChatChunk, ChatResponse, EmbeddingData, EmbeddingResponse, FinishReason, Usage,
-    },
+    responses::{ChatChoice, ChatResponse, FinishReason, Usage},
     tools::FunctionCall,
     tools::ToolCall,
 };
@@ -448,265 +437,6 @@ impl OllamaProvider {
             }],
             usage: Some(usage),
         })
-    }
-}
-
-#[async_trait]
-impl LLMProvider for OllamaProvider {
-    type Config = OllamaConfig;
-    type Error = ProviderError;
-    type ErrorMapper = GenericErrorMapper;
-
-    fn name(&self) -> &'static str {
-        "ollama"
-    }
-
-    fn capabilities(&self) -> &'static [ProviderCapability] {
-        OLLAMA_CAPABILITIES
-    }
-
-    fn models(&self) -> &[ModelInfo] {
-        &self.models
-    }
-
-    fn get_supported_openai_params(&self, _model: &str) -> &'static [&'static str] {
-        &[
-            "temperature",
-            "top_p",
-            "max_tokens",
-            "max_completion_tokens",
-            "stream",
-            "stop",
-            "frequency_penalty",
-            "presence_penalty",
-            "n",
-            "response_format",
-            "seed",
-            "tools",
-            "tool_choice",
-            // Ollama-specific params exposed as OpenAI-compatible
-            "num_ctx",
-            "num_predict",
-            "repeat_penalty",
-            "mirostat",
-            "mirostat_eta",
-            "mirostat_tau",
-        ]
-    }
-
-    async fn map_openai_params(
-        &self,
-        mut params: HashMap<String, serde_json::Value>,
-        _model: &str,
-    ) -> Result<HashMap<String, serde_json::Value>, Self::Error> {
-        // Map max_tokens to num_predict (Ollama's equivalent)
-        if let Some(max_tokens) = params.remove("max_tokens") {
-            params.insert("num_predict".to_string(), max_tokens);
-        }
-        if let Some(max_completion_tokens) = params.remove("max_completion_tokens") {
-            params.insert("num_predict".to_string(), max_completion_tokens);
-        }
-
-        Ok(params)
-    }
-
-    async fn transform_request(
-        &self,
-        request: ChatRequest,
-        _context: RequestContext,
-    ) -> Result<serde_json::Value, Self::Error> {
-        self.build_chat_request(&request, request.stream)
-    }
-
-    async fn transform_response(
-        &self,
-        raw_response: &[u8],
-        model: &str,
-        _request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
-        let response: serde_json::Value = serde_json::from_slice(raw_response).map_err(|e| {
-            ProviderError::api_error("ollama", 500, format!("Failed to parse response: {}", e))
-        })?;
-
-        self.parse_chat_response(response, model)
-    }
-
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        GenericErrorMapper
-    }
-
-    async fn chat_completion(
-        &self,
-        request: ChatRequest,
-        _context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
-        debug!("Ollama chat request: model={}", request.model);
-
-        let model = request.model.clone();
-        let request_body = self.build_chat_request(&request, false)?;
-
-        let url = self.config.get_chat_endpoint();
-        let response = self
-            .execute_request(&url, HttpMethod::POST, Some(request_body))
-            .await?;
-
-        self.parse_chat_response(response, &model)
-    }
-
-    async fn chat_completion_stream(
-        &self,
-        request: ChatRequest,
-        _context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
-    {
-        debug!("Ollama streaming request: model={}", request.model);
-
-        let request_body = self.build_chat_request(&request, true)?;
-
-        // Use reqwest directly for streaming
-        let url = self.config.get_chat_endpoint();
-        let mut req = reqwest::Client::new().post(&url);
-
-        // Add auth header if API key is set
-        if let Some(api_key) = self.config.get_api_key() {
-            req = req.header("Authorization", format!("Bearer {}", api_key));
-        }
-
-        let response = req
-            .header("Content-Type", "application/json")
-            .json(&request_body)
-            .send()
-            .await
-            .map_err(|e| {
-                let error_msg = e.to_string();
-                if error_msg.contains("Connection refused") || error_msg.contains("connect error") {
-                    ProviderError::network(
-                        "ollama",
-                        format!(
-                            "Failed to connect to Ollama server at {}. Is Ollama running?",
-                            self.config.get_api_base()
-                        ),
-                    )
-                } else if error_msg.contains("timed out") || error_msg.contains("timeout") {
-                    ProviderError::Timeout {
-                        provider: "ollama",
-                        message: error_msg,
-                    }
-                } else {
-                    ProviderError::network("ollama", error_msg)
-                }
-            })?;
-
-        // Check status
-        if !response.status().is_success() {
-            let status = response.status().as_u16();
-            let body = response.text().await.ok();
-            return Err(HttpErrorMapper::map_status_code(
-                "ollama",
-                status,
-                &body.unwrap_or_default(),
-            ));
-        }
-
-        // Create NDJSON stream
-        let stream = OllamaStream::new(response.bytes_stream());
-        Ok(Box::pin(stream))
-    }
-
-    async fn embeddings(
-        &self,
-        request: EmbeddingRequest,
-        _context: RequestContext,
-    ) -> Result<EmbeddingResponse, Self::Error> {
-        debug!("Ollama embeddings request: model={}", request.model);
-
-        let model = request
-            .model
-            .strip_prefix("ollama/")
-            .unwrap_or(&request.model);
-
-        // Build input array
-        let input = match request.input {
-            crate::core::types::embedding::EmbeddingInput::Text(text) => vec![text],
-            crate::core::types::embedding::EmbeddingInput::Array(texts) => texts,
-        };
-
-        let body = serde_json::json!({
-            "model": model,
-            "input": input,
-        });
-
-        let url = self.config.get_embeddings_endpoint();
-        let response = self
-            .execute_request(&url, HttpMethod::POST, Some(body))
-            .await?;
-
-        // Parse Ollama embeddings response
-        // Ollama returns: { "embeddings": [[...], [...]] }
-        let embeddings = response
-            .get("embeddings")
-            .and_then(|e| e.as_array())
-            .ok_or_else(|| {
-                ProviderError::api_error(
-                    "ollama",
-                    500,
-                    "Missing embeddings in response".to_string(),
-                )
-            })?;
-
-        let data: Vec<EmbeddingData> = embeddings
-            .iter()
-            .enumerate()
-            .map(|(i, emb)| {
-                let embedding: Vec<f32> = emb
-                    .as_array()
-                    .map(|arr| {
-                        arr.iter()
-                            .filter_map(|v| v.as_f64().map(|f| f as f32))
-                            .collect()
-                    })
-                    .unwrap_or_default();
-
-                EmbeddingData {
-                    object: "embedding".to_string(),
-                    embedding,
-                    index: i as u32,
-                }
-            })
-            .collect();
-
-        Ok(EmbeddingResponse {
-            object: "list".to_string(),
-            data,
-            model: format!("ollama/{}", model),
-            usage: Some(Usage {
-                prompt_tokens: 0, // Ollama doesn't report token usage for embeddings
-                completion_tokens: 0,
-                total_tokens: 0,
-                prompt_tokens_details: None,
-                completion_tokens_details: None,
-                thinking_usage: None,
-            }),
-            embeddings: None,
-        })
-    }
-
-    async fn health_check(&self) -> HealthStatus {
-        // Try to list models as a health check
-        match self.list_models().await {
-            Ok(_) => HealthStatus::Healthy,
-            Err(_) => HealthStatus::Unhealthy,
-        }
-    }
-
-    async fn calculate_cost(
-        &self,
-        _model: &str,
-        _input_tokens: u32,
-        _output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
-        // Ollama is local/free, so cost is always 0
-        Ok(0.0)
     }
 }
 

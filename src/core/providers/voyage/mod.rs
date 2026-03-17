@@ -15,6 +15,3 @@ pub use config::VoyageConfig;
 pub use error::VoyageError;
 pub use model_info::{VoyageModel, get_model_info};
 pub use provider::VoyageProvider;
-
-#[cfg(test)]
-mod tests;

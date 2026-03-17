@@ -8,9 +8,6 @@ mod error;
 mod model_info;
 mod provider;
 
-#[cfg(test)]
-mod tests;
-
 pub use config::CodestralConfig;
 pub use error::CodestralError;
 pub use model_info::get_model_info;

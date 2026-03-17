@@ -2,28 +2,12 @@
 //!
 //! SAP AI Core and Foundation integration
 
-use async_trait::async_trait;
-use futures::Stream;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::pin::Pin;
 
 use crate::core::providers::base::{BaseConfig, BaseHttpClient, HttpErrorMapper};
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::traits::{
-    error_mapper::trait_def::ErrorMapper, provider::ProviderConfig,
-    provider::llm_provider::trait_definition::LLMProvider,
-};
-use crate::core::types::{
-    chat::ChatRequest,
-    context::RequestContext,
-    embedding::EmbeddingRequest,
-    health::HealthStatus,
-    image::ImageGenerationRequest,
-    model::ModelInfo,
-    model::ProviderCapability,
-    responses::{ChatChunk, ChatResponse, EmbeddingResponse, ImageGenerationResponse},
-};
+use crate::core::traits::{error_mapper::trait_def::ErrorMapper, provider::ProviderConfig};
 
 /// SAP AI configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -110,138 +94,6 @@ pub struct SapAIErrorMapper;
 impl ErrorMapper<SapAIError> for SapAIErrorMapper {
     fn map_http_error(&self, status_code: u16, response_body: &str) -> SapAIError {
         HttpErrorMapper::map_status_code("sap_ai", status_code, response_body)
-    }
-}
-
-#[async_trait]
-impl LLMProvider for SapAIProvider {
-    type Config = SapAIConfig;
-    type Error = SapAIError;
-    type ErrorMapper = SapAIErrorMapper;
-
-    fn name(&self) -> &'static str {
-        "sap_ai"
-    }
-
-    fn capabilities(&self) -> &'static [ProviderCapability] {
-        static CAPABILITIES: &[ProviderCapability] = &[ProviderCapability::ChatCompletion];
-        CAPABILITIES
-    }
-
-    fn models(&self) -> &[ModelInfo] {
-        &[]
-    }
-
-    fn get_supported_openai_params(&self, _model: &str) -> &'static [&'static str] {
-        &["temperature", "max_tokens", "top_p"]
-    }
-
-    async fn map_openai_params(
-        &self,
-        params: std::collections::HashMap<String, serde_json::Value>,
-        _model: &str,
-    ) -> Result<std::collections::HashMap<String, serde_json::Value>, Self::Error> {
-        Ok(params)
-    }
-
-    async fn transform_request(
-        &self,
-        request: ChatRequest,
-        _context: RequestContext,
-    ) -> Result<serde_json::Value, Self::Error> {
-        use serde_json::json;
-
-        let mut body = json!({
-            "model": request.model,
-            "messages": request.messages,
-        });
-
-        if let Some(temperature) = request.temperature {
-            body["temperature"] = json!(temperature);
-        }
-
-        if let Some(max_tokens) = request.max_tokens {
-            body["max_tokens"] = json!(max_tokens);
-        }
-
-        if let Some(top_p) = request.top_p {
-            body["top_p"] = json!(top_p);
-        }
-
-        Ok(body)
-    }
-
-    async fn transform_response(
-        &self,
-        _raw_response: &[u8],
-        _model: &str,
-        _request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
-        Err(ProviderError::not_implemented(
-            "sap_ai",
-            "Response transformation not yet implemented",
-        ))
-    }
-
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        SapAIErrorMapper
-    }
-
-    async fn calculate_cost(
-        &self,
-        _model: &str,
-        _input_tokens: u32,
-        _output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
-        Ok(0.0)
-    }
-
-    fn supports_model(&self, model: &str) -> bool {
-        model.contains("gpt") || model.contains("sap")
-    }
-
-    async fn health_check(&self) -> HealthStatus {
-        if self.config.api_key.is_some() {
-            HealthStatus::Healthy
-        } else {
-            HealthStatus::Unhealthy
-        }
-    }
-
-    async fn chat_completion(
-        &self,
-        _request: ChatRequest,
-        _context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
-        Err(ProviderError::not_implemented(
-            "sap_ai",
-            "Chat completion not yet implemented",
-        ))
-    }
-
-    async fn chat_completion_stream(
-        &self,
-        _request: ChatRequest,
-        _context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
-    {
-        Err(ProviderError::not_supported("sap_ai", "Streaming"))
-    }
-
-    async fn embeddings(
-        &self,
-        _request: EmbeddingRequest,
-        _context: RequestContext,
-    ) -> Result<EmbeddingResponse, Self::Error> {
-        Err(ProviderError::not_supported("sap_ai", "Embeddings"))
-    }
-
-    async fn image_generation(
-        &self,
-        _request: ImageGenerationRequest,
-        _context: RequestContext,
-    ) -> Result<ImageGenerationResponse, Self::Error> {
-        Err(ProviderError::not_supported("sap_ai", "Image generation"))
     }
 }
 

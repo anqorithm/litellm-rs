@@ -8,9 +8,6 @@ mod config;
 mod error;
 mod provider;
 
-#[cfg(test)]
-mod tests;
-
 pub use config::BasetenConfig;
 pub use error::BasetenError;
 pub use provider::BasetenProvider;

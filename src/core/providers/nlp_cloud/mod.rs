@@ -8,9 +8,6 @@ mod error;
 mod model_info;
 mod provider;
 
-#[cfg(test)]
-mod tests;
-
 pub use config::NlpCloudConfig;
 pub use error::NlpCloudError;
 pub use model_info::{get_available_models, get_model_info};

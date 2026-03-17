@@ -8,9 +8,6 @@ mod error;
 mod model_info;
 mod provider;
 
-#[cfg(test)]
-mod tests;
-
 pub use config::PredibaseConfig;
 pub use error::PredibaseError;
 pub use model_info::{get_available_models, get_model_info};

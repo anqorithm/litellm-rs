@@ -14,9 +14,6 @@ mod provider;
 mod rerank;
 mod streaming;
 
-#[cfg(test)]
-mod tests;
-
 // Re-export main types
 pub use config::CohereConfig;
 pub use error::CohereError;

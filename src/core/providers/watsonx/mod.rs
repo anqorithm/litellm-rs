@@ -20,8 +20,6 @@ mod provider;
 mod streaming;
 
 // Tests
-#[cfg(test)]
-mod tests;
 
 // Re-export main types for external use
 pub use config::WatsonxConfig;

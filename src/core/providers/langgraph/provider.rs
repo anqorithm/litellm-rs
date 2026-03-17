@@ -2,28 +2,20 @@
 //!
 //! Main provider implementation for LangGraph Cloud integration
 
-use async_trait::async_trait;
 use futures::Stream;
-use serde_json::Value;
 use std::collections::HashMap;
-use std::pin::Pin;
 use std::sync::Arc;
 
 use crate::core::providers::base::{
-    GlobalPoolManager, HeaderPair, HttpMethod, get_pricing_db, header, header_owned,
-    streaming_client,
+    GlobalPoolManager, HeaderPair, HttpMethod, header, header_owned,
 };
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::error_mapper::trait_def::ErrorMapper;
 use crate::core::traits::provider::ProviderConfig;
-use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use crate::core::types::{
     chat::{ChatMessage, ChatRequest},
-    context::RequestContext,
-    health::HealthStatus,
     message::{MessageContent, MessageRole},
     model::ModelInfo,
-    model::ProviderCapability,
     responses::{ChatChoice, ChatChunk, ChatDelta, ChatResponse, ChatStreamChoice, Usage},
 };
 
@@ -367,221 +359,6 @@ impl LangGraphProvider {
             }),
             system_fingerprint: None,
         })
-    }
-}
-
-#[async_trait]
-impl LLMProvider for LangGraphProvider {
-    type Config = LangGraphConfig;
-    type Error = ProviderError;
-    type ErrorMapper = LangGraphErrorMapper;
-
-    fn name(&self) -> &'static str {
-        PROVIDER_NAME
-    }
-
-    fn capabilities(&self) -> &'static [ProviderCapability] {
-        &[
-            ProviderCapability::ChatCompletion,
-            ProviderCapability::ChatCompletionStream,
-            ProviderCapability::ToolCalling,
-        ]
-    }
-
-    fn models(&self) -> &[ModelInfo] {
-        &self.supported_models
-    }
-
-    fn get_supported_openai_params(&self, _model: &str) -> &'static [&'static str] {
-        &[
-            "messages",
-            "temperature",
-            "max_tokens",
-            "stream",
-            "tools",
-            "tool_choice",
-        ]
-    }
-
-    async fn map_openai_params(
-        &self,
-        params: HashMap<String, Value>,
-        _model: &str,
-    ) -> Result<HashMap<String, Value>, Self::Error> {
-        // LangGraph can accept most OpenAI params and pass them to the underlying LLM
-        Ok(params)
-    }
-
-    async fn transform_request(
-        &self,
-        request: ChatRequest,
-        _context: RequestContext,
-    ) -> Result<Value, Self::Error> {
-        // Transform to LangGraph input format
-        Ok(self.transform_chat_to_langgraph_input(&request))
-    }
-
-    async fn transform_response(
-        &self,
-        raw_response: &[u8],
-        model: &str,
-        request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
-        let run_response: RunResponse = serde_json::from_slice(raw_response)
-            .map_err(|e| ProviderError::response_parsing(PROVIDER_NAME, e.to_string()))?;
-
-        self.transform_langgraph_output_to_chat(&run_response, model, request_id)
-    }
-
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        LangGraphErrorMapper
-    }
-
-    async fn chat_completion(
-        &self,
-        request: ChatRequest,
-        context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
-        // Get or create a thread
-        let thread_id = if let Some(thread_id) = &self.config.thread_id {
-            thread_id.clone()
-        } else {
-            // Create a new thread for this request
-            let thread = self.create_thread(None).await?;
-            thread.thread_id
-        };
-
-        // Get the assistant/graph ID
-        let assistant_id = self.config.assistant_id.clone().ok_or_else(|| {
-            ProviderError::configuration(
-                PROVIDER_NAME,
-                "assistant_id is required. Set LANGGRAPH_ASSISTANT_ID or configure assistant_id",
-            )
-        })?;
-
-        // Transform the request
-        let input = self.transform_chat_to_langgraph_input(&request);
-
-        // Run the graph
-        let run_response = self
-            .run_graph(&thread_id, &assistant_id, input, None)
-            .await?;
-
-        // Wait for completion
-        let completed_run = self
-            .wait_for_run(&thread_id, &run_response.run_id, self.config.base.timeout)
-            .await?;
-
-        // Transform to ChatResponse
-        self.transform_langgraph_output_to_chat(&completed_run, &request.model, &context.request_id)
-    }
-
-    async fn chat_completion_stream(
-        &self,
-        request: ChatRequest,
-        _context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
-    {
-        // Get or create a thread
-        let thread_id = if let Some(thread_id) = &self.config.thread_id {
-            thread_id.clone()
-        } else {
-            let thread = self.create_thread(None).await?;
-            thread.thread_id
-        };
-
-        let assistant_id = self.config.assistant_id.clone().ok_or_else(|| {
-            ProviderError::configuration(PROVIDER_NAME, "assistant_id is required for streaming")
-        })?;
-
-        let input = self.transform_chat_to_langgraph_input(&request);
-
-        let url = format!(
-            "{}/threads/{}/runs/stream",
-            self.config.get_api_base(),
-            thread_id
-        );
-
-        let stream_request = RunGraphRequest {
-            assistant_id,
-            input,
-            config: None,
-            metadata: None,
-            stream_mode: Some(vec!["values".to_string(), "messages".to_string()]),
-            interrupt_before: None,
-            interrupt_after: None,
-        };
-
-        let api_key = self
-            .config
-            .get_api_key()
-            .ok_or_else(|| ProviderError::authentication(PROVIDER_NAME, "API key is required"))?;
-
-        let client = streaming_client();
-        let response = client
-            .post(&url)
-            .header("x-api-key", api_key)
-            .header("Content-Type", "application/json")
-            .json(&stream_request)
-            .send()
-            .await
-            .map_err(|e| ProviderError::network(PROVIDER_NAME, e.to_string()))?;
-
-        let status = response.status();
-        if !status.is_success() {
-            let error_text = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(LangGraphErrorMapper.map_http_error(status.as_u16(), &error_text));
-        }
-
-        // Create SSE stream
-        let byte_stream = response.bytes_stream();
-        let stream = create_langgraph_stream(byte_stream, request.model.clone());
-
-        Ok(Box::pin(stream))
-    }
-
-    async fn health_check(&self) -> HealthStatus {
-        // Try to list threads as a health check
-        let url = format!("{}/threads?limit=1", self.config.get_api_base());
-
-        let headers = self.get_request_headers();
-        match self
-            .pool_manager
-            .execute_request(&url, HttpMethod::GET, headers, None)
-            .await
-        {
-            Ok(response) => {
-                if response.status().is_success() {
-                    HealthStatus::Healthy
-                } else if response.status().as_u16() == 401 {
-                    HealthStatus::Unhealthy
-                } else {
-                    HealthStatus::Degraded
-                }
-            }
-            Err(_) => HealthStatus::Unhealthy,
-        }
-    }
-
-    async fn calculate_cost(
-        &self,
-        model: &str,
-        input_tokens: u32,
-        output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
-        // LangGraph itself doesn't have fixed costs - costs depend on the underlying LLM
-        // Use the pricing database for estimation
-        let usage = crate::core::providers::base::pricing::Usage {
-            prompt_tokens: input_tokens,
-            completion_tokens: output_tokens,
-            total_tokens: input_tokens + output_tokens,
-            reasoning_tokens: None,
-        };
-
-        Ok(get_pricing_db().calculate(model, &usage))
     }
 }
 

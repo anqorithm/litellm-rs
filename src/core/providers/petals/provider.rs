@@ -1,11 +1,7 @@
 //! Main Petals Provider Implementation
 
-use async_trait::async_trait;
-use futures::Stream;
 use std::collections::HashMap;
-use std::pin::Pin;
 use std::sync::Arc;
-use tracing::debug;
 
 use super::config::PetalsConfig;
 use super::model_info::{get_available_models, get_model_info};
@@ -14,15 +10,7 @@ use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::{
     provider::ProviderConfig as _, provider::llm_provider::trait_definition::LLMProvider,
 };
-use crate::core::types::{
-    chat::ChatRequest,
-    context::RequestContext,
-    embedding::EmbeddingRequest,
-    health::HealthStatus,
-    model::ModelInfo,
-    model::ProviderCapability,
-    responses::{ChatChunk, ChatResponse, EmbeddingResponse},
-};
+use crate::core::types::{model::ModelInfo, model::ProviderCapability};
 
 const PETALS_CAPABILITIES: &[ProviderCapability] = &[
     ProviderCapability::ChatCompletion,
@@ -129,126 +117,5 @@ impl PetalsProvider {
         serde_json::from_slice(&response_bytes).map_err(|e| {
             ProviderError::api_error("petals", 500, format!("Failed to parse response: {}", e))
         })
-    }
-}
-
-#[async_trait]
-impl LLMProvider for PetalsProvider {
-    type Config = PetalsConfig;
-    type Error = ProviderError;
-    type ErrorMapper = crate::core::traits::error_mapper::DefaultErrorMapper;
-
-    fn name(&self) -> &'static str {
-        "petals"
-    }
-
-    fn capabilities(&self) -> &'static [ProviderCapability] {
-        PETALS_CAPABILITIES
-    }
-
-    fn models(&self) -> &[ModelInfo] {
-        &self.models
-    }
-
-    fn get_supported_openai_params(&self, _model: &str) -> &'static [&'static str] {
-        &["temperature", "top_p", "max_tokens", "stream", "stop"]
-    }
-
-    async fn map_openai_params(
-        &self,
-        params: HashMap<String, serde_json::Value>,
-        _model: &str,
-    ) -> Result<HashMap<String, serde_json::Value>, Self::Error> {
-        Ok(params)
-    }
-
-    async fn transform_request(
-        &self,
-        request: ChatRequest,
-        _context: RequestContext,
-    ) -> Result<serde_json::Value, Self::Error> {
-        serde_json::to_value(&request)
-            .map_err(|e| ProviderError::invalid_request("petals", e.to_string()))
-    }
-
-    async fn transform_response(
-        &self,
-        raw_response: &[u8],
-        _model: &str,
-        _request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
-        serde_json::from_slice(raw_response).map_err(|e| {
-            ProviderError::api_error("petals", 500, format!("Failed to parse response: {}", e))
-        })
-    }
-
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        crate::core::traits::error_mapper::DefaultErrorMapper
-    }
-
-    async fn chat_completion(
-        &self,
-        request: ChatRequest,
-        _context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
-        debug!("Petals chat request: model={}", request.model);
-
-        let request_json = serde_json::to_value(&request)
-            .map_err(|e| ProviderError::invalid_request("petals", e.to_string()))?;
-
-        let response = self
-            .execute_request("/v1/chat/completions", request_json)
-            .await?;
-
-        serde_json::from_value(response).map_err(|e| {
-            ProviderError::api_error(
-                "petals",
-                500,
-                format!("Failed to parse chat response: {}", e),
-            )
-        })
-    }
-
-    async fn chat_completion_stream(
-        &self,
-        _request: ChatRequest,
-        _context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
-    {
-        Err(ProviderError::not_supported(
-            "petals",
-            "Streaming not yet implemented",
-        ))
-    }
-
-    async fn embeddings(
-        &self,
-        _request: EmbeddingRequest,
-        _context: RequestContext,
-    ) -> Result<EmbeddingResponse, Self::Error> {
-        Err(ProviderError::not_supported(
-            "petals",
-            "Embeddings not supported",
-        ))
-    }
-
-    async fn health_check(&self) -> HealthStatus {
-        HealthStatus::Healthy
-    }
-
-    async fn calculate_cost(
-        &self,
-        model: &str,
-        input_tokens: u32,
-        output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
-        let model_info = get_model_info(model).ok_or_else(|| {
-            ProviderError::model_not_found("petals", format!("Unknown model: {}", model))
-        })?;
-
-        let input_cost = (input_tokens as f64) * (model_info.input_cost_per_million / 1_000_000.0);
-        let output_cost =
-            (output_tokens as f64) * (model_info.output_cost_per_million / 1_000_000.0);
-        Ok(input_cost + output_cost)
     }
 }
