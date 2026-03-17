@@ -1,0 +1,744 @@
+//! OpenAI Response Transformer
+//!
+//! Converts OpenAI-specific response formats into unified ChatResponse types.
+//! Also handles streaming chunk transformation.
+
+use crate::core::types::chat::ChatMessage;
+use crate::core::types::message::MessageRole;
+use crate::core::types::responses::{
+    ChatChoice, ChatChunk, ChatDelta, ChatResponse, ChatStreamChoice, FinishReason, LogProbs,
+    TokenLogProb, TopLogProb, Usage,
+};
+use crate::core::types::thinking::ThinkingContent;
+
+use super::super::error::OpenAIError;
+use super::super::models::*;
+
+/// OpenAI Response Transformer
+pub struct OpenAIResponseTransformer;
+
+impl OpenAIResponseTransformer {
+    /// Transform OpenAIChatResponse to ChatResponse
+    pub fn transform(response: OpenAIChatResponse) -> Result<ChatResponse, OpenAIError> {
+        let choices = response
+            .choices
+            .into_iter()
+            .map(Self::transform_choice)
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(ChatResponse {
+            id: response.id,
+            object: response.object,
+            created: response.created,
+            model: response.model,
+            choices,
+            usage: response.usage.map(Self::transform_usage),
+            system_fingerprint: response.system_fingerprint,
+        })
+    }
+
+    /// Transform stream chunk
+    pub fn transform_stream_chunk(chunk: OpenAIStreamChunk) -> Result<ChatChunk, OpenAIError> {
+        let choices = chunk
+            .choices
+            .into_iter()
+            .map(Self::transform_stream_choice)
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(ChatChunk {
+            id: chunk.id,
+            object: chunk.object,
+            created: chunk.created,
+            model: chunk.model,
+            choices,
+            usage: chunk.usage.map(Self::transform_usage),
+            system_fingerprint: chunk.system_fingerprint,
+        })
+    }
+
+    /// Transform stream choice
+    fn transform_stream_choice(
+        choice: OpenAIStreamChoice,
+    ) -> Result<ChatStreamChoice, OpenAIError> {
+        Ok(ChatStreamChoice {
+            index: choice.index,
+            delta: Self::transform_delta(choice.delta)?,
+            logprobs: choice.logprobs.and_then(|lp| {
+                serde_json::from_value::<OpenAILogprobs>(lp)
+                    .ok()
+                    .map(Self::transform_logprobs)
+            }),
+            finish_reason: choice.finish_reason.map(Self::transform_finish_reason),
+        })
+    }
+
+    /// Transform delta
+    fn transform_delta(delta: OpenAIDelta) -> Result<ChatDelta, OpenAIError> {
+        Ok(ChatDelta {
+            role: delta.role.map(|r| match r.as_str() {
+                "system" => MessageRole::System,
+                "user" => MessageRole::User,
+                "assistant" => MessageRole::Assistant,
+                "tool" => MessageRole::Tool,
+                "function" => MessageRole::Function,
+                _ => MessageRole::Assistant,
+            }),
+            content: delta.content,
+            thinking: None,
+            tool_calls: None,
+            function_call: None,
+        })
+    }
+
+    /// Transform choice
+    fn transform_choice(choice: OpenAIChoice) -> Result<ChatChoice, OpenAIError> {
+        Ok(ChatChoice {
+            index: choice.index,
+            message: Self::transform_message_response(choice.message)?,
+            logprobs: choice.logprobs.and_then(|lp| {
+                serde_json::from_value::<OpenAILogprobs>(lp)
+                    .ok()
+                    .map(Self::transform_logprobs)
+            }),
+            finish_reason: choice.finish_reason.map(Self::transform_finish_reason),
+        })
+    }
+
+    /// Transform message response
+    fn transform_message_response(message: OpenAIMessage) -> Result<ChatMessage, OpenAIError> {
+        // Extract thinking content from reasoning fields
+        // Priority: reasoning_content (DeepSeek) > reasoning (OpenAI)
+        let thinking = message
+            .reasoning_content
+            .as_ref()
+            .filter(|s| !s.is_empty())
+            .or(message.reasoning.as_ref().filter(|s| !s.is_empty()))
+            .map(|text| ThinkingContent::Text {
+                text: text.clone(),
+                signature: None,
+            });
+        let compatible_message =
+            message
+                .into_compatible_message()
+                .map_err(|message| OpenAIError::ResponseParsing {
+                    provider: "openai",
+                    message,
+                })?;
+        let mut core_message: ChatMessage = compatible_message.into();
+        core_message.thinking = thinking;
+        Ok(core_message)
+    }
+
+    /// Transform usage
+    pub(super) fn transform_usage(usage: OpenAIUsage) -> Usage {
+        Usage {
+            prompt_tokens: usage.prompt_tokens,
+            completion_tokens: usage.completion_tokens,
+            total_tokens: usage.total_tokens,
+            thinking_usage: None,
+            prompt_tokens_details: usage.prompt_tokens_details.map(|details| {
+                crate::core::types::responses::PromptTokensDetails {
+                    cached_tokens: details.cached_tokens,
+                    audio_tokens: details.audio_tokens,
+                }
+            }),
+            completion_tokens_details: usage.completion_tokens_details.map(|details| {
+                crate::core::types::responses::CompletionTokensDetails {
+                    reasoning_tokens: details.reasoning_tokens,
+                    audio_tokens: details.audio_tokens,
+                }
+            }),
+        }
+    }
+
+    /// Transform logprobs
+    pub(super) fn transform_logprobs(logprobs: OpenAILogprobs) -> LogProbs {
+        LogProbs {
+            content: logprobs
+                .content
+                .map(|content| {
+                    content
+                        .into_iter()
+                        .map(|token| TokenLogProb {
+                            token: token.token,
+                            logprob: token.logprob,
+                            bytes: token.bytes,
+                            top_logprobs: Some(
+                                token
+                                    .top_logprobs
+                                    .into_iter()
+                                    .map(|top| TopLogProb {
+                                        token: top.token,
+                                        logprob: top.logprob,
+                                        bytes: top.bytes,
+                                    })
+                                    .collect(),
+                            ),
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
+            refusal: logprobs.refusal.map(|_| "filtered".to_string()),
+        }
+    }
+
+    /// Transform finish reason
+    pub(super) fn transform_finish_reason(reason: String) -> FinishReason {
+        match reason.as_str() {
+            "stop" => FinishReason::Stop,
+            "length" => FinishReason::Length,
+            "function_call" => FinishReason::FunctionCall,
+            "tool_calls" => FinishReason::ToolCalls,
+            "content_filter" => FinishReason::ContentFilter,
+            _ => FinishReason::Stop,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::types::responses::FinishReason;
+
+    #[test]
+    fn test_transform_basic_response() {
+        let response = OpenAIChatResponse {
+            id: "chatcmpl-123".to_string(),
+            object: "chat.completion".to_string(),
+            created: 1677652288,
+            model: "gpt-4".to_string(),
+            choices: vec![OpenAIChoice {
+                index: 0,
+                message: OpenAIMessage {
+                    role: "assistant".to_string(),
+                    content: Some(serde_json::json!("Hello!")),
+                    name: None,
+                    tool_calls: None,
+                    tool_call_id: None,
+                    function_call: None,
+                    reasoning: None,
+                    reasoning_details: None,
+                    reasoning_content: None,
+                },
+                finish_reason: Some("stop".to_string()),
+                logprobs: None,
+            }],
+            usage: Some(OpenAIUsage {
+                prompt_tokens: 10,
+                completion_tokens: 5,
+                total_tokens: 15,
+                prompt_tokens_details: None,
+                completion_tokens_details: None,
+            }),
+            system_fingerprint: Some("fp_123".to_string()),
+        };
+
+        let result = OpenAIResponseTransformer::transform(response).unwrap();
+        assert_eq!(result.id, "chatcmpl-123");
+        assert_eq!(result.model, "gpt-4");
+        assert_eq!(result.choices.len(), 1);
+        assert!(matches!(
+            result.choices.first().unwrap().finish_reason,
+            Some(FinishReason::Stop)
+        ));
+    }
+
+    #[test]
+    fn test_transform_response_with_usage_details() {
+        let response = OpenAIChatResponse {
+            id: "chatcmpl-123".to_string(),
+            object: "chat.completion".to_string(),
+            created: 1677652288,
+            model: "gpt-4".to_string(),
+            choices: vec![],
+            usage: Some(OpenAIUsage {
+                prompt_tokens: 100,
+                completion_tokens: 50,
+                total_tokens: 150,
+                prompt_tokens_details: Some(OpenAITokenDetails {
+                    cached_tokens: Some(20),
+                    audio_tokens: Some(5),
+                    reasoning_tokens: None,
+                }),
+                completion_tokens_details: Some(OpenAITokenDetails {
+                    cached_tokens: None,
+                    audio_tokens: Some(10),
+                    reasoning_tokens: Some(15),
+                }),
+            }),
+            system_fingerprint: None,
+        };
+
+        let result = OpenAIResponseTransformer::transform(response).unwrap();
+        let usage = result.usage.unwrap();
+        assert_eq!(usage.prompt_tokens, 100);
+        assert_eq!(usage.completion_tokens, 50);
+        assert_eq!(
+            usage.prompt_tokens_details.as_ref().unwrap().cached_tokens,
+            Some(20)
+        );
+        assert_eq!(
+            usage
+                .completion_tokens_details
+                .as_ref()
+                .unwrap()
+                .reasoning_tokens,
+            Some(15)
+        );
+    }
+
+    #[test]
+    fn test_transform_response_role_mapping() {
+        let roles = vec!["system", "user", "assistant", "tool", "function", "unknown"];
+
+        for role in roles {
+            let response = OpenAIChatResponse {
+                id: "test".to_string(),
+                object: "chat.completion".to_string(),
+                created: 0,
+                model: "gpt-4".to_string(),
+                choices: vec![OpenAIChoice {
+                    index: 0,
+                    message: OpenAIMessage {
+                        role: role.to_string(),
+                        content: Some(serde_json::json!("test")),
+                        name: None,
+                        tool_calls: None,
+                        tool_call_id: None,
+                        function_call: None,
+                        reasoning: None,
+                        reasoning_details: None,
+                        reasoning_content: None,
+                    },
+                    finish_reason: None,
+                    logprobs: None,
+                }],
+                usage: None,
+                system_fingerprint: None,
+            };
+
+            let result = OpenAIResponseTransformer::transform(response);
+            assert!(result.is_ok());
+        }
+    }
+
+    #[test]
+    fn test_transform_finish_reasons() {
+        let reasons = vec![
+            ("stop", FinishReason::Stop),
+            ("length", FinishReason::Length),
+            ("function_call", FinishReason::FunctionCall),
+            ("tool_calls", FinishReason::ToolCalls),
+            ("content_filter", FinishReason::ContentFilter),
+            ("unknown", FinishReason::Stop), // Default fallback
+        ];
+
+        for (reason_str, expected) in reasons {
+            let response = OpenAIChatResponse {
+                id: "test".to_string(),
+                object: "chat.completion".to_string(),
+                created: 0,
+                model: "gpt-4".to_string(),
+                choices: vec![OpenAIChoice {
+                    index: 0,
+                    message: OpenAIMessage {
+                        role: "assistant".to_string(),
+                        content: None,
+                        name: None,
+                        tool_calls: None,
+                        tool_call_id: None,
+                        function_call: None,
+                        reasoning: None,
+                        reasoning_details: None,
+                        reasoning_content: None,
+                    },
+                    finish_reason: Some(reason_str.to_string()),
+                    logprobs: None,
+                }],
+                usage: None,
+                system_fingerprint: None,
+            };
+
+            let result = OpenAIResponseTransformer::transform(response).unwrap();
+            assert_eq!(
+                result.choices.first().unwrap().finish_reason,
+                Some(expected)
+            );
+        }
+    }
+
+    #[test]
+    fn test_transform_response_with_tool_calls() {
+        let response = OpenAIChatResponse {
+            id: "test".to_string(),
+            object: "chat.completion".to_string(),
+            created: 0,
+            model: "gpt-4".to_string(),
+            choices: vec![OpenAIChoice {
+                index: 0,
+                message: OpenAIMessage {
+                    role: "assistant".to_string(),
+                    content: None,
+                    name: None,
+                    tool_calls: Some(vec![OpenAIToolCall {
+                        id: "call_abc".to_string(),
+                        tool_type: "function".to_string(),
+                        function: OpenAIFunctionCall {
+                            name: "get_weather".to_string(),
+                            arguments: r#"{"location":"NYC"}"#.to_string(),
+                        },
+                    }]),
+                    tool_call_id: None,
+                    function_call: None,
+                    reasoning: None,
+                    reasoning_details: None,
+                    reasoning_content: None,
+                },
+                finish_reason: Some("tool_calls".to_string()),
+                logprobs: None,
+            }],
+            usage: None,
+            system_fingerprint: None,
+        };
+
+        let result = OpenAIResponseTransformer::transform(response).unwrap();
+        let tool_calls = result
+            .choices
+            .first()
+            .unwrap()
+            .message
+            .tool_calls
+            .as_ref()
+            .unwrap();
+        assert_eq!(tool_calls.len(), 1);
+        assert_eq!(tool_calls.first().unwrap().id, "call_abc");
+        assert_eq!(tool_calls.first().unwrap().function.name, "get_weather");
+    }
+
+    #[test]
+    fn test_transform_response_with_reasoning() {
+        let response = OpenAIChatResponse {
+            id: "test".to_string(),
+            object: "chat.completion".to_string(),
+            created: 0,
+            model: "o1-preview".to_string(),
+            choices: vec![OpenAIChoice {
+                index: 0,
+                message: OpenAIMessage {
+                    role: "assistant".to_string(),
+                    content: Some(serde_json::json!("The answer is 42")),
+                    name: None,
+                    tool_calls: None,
+                    tool_call_id: None,
+                    function_call: None,
+                    reasoning: Some("Let me think about this...".to_string()),
+                    reasoning_details: None,
+                    reasoning_content: None,
+                },
+                finish_reason: Some("stop".to_string()),
+                logprobs: None,
+            }],
+            usage: None,
+            system_fingerprint: None,
+        };
+
+        let result = OpenAIResponseTransformer::transform(response).unwrap();
+        assert!(result.choices.first().unwrap().message.thinking.is_some());
+    }
+
+    #[test]
+    fn test_transform_response_with_deepseek_reasoning() {
+        let response = OpenAIChatResponse {
+            id: "test".to_string(),
+            object: "chat.completion".to_string(),
+            created: 0,
+            model: "deepseek-chat".to_string(),
+            choices: vec![OpenAIChoice {
+                index: 0,
+                message: OpenAIMessage {
+                    role: "assistant".to_string(),
+                    content: Some(serde_json::json!("Result")),
+                    name: None,
+                    tool_calls: None,
+                    tool_call_id: None,
+                    function_call: None,
+                    reasoning: None,
+                    reasoning_details: None,
+                    reasoning_content: Some("DeepSeek thinking process...".to_string()),
+                },
+                finish_reason: Some("stop".to_string()),
+                logprobs: None,
+            }],
+            usage: None,
+            system_fingerprint: None,
+        };
+
+        let result = OpenAIResponseTransformer::transform(response).unwrap();
+        assert!(result.choices.first().unwrap().message.thinking.is_some());
+    }
+
+    #[test]
+    fn test_transform_response_null_content() {
+        let response = OpenAIChatResponse {
+            id: "test".to_string(),
+            object: "chat.completion".to_string(),
+            created: 0,
+            model: "gpt-4".to_string(),
+            choices: vec![OpenAIChoice {
+                index: 0,
+                message: OpenAIMessage {
+                    role: "assistant".to_string(),
+                    content: Some(serde_json::Value::Null),
+                    name: None,
+                    tool_calls: None,
+                    tool_call_id: None,
+                    function_call: None,
+                    reasoning: None,
+                    reasoning_details: None,
+                    reasoning_content: None,
+                },
+                finish_reason: None,
+                logprobs: None,
+            }],
+            usage: None,
+            system_fingerprint: None,
+        };
+
+        let result = OpenAIResponseTransformer::transform(response).unwrap();
+        assert!(result.choices.first().unwrap().message.content.is_none());
+    }
+
+    #[test]
+    fn test_transform_response_empty_content() {
+        let response = OpenAIChatResponse {
+            id: "test".to_string(),
+            object: "chat.completion".to_string(),
+            created: 0,
+            model: "gpt-4".to_string(),
+            choices: vec![OpenAIChoice {
+                index: 0,
+                message: OpenAIMessage {
+                    role: "assistant".to_string(),
+                    content: Some(serde_json::json!("")),
+                    name: None,
+                    tool_calls: None,
+                    tool_call_id: None,
+                    function_call: None,
+                    reasoning: None,
+                    reasoning_details: None,
+                    reasoning_content: None,
+                },
+                finish_reason: None,
+                logprobs: None,
+            }],
+            usage: None,
+            system_fingerprint: None,
+        };
+
+        let result = OpenAIResponseTransformer::transform(response).unwrap();
+        assert!(result.choices.first().unwrap().message.content.is_none());
+    }
+
+    #[test]
+    fn test_transform_response_with_logprobs() {
+        let response = OpenAIChatResponse {
+            id: "test".to_string(),
+            object: "chat.completion".to_string(),
+            created: 0,
+            model: "gpt-4".to_string(),
+            choices: vec![OpenAIChoice {
+                index: 0,
+                message: OpenAIMessage {
+                    role: "assistant".to_string(),
+                    content: Some(serde_json::json!("test")),
+                    name: None,
+                    tool_calls: None,
+                    tool_call_id: None,
+                    function_call: None,
+                    reasoning: None,
+                    reasoning_details: None,
+                    reasoning_content: None,
+                },
+                finish_reason: Some("stop".to_string()),
+                logprobs: Some(serde_json::json!({
+                    "content": [{
+                        "token": "test",
+                        "logprob": -0.5,
+                        "bytes": [116, 101, 115, 116],
+                        "top_logprobs": [{
+                            "token": "test",
+                            "logprob": -0.5,
+                            "bytes": [116, 101, 115, 116]
+                        }]
+                    }]
+                })),
+            }],
+            usage: None,
+            system_fingerprint: None,
+        };
+
+        let result = OpenAIResponseTransformer::transform(response).unwrap();
+        assert!(result.choices.first().unwrap().logprobs.is_some());
+    }
+
+    #[test]
+    fn test_transform_response_content_array() {
+        let response = OpenAIChatResponse {
+            id: "test".to_string(),
+            object: "chat.completion".to_string(),
+            created: 0,
+            model: "gpt-4".to_string(),
+            choices: vec![OpenAIChoice {
+                index: 0,
+                message: OpenAIMessage {
+                    role: "assistant".to_string(),
+                    content: Some(serde_json::json!([
+                        {"type": "text", "text": "Hello"}
+                    ])),
+                    name: None,
+                    tool_calls: None,
+                    tool_call_id: None,
+                    function_call: None,
+                    reasoning: None,
+                    reasoning_details: None,
+                    reasoning_content: None,
+                },
+                finish_reason: None,
+                logprobs: None,
+            }],
+            usage: None,
+            system_fingerprint: None,
+        };
+
+        let result = OpenAIResponseTransformer::transform(response).unwrap();
+        assert!(result.choices.first().unwrap().message.content.is_some());
+    }
+
+    #[test]
+    fn test_transform_response_with_function_call() {
+        let response = OpenAIChatResponse {
+            id: "test".to_string(),
+            object: "chat.completion".to_string(),
+            created: 0,
+            model: "gpt-4".to_string(),
+            choices: vec![OpenAIChoice {
+                index: 0,
+                message: OpenAIMessage {
+                    role: "assistant".to_string(),
+                    content: None,
+                    name: None,
+                    tool_calls: None,
+                    tool_call_id: None,
+                    function_call: Some(OpenAIFunctionCall {
+                        name: "get_weather".to_string(),
+                        arguments: r#"{"location":"NYC"}"#.to_string(),
+                    }),
+                    reasoning: None,
+                    reasoning_details: None,
+                    reasoning_content: None,
+                },
+                finish_reason: Some("function_call".to_string()),
+                logprobs: None,
+            }],
+            usage: None,
+            system_fingerprint: None,
+        };
+
+        let result = OpenAIResponseTransformer::transform(response).unwrap();
+        let func_call = result
+            .choices
+            .first()
+            .unwrap()
+            .message
+            .function_call
+            .as_ref()
+            .unwrap();
+        assert_eq!(func_call.name, "get_weather");
+    }
+
+    // ==================== Stream Transformer Tests ====================
+
+    #[test]
+    fn test_transform_stream_chunk() {
+        let chunk = OpenAIStreamChunk {
+            id: "chatcmpl-123".to_string(),
+            object: "chat.completion.chunk".to_string(),
+            created: 1677652288,
+            model: "gpt-4".to_string(),
+            choices: vec![OpenAIStreamChoice {
+                index: 0,
+                delta: OpenAIDelta {
+                    role: Some("assistant".to_string()),
+                    content: Some("Hello".to_string()),
+                    tool_calls: None,
+                    function_call: None,
+                },
+                finish_reason: None,
+                logprobs: None,
+            }],
+            usage: None,
+            system_fingerprint: None,
+        };
+
+        let result = OpenAIResponseTransformer::transform_stream_chunk(chunk).unwrap();
+        assert_eq!(result.id, "chatcmpl-123");
+        assert_eq!(result.choices.len(), 1);
+        assert_eq!(
+            result.choices.first().unwrap().delta.content,
+            Some("Hello".to_string())
+        );
+    }
+
+    #[test]
+    fn test_transform_stream_chunk_with_finish() {
+        let chunk = OpenAIStreamChunk {
+            id: "chatcmpl-123".to_string(),
+            object: "chat.completion.chunk".to_string(),
+            created: 1677652288,
+            model: "gpt-4".to_string(),
+            choices: vec![OpenAIStreamChoice {
+                index: 0,
+                delta: OpenAIDelta {
+                    role: None,
+                    content: None,
+                    tool_calls: None,
+                    function_call: None,
+                },
+                finish_reason: Some("stop".to_string()),
+                logprobs: None,
+            }],
+            usage: Some(OpenAIUsage {
+                prompt_tokens: 10,
+                completion_tokens: 20,
+                total_tokens: 30,
+                prompt_tokens_details: None,
+                completion_tokens_details: None,
+            }),
+            system_fingerprint: None,
+        };
+
+        let result = OpenAIResponseTransformer::transform_stream_chunk(chunk).unwrap();
+        assert!(matches!(
+            result.choices.first().unwrap().finish_reason,
+            Some(FinishReason::Stop)
+        ));
+        assert!(result.usage.is_some());
+    }
+
+    #[test]
+    fn test_transform_delta_roles() {
+        let roles = vec!["system", "user", "assistant", "tool", "function", "unknown"];
+
+        for role in roles {
+            let delta = OpenAIDelta {
+                role: Some(role.to_string()),
+                content: None,
+                tool_calls: None,
+                function_call: None,
+            };
+
+            let result = OpenAIResponseTransformer::transform_delta(delta);
+            assert!(result.is_ok());
+        }
+    }
+}
