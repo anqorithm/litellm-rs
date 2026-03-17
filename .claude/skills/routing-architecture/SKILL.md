@@ -190,18 +190,18 @@ impl Router for LatencyBasedRouter {
 
 **Use when**: Response time is critical, providers have varying latencies.
 
-### 5. CostBased
+### 5. PriorityBased
 
 Routes to lowest-cost provider for the requested model.
 
 ```rust
-pub struct CostBasedRouter {
+pub struct PriorityBasedRouter {
     providers: Vec<Arc<dyn LLMProvider>>,
     pricing_db: Arc<PricingDatabase>,
     health_tracker: Arc<HealthTracker>,
 }
 
-impl Router for CostBasedRouter {
+impl Router for PriorityBasedRouter {
     async fn select_provider(&self, request: &ChatRequest) -> Option<Arc<dyn LLMProvider>> {
         let healthy: Vec<_> = self.providers
             .iter()
@@ -534,7 +534,7 @@ impl FallbackChain {
 
 ```yaml
 routing:
-  strategy: "latency_based"  # Options: simple_shuffle, round_robin, least_busy, latency_based, cost_based, usage_based, rate_limit_aware
+  strategy: "latency_based"  # Options: simple_shuffle, round_robin, least_busy, latency_based, priority_based, usage_based, rate_limit_aware
 
   health_check:
     enabled: true
@@ -571,7 +571,7 @@ pub fn create_router(config: &RoutingConfig, providers: Vec<Arc<dyn LLMProvider>
         "round_robin" => Box::new(RoundRobinRouter::new(providers, health_tracker)),
         "least_busy" => Box::new(LeastBusyRouter::new(providers, health_tracker)),
         "latency_based" => Box::new(LatencyBasedRouter::new(providers, health_tracker)),
-        "cost_based" => Box::new(CostBasedRouter::new(providers, health_tracker)),
+        "priority_based" => Box::new(PriorityBasedRouter::new(providers, health_tracker)),
         "usage_based" => Box::new(UsageBasedRouter::new(providers, health_tracker)),
         "rate_limit_aware" => Box::new(RateLimitAwareRouter::new(providers, health_tracker)),
         _ => Box::new(SimpleShuffleRouter::new(providers, health_tracker)),
@@ -589,7 +589,7 @@ pub fn create_router(config: &RoutingConfig, providers: Vec<Arc<dyn LLMProvider>
 | RoundRobin | O(n) | Low | Even distribution |
 | LeastBusy | O(n) | Medium | High concurrency |
 | LatencyBased | O(n) | Medium | Latency-sensitive |
-| CostBased | O(n) | Low | Cost optimization |
+| PriorityBased | O(n) | Low | Priority-based routing |
 | UsageBased | O(n) | High | Quota management |
 | RateLimitAware | O(n) | Medium | High volume |
 

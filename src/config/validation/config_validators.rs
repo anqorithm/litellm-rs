@@ -82,7 +82,7 @@ impl Validate for ServerConfig {
         }
 
         if self.port == 0 {
-            return Err("Server port must be greater than 0".to_string());
+            return Err("Server port must be between 1 and 65535".to_string());
         }
 
         if self.port < 1024 && !cfg!(test) {

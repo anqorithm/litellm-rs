@@ -2,10 +2,20 @@
 //!
 //! JSON-RPC 2.0 message types for A2A protocol communication.
 
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use super::error::A2AError;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+
+/// Monotonically increasing counter for unique JSON-RPC request IDs.
+static REQUEST_ID: AtomicU64 = AtomicU64::new(1);
+
+/// Return the next unique JSON-RPC request ID.
+fn next_id() -> Value {
+    Value::Number(REQUEST_ID.fetch_add(1, Ordering::Relaxed).into())
+}
 
 /// JSON-RPC 2.0 version constant
 pub const JSONRPC_VERSION: &str = "2.0";
@@ -42,7 +52,7 @@ impl A2AMessage {
                 },
                 configuration: None,
             }),
-            id: Value::Number(1.into()),
+            id: next_id(),
         }
     }
 
@@ -60,7 +70,7 @@ impl A2AMessage {
                 },
                 configuration: None,
             }),
-            id: Value::Number(1.into()),
+            id: next_id(),
         }
     }
 
@@ -78,7 +88,7 @@ impl A2AMessage {
                 },
                 configuration: None,
             }),
-            id: Value::Number(1.into()),
+            id: next_id(),
         }
     }
 

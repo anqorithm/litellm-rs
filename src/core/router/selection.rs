@@ -108,8 +108,8 @@ impl Router {
             RoutingStrategy::LatencyBased => {
                 strategy_impl::lowest_latency_from_context(&routing_contexts)
             }
-            RoutingStrategy::CostBased => {
-                strategy_impl::lowest_cost_from_context(&routing_contexts)
+            RoutingStrategy::PriorityBased => {
+                strategy_impl::lowest_priority_from_context(&routing_contexts)
             }
             RoutingStrategy::RateLimitAware => {
                 strategy_impl::rate_limit_aware_from_context(&routing_contexts)

@@ -439,11 +439,11 @@ fn test_lowest_latency_empty_candidates() {
 }
 
 // ====================================================================================
-// lowest_cost Tests
+// lowest_priority Tests
 // ====================================================================================
 
 #[tokio::test]
-async fn test_lowest_cost_single_candidate() {
+async fn test_lowest_priority_single_candidate() {
     let deployments = DashMap::new();
     let config = DeploymentConfig {
         priority: 5,
@@ -453,12 +453,12 @@ async fn test_lowest_cost_single_candidate() {
 
     let candidates = vec!["d1".to_string()];
     let contexts = build_routing_contexts(&candidates, &deployments);
-    let selected = lowest_cost_from_context(&contexts).unwrap();
+    let selected = lowest_priority_from_context(&contexts).unwrap();
     assert_eq!(selected, "d1");
 }
 
 #[tokio::test]
-async fn test_lowest_cost_selects_lowest_priority() {
+async fn test_lowest_priority_selects_lowest_priority() {
     let deployments = DashMap::new();
 
     let config1 = DeploymentConfig {
@@ -490,14 +490,14 @@ async fn test_lowest_cost_selects_lowest_priority() {
 
     let candidates = vec!["d1".to_string(), "d2".to_string(), "d3".to_string()];
     let contexts = build_routing_contexts(&candidates, &deployments);
-    let selected = lowest_cost_from_context(&contexts).unwrap();
+    let selected = lowest_priority_from_context(&contexts).unwrap();
 
-    // d2 has the lowest priority (cheapest)
+    // d2 has the lowest priority value
     assert_eq!(selected, "d2");
 }
 
 #[tokio::test]
-async fn test_lowest_cost_all_same_priority() {
+async fn test_lowest_priority_all_same_priority() {
     let deployments = DashMap::new();
     for i in 1..=3 {
         let config = DeploymentConfig {
@@ -512,15 +512,15 @@ async fn test_lowest_cost_all_same_priority() {
 
     let candidates: Vec<String> = (1..=3).map(|i| format!("d{}", i)).collect();
     let contexts = build_routing_contexts(&candidates, &deployments);
-    let selected = lowest_cost_from_context(&contexts).unwrap();
+    let selected = lowest_priority_from_context(&contexts).unwrap();
 
     // First one wins when all have same priority
     assert_eq!(selected, "d1");
 }
 
 #[test]
-fn test_lowest_cost_empty_candidates() {
-    assert!(lowest_cost_from_context(&[]).is_none());
+fn test_lowest_priority_empty_candidates() {
+    assert!(lowest_priority_from_context(&[]).is_none());
 }
 
 // ====================================================================================
@@ -874,7 +874,7 @@ async fn test_strategy_consistency() {
         // lowest_latency always picks d1 (100us vs 200us)
         assert_eq!(lowest_latency_from_context(&contexts).unwrap(), "d1");
 
-        // lowest_cost always picks d2 (priority 1 vs 10)
-        assert_eq!(lowest_cost_from_context(&contexts).unwrap(), "d2");
+        // lowest_priority always picks d2 (priority 1 vs 10)
+        assert_eq!(lowest_priority_from_context(&contexts).unwrap(), "d2");
     }
 }
