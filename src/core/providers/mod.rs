@@ -368,6 +368,22 @@ impl Provider {
             ProviderType::Mistral,
             ProviderType::Cloudflare,
             ProviderType::OpenAICompatible,
+            // Catalog-covered provider types (Tier 1)
+            ProviderType::Groq,
+            ProviderType::OpenRouter,
+            ProviderType::DeepSeek,
+            ProviderType::DeepInfra,
+            ProviderType::Moonshot,
+            ProviderType::Minimax,
+            ProviderType::Dashscope,
+            ProviderType::XAI,
+            ProviderType::Perplexity,
+            ProviderType::Hyperbolic,
+            ProviderType::Infinity,
+            ProviderType::Novita,
+            ProviderType::Volcengine,
+            ProviderType::Nebius,
+            ProviderType::Nscale,
         ];
         SUPPORTED
     }
