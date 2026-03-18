@@ -84,7 +84,7 @@ impl AuthSystem {
         token: &str,
         mut context: RequestContext,
     ) -> Result<AuthResult> {
-        match self.jwt.verify_token(token).await {
+        match self.jwt.verify_access_token(token).await {
             Ok(claims) => {
                 // Reject non-access tokens (e.g. refresh, password reset)
                 if !matches!(claims.token_type, TokenType::Access) {

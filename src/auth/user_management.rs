@@ -74,7 +74,7 @@ impl AuthSystem {
         info!("User logout");
 
         // Extract session ID from token
-        if let Ok(claims) = self.jwt.verify_token(session_token).await
+        if let Ok(claims) = self.jwt.verify_access_token(session_token).await
             && let Some(session_id) = claims.session_id
         {
             // Store invalidated session (in practice, you'd use Redis or similar)
