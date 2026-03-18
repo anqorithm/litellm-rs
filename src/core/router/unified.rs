@@ -132,9 +132,39 @@ impl Router {
     // ========== Model Aliases ==========
 
     /// Add a model name alias
-    pub fn add_model_alias(&self, alias: &str, model_name: &str) {
+    ///
+    /// Returns an error if the alias would create a circular reference
+    /// (e.g., A -> B and then B -> A).
+    pub fn add_model_alias(
+        &self,
+        alias: &str,
+        model_name: &str,
+    ) -> Result<(), super::error::RouterError> {
+        // Self-alias is always a cycle
+        if alias == model_name {
+            return Err(super::error::RouterError::AliasCycle(format!(
+                "'{alias}' -> '{model_name}' would create a cycle"
+            )));
+        }
+
+        // Walk the alias chain starting from model_name to detect cycles
+        let mut current = model_name.to_string();
+        let mut visited = std::collections::HashSet::new();
+        visited.insert(alias.to_string());
+
+        while let Some(next) = self.model_aliases.get(&current) {
+            let next_val = next.value().clone();
+            if !visited.insert(next_val.clone()) {
+                return Err(super::error::RouterError::AliasCycle(format!(
+                    "'{alias}' -> '{model_name}' would create a cycle"
+                )));
+            }
+            current = next_val;
+        }
+
         self.model_aliases
             .insert(alias.to_string(), model_name.to_string());
+        Ok(())
     }
 
     /// Resolve a model name (handles aliases)

@@ -49,6 +49,14 @@ pub enum RouterError {
     /// Rate limit exceeded for model
     #[error("Rate limit exceeded for model: {0}")]
     RateLimitExceeded(String),
+
+    /// Circular alias detected
+    #[error("Circular alias detected: {0}")]
+    AliasCycle(String),
+
+    /// Circular fallback chain detected
+    #[error("Circular fallback chain detected: {0}")]
+    FallbackCycle(String),
 }
 
 #[cfg(test)]
@@ -240,11 +248,28 @@ mod tests {
             RouterError::DeploymentNotFound("c".to_string()),
             RouterError::AllDeploymentsInCooldown("d".to_string()),
             RouterError::RateLimitExceeded("e".to_string()),
+            RouterError::AliasCycle("f".to_string()),
+            RouterError::FallbackCycle("g".to_string()),
         ];
 
-        assert_eq!(errors.len(), 5);
+        assert_eq!(errors.len(), 7);
         for error in errors {
             assert!(!error.to_string().is_empty());
         }
+    }
+
+    #[test]
+    fn test_router_error_alias_cycle() {
+        let error = RouterError::AliasCycle("a -> b -> a".to_string());
+        assert_eq!(error.to_string(), "Circular alias detected: a -> b -> a");
+    }
+
+    #[test]
+    fn test_router_error_fallback_cycle() {
+        let error = RouterError::FallbackCycle("x -> y -> x".to_string());
+        assert_eq!(
+            error.to_string(),
+            "Circular fallback chain detected: x -> y -> x"
+        );
     }
 }

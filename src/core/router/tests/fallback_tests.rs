@@ -102,7 +102,7 @@ async fn test_get_fallbacks_with_alias() {
         FallbackConfig::new().add_general("gpt-4", vec!["gpt-4-turbo".to_string()]);
 
     let router = Router::default().with_fallback_config(fallback_config);
-    router.add_model_alias("gpt4", "gpt-4");
+    router.add_model_alias("gpt4", "gpt-4").unwrap();
 
     let fallbacks = router.get_fallbacks("gpt4", FallbackType::General);
     assert_eq!(fallbacks.len(), 1);
@@ -244,4 +244,68 @@ async fn test_fallback_config_multiple_models() {
     let fallbacks = router.get_fallbacks("claude-3-opus", FallbackType::ContextWindow);
     assert_eq!(fallbacks.len(), 1);
     assert_eq!(fallbacks[0], "claude-3-opus-200k");
+}
+
+// ==================== Fallback Cycle Detection Tests ====================
+
+#[test]
+fn test_fallback_validate_no_cycle() {
+    let config = FallbackConfig::new()
+        .add_general("gpt-4", vec!["gpt-3.5-turbo".to_string()])
+        .add_general("gpt-3.5-turbo", vec!["claude-3".to_string()]);
+
+    assert!(config.validate().is_ok());
+}
+
+#[test]
+fn test_fallback_validate_direct_cycle() {
+    // A -> B and B -> A
+    let config = FallbackConfig::new()
+        .add_general("a", vec!["b".to_string()])
+        .add_general("b", vec!["a".to_string()]);
+
+    let result = config.validate();
+    assert!(result.is_err());
+    let errors = result.unwrap_err();
+    assert!(!errors.is_empty());
+}
+
+#[test]
+fn test_fallback_validate_transitive_cycle() {
+    // A -> B -> C -> A
+    let config = FallbackConfig::new()
+        .add_general("a", vec!["b".to_string()])
+        .add_general("b", vec!["c".to_string()])
+        .add_general("c", vec!["a".to_string()]);
+
+    let result = config.validate();
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_fallback_validate_self_cycle() {
+    let config = FallbackConfig::new().add_general("a", vec!["a".to_string()]);
+
+    let result = config.validate();
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_fallback_validate_empty_config() {
+    let config = FallbackConfig::new();
+    assert!(config.validate().is_ok());
+}
+
+#[test]
+fn test_fallback_validate_cycle_in_one_type_only() {
+    // Cycle in context_window, but not in general
+    let config = FallbackConfig::new()
+        .add_general("a", vec!["b".to_string()])
+        .add_context_window("x", vec!["y".to_string()])
+        .add_context_window("y", vec!["x".to_string()]);
+
+    let result = config.validate();
+    assert!(result.is_err());
+    let errors = result.unwrap_err();
+    assert!(errors.iter().any(|e| e.contains("context_window")));
 }

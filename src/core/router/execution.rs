@@ -103,6 +103,14 @@ pub fn router_error_to_provider_error(err: RouterError) -> ProviderError {
             message: "Deployment not found".to_string(),
         },
         RouterError::RateLimitExceeded(_msg) => ProviderError::rate_limit("router", Some(60)),
+        RouterError::AliasCycle(msg) => ProviderError::Other {
+            provider: "router",
+            message: format!("Circular alias detected: {}", msg),
+        },
+        RouterError::FallbackCycle(msg) => ProviderError::Other {
+            provider: "router",
+            message: format!("Circular fallback chain detected: {}", msg),
+        },
     }
 }
 
