@@ -334,6 +334,16 @@ impl From<McpError> for GatewayError {
                     tpm_limit: None,
                 }
             }
+            McpError::ValidationError {
+                server_name,
+                tool_name,
+                errors,
+            } => GatewayError::Validation(format!(
+                "Validation failed for tool '{}' on server '{}': {}",
+                tool_name,
+                server_name,
+                errors.join("; ")
+            )),
         }
     }
 }
