@@ -97,7 +97,7 @@ mod tests {
 
         let result = config.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("JWT secret"));
+        assert!(result.unwrap_err().contains("jwt_secret is empty"));
     }
 
     // ==================== ServerConfig Validation ====================

@@ -67,7 +67,7 @@ mod tests {
             "Expected validation to fail for empty JWT secret"
         );
         let err = result.unwrap_err();
-        assert!(err.contains("JWT secret"), "Got error: {}", err);
+        assert!(err.contains("jwt_secret is empty"), "Got error: {}", err);
     }
 
     #[test]

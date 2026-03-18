@@ -78,6 +78,14 @@ impl AuthConfig {
     pub fn validate(&self) -> Result<(), String> {
         // Validate JWT secret strength
         if self.enable_jwt {
+            if self.jwt_secret.is_empty() {
+                return Err(
+                    "JWT authentication is enabled but jwt_secret is empty. \
+                     Set a secure jwt_secret (>= 32 chars) or disable JWT auth with enable_jwt: false"
+                        .to_string(),
+                );
+            }
+
             if self.jwt_secret.len() < 32 {
                 return Err(
                     "JWT secret must be at least 32 characters long for security".to_string(),
@@ -269,7 +277,12 @@ mod tests {
         assert!(config.jwt_secret.is_empty());
         assert_eq!(config.jwt_expiration, 86400); // 24 hours
         assert_eq!(config.api_key_header, "Authorization");
-        assert!(config.validate().is_err());
+        let err = config.validate().unwrap_err();
+        assert!(
+            err.contains("jwt_secret is empty"),
+            "Expected empty secret error, got: {}",
+            err
+        );
     }
 
     #[test]
