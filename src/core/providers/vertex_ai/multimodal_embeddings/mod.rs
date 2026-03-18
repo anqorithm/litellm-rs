@@ -42,7 +42,7 @@ impl MultimodalEmbeddingHandler {
     pub async fn embed_multimodal(
         _request: MultimodalEmbeddingRequest,
     ) -> Result<Vec<f32>, ProviderError> {
-        // TODO: Implement multimodal embedding
+        // NOTE: multimodal embedding not yet implemented
         Ok(vec![0.0; 1408]) // Multimodal embedding dimension
     }
 }

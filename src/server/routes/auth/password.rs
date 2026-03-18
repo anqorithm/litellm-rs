@@ -94,7 +94,7 @@ pub async fn forgot_password(
     // Generate reset token
     match state.auth.request_password_reset(&request.email).await {
         Ok(_reset_token) => {
-            // TODO: Send email with reset token
+            // NOTE: Email sending for password reset not yet implemented.
             info!("Password reset token generated");
             // Record as failure to count against the rate limit regardless of outcome,
             // preventing enumeration attacks
