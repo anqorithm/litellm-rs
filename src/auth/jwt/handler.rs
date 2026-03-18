@@ -114,29 +114,43 @@ impl JwtHandler {
         })
     }
 
-    /// Verify and decode a token
-    pub async fn verify_token(&self, token: &str) -> Result<Claims> {
+    /// Verify and decode an access token
+    ///
+    /// Only accepts tokens with the "api" audience claim, preventing
+    /// refresh tokens from being used as access tokens.
+    pub async fn verify_access_token(&self, token: &str) -> Result<Claims> {
         let mut validation = Validation::new(self.algorithm);
         validation.set_issuer(&[&self.issuer]);
-        validation.set_audience(&["api", "refresh"]);
+        validation.set_audience(&["api"]);
 
         let token_data = decode::<Claims>(token, &self.decoding_key, &validation).map_err(|e| {
             warn!("JWT verification failed: {}", e);
             GatewayError::Auth(format!("JWT error: {}", e))
         })?;
 
-        debug!("Token verified for user: {}", token_data.claims.sub);
+        debug!("Access token verified for user: {}", token_data.claims.sub);
         Ok(token_data.claims)
     }
 
     /// Verify a refresh token and return user ID
+    ///
+    /// Only accepts tokens with the "refresh" audience claim, preventing
+    /// access tokens from being used as refresh tokens.
     pub async fn verify_refresh_token(&self, token: &str) -> Result<Uuid> {
-        let claims = self.verify_token(token).await?;
+        let mut validation = Validation::new(self.algorithm);
+        validation.set_issuer(&[&self.issuer]);
+        validation.set_audience(&["refresh"]);
 
-        if !matches!(claims.token_type, TokenType::Refresh) {
+        let token_data = decode::<Claims>(token, &self.decoding_key, &validation).map_err(|e| {
+            warn!("JWT verification failed: {}", e);
+            GatewayError::Auth(format!("JWT error: {}", e))
+        })?;
+
+        if !matches!(token_data.claims.token_type, TokenType::Refresh) {
             return Err(GatewayError::auth("Invalid token type for refresh"));
         }
 
-        Ok(claims.sub)
+        debug!("Refresh token verified for user: {}", token_data.claims.sub);
+        Ok(token_data.claims.sub)
     }
 }

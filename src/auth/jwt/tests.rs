@@ -38,7 +38,7 @@ async fn test_create_and_verify_access_token() {
         .await
         .unwrap();
 
-    let claims = handler.verify_token(&token).await.unwrap();
+    let claims = handler.verify_access_token(&token).await.unwrap();
     assert_eq!(claims.sub, user_id);
     assert_eq!(claims.role, "user");
     assert_eq!(claims.permissions, vec!["read"]);
@@ -68,7 +68,7 @@ async fn test_create_token_pair() {
 
     // Verify both tokens
     let access_claims = handler
-        .verify_token(&token_pair.access_token)
+        .verify_access_token(&token_pair.access_token)
         .await
         .unwrap();
     let refresh_user_id = handler
@@ -141,27 +141,48 @@ async fn test_invalid_token_verification() {
     let handler = create_test_handler().await;
     let invalid_token = "invalid.jwt.token";
 
-    let result = handler.verify_token(invalid_token).await;
+    let result = handler.verify_access_token(invalid_token).await;
     assert!(result.is_err());
 }
 
-/// Verify that a refresh token passes verify_token() but has TokenType::Refresh,
-/// which means authenticate_jwt() will reject it via the token_type guard.
+/// Verify that verify_access_token() rejects a refresh token at the audience level,
+/// preventing token type confusion before any token_type field check.
 #[tokio::test]
-async fn test_refresh_token_rejected_as_access() {
+async fn test_refresh_token_rejected_by_verify_access_token() {
     let handler = create_test_handler().await;
     let user_id = Uuid::new_v4();
 
     let refresh_token = handler.create_refresh_token(user_id, None).await.unwrap();
 
-    // verify_token accepts refresh tokens (it allows both "api" and "refresh" audiences)
-    let claims = handler.verify_token(&refresh_token).await.unwrap();
-    assert_eq!(claims.sub, user_id);
-
-    // But the token_type is Refresh, NOT Access — authenticate_jwt rejects this
+    // verify_access_token must reject refresh tokens (audience mismatch: "refresh" vs "api")
+    let result = handler.verify_access_token(&refresh_token).await;
     assert!(
-        !matches!(claims.token_type, TokenType::Access),
-        "refresh token must not be treated as an access token"
+        result.is_err(),
+        "refresh token must be rejected by verify_access_token"
     );
-    assert!(matches!(claims.token_type, TokenType::Refresh));
+}
+
+/// Verify that verify_refresh_token() rejects an access token at the audience level.
+#[tokio::test]
+async fn test_access_token_rejected_by_verify_refresh_token() {
+    let handler = create_test_handler().await;
+    let user_id = Uuid::new_v4();
+
+    let access_token = handler
+        .create_access_token(
+            user_id,
+            "user".to_string(),
+            vec!["read".to_string()],
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+
+    // verify_refresh_token must reject access tokens (audience mismatch: "api" vs "refresh")
+    let result = handler.verify_refresh_token(&access_token).await;
+    assert!(
+        result.is_err(),
+        "access token must be rejected by verify_refresh_token"
+    );
 }
