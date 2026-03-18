@@ -74,7 +74,7 @@ redis = { version = "0.27", features = ["tokio-comp", "cluster", "streams", "aio
 lru = "0.16"
 
 # Object storage (S3 compatible)
-object_store = { version = "0.11", features = ["aws", "gcp", "azure"], optional = true }
+object_store = { version = "0.13", features = ["aws", "gcp", "azure"], optional = true }
 aws-sdk-s3 = { version = "1.120", optional = true }
 aws-sdk-secretsmanager = { version = "1.70", optional = true }
 aws-config = { version = "1.5", optional = true }

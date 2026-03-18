@@ -6,6 +6,7 @@
 mod implementation {
     use async_trait::async_trait;
     use object_store::ObjectStore;
+    use object_store::ObjectStoreExt;
     use object_store::azure::{AzureConfigKey, MicrosoftAzureBuilder};
     use object_store::path::Path;
     use serde::{Serialize, de::DeserializeOwned};
