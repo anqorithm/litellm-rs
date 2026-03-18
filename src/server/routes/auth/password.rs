@@ -66,7 +66,8 @@ pub async fn forgot_password(
     state: web::Data<AppState>,
     request: web::Json<ForgotPasswordRequest>,
 ) -> ActixResult<HttpResponse> {
-    let client_ip = extract_client_ip(&req, &state.config.gateway.server.trusted_proxies);
+    let cfg = state.config.load();
+    let client_ip = extract_client_ip(&req, &cfg.gateway.server.trusted_proxies);
 
     // Rate limit: max 5 password reset requests per IP per minute
     let limiter = get_password_reset_rate_limiter();
@@ -116,7 +117,8 @@ pub async fn reset_password(
     state: web::Data<AppState>,
     request: web::Json<ResetPasswordRequest>,
 ) -> ActixResult<HttpResponse> {
-    let client_ip = extract_client_ip(&req, &state.config.gateway.server.trusted_proxies);
+    let cfg = state.config.load();
+    let client_ip = extract_client_ip(&req, &cfg.gateway.server.trusted_proxies);
 
     // Rate limit: max 5 reset attempts per IP per minute
     let limiter = get_password_reset_rate_limiter();

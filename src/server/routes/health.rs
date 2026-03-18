@@ -46,8 +46,10 @@ pub async fn health_check(_state: web::Data<AppState>) -> ActixResult<HttpRespon
 async fn detailed_health_check(state: web::Data<AppState>) -> ActixResult<HttpResponse> {
     debug!("Detailed health check requested");
 
+    let cfg = state.config.load();
+
     // Check storage health
-    let storage_health = if state.config.storage().database.url.is_empty() {
+    let storage_health = if cfg.storage().database.url.is_empty() {
         crate::storage::StorageHealthStatus {
             overall: false,
             database: false,
@@ -106,6 +108,7 @@ async fn detailed_health_check(state: web::Data<AppState>) -> ActixResult<HttpRe
 async fn system_status(state: web::Data<AppState>) -> ActixResult<HttpResponse> {
     debug!("System status requested");
 
+    let cfg = state.config.load();
     let system_status = SystemStatus {
         service_name: Cow::Borrowed("Rust LiteLLM Gateway"),
         version: Cow::Borrowed(env!("CARGO_PKG_VERSION")),
@@ -118,12 +121,12 @@ async fn system_status(state: web::Data<AppState>) -> ActixResult<HttpResponse> 
             .map(Cow::Owned)
             .unwrap_or(Cow::Borrowed("development")),
         config: SystemConfig {
-            server_host: state.config.server().host.clone(),
-            server_port: state.config.server().port,
-            auth_enabled: state.config.auth().enable_jwt || state.config.auth().enable_api_key,
-            rate_limiting_enabled: state.config.gateway.rate_limit.enabled,
-            caching_enabled: state.config.gateway.cache.enabled,
-            providers_count: state.config.providers().len(),
+            server_host: cfg.server().host.clone(),
+            server_port: cfg.server().port,
+            auth_enabled: cfg.auth().enable_jwt || cfg.auth().enable_api_key,
+            rate_limiting_enabled: cfg.gateway.rate_limit.enabled,
+            caching_enabled: cfg.gateway.cache.enabled,
+            providers_count: cfg.providers().len(),
         },
     };
 
@@ -175,7 +178,7 @@ gateway_providers_total {}
         get_uptime_seconds(),
         get_memory_usage(),
         get_cpu_usage(),
-        state.config.providers().len()
+        state.config.load().providers().len()
     );
 
     Ok(HttpResponse::Ok()
@@ -261,10 +264,11 @@ struct VersionInfo {
 async fn check_provider_health(
     state: &AppState,
 ) -> Result<ProviderHealthStatus, crate::utils::error::gateway_error::GatewayError> {
+    let cfg = state.config.load();
     let mut provider_details = Vec::new();
     let mut healthy_count = 0;
 
-    for provider_config in state.config.providers() {
+    for provider_config in cfg.providers() {
         let start_time = std::time::Instant::now();
 
         // TODO: Implement actual provider health checks
@@ -287,7 +291,7 @@ async fn check_provider_health(
 
     Ok(ProviderHealthStatus {
         healthy_providers: healthy_count,
-        total_providers: state.config.providers().len(),
+        total_providers: cfg.providers().len(),
         provider_details,
     })
 }
