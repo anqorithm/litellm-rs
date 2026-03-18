@@ -5,9 +5,9 @@
 #[cfg(feature = "s3")]
 mod implementation {
     use async_trait::async_trait;
-    use object_store::ObjectStore;
     use object_store::gcp::GoogleCloudStorageBuilder;
     use object_store::path::Path;
+    use object_store::{ObjectStore, ObjectStoreExt};
     use serde::{Serialize, de::DeserializeOwned};
     use std::sync::Arc;
     use std::time::Duration;

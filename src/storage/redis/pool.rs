@@ -54,8 +54,9 @@ impl RedisPool {
 
         let client = Client::open(config.url.as_str()).map_err(GatewayError::from)?;
 
-        let async_config = AsyncConnectionConfig::new()
-            .set_connection_timeout(std::time::Duration::from_secs(config.connection_timeout));
+        let async_config = AsyncConnectionConfig::new().set_connection_timeout(Some(
+            std::time::Duration::from_secs(config.connection_timeout),
+        ));
 
         let connection_manager = client
             .get_multiplexed_async_connection_with_config(&async_config)
