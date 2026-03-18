@@ -197,19 +197,42 @@ impl Router {
     // ========== Recording Methods ==========
 
     /// Record a successful request
+    ///
+    /// After recording, checks whether the deployment should be promoted from
+    /// Degraded (half-open) back to Healthy based on `success_threshold`.
     pub fn record_success(&self, deployment_id: &str, tokens: u64, latency_us: u64) {
         if let Some(deployment) = self.deployments.get(deployment_id) {
             deployment.record_success(tokens, latency_us);
+
+            // Promote Degraded -> Healthy once enough consecutive successes
+            let current_health = deployment.state.health.load(Relaxed);
+            if current_health == super::deployment::HealthStatus::Degraded as u8 {
+                let consec = deployment.state.consecutive_successes.load(Relaxed);
+                if consec >= self.config.success_threshold {
+                    deployment
+                        .state
+                        .health
+                        .store(super::deployment::HealthStatus::Healthy as u8, Relaxed);
+                }
+            }
         }
     }
 
     /// Record a failed request
+    ///
+    /// Only trips the circuit breaker when both the per-minute failure count
+    /// reaches `allowed_fails` **and** the total requests this minute meet the
+    /// `min_requests` threshold.
     pub fn record_failure(&self, deployment_id: &str) {
         if let Some(deployment) = self.deployments.get(deployment_id) {
             deployment.record_failure();
 
-            let fails_this_minute = deployment.state.fails_this_minute.load(Relaxed);
-            if fails_this_minute >= self.config.allowed_fails {
+            let fails = deployment.state.fails_this_minute.load(Relaxed);
+            let successes_this_minute = deployment.state.rpm_current.load(Relaxed);
+            let total_this_minute = successes_this_minute + fails as u64;
+            if fails >= self.config.allowed_fails
+                && total_this_minute >= self.config.min_requests as u64
+            {
                 deployment.enter_cooldown(self.config.cooldown_time_secs);
             }
         }
@@ -228,13 +251,17 @@ impl Router {
                 | CooldownReason::Manual => true,
 
                 CooldownReason::ConsecutiveFailures => {
-                    d.state.fails_this_minute.load(Relaxed) >= self.config.allowed_fails
+                    let fails = d.state.fails_this_minute.load(Relaxed);
+                    let successes_this_minute = d.state.rpm_current.load(Relaxed);
+                    let total_this_minute = successes_this_minute + fails as u64;
+                    fails >= self.config.allowed_fails
+                        && total_this_minute >= self.config.min_requests as u64
                 }
 
                 CooldownReason::HighFailureRate => {
                     let total = d.state.total_requests.load(Relaxed);
                     let fails = d.state.fail_requests.load(Relaxed);
-                    total >= 10 && (fails * 100 / total) > 50
+                    total >= self.config.min_requests as u64 && (fails * 100 / total) > 50
                 }
             };
 

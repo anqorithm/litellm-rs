@@ -145,6 +145,9 @@ pub struct DeploymentState {
     /// Average latency in microseconds (sliding window)
     pub avg_latency_us: AtomicU64,
 
+    /// Consecutive successful requests since last failure (for half-open promotion)
+    pub consecutive_successes: AtomicU32,
+
     /// Last minute reset timestamp (unix seconds)
     pub minute_reset_at: AtomicU64,
 }
@@ -165,6 +168,7 @@ impl DeploymentState {
             cooldown_until: AtomicU64::new(0),
             last_request_at: AtomicU64::new(0),
             avg_latency_us: AtomicU64::new(0),
+            consecutive_successes: AtomicU32::new(0),
             minute_reset_at: AtomicU64::new(now),
         }
     }
@@ -207,6 +211,9 @@ impl Clone for DeploymentState {
             cooldown_until: AtomicU64::new(self.cooldown_until.load(Ordering::Relaxed)),
             last_request_at: AtomicU64::new(self.last_request_at.load(Ordering::Relaxed)),
             avg_latency_us: AtomicU64::new(self.avg_latency_us.load(Ordering::Relaxed)),
+            consecutive_successes: AtomicU32::new(
+                self.consecutive_successes.load(Ordering::Relaxed),
+            ),
             minute_reset_at: AtomicU64::new(self.minute_reset_at.load(Ordering::Relaxed)),
         }
     }
@@ -361,14 +368,12 @@ impl Deployment {
         };
         self.state.avg_latency_us.store(new_avg, Ordering::Relaxed);
 
-        // If health was Degraded, consider promoting to Healthy
-        let current_health = self.state.health.load(Ordering::Relaxed);
-        if current_health == HealthStatus::Degraded as u8 {
-            // Simple heuristic: promote after successful request
-            self.state
-                .health
-                .store(HealthStatus::Healthy as u8, Ordering::Relaxed);
-        }
+        // Track consecutive successes for half-open promotion.
+        // The caller (Router) checks the counter against success_threshold
+        // to decide when to promote from Degraded to Healthy.
+        self.state
+            .consecutive_successes
+            .fetch_add(1, Ordering::Relaxed);
     }
 
     /// Record a failed request
@@ -382,6 +387,9 @@ impl Deployment {
         self.state
             .last_request_at
             .store(current_timestamp(), Ordering::Relaxed);
+
+        // Reset consecutive success counter on failure
+        self.state.consecutive_successes.store(0, Ordering::Relaxed);
 
         // Mark as degraded (caller can escalate to Unhealthy/Cooldown if needed)
         self.state

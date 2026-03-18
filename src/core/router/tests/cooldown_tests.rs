@@ -15,6 +15,7 @@ async fn test_record_failure_triggers_cooldown() {
     let config = RouterConfig {
         allowed_fails: 3,
         cooldown_time_secs: 10,
+        min_requests: 1,
         ..Default::default()
     };
     let router = Router::new(config);
@@ -91,6 +92,7 @@ async fn test_cooldown_on_consecutive_failures() {
     let config = RouterConfig {
         allowed_fails: 3,
         cooldown_time_secs: 10,
+        min_requests: 1,
         ..Default::default()
     };
     let router = Router::new(config);
@@ -303,6 +305,162 @@ async fn test_minute_reset_task_integration() {
     }
 
     task.abort();
+}
+
+#[tokio::test]
+async fn test_min_requests_prevents_premature_cooldown() {
+    // With min_requests=10, 3 failures out of only 3 total should NOT trip
+    let config = RouterConfig {
+        allowed_fails: 3,
+        cooldown_time_secs: 10,
+        min_requests: 10,
+        ..Default::default()
+    };
+    let router = Router::new(config);
+    let deployment = create_test_deployment("test-1", "gpt-4").await;
+    router.add_deployment(deployment);
+
+    router.record_failure("test-1");
+    router.record_failure("test-1");
+    router.record_failure("test-1");
+
+    if let Some(d) = router.get_deployment("test-1") {
+        // 3 fails >= allowed_fails(3), but total_this_minute(3) < min_requests(10)
+        assert!(!d.is_in_cooldown());
+    } else {
+        panic!("Deployment not found");
+    }
+}
+
+#[tokio::test]
+async fn test_min_requests_met_triggers_cooldown() {
+    // With min_requests=5, enough total traffic allows the breaker to trip
+    let config = RouterConfig {
+        allowed_fails: 3,
+        cooldown_time_secs: 10,
+        min_requests: 5,
+        ..Default::default()
+    };
+    let router = Router::new(config);
+    let deployment = create_test_deployment("test-1", "gpt-4").await;
+    router.add_deployment(deployment);
+
+    // Record 3 successes first to build up total traffic
+    for _ in 0..3 {
+        router.record_success("test-1", 100, 50_000);
+    }
+
+    // Now record 3 failures (total_this_minute = 3 success + 3 fail = 6 >= 5)
+    router.record_failure("test-1");
+    router.record_failure("test-1");
+    router.record_failure("test-1");
+
+    if let Some(d) = router.get_deployment("test-1") {
+        assert!(d.is_in_cooldown());
+    } else {
+        panic!("Deployment not found");
+    }
+}
+
+#[tokio::test]
+async fn test_success_threshold_delays_promotion() {
+    // success_threshold=3 means Degraded -> Healthy requires 3 consecutive successes
+    let config = RouterConfig {
+        allowed_fails: 3,
+        cooldown_time_secs: 10,
+        success_threshold: 3,
+        min_requests: 1,
+        ..Default::default()
+    };
+    let router = Router::new(config);
+    let deployment = create_test_deployment("test-1", "gpt-4").await;
+    router.add_deployment(deployment);
+
+    // Force into Degraded state
+    if let Some(d) = router.get_deployment("test-1") {
+        d.state
+            .health
+            .store(HealthStatus::Degraded as u8, Ordering::Relaxed);
+    }
+
+    // First two successes should NOT promote to Healthy
+    router.record_success("test-1", 100, 50_000);
+    router.record_success("test-1", 100, 50_000);
+
+    if let Some(d) = router.get_deployment("test-1") {
+        assert_eq!(
+            d.state.health.load(Ordering::Relaxed),
+            HealthStatus::Degraded as u8
+        );
+    }
+
+    // Third consecutive success promotes to Healthy
+    router.record_success("test-1", 100, 50_000);
+
+    if let Some(d) = router.get_deployment("test-1") {
+        assert_eq!(
+            d.state.health.load(Ordering::Relaxed),
+            HealthStatus::Healthy as u8
+        );
+    } else {
+        panic!("Deployment not found");
+    }
+}
+
+#[tokio::test]
+async fn test_failure_resets_consecutive_successes() {
+    let config = RouterConfig {
+        allowed_fails: 100, // high so we don't trip cooldown
+        cooldown_time_secs: 10,
+        success_threshold: 3,
+        min_requests: 1,
+        ..Default::default()
+    };
+    let router = Router::new(config);
+    let deployment = create_test_deployment("test-1", "gpt-4").await;
+    router.add_deployment(deployment);
+
+    // Force into Degraded state
+    if let Some(d) = router.get_deployment("test-1") {
+        d.state
+            .health
+            .store(HealthStatus::Degraded as u8, Ordering::Relaxed);
+    }
+
+    // Two successes, then a failure resets the counter
+    router.record_success("test-1", 100, 50_000);
+    router.record_success("test-1", 100, 50_000);
+    router.record_failure("test-1");
+
+    if let Some(d) = router.get_deployment("test-1") {
+        assert_eq!(d.state.consecutive_successes.load(Ordering::Relaxed), 0);
+        assert_eq!(
+            d.state.health.load(Ordering::Relaxed),
+            HealthStatus::Degraded as u8
+        );
+    }
+
+    // Need 3 fresh consecutive successes
+    router.record_success("test-1", 100, 50_000);
+    router.record_success("test-1", 100, 50_000);
+
+    if let Some(d) = router.get_deployment("test-1") {
+        assert_eq!(
+            d.state.health.load(Ordering::Relaxed),
+            HealthStatus::Degraded as u8
+        );
+    }
+
+    router.record_success("test-1", 100, 50_000);
+
+    if let Some(d) = router.get_deployment("test-1") {
+        assert_eq!(
+            d.state.health.load(Ordering::Relaxed),
+            HealthStatus::Healthy as u8
+        );
+    } else {
+        panic!("Deployment not found");
+    }
 }
 
 #[tokio::test]

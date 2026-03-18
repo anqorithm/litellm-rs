@@ -20,6 +20,7 @@ use actix_web::{HttpRequest, HttpResponse, ResponseError, Result as ActixResult,
 use bytes::Bytes;
 use futures::StreamExt;
 use serde_json::json;
+use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 
 use super::context::get_request_context;
@@ -124,15 +125,21 @@ async fn handle_streaming_chat_completion(
         .await
     {
         Ok((mut stream, _, _, _)) => {
-            let sse_stream = async_stream::stream! {
+            // Use a channel so that when the client disconnects and actix-web
+            // drops the response stream, the receiver is dropped, which causes
+            // the sender to fail. This breaks the upstream read loop and drops
+            // the provider stream, cancelling any in-flight HTTP request.
+            let (tx, rx) = mpsc::channel::<Bytes>(8);
+
+            tokio::spawn(async move {
                 while let Some(chunk_result) = stream.next().await {
-                    match chunk_result {
+                    let bytes = match chunk_result {
                         Ok(chunk) => {
                             let chat_chunk = convert_core_chunk_to_streaming(chunk);
                             match serde_json::to_string(&chat_chunk) {
                                 Ok(json) => {
                                     let event = Event::default().data(&json);
-                                    yield Ok::<_, actix_web::error::Error>(event.to_bytes());
+                                    event.to_bytes()
                                 }
                                 Err(e) => {
                                     error!("Stream serialization error: {}", e);
@@ -141,7 +148,12 @@ async fn handle_streaming_chat_completion(
                                         "server_error",
                                         "internal_error",
                                     );
-                                    yield Ok::<_, actix_web::error::Error>(error_bytes);
+                                    // Send error then stop reading upstream.
+                                    if tx.send(error_bytes).await.is_err() {
+                                        info!(
+                                            "Client disconnected before error event could be sent"
+                                        );
+                                    }
                                     break;
                                 }
                             }
@@ -149,20 +161,35 @@ async fn handle_streaming_chat_completion(
                         Err(e) => {
                             error!("Stream chunk error: {}", e);
                             let (error_type, error_code) = sse_error_classification(&e);
-                            let error_bytes = format_sse_error(
-                                &e.to_string(),
-                                error_type,
-                                error_code,
-                            );
-                            yield Ok::<_, actix_web::error::Error>(error_bytes);
+                            let error_bytes =
+                                format_sse_error(&e.to_string(), error_type, error_code);
+                            if tx.send(error_bytes).await.is_err() {
+                                info!("Client disconnected before error event could be sent");
+                            }
                             break;
                         }
+                    };
+
+                    // If the receiver has been dropped (client disconnected),
+                    // tx.send() returns Err and we exit, dropping the provider
+                    // stream to cancel the upstream request.
+                    if tx.send(bytes).await.is_err() {
+                        info!("Client disconnected during streaming, cancelling upstream");
+                        break;
                     }
                 }
 
+                // Send the final [DONE] event; ignore error if client is gone.
                 let done_event = Event::default().data("[DONE]");
-                yield Ok::<_, actix_web::error::Error>(done_event.to_bytes());
-            };
+                if tx.send(done_event.to_bytes()).await.is_err() {
+                    info!("Client disconnected before [DONE] event could be sent");
+                }
+                // `stream` (the provider stream) is dropped here, cancelling
+                // any remaining upstream work.
+            });
+
+            let sse_stream = tokio_stream::wrappers::ReceiverStream::new(rx)
+                .map(Ok::<_, actix_web::error::Error>);
 
             Ok(HttpResponse::Ok()
                 .insert_header((CONTENT_TYPE, "text/event-stream"))

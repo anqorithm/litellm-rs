@@ -14,30 +14,26 @@ use tracing::warn;
 
 /// Build runtime router config from gateway YAML router config.
 ///
-/// Note: `GatewayRouterConfig` fields `circuit_breaker.min_requests`,
-/// `circuit_breaker.success_threshold`, `load_balancer.sticky_sessions`, and
+/// Note: `GatewayRouterConfig` fields `load_balancer.sticky_sessions` and
 /// `load_balancer.session_timeout` are currently not mapped because runtime
 /// `RouterConfig` has no corresponding fields yet.
 pub fn runtime_router_config_from_gateway(config: &GatewayRouterConfig) -> RouterConfig {
-    let has_unmapped_fields = config.circuit_breaker.min_requests != 10
-        || config.circuit_breaker.success_threshold != 3
-        || config.load_balancer.sticky_sessions
-        || config.load_balancer.session_timeout != 3600;
+    let has_unmapped_fields =
+        config.load_balancer.sticky_sessions || config.load_balancer.session_timeout != 3600;
     if has_unmapped_fields {
         warn!(
-            min_requests = config.circuit_breaker.min_requests,
-            success_threshold = config.circuit_breaker.success_threshold,
             sticky_sessions = config.load_balancer.sticky_sessions,
             session_timeout = config.load_balancer.session_timeout,
-            "Gateway router config contains fields not mapped to runtime RouterConfig yet; values are ignored"
+            "Gateway router config contains load balancer fields not mapped to runtime RouterConfig yet; values are ignored"
         );
     }
 
     RouterConfig {
         routing_strategy: config.strategy,
-        // Gateway circuit-breaker thresholds are the closest semantic mapping here.
         allowed_fails: config.circuit_breaker.failure_threshold,
+        min_requests: config.circuit_breaker.min_requests,
         cooldown_time_secs: config.circuit_breaker.recovery_timeout,
+        success_threshold: config.circuit_breaker.success_threshold,
         enable_pre_call_checks: config.load_balancer.health_check_enabled,
         ..RouterConfig::default()
     }
@@ -186,13 +182,15 @@ mod tests {
             circuit_breaker: CircuitBreakerConfig {
                 failure_threshold: 8,
                 recovery_timeout: 45,
-                min_requests: 10,
-                success_threshold: 3,
+                min_requests: 20,
+                success_threshold: 5,
             },
             load_balancer: LoadBalancerConfig::default(),
         };
         let runtime = runtime_router_config_from_gateway(&gateway);
         assert_eq!(runtime.allowed_fails, 8);
         assert_eq!(runtime.cooldown_time_secs, 45);
+        assert_eq!(runtime.min_requests, 20);
+        assert_eq!(runtime.success_threshold, 5);
     }
 }

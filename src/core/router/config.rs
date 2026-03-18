@@ -67,8 +67,22 @@ pub struct RouterConfig {
     /// Number of failures allowed before entering cooldown (default: 3)
     pub allowed_fails: u32,
 
+    /// Minimum total requests before the circuit breaker can trip (default: 10)
+    ///
+    /// The breaker will not enter cooldown until the deployment has received at
+    /// least this many requests in the current minute, preventing premature
+    /// tripping on small sample sizes.
+    pub min_requests: u32,
+
     /// Cooldown duration in seconds (default: 5)
     pub cooldown_time_secs: u64,
+
+    /// Consecutive successes needed to promote from Degraded to Healthy (default: 3)
+    ///
+    /// After a deployment exits cooldown it enters the Degraded (half-open)
+    /// state. This many consecutive successful requests must occur before the
+    /// deployment is promoted back to Healthy.
+    pub success_threshold: u32,
 
     /// Default timeout for requests in seconds (default: 60)
     pub timeout_secs: u64,
@@ -87,7 +101,9 @@ impl Default for RouterConfig {
             num_retries: 3,
             retry_after_secs: 0,
             allowed_fails: 3,
+            min_requests: 10,
             cooldown_time_secs: 5,
+            success_threshold: 3,
             timeout_secs: 60,
             max_fallbacks: 5,
             enable_pre_call_checks: true,
@@ -163,7 +179,9 @@ mod tests {
         assert_eq!(config.num_retries, 3);
         assert_eq!(config.retry_after_secs, 0);
         assert_eq!(config.allowed_fails, 3);
+        assert_eq!(config.min_requests, 10);
         assert_eq!(config.cooldown_time_secs, 5);
+        assert_eq!(config.success_threshold, 3);
         assert_eq!(config.timeout_secs, 60);
         assert_eq!(config.max_fallbacks, 5);
         assert!(config.enable_pre_call_checks);
@@ -176,7 +194,9 @@ mod tests {
             num_retries: 5,
             retry_after_secs: 2,
             allowed_fails: 5,
+            min_requests: 20,
             cooldown_time_secs: 10,
+            success_threshold: 5,
             timeout_secs: 120,
             max_fallbacks: 10,
             enable_pre_call_checks: false,
@@ -185,6 +205,8 @@ mod tests {
         assert_eq!(config.routing_strategy, RoutingStrategy::LatencyBased);
         assert_eq!(config.num_retries, 5);
         assert_eq!(config.retry_after_secs, 2);
+        assert_eq!(config.min_requests, 20);
+        assert_eq!(config.success_threshold, 5);
         assert!(!config.enable_pre_call_checks);
     }
 
@@ -216,7 +238,9 @@ mod tests {
             num_retries: 10,
             retry_after_secs: 1,
             allowed_fails: 10,
+            min_requests: 20,
             cooldown_time_secs: 30,
+            success_threshold: 5,
             timeout_secs: 30,
             max_fallbacks: 20,
             enable_pre_call_checks: true,
@@ -234,7 +258,9 @@ mod tests {
             num_retries: 1,
             retry_after_secs: 0,
             allowed_fails: 1,
+            min_requests: 1,
             cooldown_time_secs: 2,
+            success_threshold: 1,
             timeout_secs: 10,
             max_fallbacks: 2,
             enable_pre_call_checks: false,
@@ -256,7 +282,7 @@ mod tests {
             cooldown_time_secs: 60,
             timeout_secs: 120,
             max_fallbacks: 3,
-            enable_pre_call_checks: true,
+            ..RouterConfig::default()
         };
 
         assert_eq!(config.routing_strategy, RoutingStrategy::PriorityBased);
@@ -273,7 +299,7 @@ mod tests {
             cooldown_time_secs: 60,
             timeout_secs: 60,
             max_fallbacks: 10,
-            enable_pre_call_checks: true,
+            ..RouterConfig::default()
         };
 
         assert_eq!(config.routing_strategy, RoutingStrategy::RateLimitAware);
