@@ -775,7 +775,7 @@ mod tests {
         config.auth.jwt_secret = "".to_string();
         let result = config.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("JWT secret"));
+        assert!(result.unwrap_err().contains("jwt_secret is empty"));
     }
 
     // ==================== GatewayConfig Provider Lookup Tests ====================
