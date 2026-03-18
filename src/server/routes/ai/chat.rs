@@ -20,6 +20,7 @@ use actix_web::{HttpRequest, HttpResponse, ResponseError, Result as ActixResult,
 use bytes::Bytes;
 use futures::StreamExt;
 use serde_json::json;
+use std::time::Duration;
 use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 
@@ -131,8 +132,41 @@ async fn handle_streaming_chat_completion(
             // the provider stream, cancelling any in-flight HTTP request.
             let (tx, rx) = mpsc::channel::<Bytes>(8);
 
+            let idle_timeout_secs = state.config.gateway.server.stream_idle_timeout;
+
             tokio::spawn(async move {
-                while let Some(chunk_result) = stream.next().await {
+                loop {
+                    let chunk_result = if idle_timeout_secs == 0 {
+                        stream.next().await
+                    } else {
+                        let timeout_dur = Duration::from_secs(idle_timeout_secs);
+                        match tokio::time::timeout(timeout_dur, stream.next()).await {
+                            Ok(result) => result,
+                            Err(_) => {
+                                warn!(
+                                    "SSE stream idle timeout after {}s, closing connection",
+                                    idle_timeout_secs
+                                );
+                                let error_bytes = format_sse_error(
+                                    &format!(
+                                        "Stream idle timeout: no data received for {}s",
+                                        idle_timeout_secs
+                                    ),
+                                    "server_error",
+                                    "timeout",
+                                );
+                                if tx.send(error_bytes).await.is_err() {
+                                    info!("Client disconnected before timeout error could be sent");
+                                }
+                                break;
+                            }
+                        }
+                    };
+
+                    let Some(chunk_result) = chunk_result else {
+                        break;
+                    };
+
                     let bytes = match chunk_result {
                         Ok(chunk) => {
                             let chat_chunk = convert_core_chunk_to_streaming(chunk);

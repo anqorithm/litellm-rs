@@ -82,6 +82,7 @@ impl ServerConfigBuilder {
             },
             features: Vec::new(),
             trusted_proxies: Vec::new(),
+            stream_idle_timeout: 300,
         }
     }
 }

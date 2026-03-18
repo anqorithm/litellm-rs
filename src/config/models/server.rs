@@ -39,6 +39,15 @@ pub struct ServerConfig {
     /// Only requests from these IPs will have their X-Forwarded-For header trusted.
     #[serde(default)]
     pub trusted_proxies: Vec<String>,
+    /// Idle timeout for SSE streaming connections in seconds.
+    /// If no chunk arrives within this duration, the stream is closed with a timeout error.
+    /// Default: 300 seconds (5 minutes). Set to 0 to disable.
+    #[serde(default = "default_stream_idle_timeout")]
+    pub stream_idle_timeout: u64,
+}
+
+fn default_stream_idle_timeout() -> u64 {
+    300 // 5 minutes
 }
 
 impl Default for ServerConfig {
@@ -55,6 +64,7 @@ impl Default for ServerConfig {
             cors: CorsConfig::default(),
             features: Vec::new(),
             trusted_proxies: Vec::new(),
+            stream_idle_timeout: default_stream_idle_timeout(),
         }
     }
 }
@@ -92,6 +102,9 @@ impl ServerConfig {
         }
         if !other.trusted_proxies.is_empty() {
             self.trusted_proxies = other.trusted_proxies;
+        }
+        if other.stream_idle_timeout != default_stream_idle_timeout() {
+            self.stream_idle_timeout = other.stream_idle_timeout;
         }
         self
     }
