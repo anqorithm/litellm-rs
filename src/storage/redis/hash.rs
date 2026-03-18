@@ -37,7 +37,7 @@ impl RedisPool {
             let result: RedisResult<String> = c.hget(key, field).await;
             match result {
                 Ok(value) => Ok(Some(value)),
-                Err(e) if e.kind() == redis::ErrorKind::TypeError => Ok(None),
+                Err(e) if e.kind() == redis::ErrorKind::UnexpectedReturnType => Ok(None),
                 Err(e) => Err(GatewayError::from(e)),
             }
         } else {

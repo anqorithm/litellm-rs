@@ -128,7 +128,7 @@ impl RedisConfig {
         if other.cluster {
             self.cluster = true;
         }
-        // Redis defaults to enabled=true, so we need to handle both enable and disable
+        // Redis defaults to enabled=false; propagate if other differs from default
         if other.enabled != default_redis_enabled() {
             self.enabled = other.enabled;
         }
@@ -137,7 +137,7 @@ impl RedisConfig {
 }
 
 fn default_redis_enabled() -> bool {
-    true
+    false
 }
 
 #[cfg(test)]
@@ -249,7 +249,7 @@ mod tests {
     fn test_redis_config_default() {
         let config = RedisConfig::default();
         assert_eq!(config.url, "redis://localhost:6379");
-        assert!(config.enabled);
+        assert!(!config.enabled);
         assert_eq!(config.max_connections, 20);
         assert_eq!(config.connection_timeout, 5);
         assert!(!config.cluster);
@@ -319,17 +319,17 @@ mod tests {
     }
 
     #[test]
-    fn test_redis_config_merge_enabled_false() {
+    fn test_redis_config_merge_enabled_true() {
         let base = RedisConfig::default();
         let other = RedisConfig {
             url: "redis://localhost:6379".to_string(),
-            enabled: false,
+            enabled: true,
             max_connections: default_redis_max_connections(),
             connection_timeout: default_connection_timeout(),
             cluster: false,
         };
         let merged = base.merge(other);
-        assert!(!merged.enabled);
+        assert!(merged.enabled);
     }
 
     #[test]
