@@ -549,6 +549,37 @@ impl Provider {
                     })?;
                 Ok(Provider::OpenAILike(provider))
             }
+            // Catalog-covered provider types: delegate to the Tier 1 registry
+            ref pt if registry::get_definition(&pt.to_string()).is_some() => {
+                let name = pt.to_string();
+                // Safety: guard guarantees the definition exists
+                let def = match registry::get_definition(&name) {
+                    Some(d) => d,
+                    None => {
+                        return Err(ProviderError::not_implemented(
+                            "unknown",
+                            format!("Catalog definition for '{}' disappeared unexpectedly", name),
+                        ));
+                    }
+                };
+                let api_key = config_str(&config, "api_key")
+                    .map(|s| s.to_string())
+                    .or_else(|| def.resolve_api_key(None));
+                let base_url_override =
+                    config_str(&config, "base_url").or_else(|| config_str(&config, "api_base"));
+                let mut oai_config =
+                    def.to_openai_like_config(api_key.as_deref(), base_url_override);
+                if let Some(timeout) = config_u64(&config, "timeout") {
+                    oai_config.base.timeout = timeout;
+                }
+                if let Some(max_retries) = config_u32(&config, "max_retries") {
+                    oai_config.base.max_retries = max_retries;
+                }
+                let provider = openai_like::OpenAILikeProvider::new(oai_config)
+                    .await
+                    .map_err(|e| ProviderError::initialization(def.name, e.to_string()))?;
+                Ok(Provider::OpenAILike(provider))
+            }
             _ => Err(ProviderError::not_implemented(
                 "unknown",
                 format!("Factory for {:?} not yet implemented", provider_type),
@@ -570,15 +601,18 @@ mod tests {
     #[tokio::test]
     async fn test_from_config_async_supported_variants_do_not_fallthrough_to_not_implemented() {
         for provider_type in supported_factory_provider_types() {
-            let err = Provider::from_config_async(provider_type.clone(), serde_json::json!({}))
-                .await
-                .expect_err("Expected empty config to fail");
-            assert!(
-                !matches!(err, ProviderError::NotImplemented { .. }),
-                "{:?} unexpectedly fell through to NotImplemented: {}",
-                provider_type,
-                err
-            );
+            let result =
+                Provider::from_config_async(provider_type.clone(), serde_json::json!({})).await;
+            // Success is fine (e.g. local catalog providers with skip_api_key);
+            // a real config error is also fine. Only NotImplemented is wrong.
+            if let Err(err) = result {
+                assert!(
+                    !matches!(err, ProviderError::NotImplemented { .. }),
+                    "{:?} unexpectedly fell through to NotImplemented: {}",
+                    provider_type,
+                    err
+                );
+            }
         }
     }
 
