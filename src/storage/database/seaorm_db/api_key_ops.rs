@@ -1,4 +1,5 @@
 use crate::utils::error::gateway_error::{GatewayError, Result};
+use sea_orm::prelude::Expr;
 use sea_orm::*;
 use tracing::debug;
 
@@ -53,26 +54,39 @@ impl SeaOrmDatabase {
         Ok(model.map(|m| m.to_domain_api_key()))
     }
 
-    /// Deactivate API key
+    /// Deactivate API key with transaction wrapping and optimistic locking
     pub async fn deactivate_api_key(&self, key_id: uuid::Uuid) -> Result<()> {
         debug!("Deactivating API key: {}", key_id);
 
+        let txn = self.db.begin().await.map_err(GatewayError::from)?;
+
         let model = entities::ApiKey::find_by_id(key_id)
-            .one(&self.db)
+            .one(&txn)
             .await
             .map_err(GatewayError::from)?
             .ok_or_else(|| GatewayError::NotFound("API key not found".to_string()))?;
 
-        let next_version = model.version + 1;
-        let mut active_model: api_key::ActiveModel = model.into();
-        active_model.is_active = Set(false);
-        active_model.updated_at = Set(chrono::Utc::now().into());
-        active_model.version = Set(next_version);
-        active_model
-            .update(&self.db)
+        let current_version = model.version;
+        let next_version = current_version + 1;
+
+        let result = entities::ApiKey::update_many()
+            .col_expr(api_key::Column::IsActive, Expr::value(false))
+            .col_expr(api_key::Column::UpdatedAt, Expr::value(chrono::Utc::now()))
+            .col_expr(api_key::Column::Version, Expr::value(next_version))
+            .filter(api_key::Column::Id.eq(key_id))
+            .filter(api_key::Column::Version.eq(current_version))
+            .exec(&txn)
             .await
             .map_err(GatewayError::from)?;
 
+        if result.rows_affected == 0 {
+            txn.rollback().await.map_err(GatewayError::from)?;
+            return Err(GatewayError::Conflict(
+                "API key was modified concurrently".to_string(),
+            ));
+        }
+
+        txn.commit().await.map_err(GatewayError::from)?;
         Ok(())
     }
 
@@ -109,7 +123,7 @@ impl SeaOrmDatabase {
         Ok(models.into_iter().map(|m| m.to_domain_api_key()).collect())
     }
 
-    /// Update API key permissions
+    /// Update API key permissions with transaction wrapping and optimistic locking
     pub async fn update_api_key_permissions(
         &self,
         key_id: uuid::Uuid,
@@ -117,8 +131,10 @@ impl SeaOrmDatabase {
     ) -> Result<()> {
         debug!("Updating API key permissions: {}", key_id);
 
+        let txn = self.db.begin().await.map_err(GatewayError::from)?;
+
         let model = entities::ApiKey::find_by_id(key_id)
-            .one(&self.db)
+            .one(&txn)
             .await
             .map_err(GatewayError::from)?
             .ok_or_else(|| GatewayError::NotFound("API key not found".to_string()))?;
@@ -126,20 +142,31 @@ impl SeaOrmDatabase {
         let serialized = serde_json::to_string(permissions)
             .map_err(|e| GatewayError::Validation(format!("Invalid permissions: {}", e)))?;
 
-        let next_version = model.version + 1;
-        let mut active_model: api_key::ActiveModel = model.into();
-        active_model.permissions = Set(serialized);
-        active_model.updated_at = Set(chrono::Utc::now().into());
-        active_model.version = Set(next_version);
-        active_model
-            .update(&self.db)
+        let current_version = model.version;
+        let next_version = current_version + 1;
+
+        let result = entities::ApiKey::update_many()
+            .col_expr(api_key::Column::Permissions, Expr::value(serialized))
+            .col_expr(api_key::Column::UpdatedAt, Expr::value(chrono::Utc::now()))
+            .col_expr(api_key::Column::Version, Expr::value(next_version))
+            .filter(api_key::Column::Id.eq(key_id))
+            .filter(api_key::Column::Version.eq(current_version))
+            .exec(&txn)
             .await
             .map_err(GatewayError::from)?;
 
+        if result.rows_affected == 0 {
+            txn.rollback().await.map_err(GatewayError::from)?;
+            return Err(GatewayError::Conflict(
+                "API key was modified concurrently".to_string(),
+            ));
+        }
+
+        txn.commit().await.map_err(GatewayError::from)?;
         Ok(())
     }
 
-    /// Update API key rate limits
+    /// Update API key rate limits with transaction wrapping and optimistic locking
     pub async fn update_api_key_rate_limits(
         &self,
         key_id: uuid::Uuid,
@@ -147,8 +174,10 @@ impl SeaOrmDatabase {
     ) -> Result<()> {
         debug!("Updating API key rate limits: {}", key_id);
 
+        let txn = self.db.begin().await.map_err(GatewayError::from)?;
+
         let model = entities::ApiKey::find_by_id(key_id)
-            .one(&self.db)
+            .one(&txn)
             .await
             .map_err(GatewayError::from)?
             .ok_or_else(|| GatewayError::NotFound("API key not found".to_string()))?;
@@ -156,20 +185,31 @@ impl SeaOrmDatabase {
         let serialized = serde_json::to_string(rate_limits)
             .map_err(|e| GatewayError::Validation(format!("Invalid rate limits: {}", e)))?;
 
-        let next_version = model.version + 1;
-        let mut active_model: api_key::ActiveModel = model.into();
-        active_model.rate_limits = Set(Some(serialized));
-        active_model.updated_at = Set(chrono::Utc::now().into());
-        active_model.version = Set(next_version);
-        active_model
-            .update(&self.db)
+        let current_version = model.version;
+        let next_version = current_version + 1;
+
+        let result = entities::ApiKey::update_many()
+            .col_expr(api_key::Column::RateLimits, Expr::value(Some(serialized)))
+            .col_expr(api_key::Column::UpdatedAt, Expr::value(chrono::Utc::now()))
+            .col_expr(api_key::Column::Version, Expr::value(next_version))
+            .filter(api_key::Column::Id.eq(key_id))
+            .filter(api_key::Column::Version.eq(current_version))
+            .exec(&txn)
             .await
             .map_err(GatewayError::from)?;
 
+        if result.rows_affected == 0 {
+            txn.rollback().await.map_err(GatewayError::from)?;
+            return Err(GatewayError::Conflict(
+                "API key was modified concurrently".to_string(),
+            ));
+        }
+
+        txn.commit().await.map_err(GatewayError::from)?;
         Ok(())
     }
 
-    /// Update API key expiration
+    /// Update API key expiration with transaction wrapping and optimistic locking
     pub async fn update_api_key_expiration(
         &self,
         key_id: uuid::Uuid,
@@ -177,26 +217,43 @@ impl SeaOrmDatabase {
     ) -> Result<()> {
         debug!("Updating API key expiration: {}", key_id);
 
+        let txn = self.db.begin().await.map_err(GatewayError::from)?;
+
         let model = entities::ApiKey::find_by_id(key_id)
-            .one(&self.db)
+            .one(&txn)
             .await
             .map_err(GatewayError::from)?
             .ok_or_else(|| GatewayError::NotFound("API key not found".to_string()))?;
 
-        let next_version = model.version + 1;
-        let mut active_model: api_key::ActiveModel = model.into();
-        active_model.expires_at = Set(expires_at.map(Into::into));
-        active_model.updated_at = Set(chrono::Utc::now().into());
-        active_model.version = Set(next_version);
-        active_model
-            .update(&self.db)
+        let current_version = model.version;
+        let next_version = current_version + 1;
+
+        let result = entities::ApiKey::update_many()
+            .col_expr(api_key::Column::ExpiresAt, Expr::value(expires_at))
+            .col_expr(api_key::Column::UpdatedAt, Expr::value(chrono::Utc::now()))
+            .col_expr(api_key::Column::Version, Expr::value(next_version))
+            .filter(api_key::Column::Id.eq(key_id))
+            .filter(api_key::Column::Version.eq(current_version))
+            .exec(&txn)
             .await
             .map_err(GatewayError::from)?;
 
+        if result.rows_affected == 0 {
+            txn.rollback().await.map_err(GatewayError::from)?;
+            return Err(GatewayError::Conflict(
+                "API key was modified concurrently".to_string(),
+            ));
+        }
+
+        txn.commit().await.map_err(GatewayError::from)?;
         Ok(())
     }
 
-    /// Update API key usage statistics
+    /// Update API key usage statistics with transaction wrapping and optimistic locking.
+    ///
+    /// This is the most critical read-modify-write operation: it reads current usage
+    /// stats, computes new totals, and writes them back. Without a transaction and
+    /// optimistic lock, concurrent requests can lose usage increments.
     pub async fn update_api_key_usage(
         &self,
         key_id: uuid::Uuid,
@@ -206,63 +263,93 @@ impl SeaOrmDatabase {
     ) -> Result<()> {
         debug!("Updating API key usage: {}", key_id);
 
+        let txn = self.db.begin().await.map_err(GatewayError::from)?;
+
         let model = entities::ApiKey::find_by_id(key_id)
-            .one(&self.db)
+            .one(&txn)
             .await
             .map_err(GatewayError::from)?
             .ok_or_else(|| GatewayError::NotFound("API key not found".to_string()))?;
 
-        let mut api_key = model.to_domain_api_key();
-        api_key.usage_stats.total_requests =
-            api_key.usage_stats.total_requests.saturating_add(requests);
-        api_key.usage_stats.total_tokens = api_key.usage_stats.total_tokens.saturating_add(tokens);
-        api_key.usage_stats.total_cost += cost;
-        api_key.usage_stats.requests_today = api_key
+        let mut domain_key = model.to_domain_api_key();
+        domain_key.usage_stats.total_requests = domain_key
+            .usage_stats
+            .total_requests
+            .saturating_add(requests);
+        domain_key.usage_stats.total_tokens =
+            domain_key.usage_stats.total_tokens.saturating_add(tokens);
+        domain_key.usage_stats.total_cost += cost;
+        domain_key.usage_stats.requests_today = domain_key
             .usage_stats
             .requests_today
             .saturating_add(requests as u32);
-        api_key.usage_stats.tokens_today = api_key
+        domain_key.usage_stats.tokens_today = domain_key
             .usage_stats
             .tokens_today
             .saturating_add(tokens as u32);
-        api_key.usage_stats.cost_today += cost;
+        domain_key.usage_stats.cost_today += cost;
 
-        let usage_stats = serde_json::to_string(&api_key.usage_stats)
+        let usage_stats = serde_json::to_string(&domain_key.usage_stats)
             .map_err(|e| GatewayError::Validation(format!("Invalid usage stats: {}", e)))?;
 
-        let next_version = model.version + 1;
-        let mut active_model: api_key::ActiveModel = model.into();
-        active_model.usage_stats = Set(usage_stats);
-        active_model.updated_at = Set(chrono::Utc::now().into());
-        active_model.version = Set(next_version);
-        active_model
-            .update(&self.db)
+        let current_version = model.version;
+        let next_version = current_version + 1;
+
+        let result = entities::ApiKey::update_many()
+            .col_expr(api_key::Column::UsageStats, Expr::value(usage_stats))
+            .col_expr(api_key::Column::UpdatedAt, Expr::value(chrono::Utc::now()))
+            .col_expr(api_key::Column::Version, Expr::value(next_version))
+            .filter(api_key::Column::Id.eq(key_id))
+            .filter(api_key::Column::Version.eq(current_version))
+            .exec(&txn)
             .await
             .map_err(GatewayError::from)?;
 
+        if result.rows_affected == 0 {
+            txn.rollback().await.map_err(GatewayError::from)?;
+            return Err(GatewayError::Conflict(
+                "API key was modified concurrently".to_string(),
+            ));
+        }
+
+        txn.commit().await.map_err(GatewayError::from)?;
         Ok(())
     }
 
-    /// Update API key last used timestamp
+    /// Update API key last used timestamp with transaction wrapping and optimistic locking
     pub async fn update_api_key_last_used(&self, key_id: uuid::Uuid) -> Result<()> {
         debug!("Updating API key last_used_at: {}", key_id);
 
+        let txn = self.db.begin().await.map_err(GatewayError::from)?;
+
         let model = entities::ApiKey::find_by_id(key_id)
-            .one(&self.db)
+            .one(&txn)
             .await
             .map_err(GatewayError::from)?
             .ok_or_else(|| GatewayError::NotFound("API key not found".to_string()))?;
 
-        let next_version = model.version + 1;
-        let mut active_model: api_key::ActiveModel = model.into();
-        active_model.last_used_at = Set(Some(chrono::Utc::now().into()));
-        active_model.updated_at = Set(chrono::Utc::now().into());
-        active_model.version = Set(next_version);
-        active_model
-            .update(&self.db)
+        let current_version = model.version;
+        let next_version = current_version + 1;
+        let now = chrono::Utc::now();
+
+        let result = entities::ApiKey::update_many()
+            .col_expr(api_key::Column::LastUsedAt, Expr::value(Some(now)))
+            .col_expr(api_key::Column::UpdatedAt, Expr::value(now))
+            .col_expr(api_key::Column::Version, Expr::value(next_version))
+            .filter(api_key::Column::Id.eq(key_id))
+            .filter(api_key::Column::Version.eq(current_version))
+            .exec(&txn)
             .await
             .map_err(GatewayError::from)?;
 
+        if result.rows_affected == 0 {
+            txn.rollback().await.map_err(GatewayError::from)?;
+            return Err(GatewayError::Conflict(
+                "API key was modified concurrently".to_string(),
+            ));
+        }
+
+        txn.commit().await.map_err(GatewayError::from)?;
         Ok(())
     }
 

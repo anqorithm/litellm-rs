@@ -6,7 +6,10 @@ use super::super::entities::{self, password_reset_token, user};
 use super::types::SeaOrmDatabase;
 
 impl SeaOrmDatabase {
-    /// Store password reset token
+    /// Store password reset token within a transaction.
+    ///
+    /// The delete-then-insert sequence must be atomic to prevent a concurrent
+    /// request from seeing a state where no token exists for the user.
     pub async fn store_password_reset_token(
         &self,
         user_id: uuid::Uuid,
@@ -15,14 +18,16 @@ impl SeaOrmDatabase {
     ) -> Result<()> {
         debug!("Storing password reset token for user: {}", user_id);
 
-        // First, delete any existing tokens for this user
+        let txn = self.db.begin().await.map_err(GatewayError::from)?;
+
+        // Delete any existing tokens for this user inside the transaction
         entities::PasswordResetToken::delete_many()
             .filter(password_reset_token::Column::UserId.eq(user_id))
-            .exec(&self.db)
+            .exec(&txn)
             .await
             .map_err(GatewayError::from)?;
 
-        // Insert new token
+        // Insert new token inside the same transaction
         let active_model = password_reset_token::ActiveModel {
             id: NotSet,
             user_id: Set(user_id),
@@ -33,37 +38,47 @@ impl SeaOrmDatabase {
         };
 
         entities::PasswordResetToken::insert(active_model)
-            .exec(&self.db)
+            .exec(&txn)
             .await
             .map_err(GatewayError::from)?;
 
+        txn.commit().await.map_err(GatewayError::from)?;
         Ok(())
     }
 
-    /// Verify and consume password reset token
+    /// Verify and consume password reset token within a transaction.
+    ///
+    /// The find-then-mark-as-used sequence is atomic to prevent a token
+    /// from being consumed twice by concurrent requests (TOCTOU).
     pub async fn verify_password_reset_token(&self, token: &str) -> Result<Option<uuid::Uuid>> {
         debug!("Verifying password reset token");
+
+        let txn = self.db.begin().await.map_err(GatewayError::from)?;
 
         let token_model = entities::PasswordResetToken::find()
             .filter(password_reset_token::Column::Token.eq(token))
             .filter(password_reset_token::Column::UsedAt.is_null())
             .filter(password_reset_token::Column::ExpiresAt.gt(chrono::Utc::now()))
-            .one(&self.db)
+            .one(&txn)
             .await
             .map_err(GatewayError::from)?;
 
         if let Some(token_model) = token_model {
-            // Mark token as used
-            let mut active_model: password_reset_token::ActiveModel = token_model.clone().into();
+            let user_id = token_model.user_id;
+
+            // Mark token as used inside the transaction
+            let mut active_model: password_reset_token::ActiveModel = token_model.into();
             active_model.used_at = Set(Some(chrono::Utc::now().into()));
 
             active_model
-                .update(&self.db)
+                .update(&txn)
                 .await
                 .map_err(GatewayError::from)?;
 
-            Ok(Some(token_model.user_id))
+            txn.commit().await.map_err(GatewayError::from)?;
+            Ok(Some(user_id))
         } else {
+            txn.rollback().await.map_err(GatewayError::from)?;
             Ok(None)
         }
     }

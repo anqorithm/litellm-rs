@@ -50,12 +50,17 @@ impl SeaOrmDatabase {
         Ok(batch.batch_id.clone())
     }
 
-    /// Update batch status
+    /// Update batch status within a transaction.
+    ///
+    /// The read-then-update sequence is wrapped in a transaction to ensure
+    /// status transitions are atomic.
     pub async fn update_batch_status(&self, batch_id: &str, status: &str) -> Result<()> {
         debug!("Updating batch status: {} -> {}", batch_id, status);
 
+        let txn = self.db.begin().await.map_err(GatewayError::from)?;
+
         let batch_model = entities::Batch::find_by_id(batch_id)
-            .one(&self.db)
+            .one(&txn)
             .await
             .map_err(GatewayError::from)?
             .ok_or_else(|| GatewayError::NotFound("Batch not found".to_string()))?;
@@ -77,10 +82,11 @@ impl SeaOrmDatabase {
         }
 
         active_model
-            .update(&self.db)
+            .update(&txn)
             .await
             .map_err(GatewayError::from)?;
 
+        txn.commit().await.map_err(GatewayError::from)?;
         Ok(())
     }
 
@@ -189,7 +195,10 @@ impl SeaOrmDatabase {
         Ok(())
     }
 
-    /// Update batch progress
+    /// Update batch progress within a transaction.
+    ///
+    /// The read-then-update sequence is wrapped in a transaction to ensure
+    /// progress counter updates are atomic.
     pub async fn update_batch_progress(
         &self,
         batch_id: &str,
@@ -201,8 +210,10 @@ impl SeaOrmDatabase {
             batch_id, completed, failed
         );
 
+        let txn = self.db.begin().await.map_err(GatewayError::from)?;
+
         let batch_model = entities::Batch::find_by_id(batch_id)
-            .one(&self.db)
+            .one(&txn)
             .await
             .map_err(GatewayError::from)?
             .ok_or_else(|| GatewayError::NotFound("Batch not found".to_string()))?;
@@ -212,19 +223,25 @@ impl SeaOrmDatabase {
         active_model.request_counts_failed = Set(Some(failed));
 
         active_model
-            .update(&self.db)
+            .update(&txn)
             .await
             .map_err(GatewayError::from)?;
 
+        txn.commit().await.map_err(GatewayError::from)?;
         Ok(())
     }
 
-    /// Mark batch as completed
+    /// Mark batch as completed within a transaction.
+    ///
+    /// The read-then-update sequence is wrapped in a transaction to ensure
+    /// the status and timestamp update are atomic.
     pub async fn mark_batch_completed(&self, batch_id: &str) -> Result<()> {
         debug!("Marking batch as completed: {}", batch_id);
 
+        let txn = self.db.begin().await.map_err(GatewayError::from)?;
+
         let batch_model = entities::Batch::find_by_id(batch_id)
-            .one(&self.db)
+            .one(&txn)
             .await
             .map_err(GatewayError::from)?
             .ok_or_else(|| GatewayError::NotFound("Batch not found".to_string()))?;
@@ -234,10 +251,11 @@ impl SeaOrmDatabase {
         active_model.completed_at = Set(Some(chrono::Utc::now().into()));
 
         active_model
-            .update(&self.db)
+            .update(&txn)
             .await
             .map_err(GatewayError::from)?;
 
+        txn.commit().await.map_err(GatewayError::from)?;
         Ok(())
     }
 }
