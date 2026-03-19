@@ -89,7 +89,7 @@ impl AlertManager {
 
     /// Evaluate a single alert rule
     pub(super) async fn evaluate_rule(&self, rule: &AlertRule) -> Result<()> {
-        // TODO: Implement metric evaluation
+        // NOTE: metric evaluation not yet implemented
         // This would involve getting the current metric value and comparing it to the threshold
 
         debug!("Evaluating rule: {}", rule.name);

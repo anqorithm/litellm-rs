@@ -74,6 +74,14 @@ fn validate_create_key_input(name: &str, permissions: &[String]) -> Result<()> {
 /// Minimum interval between DB writes for the same key's last_used timestamp.
 const LAST_USED_THROTTLE: Duration = Duration::from_secs(5 * 60);
 
+/// TTL for cached API keys in Redis (seconds).
+const API_KEY_CACHE_TTL: u64 = 300;
+
+/// Build the Redis cache key for an API key hash.
+fn api_key_cache_key(key_hash: &str) -> String {
+    format!("api_key:hash:{}", key_hash)
+}
+
 /// API key handler for authentication and management
 #[derive(Debug, Clone)]
 pub struct ApiKeyHandler {
@@ -169,6 +177,67 @@ impl ApiKeyHandler {
         Ok((stored_key, raw_key))
     }
 
+    /// Look up an API key by hash, checking Redis cache first and falling back
+    /// to PostgreSQL. On a cache miss the result is populated into Redis with a
+    /// 5-minute TTL.
+    async fn find_api_key_cached(&self, key_hash: &str) -> Result<Option<ApiKey>> {
+        let cache_key = api_key_cache_key(key_hash);
+
+        // 1. Try Redis cache
+        match self.storage.cache_get(&cache_key).await {
+            Ok(Some(cached)) => {
+                debug!("API key cache hit");
+                match serde_json::from_str::<ApiKey>(&cached) {
+                    Ok(api_key) => return Ok(Some(api_key)),
+                    Err(e) => {
+                        warn!(
+                            "Failed to deserialize cached API key, falling back to DB: {}",
+                            e
+                        );
+                        // Stale/corrupt entry – delete and continue to DB
+                        if let Err(del_err) = self.storage.cache_delete(&cache_key).await {
+                            warn!("Failed to delete corrupt API key cache entry: {}", del_err);
+                        }
+                    }
+                }
+            }
+            Ok(None) => {
+                debug!("API key cache miss");
+            }
+            Err(e) => {
+                // Redis unavailable – degrade gracefully
+                warn!("Redis cache_get failed, falling back to DB: {}", e);
+            }
+        }
+
+        // 2. Fall back to PostgreSQL
+        let api_key = self.storage.db().find_api_key_by_hash(key_hash).await?;
+
+        // 3. Populate cache on DB hit
+        if let Some(ref key) = api_key
+            && let Ok(serialized) = serde_json::to_string(key)
+            && let Err(e) = self
+                .storage
+                .cache_set(&cache_key, &serialized, Some(API_KEY_CACHE_TTL))
+                .await
+        {
+            warn!("Failed to populate API key cache: {}", e);
+        }
+
+        Ok(api_key)
+    }
+
+    /// Invalidate the Redis cache entry for the given key hash.
+    pub(super) async fn invalidate_api_key_cache(&self, key_hash: &str) {
+        let cache_key = api_key_cache_key(key_hash);
+        if let Err(e) = self.storage.cache_delete(&cache_key).await {
+            warn!(
+                "Failed to invalidate API key cache for {}: {}",
+                cache_key, e
+            );
+        }
+    }
+
     /// Verify an API key
     pub async fn verify_key(&self, raw_key: &str) -> Result<Option<(ApiKey, Option<User>)>> {
         debug!("Verifying API key");
@@ -176,8 +245,8 @@ impl ApiKeyHandler {
         // Hash the provided key
         let key_hash = hash_api_key(raw_key);
 
-        // Find API key in database
-        let api_key = match self.storage.db().find_api_key_by_hash(&key_hash).await? {
+        // Find API key (cache-aside: Redis → PostgreSQL → populate Redis)
+        let api_key = match self.find_api_key_cached(&key_hash).await? {
             Some(key) => key,
             None => {
                 debug!("API key not found");
@@ -217,7 +286,7 @@ impl ApiKeyHandler {
     pub async fn verify_key_detailed(&self, raw_key: &str) -> Result<ApiKeyVerification> {
         let key_hash = hash_api_key(raw_key);
 
-        let api_key = match self.storage.db().find_api_key_by_hash(&key_hash).await? {
+        let api_key = match self.find_api_key_cached(&key_hash).await? {
             Some(key) => key,
             None => {
                 return Ok(ApiKeyVerification {

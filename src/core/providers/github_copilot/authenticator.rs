@@ -339,15 +339,51 @@ impl CopilotAuthenticator {
     /// Get standard GitHub headers
     fn get_github_headers(&self, access_token: Option<&str>) -> reqwest::header::HeaderMap {
         let mut headers = reqwest::header::HeaderMap::new();
-        headers.insert("accept", "application/json".parse().unwrap());
-        headers.insert("content-type", "application/json".parse().unwrap());
-        headers.insert("editor-version", "vscode/1.85.1".parse().unwrap());
-        headers.insert("editor-plugin-version", "copilot/1.155.0".parse().unwrap());
-        headers.insert("user-agent", "GithubCopilot/1.155.0".parse().unwrap());
-        headers.insert("accept-encoding", "gzip,deflate,br".parse().unwrap());
+        headers.insert(
+            "accept",
+            "application/json"
+                .parse()
+                .expect("static header value 'application/json' is always valid"),
+        );
+        headers.insert(
+            "content-type",
+            "application/json"
+                .parse()
+                .expect("static header value 'application/json' is always valid"),
+        );
+        headers.insert(
+            "editor-version",
+            "vscode/1.85.1"
+                .parse()
+                .expect("static header value 'vscode/1.85.1' is always valid"),
+        );
+        headers.insert(
+            "editor-plugin-version",
+            "copilot/1.155.0"
+                .parse()
+                .expect("static header value 'copilot/1.155.0' is always valid"),
+        );
+        headers.insert(
+            "user-agent",
+            "GithubCopilot/1.155.0"
+                .parse()
+                .expect("static header value 'GithubCopilot/1.155.0' is always valid"),
+        );
+        headers.insert(
+            "accept-encoding",
+            "gzip,deflate,br"
+                .parse()
+                .expect("static header value 'gzip,deflate,br' is always valid"),
+        );
 
         if let Some(token) = access_token {
-            headers.insert("authorization", format!("token {}", token).parse().unwrap());
+            if let Ok(value) = format!("token {}", token).parse() {
+                headers.insert("authorization", value);
+            } else {
+                tracing::warn!(
+                    "GitHub Copilot access token contains invalid header characters, skipping authorization header"
+                );
+            }
         }
 
         headers

@@ -233,6 +233,14 @@ impl Router {
             if fails >= self.config.allowed_fails
                 && total_this_minute >= self.config.min_requests as u64
             {
+                tracing::info!(
+                    deployment_id = %deployment_id,
+                    model = %deployment.model_name,
+                    reason = "consecutive_failures",
+                    cooldown_secs = self.config.cooldown_time_secs,
+                    fails_this_minute = fails,
+                    "deployment entering cooldown"
+                );
                 deployment.enter_cooldown(self.config.cooldown_time_secs);
             }
         }
@@ -266,6 +274,13 @@ impl Router {
             };
 
             if should_cooldown {
+                tracing::info!(
+                    deployment_id = %deployment_id,
+                    model = %d.model_name,
+                    reason = ?reason,
+                    cooldown_secs = self.config.cooldown_time_secs,
+                    "deployment entering cooldown"
+                );
                 d.enter_cooldown(self.config.cooldown_time_secs);
             }
         }

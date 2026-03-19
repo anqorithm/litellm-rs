@@ -63,9 +63,7 @@ where
     where
         M: Middleware<Req, Resp> + 'static,
     {
-        // TODO: Fix middleware wrapper type constraints
-        // let boxed = Box::new(MiddlewareWrapper(middleware));
-        // self.middlewares.push(boxed);
+        // NOTE: Middleware wrapper type constraints not yet resolved.
         self
     }
 
@@ -106,7 +104,7 @@ where
                     _request: request.clone(),
                 });
 
-                // TODO: Fix middleware execution with proper type constraints
+                // NOTE: Middleware execution disabled; type constraints not yet resolved.
                 // self.middlewares[index].process(request, next).await
                 Err(Box::new(std::io::Error::other(
                     "Middleware system temporarily disabled",

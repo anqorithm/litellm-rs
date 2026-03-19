@@ -59,11 +59,11 @@ impl MonitoringSystem {
         let _metrics = self.get_metrics().await?;
 
         // Store metrics in database
-        // TODO: SystemMetrics and RequestMetrics are different types, need to convert or use different method
+        // NOTE: SystemMetrics and RequestMetrics type mismatch; conversion needed before storage.
         // self.storage.db().store_metrics(&metrics).await?;
 
         // Store metrics in time series database (if configured)
-        // TODO: Implement time series storage
+        // NOTE: time series storage not yet implemented
 
         Ok(())
     }
@@ -71,7 +71,7 @@ impl MonitoringSystem {
     /// Run health checks
     pub(super) async fn run_health_checks(&self) -> Result<()> {
         debug!("Running health checks");
-        // TODO: Integrate with core::health when monitoring system is activated
+        // NOTE: health check integration pending monitoring system activation
         Ok(())
     }
 
