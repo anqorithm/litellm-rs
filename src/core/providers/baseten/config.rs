@@ -11,7 +11,7 @@ pub const BASETEN_API_BASE: &str = "https://inference.baseten.co/v1";
 
 /// Regex for matching dedicated deployment model IDs
 static DEDICATED_DEPLOYMENT_REGEX: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^[a-zA-Z0-9]{8}$").unwrap());
+    LazyLock::new(|| Regex::new(r"^[a-zA-Z0-9]{8}$").expect("static regex is valid"));
 
 define_standalone_provider_config!(BasetenConfig,
     provider: "Baseten",
