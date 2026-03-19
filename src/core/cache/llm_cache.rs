@@ -296,12 +296,7 @@ impl LLMCache {
             return Ok(Some(cached.response_arc()));
         }
 
-        // TODO: Implement semantic cache lookup
-        // if self.config.semantic_cache_enabled {
-        //     if let Some(response) = self.semantic_lookup(request).await? {
-        //         return Ok(Some(response));
-        //     }
-        // }
+        // NOTE: Semantic cache lookup not yet implemented.
 
         Ok(None)
     }

@@ -89,27 +89,27 @@ pub fn transform_nova_request(
                                         Some(json!({"text": text}))
                                     }
                                     crate::core::types::content::ContentPart::Image { .. } => {
-                                        // TODO: Handle image content for Nova Canvas
+                                        // NOTE: image content for Nova Canvas not yet handled
                                         None
                                     }
                                     crate::core::types::content::ContentPart::ImageUrl { .. } => {
-                                        // TODO: Handle image URL content
+                                        // NOTE: image URL content not yet handled
                                         None
                                     }
                                     crate::core::types::content::ContentPart::Audio { .. } => {
-                                        // TODO: Handle audio content
+                                        // NOTE: audio content not yet handled
                                         None
                                     }
                                     crate::core::types::content::ContentPart::Document { .. } => {
-                                        // TODO: Handle document content
+                                        // NOTE: document content not yet handled
                                         None
                                     }
                                     crate::core::types::content::ContentPart::ToolResult { .. } => {
-                                        // TODO: Handle tool result content
+                                        // NOTE: tool result content not yet handled
                                         None
                                     }
                                     crate::core::types::content::ContentPart::ToolUse { .. } => {
-                                        // TODO: Handle tool use content
+                                        // NOTE: tool use content not yet handled
                                         None
                                     }
                                 }

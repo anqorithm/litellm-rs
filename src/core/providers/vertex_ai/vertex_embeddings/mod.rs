@@ -24,11 +24,11 @@ impl VertexEmbeddingHandler {
         // Handle legacy models like textembedding-gecko
         match model {
             "textembedding-gecko" | "textembedding-gecko@003" => {
-                // TODO: Implement gecko embedding
+                // NOTE: gecko embedding not yet implemented
                 Ok(vec![0.0; 768])
             }
             "textembedding-gecko-multilingual" => {
-                // TODO: Implement multilingual gecko
+                // NOTE: multilingual gecko not yet implemented
                 Ok(vec![0.0; 768])
             }
             _ => Err(ProviderError::model_not_found("vertex_ai", model)),

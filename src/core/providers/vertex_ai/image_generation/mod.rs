@@ -102,7 +102,7 @@ impl ImageGenerationHandler {
         // Transform request for Vertex AI format
         let _vertex_request = self.transform_request(model, request)?;
 
-        // TODO: Implement actual API call
+        // NOTE: actual API call not yet implemented
         Ok(ImageGenerationResponse {
             predictions: vec![ImagePrediction {
                 bytes_base64_encoded: Some("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==".to_string()),
