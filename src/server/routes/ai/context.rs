@@ -46,11 +46,65 @@ pub fn get_authenticated_api_key(req: &HttpRequest) -> Option<ApiKey> {
     req.extensions().get::<ApiKey>().cloned()
 }
 
-/// Check if user has permission for the requested operation
-pub fn check_permission(user: Option<&User>, api_key: Option<&ApiKey>, _operation: &str) -> bool {
-    // In a real implementation, this would check permissions through the RBAC system
-    // For now, assume all authenticated requests are allowed
-    user.is_some() || api_key.is_some()
+/// Check if user has permission for the requested operation.
+///
+/// Permission logic (two-role model: admin vs user):
+/// - Unauthenticated requests are always denied.
+/// - Admin roles (`SuperAdmin`, `Admin`) have full access to every operation.
+/// - API-usage operations (`chat`, `completions`, `models`, `embeddings`, `images`,
+///   `audio`, `moderations`, `assistants`, `files`, `fine_tuning`) are allowed for
+///   any authenticated user/key.
+/// - Management operations (`keys.list_all`, `users.manage`, `config.manage`,
+///   `teams.manage`, `analytics.admin`) require an admin role.
+/// - API key `permissions` can grant admin-level access via `"*"` or `"system.admin"`,
+///   or grant a specific operation directly.
+pub fn check_permission(user: Option<&User>, api_key: Option<&ApiKey>, operation: &str) -> bool {
+    use crate::core::models::user::types::UserRole;
+
+    // Unauthenticated requests are always denied
+    if user.is_none() && api_key.is_none() {
+        return false;
+    }
+
+    // Check if the user has an admin role
+    let user_is_admin = user
+        .map(|u| matches!(u.role, UserRole::SuperAdmin | UserRole::Admin))
+        .unwrap_or(false);
+
+    // Check if the API key carries admin-level permissions
+    let key_is_admin = api_key
+        .map(|k| {
+            k.permissions
+                .iter()
+                .any(|p| p == "*" || p == "system.admin")
+        })
+        .unwrap_or(false);
+
+    if user_is_admin || key_is_admin {
+        return true;
+    }
+
+    // Check if the API key explicitly grants this operation
+    let key_has_operation = api_key
+        .map(|k| k.permissions.iter().any(|p| p == operation))
+        .unwrap_or(false);
+
+    if key_has_operation {
+        return true;
+    }
+
+    // Management operations require admin — deny for non-admin callers
+    let is_management_op = matches!(
+        operation,
+        "keys.list_all" | "users.manage" | "config.manage" | "teams.manage" | "analytics.admin"
+    );
+
+    if is_management_op {
+        return false;
+    }
+
+    // API-usage operations are allowed for any authenticated caller
+    true
 }
 
 /// Log API usage for billing and analytics
@@ -96,7 +150,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::models::user::types::User;
+    use crate::core::models::user::types::{User, UserRole};
     use crate::core::models::{Metadata, UsageStats};
 
     fn create_test_user() -> User {
@@ -105,6 +159,18 @@ mod tests {
             "test@example.com".to_string(),
             "hash".to_string(),
         )
+    }
+
+    fn create_admin_user() -> User {
+        let mut user = create_test_user();
+        user.role = UserRole::Admin;
+        user
+    }
+
+    fn create_super_admin_user() -> User {
+        let mut user = create_test_user();
+        user.role = UserRole::SuperAdmin;
+        user
     }
 
     fn create_test_api_key() -> ApiKey {
@@ -124,11 +190,22 @@ mod tests {
         }
     }
 
+    fn create_admin_api_key() -> ApiKey {
+        let mut key = create_test_api_key();
+        key.permissions = vec!["*".to_string()];
+        key
+    }
+
     // ==================== check_permission Tests ====================
 
     #[test]
     fn test_check_permission_no_auth() {
         assert!(!check_permission(None, None, "chat"));
+    }
+
+    #[test]
+    fn test_check_permission_no_auth_management() {
+        assert!(!check_permission(None, None, "keys.list_all"));
     }
 
     #[test]
@@ -157,6 +234,102 @@ mod tests {
         assert!(check_permission(Some(&user), None, "completions"));
         assert!(check_permission(Some(&user), None, "embeddings"));
         assert!(check_permission(Some(&user), None, "images"));
+    }
+
+    // ==================== Admin role Tests ====================
+
+    #[test]
+    fn test_admin_user_can_access_management_ops() {
+        let admin = create_admin_user();
+        assert!(check_permission(Some(&admin), None, "keys.list_all"));
+        assert!(check_permission(Some(&admin), None, "users.manage"));
+        assert!(check_permission(Some(&admin), None, "config.manage"));
+        assert!(check_permission(Some(&admin), None, "teams.manage"));
+        assert!(check_permission(Some(&admin), None, "analytics.admin"));
+    }
+
+    #[test]
+    fn test_super_admin_can_access_management_ops() {
+        let sa = create_super_admin_user();
+        assert!(check_permission(Some(&sa), None, "keys.list_all"));
+        assert!(check_permission(Some(&sa), None, "users.manage"));
+        assert!(check_permission(Some(&sa), None, "config.manage"));
+    }
+
+    #[test]
+    fn test_admin_user_can_access_api_ops() {
+        let admin = create_admin_user();
+        assert!(check_permission(Some(&admin), None, "chat"));
+        assert!(check_permission(Some(&admin), None, "completions"));
+        assert!(check_permission(Some(&admin), None, "models"));
+    }
+
+    // ==================== Regular user denied management Tests ====================
+
+    #[test]
+    fn test_regular_user_denied_management_ops() {
+        let user = create_test_user();
+        assert!(!check_permission(Some(&user), None, "keys.list_all"));
+        assert!(!check_permission(Some(&user), None, "users.manage"));
+        assert!(!check_permission(Some(&user), None, "config.manage"));
+        assert!(!check_permission(Some(&user), None, "teams.manage"));
+        assert!(!check_permission(Some(&user), None, "analytics.admin"));
+    }
+
+    #[test]
+    fn test_viewer_denied_management_ops() {
+        let mut user = create_test_user();
+        user.role = UserRole::Viewer;
+        assert!(!check_permission(Some(&user), None, "keys.list_all"));
+        assert!(!check_permission(Some(&user), None, "users.manage"));
+    }
+
+    #[test]
+    fn test_api_user_denied_management_ops() {
+        let mut user = create_test_user();
+        user.role = UserRole::ApiUser;
+        assert!(!check_permission(Some(&user), None, "keys.list_all"));
+        assert!(!check_permission(Some(&user), None, "config.manage"));
+    }
+
+    #[test]
+    fn test_manager_denied_management_ops() {
+        let mut user = create_test_user();
+        user.role = UserRole::Manager;
+        assert!(!check_permission(Some(&user), None, "users.manage"));
+    }
+
+    // ==================== API key permission Tests ====================
+
+    #[test]
+    fn test_admin_api_key_can_access_management_ops() {
+        let key = create_admin_api_key();
+        assert!(check_permission(None, Some(&key), "keys.list_all"));
+        assert!(check_permission(None, Some(&key), "users.manage"));
+        assert!(check_permission(None, Some(&key), "config.manage"));
+    }
+
+    #[test]
+    fn test_system_admin_api_key_can_access_management_ops() {
+        let mut key = create_test_api_key();
+        key.permissions = vec!["system.admin".to_string()];
+        assert!(check_permission(None, Some(&key), "keys.list_all"));
+        assert!(check_permission(None, Some(&key), "users.manage"));
+    }
+
+    #[test]
+    fn test_regular_api_key_denied_management_ops() {
+        let key = create_test_api_key();
+        assert!(!check_permission(None, Some(&key), "keys.list_all"));
+        assert!(!check_permission(None, Some(&key), "users.manage"));
+    }
+
+    #[test]
+    fn test_api_key_with_specific_management_permission() {
+        let mut key = create_test_api_key();
+        key.permissions = vec!["keys.list_all".to_string()];
+        assert!(check_permission(None, Some(&key), "keys.list_all"));
+        assert!(!check_permission(None, Some(&key), "users.manage"));
     }
 
     // ==================== get_authenticated_user Tests ====================
