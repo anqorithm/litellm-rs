@@ -81,14 +81,14 @@ impl AuthConfig {
             if self.jwt_secret.is_empty() {
                 return Err(
                     "JWT authentication is enabled but jwt_secret is empty. \
-                     Set a secure jwt_secret (>= 32 chars) or disable JWT auth with enable_jwt: false"
+                     Set a secure jwt_secret (>= 32 bytes for HS256 256-bit minimum) or disable JWT auth with enable_jwt: false"
                         .to_string(),
                 );
             }
 
             if self.jwt_secret.len() < 32 {
                 return Err(
-                    "JWT secret must be at least 32 characters long for security".to_string(),
+                    "JWT secret must be at least 32 bytes (256-bit) for HS256 security".to_string(),
                 );
             }
 
@@ -326,6 +326,23 @@ mod tests {
             rbac: RbacConfig::default(),
         };
         assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_auth_config_validate_secret_checks_bytes_not_chars() {
+        // 16 CJK characters = 48 UTF-8 bytes (>= 32), but only 16 chars
+        // Mixed with ASCII to pass the weak-pattern check
+        let config = AuthConfig {
+            enable_jwt: true,
+            enable_api_key: true,
+            jwt_secret: "A1!abcde\u{4e00}\u{4e01}\u{4e02}\u{4e03}\u{4e04}\u{4e05}\u{4e06}\u{4e07}\u{4e08}\u{4e09}\u{4e0a}\u{4e0b}".to_string(),
+            jwt_expiration: 3600,
+            api_key_header: "X-API-Key".to_string(),
+            rbac: RbacConfig::default(),
+        };
+        // 8 ASCII bytes + 12 CJK * 3 bytes = 44 bytes >= 32, should pass length check
+        assert!(config.jwt_secret.len() >= 32);
+        assert!(config.validate().is_ok());
     }
 
     #[test]
