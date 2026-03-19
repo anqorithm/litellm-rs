@@ -115,10 +115,6 @@ impl ErrorMapper<SapAIError> for SapAIErrorMapper {
 
 #[async_trait]
 impl LLMProvider for SapAIProvider {
-    type Config = SapAIConfig;
-    type Error = SapAIError;
-    type ErrorMapper = SapAIErrorMapper;
-
     fn name(&self) -> &'static str {
         "sap_ai"
     }
@@ -140,7 +136,7 @@ impl LLMProvider for SapAIProvider {
         &self,
         params: std::collections::HashMap<String, serde_json::Value>,
         _model: &str,
-    ) -> Result<std::collections::HashMap<String, serde_json::Value>, Self::Error> {
+    ) -> Result<std::collections::HashMap<String, serde_json::Value>, ProviderError> {
         Ok(params)
     }
 
@@ -148,7 +144,7 @@ impl LLMProvider for SapAIProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<serde_json::Value, Self::Error> {
+    ) -> Result<serde_json::Value, ProviderError> {
         use serde_json::json;
 
         let mut body = json!({
@@ -176,15 +172,15 @@ impl LLMProvider for SapAIProvider {
         _raw_response: &[u8],
         _model: &str,
         _request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         Err(ProviderError::not_implemented(
             "sap_ai",
             "Response transformation not yet implemented",
         ))
     }
 
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        SapAIErrorMapper
+    fn get_error_mapper(&self) -> Box<dyn ErrorMapper<ProviderError>> {
+        Box::new(SapAIErrorMapper)
     }
 
     async fn calculate_cost(
@@ -192,7 +188,7 @@ impl LLMProvider for SapAIProvider {
         _model: &str,
         _input_tokens: u32,
         _output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
+    ) -> Result<f64, ProviderError> {
         Ok(0.0)
     }
 
@@ -212,7 +208,7 @@ impl LLMProvider for SapAIProvider {
         &self,
         _request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         Err(ProviderError::not_implemented(
             "sap_ai",
             "Chat completion not yet implemented",
@@ -223,7 +219,7 @@ impl LLMProvider for SapAIProvider {
         &self,
         _request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError>
     {
         Err(ProviderError::not_supported("sap_ai", "Streaming"))
     }
@@ -232,7 +228,7 @@ impl LLMProvider for SapAIProvider {
         &self,
         _request: EmbeddingRequest,
         _context: RequestContext,
-    ) -> Result<EmbeddingResponse, Self::Error> {
+    ) -> Result<EmbeddingResponse, ProviderError> {
         Err(ProviderError::not_supported("sap_ai", "Embeddings"))
     }
 
@@ -240,7 +236,7 @@ impl LLMProvider for SapAIProvider {
         &self,
         _request: ImageGenerationRequest,
         _context: RequestContext,
-    ) -> Result<ImageGenerationResponse, Self::Error> {
+    ) -> Result<ImageGenerationResponse, ProviderError> {
         Err(ProviderError::not_supported("sap_ai", "Image generation"))
     }
 }

@@ -13,6 +13,7 @@ use super::config::CloudflareConfig;
 use super::model_info::{calculate_cost, get_available_models, get_model_info};
 use crate::core::providers::base::{GlobalPoolManager, HttpMethod, header};
 use crate::core::providers::unified_provider::ProviderError;
+use crate::core::traits::error_mapper::trait_def::ErrorMapper;
 use crate::core::traits::{
     provider::ProviderConfig as _, provider::llm_provider::trait_definition::LLMProvider,
 };
@@ -193,10 +194,6 @@ impl CloudflareProvider {
 
 #[async_trait]
 impl LLMProvider for CloudflareProvider {
-    type Config = CloudflareConfig;
-    type Error = ProviderError;
-    type ErrorMapper = crate::core::traits::error_mapper::DefaultErrorMapper;
-
     fn name(&self) -> &'static str {
         "cloudflare"
     }
@@ -227,7 +224,7 @@ impl LLMProvider for CloudflareProvider {
         &self,
         params: HashMap<String, serde_json::Value>,
         _model: &str,
-    ) -> Result<HashMap<String, serde_json::Value>, Self::Error> {
+    ) -> Result<HashMap<String, serde_json::Value>, ProviderError> {
         // Cloudflare supports a subset of OpenAI parameters directly
         Ok(params)
     }
@@ -236,7 +233,7 @@ impl LLMProvider for CloudflareProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<serde_json::Value, Self::Error> {
+    ) -> Result<serde_json::Value, ProviderError> {
         Ok(self.transform_to_cloudflare_format(&request))
     }
 
@@ -245,7 +242,7 @@ impl LLMProvider for CloudflareProvider {
         raw_response: &[u8],
         model: &str,
         request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         let cloudflare_response: serde_json::Value =
             serde_json::from_slice(raw_response).map_err(|e| {
                 ProviderError::api_error(
@@ -285,15 +282,15 @@ impl LLMProvider for CloudflareProvider {
         })
     }
 
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        crate::core::traits::error_mapper::DefaultErrorMapper
+    fn get_error_mapper(&self) -> Box<dyn ErrorMapper<ProviderError>> {
+        Box::new(crate::core::traits::error_mapper::DefaultErrorMapper)
     }
 
     async fn chat_completion(
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         debug!("Cloudflare chat request: model={}", request.model);
 
         // Remove cloudflare/ prefix if present
@@ -344,7 +341,7 @@ impl LLMProvider for CloudflareProvider {
         &self,
         mut request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError>
     {
         debug!("Cloudflare streaming request: model={}", request.model);
 
@@ -363,7 +360,7 @@ impl LLMProvider for CloudflareProvider {
         &self,
         _request: EmbeddingRequest,
         _context: RequestContext,
-    ) -> Result<EmbeddingResponse, Self::Error> {
+    ) -> Result<EmbeddingResponse, ProviderError> {
         // Cloudflare also supports embeddings models, but we'll implement text generation first
         Err(ProviderError::not_supported(
             "cloudflare",
@@ -404,7 +401,7 @@ impl LLMProvider for CloudflareProvider {
         model: &str,
         input_tokens: u32,
         output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
+    ) -> Result<f64, ProviderError> {
         calculate_cost(model, input_tokens, output_tokens)
             .ok_or_else(|| ProviderError::model_not_found("cloudflare", model))
     }

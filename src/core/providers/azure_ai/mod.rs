@@ -27,6 +27,7 @@ use std::collections::HashMap;
 use std::pin::Pin;
 
 use crate::core::providers::unified_provider::ProviderError;
+use crate::core::traits::error_mapper::trait_def::ErrorMapper;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use crate::core::types::{
     chat::ChatRequest,
@@ -128,10 +129,6 @@ impl AzureAIProvider {
 
 #[async_trait]
 impl LLMProvider for AzureAIProvider {
-    type Config = AzureAIConfig;
-    type Error = ProviderError;
-    type ErrorMapper = AzureAIErrorMapper;
-
     fn name(&self) -> &'static str {
         "azure_ai"
     }
@@ -169,7 +166,7 @@ impl LLMProvider for AzureAIProvider {
         &self,
         params: HashMap<String, Value>,
         _model: &str,
-    ) -> Result<HashMap<String, Value>, Self::Error> {
+    ) -> Result<HashMap<String, Value>, ProviderError> {
         // Azure AI generally uses the same parameters as OpenAI
         Ok(params)
     }
@@ -178,7 +175,7 @@ impl LLMProvider for AzureAIProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Value, Self::Error> {
+    ) -> Result<Value, ProviderError> {
         // Transform ChatRequest to Azure AI API format
         AzureAIChatUtils::transform_request(&request)
     }
@@ -188,7 +185,7 @@ impl LLMProvider for AzureAIProvider {
         raw_response: &[u8],
         model: &str,
         _request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         // Parse Azure AI response to ChatResponse
         let response_json: Value = serde_json::from_slice(raw_response)
             .map_err(|e| ProviderError::response_parsing("azure_ai", e.to_string()))?;
@@ -196,15 +193,15 @@ impl LLMProvider for AzureAIProvider {
         AzureAIChatUtils::transform_response(response_json, model)
     }
 
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        AzureAIErrorMapper
+    fn get_error_mapper(&self) -> Box<dyn ErrorMapper<ProviderError>> {
+        Box::new(AzureAIErrorMapper)
     }
 
     async fn chat_completion(
         &self,
         request: ChatRequest,
         context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         self.chat_handler
             .create_chat_completion(request, context)
             .await
@@ -214,7 +211,7 @@ impl LLMProvider for AzureAIProvider {
         &self,
         request: ChatRequest,
         context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError>
     {
         let stream = self
             .chat_handler
@@ -227,7 +224,7 @@ impl LLMProvider for AzureAIProvider {
         &self,
         request: EmbeddingRequest,
         context: RequestContext,
-    ) -> Result<EmbeddingResponse, Self::Error> {
+    ) -> Result<EmbeddingResponse, ProviderError> {
         self.embedding_handler.embedding(request, context).await
     }
 
@@ -235,7 +232,7 @@ impl LLMProvider for AzureAIProvider {
         &self,
         request: ImageGenerationRequest,
         context: RequestContext,
-    ) -> Result<ImageGenerationResponse, Self::Error> {
+    ) -> Result<ImageGenerationResponse, ProviderError> {
         self.image_handler.generate_image(request, context).await
     }
 
@@ -255,7 +252,7 @@ impl LLMProvider for AzureAIProvider {
         model: &str,
         input_tokens: u32,
         output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
+    ) -> Result<f64, ProviderError> {
         if let Some(model_spec) = self.model_registry.get_model(model) {
             let input_cost =
                 model_spec.input_price_per_1k.unwrap_or(0.0) * (input_tokens as f64 / 1000.0);

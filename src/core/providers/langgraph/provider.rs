@@ -372,10 +372,6 @@ impl LangGraphProvider {
 
 #[async_trait]
 impl LLMProvider for LangGraphProvider {
-    type Config = LangGraphConfig;
-    type Error = ProviderError;
-    type ErrorMapper = LangGraphErrorMapper;
-
     fn name(&self) -> &'static str {
         PROVIDER_NAME
     }
@@ -407,7 +403,7 @@ impl LLMProvider for LangGraphProvider {
         &self,
         params: HashMap<String, Value>,
         _model: &str,
-    ) -> Result<HashMap<String, Value>, Self::Error> {
+    ) -> Result<HashMap<String, Value>, ProviderError> {
         // LangGraph can accept most OpenAI params and pass them to the underlying LLM
         Ok(params)
     }
@@ -416,7 +412,7 @@ impl LLMProvider for LangGraphProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Value, Self::Error> {
+    ) -> Result<Value, ProviderError> {
         // Transform to LangGraph input format
         Ok(self.transform_chat_to_langgraph_input(&request))
     }
@@ -426,22 +422,22 @@ impl LLMProvider for LangGraphProvider {
         raw_response: &[u8],
         model: &str,
         request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         let run_response: RunResponse = serde_json::from_slice(raw_response)
             .map_err(|e| ProviderError::response_parsing(PROVIDER_NAME, e.to_string()))?;
 
         self.transform_langgraph_output_to_chat(&run_response, model, request_id)
     }
 
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        LangGraphErrorMapper
+    fn get_error_mapper(&self) -> Box<dyn ErrorMapper<ProviderError>> {
+        Box::new(LangGraphErrorMapper)
     }
 
     async fn chat_completion(
         &self,
         request: ChatRequest,
         context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         // Get or create a thread
         let thread_id = if let Some(thread_id) = &self.config.thread_id {
             thread_id.clone()
@@ -480,7 +476,7 @@ impl LLMProvider for LangGraphProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError>
     {
         // Get or create a thread
         let thread_id = if let Some(thread_id) = &self.config.thread_id {
@@ -571,7 +567,7 @@ impl LLMProvider for LangGraphProvider {
         model: &str,
         input_tokens: u32,
         output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
+    ) -> Result<f64, ProviderError> {
         // LangGraph itself doesn't have fixed costs - costs depend on the underlying LLM
         // Use the pricing database for estimation
         let usage = crate::core::providers::base::pricing::Usage {

@@ -182,10 +182,6 @@ impl StabilityProvider {
 
 #[async_trait]
 impl LLMProvider for StabilityProvider {
-    type Config = StabilityConfig;
-    type Error = ProviderError;
-    type ErrorMapper = StabilityErrorMapper;
-
     fn name(&self) -> &'static str {
         "stability"
     }
@@ -206,7 +202,7 @@ impl LLMProvider for StabilityProvider {
         &self,
         params: HashMap<String, Value>,
         _model: &str,
-    ) -> Result<HashMap<String, Value>, Self::Error> {
+    ) -> Result<HashMap<String, Value>, ProviderError> {
         let mut mapped = HashMap::new();
         let registry = get_stability_registry();
 
@@ -240,7 +236,7 @@ impl LLMProvider for StabilityProvider {
         &self,
         _request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Value, Self::Error> {
+    ) -> Result<Value, ProviderError> {
         // Stability AI is primarily for image generation, not chat
         Err(ProviderError::not_supported(
             "stability",
@@ -253,22 +249,22 @@ impl LLMProvider for StabilityProvider {
         _raw_response: &[u8],
         _model: &str,
         _request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         Err(ProviderError::not_supported(
             "stability",
             "Chat completion is not supported by Stability AI",
         ))
     }
 
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        StabilityErrorMapper
+    fn get_error_mapper(&self) -> Box<dyn ErrorMapper<ProviderError>> {
+        Box::new(StabilityErrorMapper)
     }
 
     async fn chat_completion(
         &self,
         _request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         Err(ProviderError::not_supported(
             "stability",
             "Chat completion is not supported by Stability AI. Use image_generation instead.",
@@ -279,7 +275,7 @@ impl LLMProvider for StabilityProvider {
         &self,
         _request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError>
     {
         Err(ProviderError::not_supported(
             "stability",
@@ -291,7 +287,7 @@ impl LLMProvider for StabilityProvider {
         &self,
         request: ImageGenerationRequest,
         _context: RequestContext,
-    ) -> Result<ImageGenerationResponse, Self::Error> {
+    ) -> Result<ImageGenerationResponse, ProviderError> {
         let url = self.get_endpoint(request.model.as_deref());
         let stability_request = self.transform_image_request(&request);
 
@@ -370,7 +366,7 @@ impl LLMProvider for StabilityProvider {
         model: &str,
         input_tokens: u32,
         output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
+    ) -> Result<f64, ProviderError> {
         // Stability AI pricing is per image, not per token
         // Use the pricing database for estimation
         let usage = crate::core::providers::base::pricing::Usage {

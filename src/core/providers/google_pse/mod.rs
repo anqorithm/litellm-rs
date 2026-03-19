@@ -173,10 +173,6 @@ impl GooglePSEProvider {
 
 #[async_trait]
 impl LLMProvider for GooglePSEProvider {
-    type Config = GooglePSEConfig;
-    type Error = GooglePSEError;
-    type ErrorMapper = GooglePSEErrorMapper;
-
     fn name(&self) -> &'static str {
         "google_pse"
     }
@@ -197,7 +193,7 @@ impl LLMProvider for GooglePSEProvider {
         &self,
         params: HashMap<String, Value>,
         _model: &str,
-    ) -> Result<HashMap<String, Value>, Self::Error> {
+    ) -> Result<HashMap<String, Value>, ProviderError> {
         let mut mapped = HashMap::new();
         for (key, value) in params {
             match key.as_str() {
@@ -214,7 +210,7 @@ impl LLMProvider for GooglePSEProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Value, Self::Error> {
+    ) -> Result<Value, ProviderError> {
         Ok(OpenAIRequestTransformer::transform_chat_request(&request))
     }
 
@@ -223,20 +219,20 @@ impl LLMProvider for GooglePSEProvider {
         raw_response: &[u8],
         _model: &str,
         _request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         serde_json::from_slice(raw_response)
             .map_err(|e| ProviderError::response_parsing("google_pse", e.to_string()))
     }
 
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        GooglePSEErrorMapper
+    fn get_error_mapper(&self) -> Box<dyn ErrorMapper<ProviderError>> {
+        Box::new(GooglePSEErrorMapper)
     }
 
     async fn chat_completion(
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         debug!("Google PSE search request: model={}", request.model);
 
         let query = if let Some(last_message) = request.messages.last() {
@@ -325,7 +321,7 @@ impl LLMProvider for GooglePSEProvider {
         &self,
         _request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError>
     {
         Err(ProviderError::not_implemented(
             "google_pse",
@@ -337,7 +333,7 @@ impl LLMProvider for GooglePSEProvider {
         &self,
         _request: EmbeddingRequest,
         _context: RequestContext,
-    ) -> Result<EmbeddingResponse, Self::Error> {
+    ) -> Result<EmbeddingResponse, ProviderError> {
         Err(ProviderError::not_implemented(
             "google_pse",
             "Google PSE does not support embeddings".to_string(),
@@ -372,7 +368,7 @@ impl LLMProvider for GooglePSEProvider {
         model: &str,
         input_tokens: u32,
         output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
+    ) -> Result<f64, ProviderError> {
         let usage = crate::core::providers::base::pricing::Usage {
             prompt_tokens: input_tokens,
             completion_tokens: output_tokens,

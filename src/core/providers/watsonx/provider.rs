@@ -419,10 +419,6 @@ impl WatsonxProvider {
 
 #[async_trait]
 impl LLMProvider for WatsonxProvider {
-    type Config = WatsonxConfig;
-    type Error = WatsonxError;
-    type ErrorMapper = WatsonxErrorMapper;
-
     fn name(&self) -> &'static str {
         "watsonx"
     }
@@ -476,7 +472,7 @@ impl LLMProvider for WatsonxProvider {
         &self,
         params: HashMap<String, serde_json::Value>,
         _model: &str,
-    ) -> Result<HashMap<String, serde_json::Value>, Self::Error> {
+    ) -> Result<HashMap<String, serde_json::Value>, ProviderError> {
         // Watsonx uses similar parameters to OpenAI with some mapping
         let mut mapped = HashMap::new();
 
@@ -498,7 +494,7 @@ impl LLMProvider for WatsonxProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<serde_json::Value, Self::Error> {
+    ) -> Result<serde_json::Value, ProviderError> {
         self.prepare_payload(&request.model, &request)
     }
 
@@ -507,21 +503,21 @@ impl LLMProvider for WatsonxProvider {
         raw_response: &[u8],
         _model: &str,
         _request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         serde_json::from_slice(raw_response).map_err(|e| {
             ProviderError::response_parsing("watsonx", format!("Failed to parse response: {}", e))
         })
     }
 
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        WatsonxErrorMapper
+    fn get_error_mapper(&self) -> Box<dyn ErrorMapper<ProviderError>> {
+        Box::new(WatsonxErrorMapper)
     }
 
     async fn chat_completion(
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         debug!("Watsonx chat request: model={}", request.model);
 
         let url = self.get_endpoint_url(&request.model, false)?;
@@ -541,7 +537,7 @@ impl LLMProvider for WatsonxProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError>
     {
         debug!("Watsonx streaming request: model={}", request.model);
 
@@ -580,7 +576,7 @@ impl LLMProvider for WatsonxProvider {
         &self,
         _request: EmbeddingRequest,
         _context: RequestContext,
-    ) -> Result<EmbeddingResponse, Self::Error> {
+    ) -> Result<EmbeddingResponse, ProviderError> {
         Err(ProviderError::not_supported(
             "watsonx",
             "Embeddings are available through a separate Watsonx embeddings API. \
@@ -601,7 +597,7 @@ impl LLMProvider for WatsonxProvider {
         model: &str,
         input_tokens: u32,
         output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
+    ) -> Result<f64, ProviderError> {
         let model_info = get_model_info(model).ok_or_else(|| {
             ProviderError::model_not_found("watsonx", format!("Unknown model: {}", model))
         })?;

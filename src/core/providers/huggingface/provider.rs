@@ -30,6 +30,7 @@ use super::config::{HF_HUB_URL, HuggingFaceConfig};
 use super::embedding::HuggingFaceEmbeddingHandler;
 use super::error::{HuggingFaceError, parse_hf_error_response};
 use super::models::{get_default_models, parse_model_string};
+use crate::core::providers::unified_provider::ProviderError;
 
 // Static capabilities
 const HUGGINGFACE_CAPABILITIES: &[ProviderCapability] = &[
@@ -261,10 +262,6 @@ impl HuggingFaceProvider {
 
 #[async_trait]
 impl LLMProvider for HuggingFaceProvider {
-    type Config = HuggingFaceConfig;
-    type Error = HuggingFaceError;
-    type ErrorMapper = HuggingFaceErrorMapper;
-
     fn name(&self) -> &'static str {
         "huggingface"
     }
@@ -298,7 +295,7 @@ impl LLMProvider for HuggingFaceProvider {
         &self,
         params: HashMap<String, Value>,
         _model: &str,
-    ) -> Result<HashMap<String, Value>, Self::Error> {
+    ) -> Result<HashMap<String, Value>, ProviderError> {
         // HuggingFace uses OpenAI-compatible parameters with some adjustments
         let mut mapped = HashMap::new();
 
@@ -335,7 +332,7 @@ impl LLMProvider for HuggingFaceProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Value, Self::Error> {
+    ) -> Result<Value, ProviderError> {
         // Parse model string to extract provider and model ID
         let (provider, model_id) = parse_model_string(&request.model);
 
@@ -358,21 +355,21 @@ impl LLMProvider for HuggingFaceProvider {
         raw_response: &[u8],
         _model: &str,
         _request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         // Parse OpenAI-compatible response
         serde_json::from_slice(raw_response)
             .map_err(|e| HuggingFaceError::huggingface_response_parsing(e.to_string()))
     }
 
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        HuggingFaceErrorMapper
+    fn get_error_mapper(&self) -> Box<dyn ErrorMapper<ProviderError>> {
+        Box::new(HuggingFaceErrorMapper)
     }
 
     async fn chat_completion(
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         debug!("HuggingFace chat request: model={}", request.model);
 
         // Parse model string to extract provider and model ID
@@ -425,7 +422,7 @@ impl LLMProvider for HuggingFaceProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError>
     {
         debug!(
             "HuggingFace streaming chat request: model={}",
@@ -481,7 +478,7 @@ impl LLMProvider for HuggingFaceProvider {
         &self,
         request: EmbeddingRequest,
         _context: RequestContext,
-    ) -> Result<EmbeddingResponse, Self::Error> {
+    ) -> Result<EmbeddingResponse, ProviderError> {
         debug!("HuggingFace embedding request: model={}", request.model);
 
         // Transform request
@@ -565,7 +562,7 @@ impl LLMProvider for HuggingFaceProvider {
         _model: &str,
         _input_tokens: u32,
         _output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
+    ) -> Result<f64, ProviderError> {
         // HuggingFace pricing varies by provider, returning 0 as default
         // Users are billed through their HuggingFace account at provider rates
         Ok(0.0)

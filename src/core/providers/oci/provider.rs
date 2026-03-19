@@ -272,10 +272,6 @@ impl OciProvider {
 
 #[async_trait]
 impl LLMProvider for OciProvider {
-    type Config = OciConfig;
-    type Error = ProviderError;
-    type ErrorMapper = OciErrorMapper;
-
     fn name(&self) -> &'static str {
         "oci"
     }
@@ -318,7 +314,7 @@ impl LLMProvider for OciProvider {
         &self,
         params: HashMap<String, serde_json::Value>,
         _model: &str,
-    ) -> Result<HashMap<String, serde_json::Value>, Self::Error> {
+    ) -> Result<HashMap<String, serde_json::Value>, ProviderError> {
         // OCI uses camelCase parameters
         let mut mapped = HashMap::new();
 
@@ -342,7 +338,7 @@ impl LLMProvider for OciProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<serde_json::Value, Self::Error> {
+    ) -> Result<serde_json::Value, ProviderError> {
         self.prepare_payload(&request)
     }
 
@@ -351,21 +347,21 @@ impl LLMProvider for OciProvider {
         raw_response: &[u8],
         _model: &str,
         _request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         serde_json::from_slice(raw_response).map_err(|e| {
             ProviderError::response_parsing("oci", format!("Failed to parse response: {}", e))
         })
     }
 
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        OciErrorMapper
+    fn get_error_mapper(&self) -> Box<dyn ErrorMapper<ProviderError>> {
+        Box::new(OciErrorMapper)
     }
 
     async fn chat_completion(
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         debug!("OCI chat request: model={}", request.model);
 
         let url = self.config.build_chat_url();
@@ -381,7 +377,7 @@ impl LLMProvider for OciProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError>
     {
         debug!("OCI streaming request: model={}", request.model);
 
@@ -423,7 +419,7 @@ impl LLMProvider for OciProvider {
         &self,
         _request: EmbeddingRequest,
         _context: RequestContext,
-    ) -> Result<EmbeddingResponse, Self::Error> {
+    ) -> Result<EmbeddingResponse, ProviderError> {
         Err(ProviderError::not_supported(
             "oci",
             "Embeddings are available through OCI Generative AI Embeddings API. Use the oci_embed provider for embeddings.",
@@ -444,7 +440,7 @@ impl LLMProvider for OciProvider {
         model: &str,
         input_tokens: u32,
         output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
+    ) -> Result<f64, ProviderError> {
         let model_info = get_model_info(model).ok_or_else(|| {
             ProviderError::model_not_found("oci", format!("Unknown model: {}", model))
         })?;

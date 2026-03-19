@@ -14,6 +14,7 @@ use super::model_info::{OllamaModelInfo, OllamaShowResponse, OllamaTagsResponse,
 use super::streaming::OllamaStream;
 use crate::core::providers::base::{GlobalPoolManager, HttpErrorMapper, HttpMethod, header};
 use crate::core::providers::unified_provider::ProviderError;
+use crate::core::traits::error_mapper::trait_def::ErrorMapper;
 use crate::core::traits::error_mapper::types::GenericErrorMapper;
 use crate::core::traits::{
     provider::ProviderConfig as _, provider::llm_provider::trait_definition::LLMProvider,
@@ -453,10 +454,6 @@ impl OllamaProvider {
 
 #[async_trait]
 impl LLMProvider for OllamaProvider {
-    type Config = OllamaConfig;
-    type Error = ProviderError;
-    type ErrorMapper = GenericErrorMapper;
-
     fn name(&self) -> &'static str {
         "ollama"
     }
@@ -498,7 +495,7 @@ impl LLMProvider for OllamaProvider {
         &self,
         mut params: HashMap<String, serde_json::Value>,
         _model: &str,
-    ) -> Result<HashMap<String, serde_json::Value>, Self::Error> {
+    ) -> Result<HashMap<String, serde_json::Value>, ProviderError> {
         // Map max_tokens to num_predict (Ollama's equivalent)
         if let Some(max_tokens) = params.remove("max_tokens") {
             params.insert("num_predict".to_string(), max_tokens);
@@ -514,7 +511,7 @@ impl LLMProvider for OllamaProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<serde_json::Value, Self::Error> {
+    ) -> Result<serde_json::Value, ProviderError> {
         self.build_chat_request(&request, request.stream)
     }
 
@@ -523,7 +520,7 @@ impl LLMProvider for OllamaProvider {
         raw_response: &[u8],
         model: &str,
         _request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         let response: serde_json::Value = serde_json::from_slice(raw_response).map_err(|e| {
             ProviderError::api_error("ollama", 500, format!("Failed to parse response: {}", e))
         })?;
@@ -531,15 +528,15 @@ impl LLMProvider for OllamaProvider {
         self.parse_chat_response(response, model)
     }
 
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        GenericErrorMapper
+    fn get_error_mapper(&self) -> Box<dyn ErrorMapper<ProviderError>> {
+        Box::new(GenericErrorMapper)
     }
 
     async fn chat_completion(
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         debug!("Ollama chat request: model={}", request.model);
 
         let model = request.model.clone();
@@ -557,7 +554,7 @@ impl LLMProvider for OllamaProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError>
     {
         debug!("Ollama streaming request: model={}", request.model);
 
@@ -617,7 +614,7 @@ impl LLMProvider for OllamaProvider {
         &self,
         request: EmbeddingRequest,
         _context: RequestContext,
-    ) -> Result<EmbeddingResponse, Self::Error> {
+    ) -> Result<EmbeddingResponse, ProviderError> {
         debug!("Ollama embeddings request: model={}", request.model);
 
         let model = request
@@ -704,7 +701,7 @@ impl LLMProvider for OllamaProvider {
         _model: &str,
         _input_tokens: u32,
         _output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
+    ) -> Result<f64, ProviderError> {
         // Ollama is local/free, so cost is always 0
         Ok(0.0)
     }

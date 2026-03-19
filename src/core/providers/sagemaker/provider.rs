@@ -14,6 +14,7 @@ use super::error::{SagemakerError, SagemakerErrorMapper};
 use super::sigv4::SagemakerSigV4Signer;
 use crate::core::providers::base::{GlobalPoolManager, HttpErrorMapper};
 use crate::core::providers::unified_provider::ProviderError;
+use crate::core::traits::error_mapper::trait_def::ErrorMapper;
 use crate::core::traits::provider::ProviderConfig as _;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use crate::core::types::health::HealthStatus;
@@ -106,10 +107,6 @@ impl SagemakerProvider {
 
 #[async_trait]
 impl LLMProvider for SagemakerProvider {
-    type Config = SagemakerConfig;
-    type Error = SagemakerError;
-    type ErrorMapper = SagemakerErrorMapper;
-
     fn name(&self) -> &'static str {
         "sagemaker"
     }
@@ -131,7 +128,7 @@ impl LLMProvider for SagemakerProvider {
         &self,
         mut params: HashMap<String, serde_json::Value>,
         _model: &str,
-    ) -> Result<HashMap<String, serde_json::Value>, Self::Error> {
+    ) -> Result<HashMap<String, serde_json::Value>, ProviderError> {
         // Map max_completion_tokens to max_tokens
         if let Some(max_completion_tokens) = params.remove("max_completion_tokens") {
             params.insert("max_tokens".to_string(), max_completion_tokens);
@@ -152,7 +149,7 @@ impl LLMProvider for SagemakerProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<serde_json::Value, Self::Error> {
+    ) -> Result<serde_json::Value, ProviderError> {
         serde_json::to_value(&request)
             .map_err(|e| ProviderError::invalid_request("sagemaker", e.to_string()))
     }
@@ -162,21 +159,21 @@ impl LLMProvider for SagemakerProvider {
         raw_response: &[u8],
         _model: &str,
         _request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         serde_json::from_slice(raw_response).map_err(|e| {
             ProviderError::response_parsing("sagemaker", format!("Failed to parse response: {}", e))
         })
     }
 
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        SagemakerErrorMapper
+    fn get_error_mapper(&self) -> Box<dyn ErrorMapper<ProviderError>> {
+        Box::new(SagemakerErrorMapper)
     }
 
     async fn chat_completion(
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         debug!("Sagemaker chat request: model={}", request.model);
 
         // Extract endpoint name from model
@@ -256,7 +253,7 @@ impl LLMProvider for SagemakerProvider {
         &self,
         _request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError>
     {
         Err(ProviderError::not_supported(
             "sagemaker",
@@ -268,7 +265,7 @@ impl LLMProvider for SagemakerProvider {
         &self,
         _request: EmbeddingRequest,
         _context: RequestContext,
-    ) -> Result<EmbeddingResponse, Self::Error> {
+    ) -> Result<EmbeddingResponse, ProviderError> {
         Err(ProviderError::not_supported(
             "sagemaker",
             "Embeddings not supported by Sagemaker provider".to_string(),
@@ -290,7 +287,7 @@ impl LLMProvider for SagemakerProvider {
         _model: &str,
         _input_tokens: u32,
         _output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
+    ) -> Result<f64, ProviderError> {
         // Sagemaker pricing is based on instance hours, not tokens
         Ok(0.0)
     }

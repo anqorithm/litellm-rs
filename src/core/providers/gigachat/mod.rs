@@ -194,10 +194,6 @@ impl GigaChatProvider {
 
 #[async_trait]
 impl LLMProvider for GigaChatProvider {
-    type Config = GigaChatConfig;
-    type Error = GigaChatError;
-    type ErrorMapper = GigaChatErrorMapper;
-
     fn name(&self) -> &'static str {
         "gigachat"
     }
@@ -224,7 +220,7 @@ impl LLMProvider for GigaChatProvider {
         &self,
         params: HashMap<String, Value>,
         _model: &str,
-    ) -> Result<HashMap<String, Value>, Self::Error> {
+    ) -> Result<HashMap<String, Value>, ProviderError> {
         let mut mapped = HashMap::new();
         for (key, value) in params {
             match key.as_str() {
@@ -241,7 +237,7 @@ impl LLMProvider for GigaChatProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Value, Self::Error> {
+    ) -> Result<Value, ProviderError> {
         Ok(OpenAIRequestTransformer::transform_chat_request(&request))
     }
 
@@ -250,20 +246,20 @@ impl LLMProvider for GigaChatProvider {
         raw_response: &[u8],
         _model: &str,
         _request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         serde_json::from_slice(raw_response)
             .map_err(|e| ProviderError::response_parsing("gigachat", e.to_string()))
     }
 
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        GigaChatErrorMapper
+    fn get_error_mapper(&self) -> Box<dyn ErrorMapper<ProviderError>> {
+        Box::new(GigaChatErrorMapper)
     }
 
     async fn chat_completion(
         &self,
         request: ChatRequest,
         context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         debug!("GigaChat chat request: model={}", request.model);
 
         if self.is_embedding_model(&request.model) {
@@ -306,7 +302,7 @@ impl LLMProvider for GigaChatProvider {
         &self,
         request: ChatRequest,
         context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError>
     {
         debug!("GigaChat streaming chat request: model={}", request.model);
 
@@ -343,7 +339,7 @@ impl LLMProvider for GigaChatProvider {
         &self,
         request: EmbeddingRequest,
         _context: RequestContext,
-    ) -> Result<EmbeddingResponse, Self::Error> {
+    ) -> Result<EmbeddingResponse, ProviderError> {
         debug!("GigaChat embedding request: model={}", request.model);
 
         let body = serde_json::json!({
@@ -410,7 +406,7 @@ impl LLMProvider for GigaChatProvider {
         model: &str,
         input_tokens: u32,
         output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
+    ) -> Result<f64, ProviderError> {
         let usage = crate::core::providers::base::pricing::Usage {
             prompt_tokens: input_tokens,
             completion_tokens: output_tokens,

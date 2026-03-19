@@ -333,10 +333,6 @@ impl DatabricksProvider {
 
 #[async_trait]
 impl LLMProvider for DatabricksProvider {
-    type Config = DatabricksConfig;
-    type Error = ProviderError;
-    type ErrorMapper = DatabricksErrorMapper;
-
     fn name(&self) -> &'static str {
         "databricks"
     }
@@ -362,7 +358,7 @@ impl LLMProvider for DatabricksProvider {
         &self,
         params: HashMap<String, Value>,
         model: &str,
-    ) -> Result<HashMap<String, Value>, Self::Error> {
+    ) -> Result<HashMap<String, Value>, ProviderError> {
         let registry = get_databricks_registry();
         let supported = registry.get_supported_params(model);
 
@@ -379,7 +375,7 @@ impl LLMProvider for DatabricksProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Value, Self::Error> {
+    ) -> Result<Value, ProviderError> {
         Ok(self.transform_chat_request_to_value(&request))
     }
 
@@ -388,22 +384,22 @@ impl LLMProvider for DatabricksProvider {
         raw_response: &[u8],
         model: &str,
         _request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         let response: Value = serde_json::from_slice(raw_response)
             .map_err(|e| ProviderError::response_parsing("databricks", e.to_string()))?;
 
         self.parse_chat_response(&response, model)
     }
 
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        DatabricksErrorMapper
+    fn get_error_mapper(&self) -> Box<dyn ErrorMapper<ProviderError>> {
+        Box::new(DatabricksErrorMapper)
     }
 
     async fn chat_completion(
         &self,
         request: ChatRequest,
         context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         let url = self.build_endpoint_url(&request.model, "chat")?;
         let body = self.transform_chat_request_to_value(&request);
 
@@ -427,7 +423,7 @@ impl LLMProvider for DatabricksProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError>
     {
         let url = self.build_endpoint_url(&request.model, "chat")?;
 
@@ -471,7 +467,7 @@ impl LLMProvider for DatabricksProvider {
         &self,
         request: EmbeddingRequest,
         _context: RequestContext,
-    ) -> Result<EmbeddingResponse, Self::Error> {
+    ) -> Result<EmbeddingResponse, ProviderError> {
         let url = self.build_endpoint_url(&request.model, "embeddings")?;
 
         // Build request body
@@ -575,7 +571,7 @@ impl LLMProvider for DatabricksProvider {
         model: &str,
         input_tokens: u32,
         output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
+    ) -> Result<f64, ProviderError> {
         let usage = crate::core::providers::base::pricing::Usage {
             prompt_tokens: input_tokens,
             completion_tokens: output_tokens,

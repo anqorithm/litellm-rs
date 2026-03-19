@@ -25,6 +25,7 @@ use super::client::AnthropicClient;
 use super::config::AnthropicConfig;
 use super::models::{ModelFeature, get_anthropic_registry};
 use super::streaming::AnthropicStream;
+use crate::core::traits::error_mapper::trait_def::ErrorMapper;
 
 /// Anthropic Provider - unified implementation
 #[derive(Debug, Clone)]
@@ -113,10 +114,6 @@ impl AnthropicProvider {
 
 #[async_trait]
 impl LLMProvider for AnthropicProvider {
-    type Config = AnthropicConfig;
-    type Error = ProviderError;
-    type ErrorMapper = super::error::AnthropicErrorMapper;
-
     fn name(&self) -> &'static str {
         "anthropic"
     }
@@ -150,7 +147,7 @@ impl LLMProvider for AnthropicProvider {
         &self,
         mut params: HashMap<String, Value>,
         _model: &str,
-    ) -> Result<HashMap<String, Value>, Self::Error> {
+    ) -> Result<HashMap<String, Value>, ProviderError> {
         // Anthropic uses max_tokens instead of max_tokens_to_sample
         if let Some(max_tokens) = params.remove("max_tokens") {
             params.insert("max_tokens".to_string(), max_tokens);
@@ -163,7 +160,7 @@ impl LLMProvider for AnthropicProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Value, Self::Error> {
+    ) -> Result<Value, ProviderError> {
         self.validate_request(&request)?;
 
         // Request
@@ -218,7 +215,7 @@ impl LLMProvider for AnthropicProvider {
         raw_response: &[u8],
         _model: &str,
         _request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         let response_text = String::from_utf8_lossy(raw_response);
         let anthropic_response: Value = serde_json::from_str(&response_text)?;
 
@@ -227,15 +224,15 @@ impl LLMProvider for AnthropicProvider {
         Ok(response)
     }
 
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        super::error::AnthropicErrorMapper
+    fn get_error_mapper(&self) -> Box<dyn ErrorMapper<ProviderError>> {
+        Box::new(super::error::AnthropicErrorMapper)
     }
 
     async fn chat_completion(
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         self.validate_request(&request)?;
         let response = self.client.chat(request.clone()).await?;
         Ok(response)
@@ -245,7 +242,7 @@ impl LLMProvider for AnthropicProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError>
     {
         self.validate_request(&request)?;
 
@@ -297,7 +294,7 @@ impl LLMProvider for AnthropicProvider {
         model: &str,
         input_tokens: u32,
         output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
+    ) -> Result<f64, ProviderError> {
         Ok(
             super::models::CostCalculator::calculate_cost(model, input_tokens, output_tokens)
                 .unwrap_or(0.0),

@@ -110,10 +110,6 @@ impl ErrorMapper<ProviderError> for SparkErrorMapper {
 
 #[async_trait]
 impl LLMProvider for SparkProvider {
-    type Config = SparkConfig;
-    type Error = ProviderError;
-    type ErrorMapper = SparkErrorMapper;
-
     fn name(&self) -> &'static str {
         "spark"
     }
@@ -138,7 +134,7 @@ impl LLMProvider for SparkProvider {
         &self,
         params: HashMap<String, Value>,
         _model: &str,
-    ) -> Result<HashMap<String, Value>, Self::Error> {
+    ) -> Result<HashMap<String, Value>, ProviderError> {
         // Spark API accepts most OpenAI params directly
         Ok(params)
     }
@@ -147,7 +143,7 @@ impl LLMProvider for SparkProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Value, Self::Error> {
+    ) -> Result<Value, ProviderError> {
         self.validate_request(&request)?;
 
         use serde_json::json;
@@ -181,7 +177,7 @@ impl LLMProvider for SparkProvider {
         raw_response: &[u8],
         _model: &str,
         _request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         let response_text = String::from_utf8_lossy(raw_response);
         let spark_response: Value = serde_json::from_str(&response_text)?;
 
@@ -190,8 +186,8 @@ impl LLMProvider for SparkProvider {
         Ok(response)
     }
 
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        SparkErrorMapper
+    fn get_error_mapper(&self) -> Box<dyn ErrorMapper<ProviderError>> {
+        Box::new(SparkErrorMapper)
     }
 
     async fn calculate_cost(
@@ -199,7 +195,7 @@ impl LLMProvider for SparkProvider {
         model: &str,
         input_tokens: u32,
         output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
+    ) -> Result<f64, ProviderError> {
         Ok(
             super::model_info::CostCalculator::calculate_cost(model, input_tokens, output_tokens)
                 .unwrap_or(0.0),
@@ -225,7 +221,7 @@ impl LLMProvider for SparkProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         self.validate_request(&request)?;
 
         // Note: This is a placeholder. Real implementation would use WebSocket
@@ -240,7 +236,7 @@ impl LLMProvider for SparkProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError>
     {
         self.validate_request(&request)?;
 
@@ -270,7 +266,7 @@ impl LLMProvider for SparkProvider {
         &self,
         _request: EmbeddingRequest,
         _context: RequestContext,
-    ) -> Result<EmbeddingResponse, Self::Error> {
+    ) -> Result<EmbeddingResponse, ProviderError> {
         Err(ProviderError::not_supported("spark", "Embeddings"))
     }
 
@@ -278,7 +274,7 @@ impl LLMProvider for SparkProvider {
         &self,
         _request: ImageGenerationRequest,
         _context: RequestContext,
-    ) -> Result<ImageGenerationResponse, Self::Error> {
+    ) -> Result<ImageGenerationResponse, ProviderError> {
         Err(ProviderError::not_supported("spark", "Image generation"))
     }
 }

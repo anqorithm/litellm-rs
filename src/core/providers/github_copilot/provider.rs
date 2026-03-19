@@ -20,6 +20,7 @@ use super::model_info::{
 use crate::ProviderError;
 use crate::core::providers::base::HttpErrorMapper;
 use crate::core::streaming::utils::is_done_marker;
+use crate::core::traits::error_mapper::trait_def::ErrorMapper;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use crate::core::types::{
     chat::ChatMessage,
@@ -250,10 +251,6 @@ impl GitHubCopilotProvider {
 
 #[async_trait]
 impl LLMProvider for GitHubCopilotProvider {
-    type Config = GitHubCopilotConfig;
-    type Error = ProviderError;
-    type ErrorMapper = crate::core::traits::error_mapper::DefaultErrorMapper;
-
     fn name(&self) -> &'static str {
         "github_copilot"
     }
@@ -336,7 +333,7 @@ impl LLMProvider for GitHubCopilotProvider {
         &self,
         params: HashMap<String, serde_json::Value>,
         _model: &str,
-    ) -> Result<HashMap<String, serde_json::Value>, Self::Error> {
+    ) -> Result<HashMap<String, serde_json::Value>, ProviderError> {
         // GitHub Copilot uses the same parameters as OpenAI
         Ok(params)
     }
@@ -345,7 +342,7 @@ impl LLMProvider for GitHubCopilotProvider {
         &self,
         mut request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<serde_json::Value, Self::Error> {
+    ) -> Result<serde_json::Value, ProviderError> {
         // Transform messages
         self.transform_messages(&mut request.messages);
 
@@ -359,7 +356,7 @@ impl LLMProvider for GitHubCopilotProvider {
         raw_response: &[u8],
         _model: &str,
         _request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         let chat_response: ChatResponse = serde_json::from_slice(raw_response).map_err(|e| {
             ProviderError::api_error(
                 "github_copilot",
@@ -371,15 +368,15 @@ impl LLMProvider for GitHubCopilotProvider {
         Ok(chat_response)
     }
 
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        crate::core::traits::error_mapper::DefaultErrorMapper
+    fn get_error_mapper(&self) -> Box<dyn ErrorMapper<ProviderError>> {
+        Box::new(crate::core::traits::error_mapper::DefaultErrorMapper)
     }
 
     async fn chat_completion(
         &self,
         mut request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         debug!("GitHub Copilot chat request: model={}", request.model);
 
         // Transform messages
@@ -442,7 +439,7 @@ impl LLMProvider for GitHubCopilotProvider {
         &self,
         mut request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError>
     {
         debug!("GitHub Copilot streaming request: model={}", request.model);
 
@@ -500,7 +497,7 @@ impl LLMProvider for GitHubCopilotProvider {
         &self,
         request: EmbeddingRequest,
         _context: RequestContext,
-    ) -> Result<EmbeddingResponse, Self::Error> {
+    ) -> Result<EmbeddingResponse, ProviderError> {
         debug!("GitHub Copilot embeddings request: model={}", request.model);
 
         // Build headers
@@ -573,7 +570,7 @@ impl LLMProvider for GitHubCopilotProvider {
         _model: &str,
         _input_tokens: u32,
         _output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
+    ) -> Result<f64, ProviderError> {
         // GitHub Copilot is subscription-based, no per-token cost
         Ok(0.0)
     }

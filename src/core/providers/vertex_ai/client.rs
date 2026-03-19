@@ -388,10 +388,6 @@ impl VertexAIProvider {
 
 #[async_trait]
 impl LLMProvider for VertexAIProvider {
-    type Config = VertexAIProviderConfig;
-    type Error = VertexAIError;
-    type ErrorMapper = VertexAIErrorMapper;
-
     fn name(&self) -> &'static str {
         "vertex_ai"
     }
@@ -464,7 +460,7 @@ impl LLMProvider for VertexAIProvider {
         &self,
         request: ChatRequest,
         context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         self.chat_completion_internal(request, context).await
     }
 
@@ -472,7 +468,7 @@ impl LLMProvider for VertexAIProvider {
         &self,
         request: EmbeddingRequest,
         context: RequestContext,
-    ) -> Result<EmbeddingResponse, Self::Error> {
+    ) -> Result<EmbeddingResponse, ProviderError> {
         self.embedding_internal(request, context).await
     }
 
@@ -480,7 +476,7 @@ impl LLMProvider for VertexAIProvider {
         &self,
         request: ImageGenerationRequest,
         _context: RequestContext,
-    ) -> Result<ImageGenerationResponse, Self::Error> {
+    ) -> Result<ImageGenerationResponse, ProviderError> {
         // Use Imagen model for image generation
         let endpoint = "predict";
         let model = "imagegeneration@006";
@@ -538,7 +534,7 @@ impl LLMProvider for VertexAIProvider {
         model: &str,
         input_tokens: u32,
         output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
+    ) -> Result<f64, ProviderError> {
         // Basic cost calculation for Vertex AI models (per 1M tokens)
         let cost = match model {
             m if m.contains("gemini-pro") => {
@@ -591,7 +587,7 @@ impl LLMProvider for VertexAIProvider {
         &self,
         params: HashMap<String, Value>,
         model: &str,
-    ) -> std::result::Result<HashMap<String, Value>, Self::Error> {
+    ) -> std::result::Result<HashMap<String, Value>, ProviderError> {
         let mut vertex_params = HashMap::new();
         let vertex_model = super::parse_vertex_model(model);
 
@@ -676,7 +672,7 @@ impl LLMProvider for VertexAIProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> std::result::Result<Value, Self::Error> {
+    ) -> std::result::Result<Value, ProviderError> {
         let mut params = HashMap::new();
 
         params.insert(
@@ -760,7 +756,7 @@ impl LLMProvider for VertexAIProvider {
         raw_response: &[u8],
         model: &str,
         _request_id: &str,
-    ) -> std::result::Result<ChatResponse, Self::Error> {
+    ) -> std::result::Result<ChatResponse, ProviderError> {
         let response_str = std::str::from_utf8(raw_response).map_err(|e| {
             ProviderError::response_parsing("vertex_ai", format!("Invalid UTF-8: {}", e))
         })?;
@@ -856,8 +852,8 @@ impl LLMProvider for VertexAIProvider {
     }
 
     /// Error
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        VertexAIErrorMapper
+    fn get_error_mapper(&self) -> Box<dyn ErrorMapper<ProviderError>> {
+        Box::new(VertexAIErrorMapper)
     }
 }
 

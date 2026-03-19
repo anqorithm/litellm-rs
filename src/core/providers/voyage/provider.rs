@@ -14,6 +14,8 @@ use super::config::VoyageConfig;
 use super::error::VoyageError;
 use super::model_info::{get_available_models, get_model_info, supports_custom_dimensions};
 use crate::core::providers::base::{GlobalPoolManager, HttpMethod, header};
+use crate::core::providers::unified_provider::ProviderError;
+use crate::core::traits::error_mapper::trait_def::ErrorMapper;
 use crate::core::traits::provider::ProviderConfig as _;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use crate::core::types::{
@@ -240,10 +242,6 @@ impl VoyageProvider {
 
 #[async_trait]
 impl LLMProvider for VoyageProvider {
-    type Config = VoyageConfig;
-    type Error = VoyageError;
-    type ErrorMapper = crate::core::traits::error_mapper::DefaultErrorMapper;
-
     fn name(&self) -> &'static str {
         "voyage"
     }
@@ -269,7 +267,7 @@ impl LLMProvider for VoyageProvider {
         &self,
         mut params: HashMap<String, serde_json::Value>,
         model: &str,
-    ) -> Result<HashMap<String, serde_json::Value>, Self::Error> {
+    ) -> Result<HashMap<String, serde_json::Value>, ProviderError> {
         // Map 'dimensions' to 'output_dimension' for Voyage 3 models
         if let Some(dimensions) = params.remove("dimensions")
             && supports_custom_dimensions(model)
@@ -284,7 +282,7 @@ impl LLMProvider for VoyageProvider {
         &self,
         _request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<serde_json::Value, Self::Error> {
+    ) -> Result<serde_json::Value, ProviderError> {
         // Voyage doesn't support chat - return error
         Err(VoyageError::not_supported(
             "voyage",
@@ -297,7 +295,7 @@ impl LLMProvider for VoyageProvider {
         _raw_response: &[u8],
         _model: &str,
         _request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         // Voyage doesn't support chat - return error
         Err(VoyageError::not_supported(
             "voyage",
@@ -305,15 +303,15 @@ impl LLMProvider for VoyageProvider {
         ))
     }
 
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        crate::core::traits::error_mapper::DefaultErrorMapper
+    fn get_error_mapper(&self) -> Box<dyn ErrorMapper<ProviderError>> {
+        Box::new(crate::core::traits::error_mapper::DefaultErrorMapper)
     }
 
     async fn chat_completion(
         &self,
         _request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         Err(VoyageError::not_supported(
             "voyage",
             "Voyage AI is an embedding-only provider. Chat completion is not supported.",
@@ -324,7 +322,7 @@ impl LLMProvider for VoyageProvider {
         &self,
         _request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError>
     {
         Err(VoyageError::not_supported(
             "voyage",
@@ -336,7 +334,7 @@ impl LLMProvider for VoyageProvider {
         &self,
         request: EmbeddingRequest,
         _context: RequestContext,
-    ) -> Result<EmbeddingResponse, Self::Error> {
+    ) -> Result<EmbeddingResponse, ProviderError> {
         debug!("Voyage AI embedding request: model={}", request.model);
 
         // Transform request
@@ -389,7 +387,7 @@ impl LLMProvider for VoyageProvider {
         model: &str,
         input_tokens: u32,
         _output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
+    ) -> Result<f64, ProviderError> {
         let model_info = get_model_info(model).ok_or_else(|| {
             VoyageError::model_not_found("voyage", format!("Unknown model: {}", model))
         })?;

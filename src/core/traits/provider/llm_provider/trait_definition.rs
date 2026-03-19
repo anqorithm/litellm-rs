@@ -9,8 +9,8 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::pin::Pin;
 
+use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::error_mapper::trait_def::ErrorMapper;
-use crate::core::types::errors::ProviderErrorTrait;
 use crate::core::types::{
     chat::ChatRequest,
     context::RequestContext,
@@ -22,8 +22,6 @@ use crate::core::types::{
     responses::{ChatChunk, ChatResponse, EmbeddingResponse, ImageGenerationResponse},
 };
 
-use super::super::config::ProviderConfig;
-
 /// Unified LLM Provider interface
 ///
 /// This is the core abstraction of LiteLLM, all AI providers must implement this trait
@@ -33,33 +31,17 @@ use super::super::config::ProviderConfig;
 /// 1. **Request uniformity**: All providers use the same request/response format
 /// 2. **Capability driven**: Declare supported features through capabilities()
 /// 3. **Provider agnostic**: Users don't need to know provider-specific details
-/// 4. **Type safety**: Use associated types to ensure compile-time type safety
+/// 4. **Type safety**: Use `ProviderError` as the unified error type
 /// 5. **Async first**: All I/O operations are asynchronous
 /// 6. **Observability**: Built-in cost calculation, latency statistics, and monitoring
 ///
 /// # Example
 ///
-/// The `LLMProvider` trait is the core abstraction for AI providers. Implementations
-/// must provide a Config type for validation, an Error type for error handling,
-/// and an ErrorMapper for converting errors. See existing provider implementations
-/// in `src/core/providers/` for reference.
+/// The `LLMProvider` trait is the core abstraction for AI providers. All providers
+/// use `ProviderError` as the unified error type. See existing provider
+/// implementations in `src/core/providers/` for reference.
 #[async_trait]
 pub trait LLMProvider: Send + Sync + Debug + 'static {
-    /// Provider configuration type
-    ///
-    /// Must implement ProviderConfig for validation and common settings
-    type Config: ProviderConfig + Clone + Send + Sync;
-
-    /// Provider-specific error type
-    ///
-    /// Must implement ProviderErrorTrait for unified error handling
-    type Error: ProviderErrorTrait;
-
-    /// Error mapper for converting various error types
-    ///
-    /// Handles HTTP, JSON, network, and other error conversions
-    type ErrorMapper: ErrorMapper<Self::Error>;
-
     // ==================== Basic Metadata ====================
 
     /// Get provider name
@@ -205,7 +187,7 @@ pub trait LLMProvider: Send + Sync + Debug + 'static {
         &self,
         params: HashMap<String, Value>,
         model: &str,
-    ) -> Result<HashMap<String, Value>, Self::Error>;
+    ) -> Result<HashMap<String, Value>, ProviderError>;
 
     /// Transform request format
     ///
@@ -229,7 +211,7 @@ pub trait LLMProvider: Send + Sync + Debug + 'static {
         &self,
         request: ChatRequest,
         context: RequestContext,
-    ) -> Result<Value, Self::Error>;
+    ) -> Result<Value, ProviderError>;
 
     /// Transform response format
     ///
@@ -255,7 +237,7 @@ pub trait LLMProvider: Send + Sync + Debug + 'static {
         raw_response: &[u8],
         model: &str,
         request_id: &str,
-    ) -> Result<ChatResponse, Self::Error>;
+    ) -> Result<ChatResponse, ProviderError>;
 
     /// Get error mapper instance
     ///
@@ -263,7 +245,7 @@ pub trait LLMProvider: Send + Sync + Debug + 'static {
     ///
     /// # Returns
     /// Error mapper that handles provider-specific error formats
-    fn get_error_mapper(&self) -> Self::ErrorMapper;
+    fn get_error_mapper(&self) -> Box<dyn ErrorMapper<ProviderError>>;
 
     // ==================== Core Functionality: Chat Completion ====================
 
@@ -279,16 +261,16 @@ pub trait LLMProvider: Send + Sync + Debug + 'static {
     /// Chat completion response
     ///
     /// # Errors
-    /// * `Self::Error::authentication()` - Authentication failed
-    /// * `Self::Error::not_supported()` - Model or feature not supported
-    /// * `Self::Error::network_error()` - Network or API error
-    /// * `Self::Error::rate_limit()` - Rate limit exceeded
-    /// * `Self::Error::parsing_error()` - Response parsing failed
+    /// * `ProviderError::authentication()` - Authentication failed
+    /// * `ProviderError::not_supported()` - Model or feature not supported
+    /// * `ProviderError::network_error()` - Network or API error
+    /// * `ProviderError::rate_limit()` - Rate limit exceeded
+    /// * `ProviderError::parsing_error()` - Response parsing failed
     async fn chat_completion(
         &self,
         request: ChatRequest,
         context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error>;
+    ) -> Result<ChatResponse, ProviderError>;
 
     /// Execute streaming chat completion request
     ///
@@ -310,9 +292,9 @@ pub trait LLMProvider: Send + Sync + Debug + 'static {
         &self,
         _request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError>
     {
-        Err(Self::Error::not_supported("streaming"))
+        Err(ProviderError::not_supported(self.name(), "streaming"))
     }
 
     // ==================== Optional Features ====================
@@ -340,8 +322,8 @@ pub trait LLMProvider: Send + Sync + Debug + 'static {
         &self,
         _request: EmbeddingRequest,
         _context: RequestContext,
-    ) -> Result<EmbeddingResponse, Self::Error> {
-        Err(Self::Error::not_supported("embeddings"))
+    ) -> Result<EmbeddingResponse, ProviderError> {
+        Err(ProviderError::not_supported(self.name(), "embeddings"))
     }
 
     /// Generate images
@@ -366,8 +348,11 @@ pub trait LLMProvider: Send + Sync + Debug + 'static {
         &self,
         _request: ImageGenerationRequest,
         _context: RequestContext,
-    ) -> Result<ImageGenerationResponse, Self::Error> {
-        Err(Self::Error::not_supported("image_generation"))
+    ) -> Result<ImageGenerationResponse, ProviderError> {
+        Err(ProviderError::not_supported(
+            self.name(),
+            "image_generation",
+        ))
     }
 
     // ==================== Health Monitoring ====================
@@ -414,7 +399,7 @@ pub trait LLMProvider: Send + Sync + Debug + 'static {
         model: &str,
         input_tokens: u32,
         output_tokens: u32,
-    ) -> Result<f64, Self::Error>;
+    ) -> Result<f64, ProviderError>;
 
     // ==================== Performance Metrics ====================
 
@@ -430,7 +415,7 @@ pub trait LLMProvider: Send + Sync + Debug + 'static {
     /// - Route selection: Prefer providers with lower latency
     /// - Performance benchmarking
     /// - Performance monitoring and optimization
-    async fn get_average_latency(&self) -> Result<std::time::Duration, Self::Error> {
+    async fn get_average_latency(&self) -> Result<std::time::Duration, ProviderError> {
         Ok(std::time::Duration::from_millis(100))
     }
 
@@ -446,7 +431,7 @@ pub trait LLMProvider: Send + Sync + Debug + 'static {
     /// - Service quality assessment
     /// - Automatic failover
     /// - SLA monitoring
-    async fn get_success_rate(&self) -> Result<f32, Self::Error> {
+    async fn get_success_rate(&self) -> Result<f32, ProviderError> {
         Ok(0.99)
     }
 
@@ -473,7 +458,7 @@ pub trait LLMProvider: Send + Sync + Debug + 'static {
     /// - Pre-request validation
     /// - Cost estimation
     /// - Context length management
-    async fn estimate_tokens(&self, text: &str) -> Result<u32, Self::Error> {
+    async fn estimate_tokens(&self, text: &str) -> Result<u32, ProviderError> {
         // Simple estimation: 4 characters approximately equals 1 token
         // Subclasses should implement more accurate tokenization
         Ok((text.len() as f64 / 4.0).ceil() as u32)

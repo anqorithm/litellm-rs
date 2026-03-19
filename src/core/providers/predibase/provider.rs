@@ -11,6 +11,7 @@ use super::config::PredibaseConfig;
 use super::model_info::{get_available_models, get_model_info};
 use crate::core::providers::base::{GlobalPoolManager, HttpErrorMapper, HttpMethod, header};
 use crate::core::providers::unified_provider::ProviderError;
+use crate::core::traits::error_mapper::trait_def::ErrorMapper;
 use crate::core::traits::{
     provider::ProviderConfig as _, provider::llm_provider::trait_definition::LLMProvider,
 };
@@ -146,10 +147,6 @@ impl PredibaseProvider {
 
 #[async_trait]
 impl LLMProvider for PredibaseProvider {
-    type Config = PredibaseConfig;
-    type Error = ProviderError;
-    type ErrorMapper = crate::core::traits::error_mapper::DefaultErrorMapper;
-
     fn name(&self) -> &'static str {
         PROVIDER_NAME
     }
@@ -178,7 +175,7 @@ impl LLMProvider for PredibaseProvider {
         &self,
         params: HashMap<String, serde_json::Value>,
         _model: &str,
-    ) -> Result<HashMap<String, serde_json::Value>, Self::Error> {
+    ) -> Result<HashMap<String, serde_json::Value>, ProviderError> {
         Ok(params)
     }
 
@@ -186,7 +183,7 @@ impl LLMProvider for PredibaseProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<serde_json::Value, Self::Error> {
+    ) -> Result<serde_json::Value, ProviderError> {
         serde_json::to_value(&request)
             .map_err(|e| ProviderError::invalid_request(PROVIDER_NAME, e.to_string()))
     }
@@ -196,7 +193,7 @@ impl LLMProvider for PredibaseProvider {
         raw_response: &[u8],
         _model: &str,
         _request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         serde_json::from_slice(raw_response).map_err(|e| {
             ProviderError::api_error(
                 PROVIDER_NAME,
@@ -206,15 +203,15 @@ impl LLMProvider for PredibaseProvider {
         })
     }
 
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        crate::core::traits::error_mapper::DefaultErrorMapper
+    fn get_error_mapper(&self) -> Box<dyn ErrorMapper<ProviderError>> {
+        Box::new(crate::core::traits::error_mapper::DefaultErrorMapper)
     }
 
     async fn chat_completion(
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         debug!("Predibase chat request: model={}", request.model);
 
         let request_json = serde_json::to_value(&request)
@@ -237,7 +234,7 @@ impl LLMProvider for PredibaseProvider {
         &self,
         _request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError>
     {
         Err(ProviderError::not_implemented(
             PROVIDER_NAME,
@@ -249,7 +246,7 @@ impl LLMProvider for PredibaseProvider {
         &self,
         _request: EmbeddingRequest,
         _context: RequestContext,
-    ) -> Result<EmbeddingResponse, Self::Error> {
+    ) -> Result<EmbeddingResponse, ProviderError> {
         Err(ProviderError::not_supported(PROVIDER_NAME, "Embeddings"))
     }
 
@@ -266,7 +263,7 @@ impl LLMProvider for PredibaseProvider {
         model: &str,
         input_tokens: u32,
         output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
+    ) -> Result<f64, ProviderError> {
         let model_info = get_model_info(model).ok_or_else(|| {
             ProviderError::model_not_found(PROVIDER_NAME, format!("Unknown model: {}", model))
         })?;

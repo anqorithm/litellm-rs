@@ -283,10 +283,6 @@ impl LlamaProvider {
 
 #[async_trait]
 impl LLMProvider for LlamaProvider {
-    type Config = LlamaProviderConfig;
-    type Error = ProviderError;
-    type ErrorMapper = UnifiedErrorMapper;
-
     fn name(&self) -> &'static str {
         "meta"
     }
@@ -294,7 +290,7 @@ impl LLMProvider for LlamaProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         debug!("Llama chat completion request: model={}", request.model);
 
         // Validate model support
@@ -333,7 +329,7 @@ impl LLMProvider for LlamaProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError>
     {
         debug!("Llama streaming chat request: model={}", request.model);
 
@@ -399,7 +395,7 @@ impl LLMProvider for LlamaProvider {
         &self,
         _request: EmbeddingRequest,
         _context: RequestContext,
-    ) -> Result<EmbeddingResponse, Self::Error> {
+    ) -> Result<EmbeddingResponse, ProviderError> {
         // Llama API doesn't directly support embeddings through the OpenAI-compatible endpoint
         Err(ProviderError::not_implemented("meta", "embeddings"))
     }
@@ -408,7 +404,7 @@ impl LLMProvider for LlamaProvider {
         &self,
         _request: ImageGenerationRequest,
         _context: RequestContext,
-    ) -> Result<ImageGenerationResponse, Self::Error> {
+    ) -> Result<ImageGenerationResponse, ProviderError> {
         // Llama models don't support image generation, only vision understanding
         Err(ProviderError::not_implemented("meta", "image generation"))
     }
@@ -453,7 +449,7 @@ impl LLMProvider for LlamaProvider {
         &self,
         params: HashMap<String, Value>,
         _model: &str,
-    ) -> Result<HashMap<String, Value>, Self::Error> {
+    ) -> Result<HashMap<String, Value>, ProviderError> {
         // Llama API is OpenAI-compatible, so no mapping needed
         Ok(params)
     }
@@ -462,7 +458,7 @@ impl LLMProvider for LlamaProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Value, Self::Error> {
+    ) -> Result<Value, ProviderError> {
         self.chat_handler.transform_request(request)
     }
 
@@ -471,15 +467,15 @@ impl LLMProvider for LlamaProvider {
         raw_response: &[u8],
         _model: &str,
         _request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         let response: Value = serde_json::from_slice(raw_response)?;
         self.chat_handler
             .transform_response(response)
             .map_err(|e| ProviderError::serialization("meta", e.to_string()))
     }
 
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        UnifiedErrorMapper
+    fn get_error_mapper(&self) -> Box<dyn ErrorMapper<ProviderError>> {
+        Box::new(UnifiedErrorMapper)
     }
 
     async fn calculate_cost(
@@ -487,7 +483,7 @@ impl LLMProvider for LlamaProvider {
         _model: &str,
         input_tokens: u32,
         output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
+    ) -> Result<f64, ProviderError> {
         use crate::core::cost::types::UsageTokens;
         let usage = UsageTokens::new(input_tokens, output_tokens);
         let cost = self.cost_calculator.calculate_cost("", &usage).await?;

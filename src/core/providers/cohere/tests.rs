@@ -327,8 +327,6 @@ async fn test_transform_request_with_params() {
 async fn test_error_mapper_authentication() {
     let provider = CohereProvider::with_api_key("key").await.unwrap();
     let mapper = provider.get_error_mapper();
-
-    use crate::core::traits::error_mapper::trait_def::ErrorMapper;
     let error = mapper.map_http_error(401, "Invalid API key");
 
     match error {
@@ -343,8 +341,6 @@ async fn test_error_mapper_authentication() {
 async fn test_error_mapper_rate_limit() {
     let provider = CohereProvider::with_api_key("key").await.unwrap();
     let mapper = provider.get_error_mapper();
-
-    use crate::core::traits::error_mapper::trait_def::ErrorMapper;
     let error = mapper.map_http_error(429, "Rate limit exceeded");
 
     match error {
@@ -359,8 +355,6 @@ async fn test_error_mapper_rate_limit() {
 async fn test_error_mapper_server_error() {
     let provider = CohereProvider::with_api_key("key").await.unwrap();
     let mapper = provider.get_error_mapper();
-
-    use crate::core::traits::error_mapper::trait_def::ErrorMapper;
     let error = mapper.map_http_error(500, "Internal server error");
 
     match error {

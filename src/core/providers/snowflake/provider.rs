@@ -13,6 +13,8 @@ use super::config::SnowflakeConfig;
 use super::error::SnowflakeError;
 use super::model_info::get_available_models;
 use crate::core::providers::base::GlobalPoolManager;
+use crate::core::providers::unified_provider::ProviderError;
+use crate::core::traits::error_mapper::trait_def::ErrorMapper;
 use crate::core::traits::provider::ProviderConfig as _;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use crate::core::types::health::HealthStatus;
@@ -126,10 +128,6 @@ impl SnowflakeProvider {
 
 #[async_trait]
 impl LLMProvider for SnowflakeProvider {
-    type Config = SnowflakeConfig;
-    type Error = SnowflakeError;
-    type ErrorMapper = crate::core::traits::error_mapper::DefaultErrorMapper;
-
     fn name(&self) -> &'static str {
         "snowflake"
     }
@@ -159,7 +157,7 @@ impl LLMProvider for SnowflakeProvider {
         &self,
         mut params: HashMap<String, serde_json::Value>,
         _model: &str,
-    ) -> Result<HashMap<String, serde_json::Value>, Self::Error> {
+    ) -> Result<HashMap<String, serde_json::Value>, ProviderError> {
         // Map max_completion_tokens to max_tokens
         if let Some(max_completion_tokens) = params.remove("max_completion_tokens") {
             params.insert("max_tokens".to_string(), max_completion_tokens);
@@ -172,7 +170,7 @@ impl LLMProvider for SnowflakeProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<serde_json::Value, Self::Error> {
+    ) -> Result<serde_json::Value, ProviderError> {
         serde_json::to_value(&request)
             .map_err(|e| SnowflakeError::invalid_request("snowflake", e.to_string()))
     }
@@ -182,21 +180,21 @@ impl LLMProvider for SnowflakeProvider {
         raw_response: &[u8],
         _model: &str,
         _request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         serde_json::from_slice(raw_response).map_err(|e| {
             SnowflakeError::api_error("snowflake", 500, format!("Failed to parse response: {}", e))
         })
     }
 
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        crate::core::traits::error_mapper::DefaultErrorMapper
+    fn get_error_mapper(&self) -> Box<dyn ErrorMapper<ProviderError>> {
+        Box::new(crate::core::traits::error_mapper::DefaultErrorMapper)
     }
 
     async fn chat_completion(
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         debug!("Snowflake chat request: model={}", request.model);
 
         let api_key = self
@@ -285,7 +283,7 @@ impl LLMProvider for SnowflakeProvider {
         &self,
         _request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError>
     {
         Err(SnowflakeError::not_supported(
             "snowflake",
@@ -297,7 +295,7 @@ impl LLMProvider for SnowflakeProvider {
         &self,
         _request: EmbeddingRequest,
         _context: RequestContext,
-    ) -> Result<EmbeddingResponse, Self::Error> {
+    ) -> Result<EmbeddingResponse, ProviderError> {
         Err(SnowflakeError::not_supported(
             "snowflake",
             "Embeddings not supported by Snowflake Cortex provider",
@@ -317,7 +315,7 @@ impl LLMProvider for SnowflakeProvider {
         _model: &str,
         _input_tokens: u32,
         _output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
+    ) -> Result<f64, ProviderError> {
         // Snowflake Cortex pricing varies by region and is consumption-based
         // Return 0.0 as we don't have accurate cost data
         Ok(0.0)

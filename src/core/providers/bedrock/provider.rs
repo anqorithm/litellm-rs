@@ -18,6 +18,7 @@ use super::utils::{CostCalculator, validate_region};
 use crate::core::traits::provider::ProviderConfig as _;
 
 use crate::core::providers::unified_provider::ProviderError;
+use crate::core::traits::error_mapper::trait_def::ErrorMapper;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use crate::core::types::{
     chat::ChatMessage,
@@ -180,10 +181,6 @@ impl BedrockProvider {
 
 #[async_trait]
 impl LLMProvider for BedrockProvider {
-    type Config = BedrockConfig;
-    type Error = ProviderError;
-    type ErrorMapper = BedrockErrorMapper;
-
     fn name(&self) -> &'static str {
         "bedrock"
     }
@@ -212,7 +209,7 @@ impl LLMProvider for BedrockProvider {
         &self,
         params: HashMap<String, Value>,
         _model: &str,
-    ) -> Result<HashMap<String, Value>, Self::Error> {
+    ) -> Result<HashMap<String, Value>, ProviderError> {
         // Bedrock has some differences from OpenAI format
         let mut mapped = HashMap::new();
 
@@ -233,7 +230,7 @@ impl LLMProvider for BedrockProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Value, Self::Error> {
+    ) -> Result<Value, ProviderError> {
         transformation::transform_chat_request(
             &request.model,
             &request.messages,
@@ -249,7 +246,7 @@ impl LLMProvider for BedrockProvider {
         raw_response: &[u8],
         model: &str,
         _request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         transformation::transform_chat_response(raw_response, model)
     }
 
@@ -257,7 +254,7 @@ impl LLMProvider for BedrockProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         debug!("Bedrock chat request: model={}", request.model);
 
         // Check if it's an embedding model
@@ -283,7 +280,7 @@ impl LLMProvider for BedrockProvider {
         &self,
         request: ChatRequest,
         context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError>
     {
         debug!("Bedrock streaming chat request: model={}", request.model);
 
@@ -342,7 +339,7 @@ impl LLMProvider for BedrockProvider {
         &self,
         request: EmbeddingRequest,
         _context: RequestContext,
-    ) -> Result<EmbeddingResponse, Self::Error> {
+    ) -> Result<EmbeddingResponse, ProviderError> {
         debug!("Bedrock embedding request: model={}", request.model);
 
         // Use the embeddings module
@@ -362,8 +359,8 @@ impl LLMProvider for BedrockProvider {
         }
     }
 
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        BedrockErrorMapper
+    fn get_error_mapper(&self) -> Box<dyn ErrorMapper<ProviderError>> {
+        Box::new(BedrockErrorMapper)
     }
 
     async fn calculate_cost(
@@ -371,7 +368,7 @@ impl LLMProvider for BedrockProvider {
         model: &str,
         input_tokens: u32,
         output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
+    ) -> Result<f64, ProviderError> {
         CostCalculator::calculate_cost(model, input_tokens, output_tokens)
             .ok_or_else(|| ProviderError::model_not_found("bedrock", model.to_string()))
     }

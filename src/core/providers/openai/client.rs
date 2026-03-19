@@ -29,6 +29,7 @@ use super::{
     config::OpenAIConfig,
     models::{OpenAIModelFeature, OpenAIModelRegistry, OpenAIUseCase, get_openai_registry},
 };
+use crate::core::traits::error_mapper::trait_def::ErrorMapper;
 
 /// OpenAI Provider implementation using unified architecture
 #[derive(Debug, Clone)]
@@ -337,10 +338,6 @@ impl OpenAIProvider {
 
 #[async_trait]
 impl LLMProvider for OpenAIProvider {
-    type Config = OpenAIConfig;
-    type Error = ProviderError;
-    type ErrorMapper = crate::core::traits::error_mapper::implementations::OpenAIErrorMapper;
-
     fn name(&self) -> &'static str {
         "openai"
     }
@@ -373,7 +370,7 @@ impl LLMProvider for OpenAIProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         // Like Python LiteLLM, we don't validate models locally
         // OpenAI API will handle invalid models
 
@@ -385,7 +382,7 @@ impl LLMProvider for OpenAIProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError>
     {
         // Like Python LiteLLM, we don't validate models locally
         // OpenAI API will handle invalid models
@@ -397,7 +394,7 @@ impl LLMProvider for OpenAIProvider {
         &self,
         request: EmbeddingRequest,
         _context: RequestContext,
-    ) -> Result<EmbeddingResponse, Self::Error> {
+    ) -> Result<EmbeddingResponse, ProviderError> {
         // Calls the inherent `embeddings` method from api_methods.rs
         // (2-arg inherent method takes priority over 3-arg trait method)
         self.embeddings(request).await
@@ -407,7 +404,7 @@ impl LLMProvider for OpenAIProvider {
         &self,
         request: ImageGenerationRequest,
         _context: RequestContext,
-    ) -> Result<ImageGenerationResponse, Self::Error> {
+    ) -> Result<ImageGenerationResponse, ProviderError> {
         let response = self
             .generate_images(
                 request.prompt,
@@ -445,7 +442,7 @@ impl LLMProvider for OpenAIProvider {
         model: &str,
         input_tokens: u32,
         output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
+    ) -> Result<f64, ProviderError> {
         let model_info = self.get_model_info(model)?;
 
         let input_cost = model_info
@@ -542,7 +539,7 @@ impl LLMProvider for OpenAIProvider {
         &self,
         params: HashMap<String, Value>,
         _model: &str,
-    ) -> Result<HashMap<String, Value>, Self::Error> {
+    ) -> Result<HashMap<String, Value>, ProviderError> {
         // OpenAI provider uses standard OpenAI parameters, no mapping needed
         Ok(params)
     }
@@ -551,7 +548,7 @@ impl LLMProvider for OpenAIProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Value, Self::Error> {
+    ) -> Result<Value, ProviderError> {
         self.transform_chat_request(request)
     }
 
@@ -560,13 +557,13 @@ impl LLMProvider for OpenAIProvider {
         raw_response: &[u8],
         _model: &str,
         _request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         let response_value: Value = serde_json::from_slice(raw_response)?;
         self.transform_chat_response(response_value)
     }
 
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        crate::core::traits::error_mapper::implementations::OpenAIErrorMapper
+    fn get_error_mapper(&self) -> Box<dyn ErrorMapper<ProviderError>> {
+        Box::new(crate::core::traits::error_mapper::implementations::OpenAIErrorMapper)
     }
 }
 

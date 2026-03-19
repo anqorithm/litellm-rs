@@ -14,6 +14,7 @@ use super::error::GradientAIErrorMapper;
 use crate::core::providers::base::sse::{OpenAICompatibleTransformer, UnifiedSSEStream};
 use crate::core::providers::base::{GlobalPoolManager, HttpMethod, header};
 use crate::core::providers::unified_provider::ProviderError;
+use crate::core::traits::error_mapper::trait_def::ErrorMapper;
 use crate::core::traits::{
     provider::ProviderConfig as _, provider::llm_provider::trait_definition::LLMProvider,
 };
@@ -189,10 +190,6 @@ impl GradientAIProvider {
 
 #[async_trait]
 impl LLMProvider for GradientAIProvider {
-    type Config = GradientAIConfig;
-    type Error = ProviderError;
-    type ErrorMapper = GradientAIErrorMapper;
-
     fn name(&self) -> &'static str {
         "gradient_ai"
     }
@@ -213,7 +210,7 @@ impl LLMProvider for GradientAIProvider {
         &self,
         params: HashMap<String, serde_json::Value>,
         _model: &str,
-    ) -> Result<HashMap<String, serde_json::Value>, Self::Error> {
+    ) -> Result<HashMap<String, serde_json::Value>, ProviderError> {
         // Gradient AI uses compatible parameters
         // Check for unsupported params could be added here if drop_params is not set
         Ok(params)
@@ -223,7 +220,7 @@ impl LLMProvider for GradientAIProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<serde_json::Value, Self::Error> {
+    ) -> Result<serde_json::Value, ProviderError> {
         Ok(self.build_request_body(&request))
     }
 
@@ -232,7 +229,7 @@ impl LLMProvider for GradientAIProvider {
         raw_response: &[u8],
         _model: &str,
         _request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         serde_json::from_slice(raw_response).map_err(|e| {
             ProviderError::api_error(
                 "gradient_ai",
@@ -242,15 +239,15 @@ impl LLMProvider for GradientAIProvider {
         })
     }
 
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        GradientAIErrorMapper
+    fn get_error_mapper(&self) -> Box<dyn ErrorMapper<ProviderError>> {
+        Box::new(GradientAIErrorMapper)
     }
 
     async fn chat_completion(
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         debug!("Gradient AI chat request: model={}", request.model);
 
         let url = self.config.get_complete_url();
@@ -271,7 +268,7 @@ impl LLMProvider for GradientAIProvider {
         &self,
         mut request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError>
     {
         debug!("Gradient AI streaming request: model={}", request.model);
 
@@ -319,7 +316,7 @@ impl LLMProvider for GradientAIProvider {
         let transformer = OpenAICompatibleTransformer::new("gradient_ai");
         let inner_stream = UnifiedSSEStream::new(Box::pin(response.bytes_stream()), transformer);
 
-        // Wrap to convert ProviderError to Self::Error (they're the same type now)
+        // Wrap to convert ProviderError to ProviderError (they're the same type now)
         let mapped_stream = futures::stream::unfold(inner_stream, |mut stream| async move {
             use futures::StreamExt;
             match stream.next().await {
@@ -345,7 +342,7 @@ impl LLMProvider for GradientAIProvider {
         &self,
         _request: EmbeddingRequest,
         _context: RequestContext,
-    ) -> Result<EmbeddingResponse, Self::Error> {
+    ) -> Result<EmbeddingResponse, ProviderError> {
         Err(ProviderError::not_supported(
             "gradient_ai",
             "Gradient AI does not support embeddings through this endpoint. \
@@ -381,7 +378,7 @@ impl LLMProvider for GradientAIProvider {
         _model: &str,
         _input_tokens: u32,
         _output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
+    ) -> Result<f64, ProviderError> {
         // Gradient AI pricing depends on the specific agent configuration
         // Return 0 as a placeholder - actual costs should be tracked via Gradient AI dashboard
         Ok(0.0)

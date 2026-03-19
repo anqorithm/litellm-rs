@@ -253,10 +253,6 @@ impl MistralProvider {
 
 #[async_trait]
 impl LLMProvider for MistralProvider {
-    type Config = MistralConfig;
-    type Error = MistralError;
-    type ErrorMapper = MistralErrorMapper;
-
     fn name(&self) -> &'static str {
         "mistral"
     }
@@ -287,7 +283,7 @@ impl LLMProvider for MistralProvider {
         &self,
         params: HashMap<String, Value>,
         _model: &str,
-    ) -> Result<HashMap<String, Value>, Self::Error> {
+    ) -> Result<HashMap<String, Value>, ProviderError> {
         // Mistral uses OpenAI-compatible parameters, so mostly pass-through
         let mut mapped = HashMap::new();
 
@@ -310,7 +306,7 @@ impl LLMProvider for MistralProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Value, Self::Error> {
+    ) -> Result<Value, ProviderError> {
         // Use the OpenAI transformer from base_provider
         let mut body = OpenAIRequestTransformer::transform_chat_request(&request);
 
@@ -330,21 +326,21 @@ impl LLMProvider for MistralProvider {
         raw_response: &[u8],
         _model: &str,
         _request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         // Parse Mistral response (OpenAI-compatible format)
         serde_json::from_slice(raw_response)
             .map_err(|e| ProviderError::response_parsing("mistral", e.to_string()))
     }
 
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        MistralErrorMapper
+    fn get_error_mapper(&self) -> Box<dyn ErrorMapper<ProviderError>> {
+        Box::new(MistralErrorMapper)
     }
 
     async fn chat_completion(
         &self,
         request: ChatRequest,
         context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         debug!("Mistral chat request: model={}", request.model);
 
         if self.is_embedding_model(&request.model) {
@@ -387,7 +383,7 @@ impl LLMProvider for MistralProvider {
         &self,
         request: ChatRequest,
         context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError>
     {
         debug!("Mistral streaming chat request: model={}", request.model);
 
@@ -424,7 +420,7 @@ impl LLMProvider for MistralProvider {
         &self,
         request: EmbeddingRequest,
         _context: RequestContext,
-    ) -> Result<EmbeddingResponse, Self::Error> {
+    ) -> Result<EmbeddingResponse, ProviderError> {
         debug!("Mistral embedding request: model={}", request.model);
 
         let body = serde_json::json!({
@@ -492,7 +488,7 @@ impl LLMProvider for MistralProvider {
         model: &str,
         input_tokens: u32,
         output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
+    ) -> Result<f64, ProviderError> {
         let usage = crate::core::providers::base::pricing::Usage {
             prompt_tokens: input_tokens,
             completion_tokens: output_tokens,

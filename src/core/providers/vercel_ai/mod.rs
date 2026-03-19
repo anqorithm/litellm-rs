@@ -116,10 +116,6 @@ impl ErrorMapper<VercelAIError> for VercelAIErrorMapper {
 
 #[async_trait]
 impl LLMProvider for VercelAIProvider {
-    type Config = VercelAIConfig;
-    type Error = VercelAIError;
-    type ErrorMapper = VercelAIErrorMapper;
-
     fn name(&self) -> &'static str {
         "vercel_ai"
     }
@@ -144,7 +140,7 @@ impl LLMProvider for VercelAIProvider {
         &self,
         params: std::collections::HashMap<String, serde_json::Value>,
         _model: &str,
-    ) -> Result<std::collections::HashMap<String, serde_json::Value>, Self::Error> {
+    ) -> Result<std::collections::HashMap<String, serde_json::Value>, ProviderError> {
         Ok(params)
     }
 
@@ -152,7 +148,7 @@ impl LLMProvider for VercelAIProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<serde_json::Value, Self::Error> {
+    ) -> Result<serde_json::Value, ProviderError> {
         use serde_json::json;
 
         let mut body = json!({
@@ -184,15 +180,15 @@ impl LLMProvider for VercelAIProvider {
         _raw_response: &[u8],
         _model: &str,
         _request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         Err(ProviderError::not_implemented(
             "vercel_ai",
             "Response transformation not yet implemented",
         ))
     }
 
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        VercelAIErrorMapper
+    fn get_error_mapper(&self) -> Box<dyn ErrorMapper<ProviderError>> {
+        Box::new(VercelAIErrorMapper)
     }
 
     async fn calculate_cost(
@@ -200,7 +196,7 @@ impl LLMProvider for VercelAIProvider {
         _model: &str,
         _input_tokens: u32,
         _output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
+    ) -> Result<f64, ProviderError> {
         Ok(0.0)
     }
 
@@ -220,7 +216,7 @@ impl LLMProvider for VercelAIProvider {
         &self,
         _request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         Err(ProviderError::not_implemented(
             "vercel_ai",
             "Chat completion not yet implemented",
@@ -231,7 +227,7 @@ impl LLMProvider for VercelAIProvider {
         &self,
         _request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError>
     {
         Err(ProviderError::not_implemented(
             "vercel_ai",
@@ -243,7 +239,7 @@ impl LLMProvider for VercelAIProvider {
         &self,
         _request: EmbeddingRequest,
         _context: RequestContext,
-    ) -> Result<EmbeddingResponse, Self::Error> {
+    ) -> Result<EmbeddingResponse, ProviderError> {
         Err(ProviderError::not_supported("vercel_ai", "Embeddings"))
     }
 
@@ -251,7 +247,7 @@ impl LLMProvider for VercelAIProvider {
         &self,
         _request: ImageGenerationRequest,
         _context: RequestContext,
-    ) -> Result<ImageGenerationResponse, Self::Error> {
+    ) -> Result<ImageGenerationResponse, ProviderError> {
         Err(ProviderError::not_supported(
             "vercel_ai",
             "Image generation",

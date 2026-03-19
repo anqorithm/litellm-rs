@@ -73,9 +73,6 @@ macro_rules! define_openai_compatible_provider {
 
         #[async_trait::async_trait]
         impl $crate::core::traits::provider::llm_provider::trait_definition::LLMProvider for $struct_name {
-            type Config = $config_type;
-            type Error = $crate::core::providers::unified_provider::ProviderError;
-            type ErrorMapper = $error_mapper;
 
             fn name(&self) -> &'static str {
                 $provider_name
@@ -100,14 +97,14 @@ macro_rules! define_openai_compatible_provider {
                 &self,
                 params: std::collections::HashMap<String, serde_json::Value>,
                 _model: &str,
-            ) -> Result<std::collections::HashMap<String, serde_json::Value>, Self::Error> {
+            ) -> Result<std::collections::HashMap<String, serde_json::Value>, $crate::core::providers::unified_provider::ProviderError> {
                 Ok(params)
             }
             async fn transform_request(
                 &self,
                 request: $crate::core::types::chat::ChatRequest,
                 _context: $crate::core::types::context::RequestContext,
-            ) -> Result<serde_json::Value, Self::Error> {
+            ) -> Result<serde_json::Value, $crate::core::providers::unified_provider::ProviderError> {
                 let mut req = serde_json::json!({
                     "model": request.model,
                     "messages": request.messages,
@@ -178,7 +175,7 @@ macro_rules! define_openai_compatible_provider {
                 raw_response: &[u8],
                 _model: &str,
                 _request_id: &str,
-            ) -> Result<$crate::core::types::responses::ChatResponse, Self::Error> {
+            ) -> Result<$crate::core::types::responses::ChatResponse, $crate::core::providers::unified_provider::ProviderError> {
                 let response_text = String::from_utf8_lossy(raw_response);
                 let response: $crate::core::types::responses::ChatResponse =
                     serde_json::from_str(&response_text).map_err(|e| {
@@ -190,15 +187,15 @@ macro_rules! define_openai_compatible_provider {
                 Ok(response)
             }
 
-            fn get_error_mapper(&self) -> Self::ErrorMapper {
-                $error_mapper
+            fn get_error_mapper(&self) -> Box<dyn $crate::core::traits::error_mapper::trait_def::ErrorMapper<$crate::core::providers::unified_provider::ProviderError>> {
+                Box::new($error_mapper)
             }
 
             async fn chat_completion(
                 &self,
                 request: $crate::core::types::chat::ChatRequest,
                 context: $crate::core::types::context::RequestContext,
-            ) -> Result<$crate::core::types::responses::ChatResponse, Self::Error> {
+            ) -> Result<$crate::core::types::responses::ChatResponse, $crate::core::providers::unified_provider::ProviderError> {
                 let base_url = self
                     .config
                     .base
@@ -273,11 +270,11 @@ macro_rules! define_openai_compatible_provider {
                 std::pin::Pin<
                     Box<
                         dyn futures::Stream<
-                                Item = Result<$crate::core::types::responses::ChatChunk, Self::Error>,
+                                Item = Result<$crate::core::types::responses::ChatChunk, $crate::core::providers::unified_provider::ProviderError>,
                             > + Send,
                     >,
                 >,
-                Self::Error,
+                $crate::core::providers::unified_provider::ProviderError,
             > {
                 Err($crate::core::providers::unified_provider::ProviderError::not_implemented(
                     $provider_name,
@@ -294,7 +291,7 @@ macro_rules! define_openai_compatible_provider {
                 model: &str,
                 input_tokens: u32,
                 output_tokens: u32,
-            ) -> Result<f64, Self::Error> {
+            ) -> Result<f64, $crate::core::providers::unified_provider::ProviderError> {
                 let model_info = self
                     .supported_models
                     .iter()

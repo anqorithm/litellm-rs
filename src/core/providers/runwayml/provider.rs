@@ -379,10 +379,6 @@ impl RunwayMLProvider {
 
 #[async_trait]
 impl LLMProvider for RunwayMLProvider {
-    type Config = RunwayMLConfig;
-    type Error = ProviderError;
-    type ErrorMapper = RunwayMLErrorMapper;
-
     fn name(&self) -> &'static str {
         PROVIDER_NAME
     }
@@ -403,7 +399,7 @@ impl LLMProvider for RunwayMLProvider {
         &self,
         params: HashMap<String, Value>,
         _model: &str,
-    ) -> Result<HashMap<String, Value>, Self::Error> {
+    ) -> Result<HashMap<String, Value>, ProviderError> {
         let mut mapped = HashMap::new();
 
         for (key, value) in params {
@@ -438,7 +434,7 @@ impl LLMProvider for RunwayMLProvider {
         &self,
         _request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Value, Self::Error> {
+    ) -> Result<Value, ProviderError> {
         // Runway ML is primarily for video/image generation, not chat
         Err(ProviderError::not_supported(
             PROVIDER_NAME,
@@ -451,22 +447,22 @@ impl LLMProvider for RunwayMLProvider {
         _raw_response: &[u8],
         _model: &str,
         _request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         Err(ProviderError::not_supported(
             PROVIDER_NAME,
             "Chat completion is not supported by Runway ML",
         ))
     }
 
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        RunwayMLErrorMapper
+    fn get_error_mapper(&self) -> Box<dyn ErrorMapper<ProviderError>> {
+        Box::new(RunwayMLErrorMapper)
     }
 
     async fn chat_completion(
         &self,
         _request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         Err(ProviderError::not_supported(
             PROVIDER_NAME,
             "Chat completion is not supported by Runway ML. Use image_generation for video generation.",
@@ -477,7 +473,7 @@ impl LLMProvider for RunwayMLProvider {
         &self,
         _request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError>
     {
         Err(ProviderError::not_supported(
             PROVIDER_NAME,
@@ -489,7 +485,7 @@ impl LLMProvider for RunwayMLProvider {
         &self,
         request: ImageGenerationRequest,
         _context: RequestContext,
-    ) -> Result<ImageGenerationResponse, Self::Error> {
+    ) -> Result<ImageGenerationResponse, ProviderError> {
         let task_request = self.transform_image_to_video_request(&request);
 
         // Submit the task
@@ -522,7 +518,7 @@ impl LLMProvider for RunwayMLProvider {
         model: &str,
         input_tokens: u32,
         output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
+    ) -> Result<f64, ProviderError> {
         // Runway pricing is per-second of video, not per token
         // Use pricing database for estimation if available
         let usage = crate::core::providers::base::pricing::Usage {

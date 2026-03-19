@@ -30,6 +30,7 @@ use super::config::GeminiConfig;
 use super::error::{GeminiErrorMapper, gemini_model_error, gemini_validation_error};
 use super::models::{ModelFeature, get_gemini_registry};
 use super::streaming::GeminiStream;
+use crate::core::traits::error_mapper::trait_def::ErrorMapper;
 
 /// Gemini Provider - Unified implementation
 #[derive(Debug)]
@@ -121,10 +122,6 @@ impl GeminiProvider {
 
 #[async_trait]
 impl LLMProvider for GeminiProvider {
-    type Config = GeminiConfig;
-    type Error = ProviderError;
-    type ErrorMapper = GeminiErrorMapper;
-
     fn name(&self) -> &'static str {
         "gemini"
     }
@@ -182,7 +179,7 @@ impl LLMProvider for GeminiProvider {
         &self,
         params: HashMap<String, Value>,
         _model: &str,
-    ) -> Result<HashMap<String, Value>, Self::Error> {
+    ) -> Result<HashMap<String, Value>, ProviderError> {
         let mut mapped = HashMap::new();
 
         for (key, value) in params {
@@ -216,7 +213,7 @@ impl LLMProvider for GeminiProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Value, Self::Error> {
+    ) -> Result<Value, ProviderError> {
         // Request
         self.validate_request(&request)?;
 
@@ -230,7 +227,7 @@ impl LLMProvider for GeminiProvider {
         raw_response: &[u8],
         model: &str,
         _request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         let response_text = String::from_utf8_lossy(raw_response);
         let response_json: Value = serde_json::from_str(&response_text).map_err(|e| {
             ProviderError::serialization("gemini", format!("Failed to parse response: {}", e))
@@ -274,15 +271,15 @@ impl LLMProvider for GeminiProvider {
             .transform_chat_response(response_json, &dummy_request)
     }
 
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        GeminiErrorMapper
+    fn get_error_mapper(&self) -> Box<dyn ErrorMapper<ProviderError>> {
+        Box::new(GeminiErrorMapper)
     }
 
     async fn chat_completion(
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         // Request
         self.validate_request(&request)?;
 
@@ -294,7 +291,7 @@ impl LLMProvider for GeminiProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError>
     {
         // Request
         self.validate_request(&request)?;
@@ -312,7 +309,7 @@ impl LLMProvider for GeminiProvider {
         &self,
         _request: EmbeddingRequest,
         _context: RequestContext,
-    ) -> Result<EmbeddingResponse, Self::Error> {
+    ) -> Result<EmbeddingResponse, ProviderError> {
         Err(ProviderError::NotSupported {
             provider: "gemini",
             feature: "embeddings: not yet implemented for Gemini provider".to_string(),
@@ -323,7 +320,7 @@ impl LLMProvider for GeminiProvider {
         &self,
         _request: ImageGenerationRequest,
         _context: RequestContext,
-    ) -> Result<ImageGenerationResponse, Self::Error> {
+    ) -> Result<ImageGenerationResponse, ProviderError> {
         Err(ProviderError::NotSupported {
             provider: "gemini",
             feature: "image_generation: not supported by Gemini provider".to_string(),
@@ -382,7 +379,7 @@ impl LLMProvider for GeminiProvider {
         model: &str,
         input_tokens: u32,
         output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
+    ) -> Result<f64, ProviderError> {
         Ok(
             super::models::CostCalculator::calculate_cost(model, input_tokens, output_tokens)
                 .unwrap_or(0.0),

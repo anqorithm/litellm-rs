@@ -29,6 +29,7 @@ use crate::core::types::{
 
 use super::models::map_openai_to_fal_params;
 use super::{FalAIConfig, FalAIErrorMapper, FalAIModelRegistry};
+use crate::core::traits::error_mapper::trait_def::ErrorMapper;
 
 /// Fal AI Provider for image generation
 #[derive(Debug, Clone)]
@@ -162,10 +163,6 @@ impl FalAIProvider {
 
 #[async_trait]
 impl LLMProvider for FalAIProvider {
-    type Config = FalAIConfig;
-    type Error = ProviderError;
-    type ErrorMapper = FalAIErrorMapper;
-
     fn name(&self) -> &'static str {
         "fal_ai"
     }
@@ -186,7 +183,7 @@ impl LLMProvider for FalAIProvider {
         &self,
         params: HashMap<String, Value>,
         _model: &str,
-    ) -> Result<HashMap<String, Value>, Self::Error> {
+    ) -> Result<HashMap<String, Value>, ProviderError> {
         let params_value = serde_json::to_value(&params)
             .map_err(|e| ProviderError::invalid_request("fal_ai", e.to_string()))?;
         let mapped = map_openai_to_fal_params(&params_value);
@@ -199,7 +196,7 @@ impl LLMProvider for FalAIProvider {
         &self,
         _request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Value, Self::Error> {
+    ) -> Result<Value, ProviderError> {
         // Fal AI is primarily for image generation, not chat
         Err(ProviderError::not_implemented(
             "fal_ai",
@@ -212,22 +209,22 @@ impl LLMProvider for FalAIProvider {
         _raw_response: &[u8],
         _model: &str,
         _request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         Err(ProviderError::not_implemented(
             "fal_ai",
             "Chat response transformation not supported",
         ))
     }
 
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        FalAIErrorMapper
+    fn get_error_mapper(&self) -> Box<dyn ErrorMapper<ProviderError>> {
+        Box::new(FalAIErrorMapper)
     }
 
     async fn chat_completion(
         &self,
         _request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         Err(ProviderError::not_implemented(
             "fal_ai",
             "Chat completion not supported. Fal AI is an image generation provider.",
@@ -238,7 +235,7 @@ impl LLMProvider for FalAIProvider {
         &self,
         _request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError>
     {
         Err(ProviderError::not_implemented(
             "fal_ai",
@@ -250,7 +247,7 @@ impl LLMProvider for FalAIProvider {
         &self,
         request: ImageGenerationRequest,
         _context: RequestContext,
-    ) -> Result<ImageGenerationResponse, Self::Error> {
+    ) -> Result<ImageGenerationResponse, ProviderError> {
         let model = request.model.as_deref().unwrap_or("fal-ai/flux/schnell");
         let url = self.get_model_endpoint(model);
 
@@ -319,7 +316,7 @@ impl LLMProvider for FalAIProvider {
         model: &str,
         _input_tokens: u32,
         _output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
+    ) -> Result<f64, ProviderError> {
         // For image generation, cost is per image not per token
         Ok(self.model_registry.get_cost_per_image(model))
     }

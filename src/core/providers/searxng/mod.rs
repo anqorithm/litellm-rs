@@ -112,10 +112,6 @@ impl ErrorMapper<SearXNGError> for SearXNGErrorMapper {
 
 #[async_trait]
 impl LLMProvider for SearXNGProvider {
-    type Config = SearXNGConfig;
-    type Error = SearXNGError;
-    type ErrorMapper = SearXNGErrorMapper;
-
     fn name(&self) -> &'static str {
         "searxng"
     }
@@ -137,7 +133,7 @@ impl LLMProvider for SearXNGProvider {
         &self,
         params: std::collections::HashMap<String, serde_json::Value>,
         _model: &str,
-    ) -> Result<std::collections::HashMap<String, serde_json::Value>, Self::Error> {
+    ) -> Result<std::collections::HashMap<String, serde_json::Value>, ProviderError> {
         Ok(params)
     }
 
@@ -145,7 +141,7 @@ impl LLMProvider for SearXNGProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<serde_json::Value, Self::Error> {
+    ) -> Result<serde_json::Value, ProviderError> {
         use serde_json::json;
         Ok(json!({ "model": request.model }))
     }
@@ -155,12 +151,12 @@ impl LLMProvider for SearXNGProvider {
         _raw_response: &[u8],
         _model: &str,
         _request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         Err(ProviderError::not_supported("searxng", "Chat completion"))
     }
 
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        SearXNGErrorMapper
+    fn get_error_mapper(&self) -> Box<dyn ErrorMapper<ProviderError>> {
+        Box::new(SearXNGErrorMapper)
     }
 
     async fn calculate_cost(
@@ -168,7 +164,7 @@ impl LLMProvider for SearXNGProvider {
         _model: &str,
         _input_tokens: u32,
         _output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
+    ) -> Result<f64, ProviderError> {
         Ok(0.0)
     }
 
@@ -188,7 +184,7 @@ impl LLMProvider for SearXNGProvider {
         &self,
         _request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         Err(ProviderError::not_supported("searxng", "Chat completion"))
     }
 
@@ -196,7 +192,7 @@ impl LLMProvider for SearXNGProvider {
         &self,
         _request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError>
     {
         Err(ProviderError::not_supported("searxng", "Streaming"))
     }
@@ -205,7 +201,7 @@ impl LLMProvider for SearXNGProvider {
         &self,
         _request: EmbeddingRequest,
         _context: RequestContext,
-    ) -> Result<EmbeddingResponse, Self::Error> {
+    ) -> Result<EmbeddingResponse, ProviderError> {
         Err(ProviderError::not_supported("searxng", "Embeddings"))
     }
 
@@ -213,7 +209,7 @@ impl LLMProvider for SearXNGProvider {
         &self,
         _request: ImageGenerationRequest,
         _context: RequestContext,
-    ) -> Result<ImageGenerationResponse, Self::Error> {
+    ) -> Result<ImageGenerationResponse, ProviderError> {
         Err(ProviderError::not_supported("searxng", "Image generation"))
     }
 }

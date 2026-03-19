@@ -62,6 +62,7 @@ use crate::core::types::{
     responses::{ChatChunk, ChatResponse, EmbeddingResponse, ImageGenerationResponse},
 };
 
+use crate::core::traits::error_mapper::trait_def::ErrorMapper;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 
 /// Main Azure OpenAI provider - complete implementation
@@ -129,10 +130,6 @@ impl AzureOpenAIProvider {
 /// Implement the unified LLMProvider trait for AzureOpenAIProvider
 #[async_trait]
 impl LLMProvider for AzureOpenAIProvider {
-    type Config = AzureConfig;
-    type Error = ProviderError;
-    type ErrorMapper = AzureErrorMapper;
-
     fn name(&self) -> &'static str {
         "azure_openai"
     }
@@ -173,7 +170,7 @@ impl LLMProvider for AzureOpenAIProvider {
         &self,
         params: std::collections::HashMap<String, serde_json::Value>,
         _model: &str,
-    ) -> Result<std::collections::HashMap<String, serde_json::Value>, Self::Error> {
+    ) -> Result<std::collections::HashMap<String, serde_json::Value>, ProviderError> {
         // Azure OpenAI API is largely compatible with OpenAI, minimal mapping needed
         Ok(params)
     }
@@ -182,7 +179,7 @@ impl LLMProvider for AzureOpenAIProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Value, Self::Error> {
+    ) -> Result<Value, ProviderError> {
         self.chat_handler.transform_request(&request)
     }
 
@@ -191,13 +188,13 @@ impl LLMProvider for AzureOpenAIProvider {
         raw_response: &[u8],
         model: &str,
         _request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         let response_json: Value = serde_json::from_slice(raw_response)?;
         self.chat_handler.transform_response(response_json, model)
     }
 
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        AzureErrorMapper
+    fn get_error_mapper(&self) -> Box<dyn ErrorMapper<ProviderError>> {
+        Box::new(AzureErrorMapper)
     }
 
     async fn calculate_cost(
@@ -205,7 +202,7 @@ impl LLMProvider for AzureOpenAIProvider {
         model: &str,
         input_tokens: u32,
         output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
+    ) -> Result<f64, ProviderError> {
         // Basic cost calculation for Azure OpenAI models
         let cost = match model {
             "gpt-35-turbo" => {
@@ -222,7 +219,7 @@ impl LLMProvider for AzureOpenAIProvider {
         &self,
         request: ChatRequest,
         context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         self.chat_handler
             .create_chat_completion(request, context)
             .await
@@ -232,7 +229,7 @@ impl LLMProvider for AzureOpenAIProvider {
         &self,
         request: ChatRequest,
         context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError>
     {
         self.chat_handler
             .create_chat_completion_stream(request, context)
@@ -243,7 +240,7 @@ impl LLMProvider for AzureOpenAIProvider {
         &self,
         request: EmbeddingRequest,
         context: RequestContext,
-    ) -> Result<EmbeddingResponse, Self::Error> {
+    ) -> Result<EmbeddingResponse, ProviderError> {
         self.embedding_handler
             .create_embeddings(request, context)
             .await
@@ -253,7 +250,7 @@ impl LLMProvider for AzureOpenAIProvider {
         &self,
         request: ImageGenerationRequest,
         context: RequestContext,
-    ) -> Result<ImageGenerationResponse, Self::Error> {
+    ) -> Result<ImageGenerationResponse, ProviderError> {
         self.image_handler.generate_image(request, context).await
     }
 

@@ -13,7 +13,8 @@ use crate::core::providers::base::{
 };
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::{
-    provider::ProviderConfig, provider::llm_provider::trait_definition::LLMProvider,
+    error_mapper::trait_def::ErrorMapper, provider::ProviderConfig,
+    provider::llm_provider::trait_definition::LLMProvider,
 };
 use crate::core::types::{
     chat::ChatRequest,
@@ -80,10 +81,6 @@ impl ExaAiProvider {
 
 #[async_trait]
 impl LLMProvider for ExaAiProvider {
-    type Config = ExaAiConfig;
-    type Error = ProviderError;
-    type ErrorMapper = ExaAiErrorMapper;
-
     fn name(&self) -> &'static str {
         "exa_ai"
     }
@@ -107,7 +104,7 @@ impl LLMProvider for ExaAiProvider {
         &self,
         params: HashMap<String, Value>,
         _model: &str,
-    ) -> Result<HashMap<String, Value>, Self::Error> {
+    ) -> Result<HashMap<String, Value>, ProviderError> {
         Ok(params)
     }
 
@@ -115,7 +112,7 @@ impl LLMProvider for ExaAiProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Value, Self::Error> {
+    ) -> Result<Value, ProviderError> {
         Ok(ExaAiClient::transform_chat_request(request))
     }
 
@@ -124,21 +121,21 @@ impl LLMProvider for ExaAiProvider {
         raw_response: &[u8],
         _model: &str,
         _request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         let response: ChatResponse = serde_json::from_slice(raw_response)
             .map_err(|e| ProviderError::response_parsing("exa_ai", e.to_string()))?;
         Ok(response)
     }
 
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        ExaAiErrorMapper
+    fn get_error_mapper(&self) -> Box<dyn ErrorMapper<ProviderError>> {
+        Box::new(ExaAiErrorMapper)
     }
 
     async fn chat_completion(
         &self,
         request: ChatRequest,
         context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         let url = format!("{}/chat/completions", self.config.get_api_base());
         let body = ExaAiClient::transform_chat_request(request.clone());
 
@@ -159,13 +156,7 @@ impl LLMProvider for ExaAiProvider {
         if !status.is_success() {
             let error_text = String::from_utf8_lossy(&response_bytes);
             let mapper = self.get_error_mapper();
-            return Err(
-                crate::core::traits::error_mapper::trait_def::ErrorMapper::map_http_error(
-                    &mapper,
-                    status.as_u16(),
-                    &error_text,
-                ),
-            );
+            return Err(mapper.map_http_error(status.as_u16(), &error_text));
         }
 
         self.transform_response(&response_bytes, &request.model, &context.request_id)
@@ -176,7 +167,7 @@ impl LLMProvider for ExaAiProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError>
     {
         let url = format!("{}/chat/completions", self.config.get_api_base());
 
@@ -229,7 +220,7 @@ impl LLMProvider for ExaAiProvider {
         model: &str,
         input_tokens: u32,
         output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
+    ) -> Result<f64, ProviderError> {
         let usage = crate::core::providers::base::pricing::Usage {
             prompt_tokens: input_tokens,
             completion_tokens: output_tokens,

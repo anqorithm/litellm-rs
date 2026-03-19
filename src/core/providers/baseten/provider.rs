@@ -13,6 +13,8 @@ use super::config::BasetenConfig;
 use super::error::BasetenError;
 use crate::core::providers::base::sse::{OpenAICompatibleTransformer, UnifiedSSEStream};
 use crate::core::providers::base::{GlobalPoolManager, HttpMethod, header};
+use crate::core::providers::unified_provider::ProviderError;
+use crate::core::traits::error_mapper::trait_def::ErrorMapper;
 use crate::core::traits::{
     provider::ProviderConfig as _, provider::llm_provider::trait_definition::LLMProvider,
 };
@@ -154,10 +156,6 @@ impl BasetenProvider {
 
 #[async_trait]
 impl LLMProvider for BasetenProvider {
-    type Config = BasetenConfig;
-    type Error = BasetenError;
-    type ErrorMapper = crate::core::traits::error_mapper::DefaultErrorMapper;
-
     fn name(&self) -> &'static str {
         "baseten"
     }
@@ -178,7 +176,7 @@ impl LLMProvider for BasetenProvider {
         &self,
         mut params: HashMap<String, serde_json::Value>,
         _model: &str,
-    ) -> Result<HashMap<String, serde_json::Value>, Self::Error> {
+    ) -> Result<HashMap<String, serde_json::Value>, ProviderError> {
         // Map max_completion_tokens to max_tokens if present
         if let Some(max_completion_tokens) = params.remove("max_completion_tokens") {
             params.insert("max_tokens".to_string(), max_completion_tokens);
@@ -190,7 +188,7 @@ impl LLMProvider for BasetenProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<serde_json::Value, Self::Error> {
+    ) -> Result<serde_json::Value, ProviderError> {
         serde_json::to_value(&request)
             .map_err(|e| BasetenError::invalid_request("baseten", e.to_string()))
     }
@@ -200,21 +198,21 @@ impl LLMProvider for BasetenProvider {
         raw_response: &[u8],
         _model: &str,
         _request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         serde_json::from_slice(raw_response).map_err(|e| {
             BasetenError::api_error("baseten", 500, format!("Failed to parse response: {}", e))
         })
     }
 
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        crate::core::traits::error_mapper::DefaultErrorMapper
+    fn get_error_mapper(&self) -> Box<dyn ErrorMapper<ProviderError>> {
+        Box::new(crate::core::traits::error_mapper::DefaultErrorMapper)
     }
 
     async fn chat_completion(
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         debug!("Baseten chat request: model={}", request.model);
 
         let api_base = self.get_api_base_for_request(&request.model);
@@ -238,7 +236,7 @@ impl LLMProvider for BasetenProvider {
         &self,
         mut request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError>
     {
         debug!("Baseten streaming request: model={}", request.model);
 
@@ -301,7 +299,7 @@ impl LLMProvider for BasetenProvider {
         &self,
         _request: EmbeddingRequest,
         _context: RequestContext,
-    ) -> Result<EmbeddingResponse, Self::Error> {
+    ) -> Result<EmbeddingResponse, ProviderError> {
         Err(BasetenError::not_supported(
             "baseten",
             "Baseten embeddings require a specific embedding model deployment. \
@@ -332,7 +330,7 @@ impl LLMProvider for BasetenProvider {
         _model: &str,
         _input_tokens: u32,
         _output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
+    ) -> Result<f64, ProviderError> {
         // Baseten pricing depends on the specific deployment
         // Return 0 as a placeholder - actual costs should be tracked via Baseten dashboard
         Ok(0.0)

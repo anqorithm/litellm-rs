@@ -798,8 +798,9 @@ fn test_get_error_mapper() {
     let provider = create_test_provider();
     let mapper = provider.get_error_mapper();
 
-    // Test that we can get an error mapper (it's a struct)
-    let _ = format!("{:?}", mapper);
+    // Test that we can get an error mapper and use it
+    let err = mapper.map_http_error(500, "test error");
+    assert!(err.to_string().contains("test error") || err.to_string().contains("500"));
 }
 
 // ==================== Client Access Tests ====================

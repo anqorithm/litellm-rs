@@ -467,10 +467,6 @@ impl JinaProvider {
 
 #[async_trait]
 impl LLMProvider for JinaProvider {
-    type Config = JinaConfig;
-    type Error = JinaError;
-    type ErrorMapper = JinaErrorMapper;
-
     fn name(&self) -> &'static str {
         "jina"
     }
@@ -492,7 +488,7 @@ impl LLMProvider for JinaProvider {
         &self,
         params: HashMap<String, Value>,
         _model: &str,
-    ) -> Result<HashMap<String, Value>, Self::Error> {
+    ) -> Result<HashMap<String, Value>, ProviderError> {
         let mut mapped = HashMap::new();
 
         for (key, value) in params {
@@ -509,7 +505,7 @@ impl LLMProvider for JinaProvider {
         &self,
         _request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Value, Self::Error> {
+    ) -> Result<Value, ProviderError> {
         // Jina AI doesn't support chat completions
         Err(ProviderError::not_supported(
             "jina",
@@ -522,7 +518,7 @@ impl LLMProvider for JinaProvider {
         _raw_response: &[u8],
         _model: &str,
         _request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         // Jina AI doesn't support chat completions
         Err(ProviderError::not_supported(
             "jina",
@@ -530,15 +526,15 @@ impl LLMProvider for JinaProvider {
         ))
     }
 
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        JinaErrorMapper
+    fn get_error_mapper(&self) -> Box<dyn ErrorMapper<ProviderError>> {
+        Box::new(JinaErrorMapper)
     }
 
     async fn chat_completion(
         &self,
         _request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         // Jina AI doesn't support chat completions
         Err(ProviderError::not_supported(
             "jina",
@@ -550,7 +546,7 @@ impl LLMProvider for JinaProvider {
         &self,
         _request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError>
     {
         // Jina AI doesn't support streaming chat
         Err(ProviderError::not_supported(
@@ -563,7 +559,7 @@ impl LLMProvider for JinaProvider {
         &self,
         request: EmbeddingRequest,
         _context: RequestContext,
-    ) -> Result<EmbeddingResponse, Self::Error> {
+    ) -> Result<EmbeddingResponse, ProviderError> {
         debug!("Jina embedding request: model={}", request.model);
 
         // Check if using reranker model for embeddings
@@ -674,7 +670,7 @@ impl LLMProvider for JinaProvider {
         model: &str,
         input_tokens: u32,
         output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
+    ) -> Result<f64, ProviderError> {
         let usage = crate::core::providers::base::pricing::Usage {
             prompt_tokens: input_tokens,
             completion_tokens: output_tokens,

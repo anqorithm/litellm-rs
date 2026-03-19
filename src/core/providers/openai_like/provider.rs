@@ -12,6 +12,7 @@ use std::sync::Arc;
 use crate::core::providers::base::{
     GlobalPoolManager, HeaderPair, HttpMethod, apply_headers, header, header_owned,
 };
+use crate::core::traits::error_mapper::trait_def::ErrorMapper;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use crate::core::types::{
     chat::ChatRequest,
@@ -27,6 +28,7 @@ use super::{
     error::{OpenAILikeError, PROVIDER_NAME},
     models::{OpenAILikeModelRegistry, get_openai_like_registry},
 };
+use crate::core::providers::unified_provider::ProviderError;
 
 /// OpenAI-Like Provider implementation
 ///
@@ -374,10 +376,6 @@ where
 
 #[async_trait]
 impl LLMProvider for OpenAILikeProvider {
-    type Config = OpenAILikeConfig;
-    type Error = OpenAILikeError;
-    type ErrorMapper = OpenAILikeErrorMapper;
-
     fn name(&self) -> &'static str {
         self.provider_name
     }
@@ -407,7 +405,7 @@ impl LLMProvider for OpenAILikeProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         self.execute_chat_completion(request).await
     }
 
@@ -415,7 +413,7 @@ impl LLMProvider for OpenAILikeProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError>
     {
         self.execute_chat_completion_stream(request).await
     }
@@ -439,7 +437,7 @@ impl LLMProvider for OpenAILikeProvider {
         model: &str,
         input_tokens: u32,
         output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
+    ) -> Result<f64, ProviderError> {
         let model_info = self.get_model_info(model);
 
         let input_cost = model_info
@@ -485,7 +483,7 @@ impl LLMProvider for OpenAILikeProvider {
         &self,
         params: HashMap<String, Value>,
         _model: &str,
-    ) -> Result<HashMap<String, Value>, Self::Error> {
+    ) -> Result<HashMap<String, Value>, ProviderError> {
         // Pass through all params without modification
         Ok(params)
     }
@@ -494,7 +492,7 @@ impl LLMProvider for OpenAILikeProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Value, Self::Error> {
+    ) -> Result<Value, ProviderError> {
         self.transform_chat_request(request)
     }
 
@@ -503,14 +501,14 @@ impl LLMProvider for OpenAILikeProvider {
         raw_response: &[u8],
         _model: &str,
         _request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         let response_value: Value = serde_json::from_slice(raw_response)
             .map_err(|e| OpenAILikeError::response_parsing(PROVIDER_NAME, e.to_string()))?;
         self.transform_chat_response(response_value)
     }
 
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        OpenAILikeErrorMapper
+    fn get_error_mapper(&self) -> Box<dyn ErrorMapper<ProviderError>> {
+        Box::new(OpenAILikeErrorMapper)
     }
 }
 

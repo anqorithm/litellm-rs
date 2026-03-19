@@ -5,6 +5,7 @@
 
 pub mod chat;
 
+use crate::core::traits::error_mapper::trait_def::ErrorMapper;
 use crate::core::{
     providers::base::HttpErrorMapper,
     providers::unified_provider::ProviderError,
@@ -227,10 +228,6 @@ impl V0Provider {
 /// V0 is an OpenAI-compatible AI platform
 #[async_trait]
 impl LLMProvider for V0Provider {
-    type Config = V0Config;
-    type Error = ProviderError;
-    type ErrorMapper = GenericErrorMapper;
-
     /// Get
     fn name(&self) -> &'static str {
         "v0"
@@ -298,7 +295,7 @@ impl LLMProvider for V0Provider {
         &self,
         mut params: HashMap<String, Value>,
         _model: &str,
-    ) -> Result<HashMap<String, Value>, Self::Error> {
+    ) -> Result<HashMap<String, Value>, ProviderError> {
         // V0 uses OpenAI-compatible parameters, so most parameters are passed through directly
 
         // Can add specific parameter mapping logic here
@@ -319,7 +316,7 @@ impl LLMProvider for V0Provider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Value, Self::Error> {
+    ) -> Result<Value, ProviderError> {
         // Request
         if request.messages.is_empty() {
             return Err(ProviderError::invalid_request(
@@ -356,7 +353,7 @@ impl LLMProvider for V0Provider {
         raw_response: &[u8],
         model: &str,
         request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         // Response
         let response_json: Value = serde_json::from_slice(raw_response)
             .map_err(|e| ProviderError::serialization(PROVIDER_NAME, e.to_string()))?;
@@ -396,8 +393,8 @@ impl LLMProvider for V0Provider {
     }
 
     /// Error
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        GenericErrorMapper
+    fn get_error_mapper(&self) -> Box<dyn ErrorMapper<ProviderError>> {
+        Box::new(GenericErrorMapper)
     }
 
     // ==================== Core functionality: chat completion ====================
@@ -407,7 +404,7 @@ impl LLMProvider for V0Provider {
         &self,
         request: ChatRequest,
         context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         // Use new transformation flow
         let _transformed_request = self
             .transform_request(request.clone(), context.clone())
@@ -431,7 +428,7 @@ impl LLMProvider for V0Provider {
         _model: &str,
         input_tokens: u32,
         output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
+    ) -> Result<f64, ProviderError> {
         // V0 pricing: input $0.1/1K tokens, output $0.2/1K tokens
         let input_cost = (input_tokens as f64 / 1000.0) * 0.1;
         let output_cost = (output_tokens as f64 / 1000.0) * 0.2;

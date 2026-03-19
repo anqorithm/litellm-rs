@@ -180,9 +180,6 @@ macro_rules! define_http_provider_with_hooks {
         }
         #[async_trait::async_trait]
         impl $crate::core::traits::provider::llm_provider::trait_definition::LLMProvider for $struct_name {
-            type Config = $config_type;
-            type Error = $crate::core::providers::unified_provider::ProviderError;
-            type ErrorMapper = $error_mapper;
 
             fn name(&self) -> &'static str {
                 $provider_name
@@ -204,7 +201,7 @@ macro_rules! define_http_provider_with_hooks {
                 &self,
                 params: std::collections::HashMap<String, serde_json::Value>,
                 _model: &str,
-            ) -> Result<std::collections::HashMap<String, serde_json::Value>, Self::Error> {
+            ) -> Result<std::collections::HashMap<String, serde_json::Value>, $crate::core::providers::unified_provider::ProviderError> {
                 Ok(params)
             }
 
@@ -212,7 +209,7 @@ macro_rules! define_http_provider_with_hooks {
                 &self,
                 request: $crate::core::types::chat::ChatRequest,
                 _context: $crate::core::types::context::RequestContext,
-            ) -> Result<serde_json::Value, Self::Error> {
+            ) -> Result<serde_json::Value, $crate::core::providers::unified_provider::ProviderError> {
                 ($request_transform)(self, request)
             }
 
@@ -221,18 +218,18 @@ macro_rules! define_http_provider_with_hooks {
                 raw_response: &[u8],
                 _model: &str,
                 _request_id: &str,
-            ) -> Result<$crate::core::types::responses::ChatResponse, Self::Error> {
+            ) -> Result<$crate::core::types::responses::ChatResponse, $crate::core::providers::unified_provider::ProviderError> {
                 ($response_transform)(self, raw_response, _model, _request_id)
             }
 
-            fn get_error_mapper(&self) -> Self::ErrorMapper {
-                $error_mapper
+            fn get_error_mapper(&self) -> Box<dyn $crate::core::traits::error_mapper::trait_def::ErrorMapper<$crate::core::providers::unified_provider::ProviderError>> {
+                Box::new($error_mapper)
             }
             async fn chat_completion(
                 &self,
                 request: $crate::core::types::chat::ChatRequest,
                 context: $crate::core::types::context::RequestContext,
-            ) -> Result<$crate::core::types::responses::ChatResponse, Self::Error> {
+            ) -> Result<$crate::core::types::responses::ChatResponse, $crate::core::providers::unified_provider::ProviderError> {
                 let url = ($url_builder)(self);
 
                 let body = self.transform_request(request.clone(), context).await?;
@@ -282,11 +279,11 @@ macro_rules! define_http_provider_with_hooks {
                 std::pin::Pin<
                     Box<
                         dyn futures::Stream<
-                                Item = Result<$crate::core::types::responses::ChatChunk, Self::Error>,
+                                Item = Result<$crate::core::types::responses::ChatChunk, $crate::core::providers::unified_provider::ProviderError>,
                             > + Send,
                     >,
                 >,
-                Self::Error,
+                $crate::core::providers::unified_provider::ProviderError,
             > {
                 Err($crate::core::providers::unified_provider::ProviderError::not_implemented(
                     $provider_name,
@@ -303,7 +300,7 @@ macro_rules! define_http_provider_with_hooks {
                 model: &str,
                 input_tokens: u32,
                 output_tokens: u32,
-            ) -> Result<f64, Self::Error> {
+            ) -> Result<f64, $crate::core::providers::unified_provider::ProviderError> {
                 ($calculate_cost)(self, model, input_tokens, output_tokens)
             }
         }

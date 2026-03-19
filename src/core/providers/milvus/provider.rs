@@ -25,6 +25,8 @@ use super::models::{get_available_models, get_model_info};
 use crate::core::providers::base::{
     GlobalPoolManager, HeaderPair, HttpMethod, header, header_owned,
 };
+use crate::core::providers::unified_provider::ProviderError;
+use crate::core::traits::error_mapper::trait_def::ErrorMapper;
 use crate::core::traits::provider::ProviderConfig as _;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use crate::core::types::{
@@ -356,10 +358,6 @@ impl MilvusProvider {
 
 #[async_trait]
 impl LLMProvider for MilvusProvider {
-    type Config = MilvusConfig;
-    type Error = MilvusError;
-    type ErrorMapper = crate::core::traits::error_mapper::DefaultErrorMapper;
-
     fn name(&self) -> &'static str {
         PROVIDER_NAME
     }
@@ -385,7 +383,7 @@ impl LLMProvider for MilvusProvider {
         &self,
         params: HashMap<String, serde_json::Value>,
         _model: &str,
-    ) -> Result<HashMap<String, serde_json::Value>, Self::Error> {
+    ) -> Result<HashMap<String, serde_json::Value>, ProviderError> {
         // Pass through params as-is (Milvus has its own parameter format)
         Ok(params)
     }
@@ -394,7 +392,7 @@ impl LLMProvider for MilvusProvider {
         &self,
         _request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<serde_json::Value, Self::Error> {
+    ) -> Result<serde_json::Value, ProviderError> {
         // Milvus doesn't support chat
         Err(MilvusError::not_supported(
             PROVIDER_NAME,
@@ -407,7 +405,7 @@ impl LLMProvider for MilvusProvider {
         _raw_response: &[u8],
         _model: &str,
         _request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         // Milvus doesn't support chat
         Err(MilvusError::not_supported(
             PROVIDER_NAME,
@@ -415,15 +413,15 @@ impl LLMProvider for MilvusProvider {
         ))
     }
 
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        crate::core::traits::error_mapper::DefaultErrorMapper
+    fn get_error_mapper(&self) -> Box<dyn ErrorMapper<ProviderError>> {
+        Box::new(crate::core::traits::error_mapper::DefaultErrorMapper)
     }
 
     async fn chat_completion(
         &self,
         _request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         Err(MilvusError::not_supported(
             PROVIDER_NAME,
             "Milvus is a vector database. Chat completion is not supported. Use a chat provider like OpenAI or Anthropic.",
@@ -434,7 +432,7 @@ impl LLMProvider for MilvusProvider {
         &self,
         _request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError>
     {
         Err(MilvusError::not_supported(
             PROVIDER_NAME,
@@ -446,7 +444,7 @@ impl LLMProvider for MilvusProvider {
         &self,
         request: EmbeddingRequest,
         _context: RequestContext,
-    ) -> Result<EmbeddingResponse, Self::Error> {
+    ) -> Result<EmbeddingResponse, ProviderError> {
         debug!("Milvus embeddings request: model={}", request.model);
 
         // Milvus doesn't generate embeddings - it's a vector database
@@ -552,7 +550,7 @@ impl LLMProvider for MilvusProvider {
         _model: &str,
         _input_tokens: u32,
         _output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
+    ) -> Result<f64, ProviderError> {
         // Milvus is typically self-hosted, so there's no per-token cost
         // Return 0.0 for self-hosted deployments
         Ok(0.0)

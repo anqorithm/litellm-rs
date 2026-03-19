@@ -29,6 +29,7 @@ use super::{
     models::ReplicateModelType,
     prediction::{CreatePredictionRequest, PredictionResponse, PredictionStatus},
 };
+use crate::core::traits::error_mapper::trait_def::ErrorMapper;
 
 /// Replicate provider implementation
 #[derive(Debug, Clone)]
@@ -216,10 +217,6 @@ impl ReplicateProvider {
 
 #[async_trait]
 impl LLMProvider for ReplicateProvider {
-    type Config = ReplicateConfig;
-    type Error = ProviderError;
-    type ErrorMapper = ReplicateErrorMapper;
-
     fn name(&self) -> &'static str {
         "replicate"
     }
@@ -244,7 +241,7 @@ impl LLMProvider for ReplicateProvider {
         &self,
         params: HashMap<String, Value>,
         _model: &str,
-    ) -> Result<HashMap<String, Value>, Self::Error> {
+    ) -> Result<HashMap<String, Value>, ProviderError> {
         // Map OpenAI params to Replicate format
         let mut mapped = HashMap::new();
 
@@ -264,7 +261,7 @@ impl LLMProvider for ReplicateProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Value, Self::Error> {
+    ) -> Result<Value, ProviderError> {
         Ok(ReplicateClient::transform_chat_request(&request))
     }
 
@@ -273,22 +270,22 @@ impl LLMProvider for ReplicateProvider {
         raw_response: &[u8],
         model: &str,
         _request_id: &str,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         let prediction: PredictionResponse = serde_json::from_slice(raw_response)
             .map_err(|e| ProviderError::replicate_response_parsing(e.to_string()))?;
 
         ReplicateClient::transform_prediction_to_chat_response(&prediction, model)
     }
 
-    fn get_error_mapper(&self) -> Self::ErrorMapper {
-        ReplicateErrorMapper
+    fn get_error_mapper(&self) -> Box<dyn ErrorMapper<ProviderError>> {
+        Box::new(ReplicateErrorMapper)
     }
 
     async fn chat_completion(
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<ChatResponse, Self::Error> {
+    ) -> Result<ChatResponse, ProviderError> {
         let model = &request.model;
 
         // Check if this is an image model
@@ -310,7 +307,7 @@ impl LLMProvider for ReplicateProvider {
         &self,
         request: ChatRequest,
         _context: RequestContext,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, Self::Error>> + Send>>, Self::Error>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError>
     {
         let model = &request.model;
 
@@ -414,7 +411,7 @@ impl LLMProvider for ReplicateProvider {
         &self,
         request: ImageGenerationRequest,
         context: RequestContext,
-    ) -> Result<ImageGenerationResponse, Self::Error> {
+    ) -> Result<ImageGenerationResponse, ProviderError> {
         self.execute_image_generation(request, context).await
     }
 
@@ -438,7 +435,7 @@ impl LLMProvider for ReplicateProvider {
         model: &str,
         input_tokens: u32,
         output_tokens: u32,
-    ) -> Result<f64, Self::Error> {
+    ) -> Result<f64, ProviderError> {
         // Replicate pricing is per-second of compute time, not per token
         // We approximate based on model type and token counts
         if let Some(spec) = super::models::get_replicate_registry().get_model_spec(model) {
