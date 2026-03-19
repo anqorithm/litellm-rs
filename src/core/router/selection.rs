@@ -58,21 +58,50 @@ impl Router {
         }
 
         // 3. Filter: healthy + not in cooldown + not rate limited
+        let total_deployments = deployment_ids_ref.len();
         let candidate_ids: Vec<DeploymentId> = deployment_ids_ref
             .iter()
             .filter(|id| {
                 if let Some(deployment) = self.deployments.get(id.as_str()) {
                     // Check cooldown first: is_in_cooldown() resets health
                     // from Cooldown to Degraded when the cooldown period expires.
-                    if deployment.is_in_cooldown() || !deployment.is_healthy() {
+                    if deployment.is_in_cooldown() {
+                        tracing::trace!(
+                            deployment_id = id.as_str(),
+                            model = %resolved_name,
+                            reason = "in_cooldown",
+                            "deployment excluded from routing candidates"
+                        );
+                        return false;
+                    }
+
+                    if !deployment.is_healthy() {
+                        tracing::trace!(
+                            deployment_id = id.as_str(),
+                            model = %resolved_name,
+                            reason = "unhealthy",
+                            "deployment excluded from routing candidates"
+                        );
                         return false;
                     }
 
                     if !self.check_parallel_limit(&deployment) {
+                        tracing::trace!(
+                            deployment_id = id.as_str(),
+                            model = %resolved_name,
+                            reason = "parallel_limit_reached",
+                            "deployment excluded from routing candidates"
+                        );
                         return false;
                     }
 
                     if !self.check_rate_limit(&deployment) {
+                        tracing::trace!(
+                            deployment_id = id.as_str(),
+                            model = %resolved_name,
+                            reason = "rate_limited",
+                            "deployment excluded from routing candidates"
+                        );
                         return false;
                     }
 
@@ -88,6 +117,11 @@ impl Router {
         drop(deployment_ids_ref);
 
         if candidate_ids.is_empty() {
+            tracing::warn!(
+                model = %model_name,
+                total_deployments = total_deployments,
+                "no available deployments after filtering"
+            );
             return Err(RouterError::NoAvailableDeployment(model_name.to_string()));
         }
 
@@ -127,6 +161,14 @@ impl Router {
         if let Some(deployment) = self.deployments.get(&selected_id) {
             deployment.state.active_requests.fetch_add(1, Relaxed);
         }
+
+        tracing::debug!(
+            model = %model_name,
+            strategy = ?self.config.routing_strategy,
+            candidate_count = candidate_ids.len(),
+            selected_id = %selected_id,
+            "deployment selected for routing"
+        );
 
         Ok(selected_id)
     }

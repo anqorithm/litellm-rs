@@ -7,13 +7,31 @@ use super::types::CreateApiKeyRequest;
 use crate::core::models::{ApiKey, RateLimits, UsageStats};
 use crate::utils::error::gateway_error::{GatewayError, Result};
 use chrono::{DateTime, Utc};
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 impl ApiKeyHandler {
+    /// Look up an API key by ID and invalidate its Redis cache entry.
+    /// Errors are logged but not propagated so the caller's primary
+    /// mutation is never blocked by a cache failure.
+    async fn invalidate_cache_for_key_id(&self, key_id: Uuid) {
+        match self.storage.db().find_api_key_by_id(key_id).await {
+            Ok(Some(key)) => self.invalidate_api_key_cache(&key.key_hash).await,
+            Ok(None) => {
+                debug!("No API key found for cache invalidation: {}", key_id);
+            }
+            Err(e) => {
+                warn!("Failed to look up API key for cache invalidation: {}", e);
+            }
+        }
+    }
+
     /// Revoke an API key
     pub async fn revoke_key(&self, key_id: Uuid) -> Result<()> {
         info!("Revoking API key: {}", key_id);
+
+        // Fetch hash before mutation so we can invalidate cache
+        self.invalidate_cache_for_key_id(key_id).await;
 
         self.storage.db().deactivate_api_key(key_id).await?;
 
@@ -42,6 +60,8 @@ impl ApiKeyHandler {
             .update_api_key_permissions(key_id, &permissions)
             .await?;
 
+        self.invalidate_cache_for_key_id(key_id).await;
+
         info!("API key permissions updated successfully: {}", key_id);
         Ok(())
     }
@@ -61,6 +81,8 @@ impl ApiKeyHandler {
                 .await?;
         }
 
+        self.invalidate_cache_for_key_id(key_id).await;
+
         info!("API key rate limits updated successfully: {}", key_id);
         Ok(())
     }
@@ -77,6 +99,8 @@ impl ApiKeyHandler {
             .db()
             .update_api_key_expiration(key_id, expires_at)
             .await?;
+
+        self.invalidate_cache_for_key_id(key_id).await;
 
         info!("API key expiration updated successfully: {}", key_id);
         Ok(())

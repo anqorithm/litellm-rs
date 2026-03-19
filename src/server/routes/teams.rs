@@ -94,7 +94,7 @@ pub struct MemberPath {
 fn get_team_manager(_state: &web::Data<AppState>) -> TeamManager {
     // For now, we use an in-memory repository
     // In production, this would be backed by the database
-    // TODO: Store team manager in AppState for proper persistence
+    // NOTE: Team manager should be stored in AppState for persistence.
     let repo = Arc::new(InMemoryTeamRepository::new());
     TeamManager::new(repo)
 }
@@ -281,7 +281,7 @@ pub async fn add_member(
         role: body.role.clone(),
     };
 
-    // TODO: Get the actual inviting user from auth context
+    // NOTE: Should extract inviting user from auth context.
     let invited_by = None;
 
     match manager.add_member(path.id, request, invited_by).await {

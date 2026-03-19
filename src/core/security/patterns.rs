@@ -10,13 +10,18 @@ use std::sync::LazyLock;
 // Note: unwrap() is used because these are static patterns that are known-good
 // If a pattern fails, it indicates a code error that should be caught in tests
 
+/// Fallback regex that never matches anything.
+/// `[^\s\S]` matches "neither whitespace nor non-whitespace" = empty set.
+/// This is a trivially valid pattern, so `expect` here is safe.
+fn never_matching_regex() -> Regex {
+    Regex::new(r"[^\s\S]").expect("static never-matching regex pattern is always valid")
+}
+
 /// SSN pattern: XXX-XX-XXXX
 pub static SSN_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"\b\d{3}-\d{2}-\d{4}\b").unwrap_or_else(|e| {
         tracing::error!("Failed to compile SSN regex: {}", e);
-        // Return a pattern that never matches as fallback
-        // [^\s\S] matches "neither whitespace nor non-whitespace" = empty set
-        Regex::new(r"[^\s\S]").unwrap()
+        never_matching_regex()
     })
 });
 
@@ -24,7 +29,7 @@ pub static SSN_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
 pub static EMAIL_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b").unwrap_or_else(|e| {
         tracing::error!("Failed to compile email regex: {}", e);
-        Regex::new(r"[^\s\S]").unwrap()
+        never_matching_regex()
     })
 });
 
@@ -32,7 +37,7 @@ pub static EMAIL_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
 pub static PHONE_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"\b\d{3}-\d{3}-\d{4}\b").unwrap_or_else(|e| {
         tracing::error!("Failed to compile phone regex: {}", e);
-        Regex::new(r"[^\s\S]").unwrap()
+        never_matching_regex()
     })
 });
 
@@ -40,7 +45,7 @@ pub static PHONE_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
 pub static CREDIT_CARD_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b").unwrap_or_else(|e| {
         tracing::error!("Failed to compile credit card regex: {}", e);
-        Regex::new(r"[^\s\S]").unwrap()
+        never_matching_regex()
     })
 });
 

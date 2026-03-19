@@ -93,7 +93,8 @@ impl HttpServer {
     > {
         info!("Setting up routes and middleware");
 
-        let cors_config = &state.config.gateway.server.cors;
+        let cfg = state.config.load();
+        let cors_config = &cfg.gateway.server.cors;
         let mut cors = Cors::default();
 
         if cors_config.enabled {
