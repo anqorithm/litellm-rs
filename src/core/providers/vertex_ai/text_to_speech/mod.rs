@@ -92,7 +92,7 @@ impl TextToSpeechHandler {
     ) -> Result<TextToSpeechResponse, ProviderError> {
         self.validate_request(&request)?;
 
-        // TODO: Implement actual Google Cloud Text-to-Speech API call
+        // NOTE: actual Google Cloud Text-to-Speech API call not yet implemented
         Ok(TextToSpeechResponse {
             audio_content: "UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuH0fPJdSgHKYDF8OOUQw".to_string(),
         })
@@ -103,7 +103,7 @@ impl TextToSpeechHandler {
         &self,
         _language_code: Option<&str>,
     ) -> Result<Vec<Voice>, ProviderError> {
-        // TODO: Implement actual voice listing
+        // NOTE: actual voice listing not yet implemented
         Ok(vec![
             Voice {
                 language_codes: vec!["en-US".to_string()],

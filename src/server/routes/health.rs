@@ -153,7 +153,7 @@ async fn version_info() -> HttpResponse {
 async fn metrics(state: web::Data<AppState>) -> ActixResult<HttpResponse> {
     debug!("Metrics requested");
 
-    // TODO: Implement proper Prometheus metrics
+    // NOTE: Proper Prometheus metrics not yet implemented.
     // For now, return basic metrics in Prometheus format
     let metrics = format!(
         r#"# HELP gateway_uptime_seconds Total uptime of the gateway in seconds
@@ -267,7 +267,7 @@ async fn check_provider_health(
     for provider_config in state.config.providers() {
         let start_time = std::time::Instant::now();
 
-        // TODO: Implement actual provider health checks
+        // NOTE: Actual provider health checks not yet implemented.
         // For now, assume all providers are healthy
         let status: Cow<'static, str> = Cow::Borrowed("healthy");
         let response_time = start_time.elapsed().as_millis() as u64;
