@@ -109,12 +109,15 @@ impl Router {
     {
         let start = std::time::Instant::now();
 
-        // Get all models to try (original + fallbacks)
+        // Get all models to try (original + fallbacks), deduplicated to prevent cycles
         let models_to_try = self.get_models_with_fallbacks(model_name, FallbackType::General);
-
-        // Limit fallback attempts
         let max_models = 1 + self.config.max_fallbacks as usize;
-        let models_to_try: Vec<_> = models_to_try.into_iter().take(max_models).collect();
+        let mut seen = std::collections::HashSet::new();
+        let models_to_try: Vec<_> = models_to_try
+            .into_iter()
+            .filter(|m| seen.insert(m.clone()))
+            .take(max_models)
+            .collect();
 
         let mut last_error = None;
         let mut total_attempts = 0;

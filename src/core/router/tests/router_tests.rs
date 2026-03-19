@@ -148,8 +148,8 @@ async fn test_model_aliases() {
     let deployment = create_test_deployment("test-1", "gpt-4").await;
 
     router.add_deployment(deployment);
-    router.add_model_alias("gpt4", "gpt-4");
-    router.add_model_alias("gpt-4-latest", "gpt-4");
+    router.add_model_alias("gpt4", "gpt-4").unwrap();
+    router.add_model_alias("gpt-4-latest", "gpt-4").unwrap();
 
     assert_eq!(router.resolve_model_name("gpt4"), "gpt-4");
     assert_eq!(router.resolve_model_name("gpt-4-latest"), "gpt-4");
@@ -282,4 +282,44 @@ fn test_router_config_default() {
     assert_eq!(config.timeout_secs, 60);
     assert_eq!(config.max_fallbacks, 5);
     assert!(config.enable_pre_call_checks);
+}
+
+// ==================== Alias Cycle Detection Tests ====================
+
+#[test]
+fn test_alias_direct_cycle() {
+    let router = Router::default();
+    router.add_model_alias("a", "b").unwrap();
+    let result = router.add_model_alias("b", "a");
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(err.to_string().contains("Circular alias"));
+}
+
+#[test]
+fn test_alias_transitive_cycle() {
+    let router = Router::default();
+    router.add_model_alias("a", "b").unwrap();
+    router.add_model_alias("b", "c").unwrap();
+    let result = router.add_model_alias("c", "a");
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(err.to_string().contains("Circular alias"));
+}
+
+#[test]
+fn test_alias_self_cycle() {
+    let router = Router::default();
+    let result = router.add_model_alias("a", "a");
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(err.to_string().contains("Circular alias"));
+}
+
+#[test]
+fn test_alias_no_cycle() {
+    let router = Router::default();
+    assert!(router.add_model_alias("gpt4", "gpt-4").is_ok());
+    assert!(router.add_model_alias("gpt-latest", "gpt-4").is_ok());
+    assert!(router.add_model_alias("best", "gpt-latest").is_ok());
 }

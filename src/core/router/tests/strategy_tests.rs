@@ -346,7 +346,7 @@ async fn test_select_deployment_with_alias() {
         .store(HealthStatus::Healthy as u8, Ordering::Relaxed);
 
     router.add_deployment(deployment);
-    router.add_model_alias("gpt4", "gpt-4");
+    router.add_model_alias("gpt4", "gpt-4").unwrap();
 
     let result = router.select_deployment("gpt4");
     assert!(result.is_ok());
