@@ -446,6 +446,18 @@ pub struct A2AGatewayConfig {
     /// Global rate limit
     #[serde(skip_serializing_if = "Option::is_none")]
     pub global_rate_limit: Option<u32>,
+
+    /// Enable periodic health checks for registered agents
+    #[serde(default = "default_true")]
+    pub health_check_enabled: bool,
+
+    /// Interval in seconds between periodic health checks
+    #[serde(default = "default_health_check_interval_secs")]
+    pub health_check_interval_secs: u64,
+}
+
+fn default_health_check_interval_secs() -> u64 {
+    30
 }
 
 impl A2AGatewayConfig {

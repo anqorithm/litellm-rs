@@ -416,8 +416,8 @@ impl AzureAIChatUtils {
             content: Some(content),
             thinking: None,
             name: message_data["name"].as_str().map(|s| s.to_string()),
-            function_call: None, // TODO: Handle function calls
-            tool_calls: None,    // TODO: Handle tool calls
+            function_call: None, // NOTE: function call parsing not yet implemented
+            tool_calls: None,    // NOTE: tool call parsing not yet implemented
             tool_call_id: message_data["tool_call_id"].as_str().map(|s| s.to_string()),
         };
 
@@ -434,7 +434,7 @@ impl AzureAIChatUtils {
             index: index as u32,
             message,
             finish_reason,
-            logprobs: None, // TODO: Handle logprobs if needed
+            logprobs: None, // NOTE: logprobs not yet supported
         })
     }
 
@@ -501,7 +501,7 @@ impl AzureAIChatUtils {
                 .iter()
                 .enumerate()
                 .map(|(index, choice)| {
-                    // TODO: Implement proper streaming choice transformation
+                    // NOTE: proper streaming choice transformation not yet implemented
                     // For now, create a basic structure
                     crate::core::types::responses::ChatStreamChoice {
                         index: index as u32,

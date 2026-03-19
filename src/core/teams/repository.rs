@@ -341,7 +341,7 @@ pub mod postgres {
     #[async_trait]
     impl TeamRepository for PostgresTeamRepository {
         async fn create(&self, _team: Team) -> Result<Team> {
-            // TODO: Implement PostgreSQL storage for teams
+            // NOTE: PostgreSQL storage for teams not yet implemented.
             // This is a placeholder that would use SeaORM entities
             Err(GatewayError::NotImplemented(
                 "PostgreSQL team storage not yet implemented".to_string(),

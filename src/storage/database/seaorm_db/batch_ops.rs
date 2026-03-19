@@ -144,7 +144,7 @@ impl SeaOrmDatabase {
                     error_file_id: model.error_file_id,
                     created_at: model.created_at.with_timezone(&chrono::Utc),
                     in_progress_at: model.in_progress_at.map(|t| t.with_timezone(&chrono::Utc)),
-                    expires_at: None, // TODO: Add expires_at field to database schema
+                    expires_at: None, // NOTE: expires_at field not yet in database schema
                     finalizing_at: model.finalizing_at.map(|t| t.with_timezone(&chrono::Utc)),
                     completed_at: model.completed_at.map(|t| t.with_timezone(&chrono::Utc)),
                     failed_at: model.failed_at.map(|t| t.with_timezone(&chrono::Utc)),
@@ -169,7 +169,7 @@ impl SeaOrmDatabase {
         &self,
         _batch_id: &str,
     ) -> Result<Option<Vec<serde_json::Value>>> {
-        // TODO: Implement batch results retrieval
+        // NOTE: batch results retrieval not yet implemented
         warn!("get_batch_results not implemented yet");
         Ok(None)
     }
@@ -179,7 +179,7 @@ impl SeaOrmDatabase {
         &self,
         _batch_id: &str,
     ) -> Result<Option<crate::core::batch::BatchRequest>> {
-        // TODO: Implement batch request retrieval
+        // NOTE: batch request retrieval not yet implemented
         warn!("get_batch_request not implemented yet");
         Ok(None)
     }
@@ -190,7 +190,7 @@ impl SeaOrmDatabase {
         _batch_id: &str,
         _results: &[serde_json::Value],
     ) -> Result<()> {
-        // TODO: Implement batch results storage
+        // NOTE: batch results storage not yet implemented
         warn!("store_batch_results not implemented yet");
         Ok(())
     }

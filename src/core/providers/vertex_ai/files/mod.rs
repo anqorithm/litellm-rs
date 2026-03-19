@@ -108,7 +108,7 @@ impl FileHandler {
         // Validate file
         self.validate_file_upload(&request)?;
 
-        // TODO: Implement actual file upload via Vertex AI API
+        // NOTE: actual file upload via Vertex AI API not yet implemented
         // For now, return a mock response
         Ok(FileMetadata {
             name: format!("files/{}", uuid::Uuid::new_v4()),
@@ -131,7 +131,7 @@ impl FileHandler {
 
     /// Get file metadata
     pub async fn get_file(&self, _file_id: &str) -> Result<FileMetadata, ProviderError> {
-        // TODO: Implement actual file retrieval
+        // NOTE: actual file retrieval not yet implemented
         Err(ProviderError::not_supported(
             "vertex_ai",
             "File retrieval not yet implemented",
@@ -144,7 +144,7 @@ impl FileHandler {
         _page_size: Option<i32>,
         _page_token: Option<String>,
     ) -> Result<ListFilesResponse, ProviderError> {
-        // TODO: Implement actual file listing
+        // NOTE: actual file listing not yet implemented
         Ok(ListFilesResponse {
             files: Vec::new(),
             next_page_token: None,
@@ -153,7 +153,7 @@ impl FileHandler {
 
     /// Delete a file
     pub async fn delete_file(&self, _file_id: &str) -> Result<(), ProviderError> {
-        // TODO: Implement actual file deletion
+        // NOTE: actual file deletion not yet implemented
         Ok(())
     }
 

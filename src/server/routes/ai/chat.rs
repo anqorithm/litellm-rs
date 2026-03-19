@@ -132,7 +132,7 @@ async fn handle_streaming_chat_completion(
             // the provider stream, cancelling any in-flight HTTP request.
             let (tx, rx) = mpsc::channel::<Bytes>(8);
 
-            let idle_timeout_secs = state.config.gateway.server.stream_idle_timeout;
+            let idle_timeout_secs = state.config.load().gateway.server.stream_idle_timeout;
 
             tokio::spawn(async move {
                 loop {

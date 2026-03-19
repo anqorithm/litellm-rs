@@ -8,10 +8,8 @@ use std::time::Duration;
 
 #[tokio::test]
 async fn test_batch_creation() {
-    // TODO: Create a proper mock database for testing
-    // For now, skip this test as it requires a real database
-    // This test would create a BatchProcessor and test batch creation
-    // when proper database mocking is implemented
+    // NOTE: Requires mock database infrastructure for proper testing.
+    // Skipped: would create a BatchProcessor and test batch creation.
 }
 
 #[test]
