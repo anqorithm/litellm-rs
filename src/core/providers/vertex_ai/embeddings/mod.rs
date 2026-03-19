@@ -437,7 +437,7 @@ impl BatchEmbeddingHandler {
             let handler = EmbeddingHandler::new(self.model.clone());
             let _vertex_request = handler.transform_request(&request)?;
 
-            // TODO: Make actual API call
+            // NOTE: actual API call not yet implemented
             // For now, return dummy embeddings
             for _ in chunk {
                 all_embeddings.push(vec![0.0; self.model.dimensions()]);

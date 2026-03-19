@@ -218,7 +218,8 @@ impl ConfigValidator {
     /// Validate email format
     pub fn validate_email(email: &str) -> Result<()> {
         static EMAIL_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-            Regex::new(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$").unwrap()
+            Regex::new(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
+                .expect("email regex is a valid constant pattern")
         });
 
         if !EMAIL_REGEX.is_match(email) {
@@ -322,8 +323,9 @@ impl ConfigValidator {
 
     /// Validate duration string (e.g., "30s", "5m", "1h")
     pub fn validate_duration_string(value: &str) -> Result<std::time::Duration> {
-        static DURATION_REGEX: LazyLock<Regex> =
-            LazyLock::new(|| Regex::new(r"^(\d+)(s|m|h|d)$").unwrap());
+        static DURATION_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+            Regex::new(r"^(\d+)(s|m|h|d)$").expect("duration regex is a valid constant pattern")
+        });
 
         if let Some(captures) = DURATION_REGEX.captures(value) {
             let number: u64 = captures[1]

@@ -9,7 +9,7 @@ impl LLMClient {
     /// This is a placeholder for future embedding functionality.
     /// Will support various embedding models across different providers.
     pub async fn embedding(&self, _text: &str, _model: Option<&str>) -> Result<Vec<f32>> {
-        // TODO: Implement embedding functionality
+        // NOTE: embedding functionality not yet implemented
         Err(SDKError::NotSupported(
             "Embedding functionality not yet implemented".to_string(),
         ))
@@ -24,7 +24,7 @@ impl LLMClient {
         _texts: &[String],
         _model: Option<&str>,
     ) -> Result<Vec<Vec<f32>>> {
-        // TODO: Implement batch embedding functionality
+        // NOTE: batch embedding functionality not yet implemented
         Err(SDKError::NotSupported(
             "Batch embedding functionality not yet implemented".to_string(),
         ))

@@ -155,7 +155,7 @@ async fn execute_titan_multimodal_embedding(
 
     let titan_request = TitanMultimodalEmbeddingRequest {
         input_text,
-        input_image: None, // TODO: Support image input
+        input_image: None, // NOTE: image input not yet supported
         embedding_config: Some(EmbeddingConfig {
             output_embedding_length: request.dimensions.unwrap_or(1024),
         }),

@@ -152,7 +152,7 @@ impl EmailChannel {
 #[async_trait::async_trait]
 impl NotificationChannel for EmailChannel {
     async fn send(&self, _alert: &Alert) -> Result<()> {
-        // TODO: Implement email sending
+        // NOTE: email sending not yet implemented
         // This would use an SMTP library to send emails
         warn!("Email notifications not implemented yet");
         Ok(())

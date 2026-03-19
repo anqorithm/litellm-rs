@@ -263,37 +263,37 @@ fn transform_to_converse(request: &ChatRequest) -> Result<ConverseRequest, Provi
                                         crate::core::types::content::ContentPart::Image {
                                             ..
                                         } => {
-                                            // TODO: Handle image content
+                                            // NOTE: image content not yet handled
                                             None
                                         }
                                         crate::core::types::content::ContentPart::ImageUrl {
                                             ..
                                         } => {
-                                            // TODO: Handle image URL content
+                                            // NOTE: image URL content not yet handled
                                             None
                                         }
                                         crate::core::types::content::ContentPart::Audio {
                                             ..
                                         } => {
-                                            // TODO: Handle audio content
+                                            // NOTE: audio content not yet handled
                                             None
                                         }
                                         crate::core::types::content::ContentPart::Document {
                                             ..
                                         } => {
-                                            // TODO: Handle document content
+                                            // NOTE: document content not yet handled
                                             None
                                         }
                                         crate::core::types::content::ContentPart::ToolResult {
                                             ..
                                         } => {
-                                            // TODO: Handle tool result content
+                                            // NOTE: tool result content not yet handled
                                             None
                                         }
                                         crate::core::types::content::ContentPart::ToolUse {
                                             ..
                                         } => {
-                                            // TODO: Handle tool use content
+                                            // NOTE: tool use content not yet handled
                                             None
                                         }
                                     }
@@ -309,7 +309,7 @@ fn transform_to_converse(request: &ChatRequest) -> Result<ConverseRequest, Provi
             }
             _ => {
                 // Skip function/tool messages for now
-                // TODO: Handle tool messages
+                // NOTE: tool message handling not yet implemented
             }
         }
     }
@@ -343,7 +343,7 @@ fn transform_to_converse(request: &ChatRequest) -> Result<ConverseRequest, Provi
 
         Some(ToolConfig {
             tools: tool_specs,
-            tool_choice: None, // TODO: Map tool_choice
+            tool_choice: None, // NOTE: tool_choice mapping not yet implemented
         })
     } else {
         None
@@ -358,7 +358,7 @@ fn transform_to_converse(request: &ChatRequest) -> Result<ConverseRequest, Provi
         },
         inference_config,
         tool_config,
-        guardrail_config: None, // TODO: Add guardrail support
+        guardrail_config: None, // NOTE: guardrail support not yet implemented
         additional_model_request_fields: None,
     })
 }
