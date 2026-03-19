@@ -137,6 +137,51 @@ impl FallbackConfig {
         self
     }
 
+    /// Validate fallback configuration for cycles
+    ///
+    /// Runs DFS on every fallback map and returns a list of cycle descriptions.
+    /// An empty `Ok(())` means no cycles were found.
+    #[allow(clippy::type_complexity)]
+    pub fn validate(&self) -> Result<(), Vec<String>> {
+        let mut errors = Vec::new();
+
+        let maps: [(&str, &RwLock<HashMap<String, Vec<String>>>); 4] = [
+            ("general", &self.general),
+            ("context_window", &self.context_window),
+            ("content_policy", &self.content_policy),
+            ("rate_limit", &self.rate_limit),
+        ];
+
+        for (label, lock) in &maps {
+            let map = lock.read().unwrap_or_else(|e| e.into_inner());
+            for start in map.keys() {
+                let mut visited = std::collections::HashSet::new();
+                visited.insert(start.clone());
+                let mut stack = vec![start.clone()];
+
+                while let Some(node) = stack.pop() {
+                    if let Some(targets) = map.get(&node) {
+                        for target in targets {
+                            if !visited.insert(target.clone()) {
+                                errors.push(format!(
+                                    "{label}: cycle involving '{start}' -> '{target}'"
+                                ));
+                            } else {
+                                stack.push(target.clone());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors)
+        }
+    }
+
     /// Get fallback models for a specific type
     ///
     /// Returns a cloned vector of fallback model names. Returns empty vector if no fallbacks

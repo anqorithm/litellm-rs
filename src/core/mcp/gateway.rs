@@ -201,6 +201,17 @@ impl McpGateway {
             server.connect().await?;
         }
 
+        // Validate arguments against the tool schema if available
+        if let Ok(Some(tool)) = server.get_tool(tool_name).await
+            && let Err(errors) = tool.input_schema.validate_arguments(&arguments)
+        {
+            return Err(McpError::ValidationError {
+                server_name: server_name.to_string(),
+                tool_name: tool_name.to_string(),
+                errors,
+            });
+        }
+
         let call = ToolCall::new(tool_name, arguments);
         server.call_tool(call).await
     }

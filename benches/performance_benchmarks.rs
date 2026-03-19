@@ -121,9 +121,9 @@ fn bench_unified_router(c: &mut Criterion) {
     // Test 5: Model alias resolution
     group.bench_function("alias_resolution", |b| {
         let router = UnifiedRouter::default();
-        router.add_model_alias("gpt4", "gpt-4");
-        router.add_model_alias("claude3", "claude-3-opus");
-        router.add_model_alias("openai/gpt-4", "gpt-4");
+        router.add_model_alias("gpt4", "gpt-4").unwrap();
+        router.add_model_alias("claude3", "claude-3-opus").unwrap();
+        router.add_model_alias("openai/gpt-4", "gpt-4").unwrap();
 
         // Add deployments
         let deployments = create_test_deployments(&rt, 5, "gpt-4");

@@ -76,6 +76,13 @@ pub enum McpError {
         server_name: String,
         retry_after_ms: Option<u64>,
     },
+
+    /// Validation error for tool arguments
+    ValidationError {
+        server_name: String,
+        tool_name: String,
+        errors: Vec<String>,
+    },
 }
 
 impl fmt::Display for McpError {
@@ -186,6 +193,19 @@ impl fmt::Display for McpError {
                 } else {
                     write!(f, "Rate limit exceeded for MCP server '{}'", server_name)
                 }
+            }
+            McpError::ValidationError {
+                server_name,
+                tool_name,
+                errors,
+            } => {
+                write!(
+                    f,
+                    "Validation failed for tool '{}' on server '{}': {}",
+                    tool_name,
+                    server_name,
+                    errors.join("; ")
+                )
             }
         }
     }

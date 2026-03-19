@@ -11,61 +11,59 @@ mod tests {
 
     // ==================== ProviderError to GatewayError Conversion ====================
 
-    /// Test that authentication errors map correctly
+    /// Test that authentication errors wrap into Provider and produce correct HTTP status
     #[test]
     fn test_auth_error_flow() {
         let provider_err = ProviderError::authentication("openai", "Invalid API key");
         let gateway_err: GatewayError = provider_err.into();
 
-        assert!(matches!(gateway_err, GatewayError::Auth(_)));
-        // Check via error_response
+        assert!(matches!(gateway_err, GatewayError::Provider(_)));
         let response = gateway_err.error_response();
         assert_eq!(response.status().as_u16(), 401);
     }
 
-    /// Test that rate limit errors map correctly
+    /// Test that rate limit errors wrap into Provider and produce correct HTTP status
     #[test]
     fn test_rate_limit_error_flow() {
         let provider_err = ProviderError::rate_limit("anthropic", Some(60));
         let gateway_err: GatewayError = provider_err.into();
 
-        assert!(matches!(gateway_err, GatewayError::RateLimit { .. }));
+        assert!(matches!(gateway_err, GatewayError::Provider(_)));
         let response = gateway_err.error_response();
         assert_eq!(response.status().as_u16(), 429);
     }
 
-    /// Test that model not found errors map correctly
+    /// Test that model not found errors wrap into Provider and produce correct HTTP status
     #[test]
     fn test_model_not_found_error_flow() {
         let provider_err = ProviderError::model_not_found("openai", "gpt-5-turbo");
         let gateway_err: GatewayError = provider_err.into();
 
-        assert!(matches!(gateway_err, GatewayError::NotFound(_)));
+        assert!(matches!(gateway_err, GatewayError::Provider(_)));
         let response = gateway_err.error_response();
         assert_eq!(response.status().as_u16(), 404);
     }
 
-    /// Test that configuration errors map correctly
+    /// Test that configuration errors wrap into Provider and produce correct HTTP status
     #[test]
     fn test_configuration_error_flow() {
         let provider_err = ProviderError::configuration("azure", "Missing deployment name");
         let gateway_err: GatewayError = provider_err.into();
 
-        assert!(matches!(gateway_err, GatewayError::Config(_)));
-        // Config errors are internal server errors
+        assert!(matches!(gateway_err, GatewayError::Provider(_)));
         let response = gateway_err.error_response();
         assert_eq!(response.status().as_u16(), 500);
     }
 
-    /// Test that timeout errors map correctly
+    /// Test that timeout errors wrap into Provider and produce correct HTTP status
     #[test]
     fn test_timeout_error_flow() {
         let provider_err = ProviderError::timeout("openai", "Request timed out after 30s");
         let gateway_err: GatewayError = provider_err.into();
 
-        assert!(matches!(gateway_err, GatewayError::Timeout(_)));
+        assert!(matches!(gateway_err, GatewayError::Provider(_)));
         let response = gateway_err.error_response();
-        assert_eq!(response.status().as_u16(), 408); // Request Timeout
+        assert_eq!(response.status().as_u16(), 504); // Gateway Timeout (via ResponseError)
     }
 
     // ==================== ProviderError Properties ====================
@@ -205,52 +203,31 @@ mod tests {
 
     // ==================== API Error Mapping ====================
 
-    /// Test HTTP status code to error type mapping
+    /// Test that API errors wrap into Provider variant and produce correct HTTP status
     #[test]
     fn test_api_error_status_mapping() {
-        // 401 -> Auth
-        let err = ProviderError::ApiError {
-            provider: "openai",
-            status: 401,
-            message: "Unauthorized".to_string(),
-        };
-        let gateway: GatewayError = err.into();
-        assert!(matches!(gateway, GatewayError::Auth(_)));
+        // All ProviderError variants now become GatewayError::Provider.
+        // HTTP status is determined by ResponseError impl in response.rs.
 
-        // 404 -> NotFound
-        let err = ProviderError::ApiError {
-            provider: "openai",
-            status: 404,
-            message: "Not found".to_string(),
-        };
-        let gateway: GatewayError = err.into();
-        assert!(matches!(gateway, GatewayError::NotFound(_)));
+        let cases: Vec<(u16, u16)> =
+            vec![(401, 401), (404, 404), (429, 429), (400, 400), (500, 500)];
 
-        // 429 -> RateLimit
-        let err = ProviderError::ApiError {
-            provider: "openai",
-            status: 429,
-            message: "Too many requests".to_string(),
-        };
-        let gateway: GatewayError = err.into();
-        assert!(matches!(gateway, GatewayError::RateLimit { .. }));
-
-        // 400 -> BadRequest
-        let err = ProviderError::ApiError {
-            provider: "openai",
-            status: 400,
-            message: "Bad request".to_string(),
-        };
-        let gateway: GatewayError = err.into();
-        assert!(matches!(gateway, GatewayError::BadRequest(_)));
-
-        // 500 -> Internal
-        let err = ProviderError::ApiError {
-            provider: "openai",
-            status: 500,
-            message: "Internal error".to_string(),
-        };
-        let gateway: GatewayError = err.into();
-        assert!(matches!(gateway, GatewayError::Internal(_)));
+        for (api_status, expected_http) in cases {
+            let err = ProviderError::ApiError {
+                provider: "openai",
+                status: api_status,
+                message: format!("status {}", api_status),
+            };
+            let gateway: GatewayError = err.into();
+            assert!(matches!(gateway, GatewayError::Provider(_)));
+            let response = gateway.error_response();
+            assert_eq!(
+                response.status().as_u16(),
+                expected_http,
+                "ApiError with status {} should produce HTTP {}",
+                api_status,
+                expected_http,
+            );
+        }
     }
 }
