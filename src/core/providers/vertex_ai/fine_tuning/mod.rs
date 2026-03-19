@@ -194,7 +194,7 @@ impl FineTuningHandler {
         // Validate request
         self.validate_tuning_request(&request)?;
 
-        // TODO: Implement actual fine-tuning job creation
+        // NOTE: actual fine-tuning job creation not yet implemented
         Ok(FineTuningJob {
             name: format!(
                 "projects/{}/locations/{}/tuningJobs/{}",
@@ -236,7 +236,7 @@ impl FineTuningHandler {
 
     /// Get fine-tuning job status
     pub async fn get_tuning_job(&self, _job_id: &str) -> Result<FineTuningJob, ProviderError> {
-        // TODO: Implement actual job retrieval
+        // NOTE: actual job retrieval not yet implemented
         Err(ProviderError::not_supported(
             "vertex_ai",
             "Fine-tuning job retrieval not yet implemented",
@@ -250,7 +250,7 @@ impl FineTuningHandler {
         _page_size: Option<i32>,
         _page_token: Option<String>,
     ) -> Result<ListFineTuningJobsResponse, ProviderError> {
-        // TODO: Implement actual job listing
+        // NOTE: actual job listing not yet implemented
         Ok(ListFineTuningJobsResponse {
             tuning_jobs: Vec::new(),
             next_page_token: None,
@@ -259,13 +259,13 @@ impl FineTuningHandler {
 
     /// Cancel a fine-tuning job
     pub async fn cancel_tuning_job(&self, _job_id: &str) -> Result<(), ProviderError> {
-        // TODO: Implement actual job cancellation
+        // NOTE: actual job cancellation not yet implemented
         Ok(())
     }
 
     /// Delete a fine-tuning job
     pub async fn delete_tuning_job(&self, _job_id: &str) -> Result<(), ProviderError> {
-        // TODO: Implement actual job deletion
+        // NOTE: actual job deletion not yet implemented
         Ok(())
     }
 

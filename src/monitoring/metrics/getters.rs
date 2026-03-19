@@ -128,14 +128,14 @@ impl MetricsCollector {
         Ok(SystemResourceMetrics {
             cpu_usage,
             memory_usage,
-            memory_usage_percent: 0.0, // TODO: Calculate based on total memory
+            memory_usage_percent: 0.0, // NOTE: requires total memory to calculate
             disk_usage,
-            disk_usage_percent: 0.0, // TODO: Calculate based on total disk
+            disk_usage_percent: 0.0, // NOTE: requires total disk to calculate
             network_bytes_in,
             network_bytes_out,
             active_connections,
-            database_connections: 0, // TODO: Get from connection pool
-            redis_connections: 0,    // TODO: Get from Redis pool
+            database_connections: 0, // NOTE: requires connection pool integration
+            redis_connections: 0,    // NOTE: requires Redis pool integration
         })
     }
 
@@ -193,7 +193,7 @@ impl MetricsCollector {
             queue_depth,
             throughput,
             latency_percentiles: LatencyPercentiles {
-                p50: 0.0, // TODO: Calculate from request metrics
+                p50: 0.0, // NOTE: percentile calculation not yet implemented
                 p90: 0.0,
                 p95: 0.0,
                 p99: 0.0,
