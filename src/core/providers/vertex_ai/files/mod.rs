@@ -9,11 +9,12 @@ use serde_json::Value;
 use std::sync::LazyLock;
 
 /// Regex for matching GCS URIs
-static GCS_PATTERN: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"gs://[^\s]+").unwrap());
+static GCS_PATTERN: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"gs://[^\s]+").expect("static regex is valid"));
 
 /// Regex for matching file IDs
 static FILE_PATTERN: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"files/[a-zA-Z0-9\-_]+").unwrap());
+    LazyLock::new(|| Regex::new(r"files/[a-zA-Z0-9\-_]+").expect("static regex is valid"));
 
 /// File upload request
 #[derive(Debug, Clone, Serialize, Deserialize)]

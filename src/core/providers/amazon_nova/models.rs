@@ -155,23 +155,27 @@ impl AmazonNovaModelRegistry {
             .with_reasoning(),
         );
 
-        // Also register simplified names
-        models.insert(
-            "nova-pro".to_string(),
-            models.get("amazon.nova-pro-v1:0").unwrap().clone(),
-        );
-        models.insert(
-            "nova-lite".to_string(),
-            models.get("amazon.nova-lite-v1:0").unwrap().clone(),
-        );
-        models.insert(
-            "nova-micro".to_string(),
-            models.get("amazon.nova-micro-v1:0").unwrap().clone(),
-        );
-        models.insert(
-            "nova-premier".to_string(),
-            models.get("amazon.nova-premier-v1:0").unwrap().clone(),
-        );
+        // Also register simplified names (keys were inserted above, so expect is safe)
+        let nova_pro = models
+            .get("amazon.nova-pro-v1:0")
+            .expect("nova-pro-v1:0 was just inserted")
+            .clone();
+        let nova_lite = models
+            .get("amazon.nova-lite-v1:0")
+            .expect("nova-lite-v1:0 was just inserted")
+            .clone();
+        let nova_micro = models
+            .get("amazon.nova-micro-v1:0")
+            .expect("nova-micro-v1:0 was just inserted")
+            .clone();
+        let nova_premier = models
+            .get("amazon.nova-premier-v1:0")
+            .expect("nova-premier-v1:0 was just inserted")
+            .clone();
+        models.insert("nova-pro".to_string(), nova_pro);
+        models.insert("nova-lite".to_string(), nova_lite);
+        models.insert("nova-micro".to_string(), nova_micro);
+        models.insert("nova-premier".to_string(), nova_premier);
 
         Self { models }
     }
