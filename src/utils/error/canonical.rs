@@ -193,6 +193,7 @@ impl CanonicalError for McpError {
             McpError::SerializationError { .. } => ErrorCode::Parsing,
             McpError::ServerAlreadyExists { .. } => ErrorCode::Conflict,
             McpError::RateLimitExceeded { .. } => ErrorCode::RateLimited,
+            McpError::ValidationError { .. } => ErrorCode::InvalidRequest,
         }
     }
 

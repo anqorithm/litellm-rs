@@ -32,7 +32,7 @@ pub(super) async fn start_system_metrics_collection(collector: &MetricsCollector
                 let mut storage = storage_clone.write();
                 let metrics = &mut storage.system;
 
-                // TODO: Implement actual system metrics collection
+                // NOTE: actual system metrics collection not yet implemented
                 // For now, use placeholder values
                 // Using push_bounded for automatic size limiting (1 hour at 10-second intervals = 360 samples)
                 const SYSTEM_MAX_SAMPLES: usize = 360;

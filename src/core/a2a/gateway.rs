@@ -46,6 +46,9 @@ impl A2AGateway {
 
     /// Create a gateway from configuration
     pub async fn from_config(config: A2AGatewayConfig) -> A2AResult<Self> {
+        let health_check_enabled = config.health_check_enabled;
+        let health_check_interval_secs = config.health_check_interval_secs;
+
         let gateway = Self {
             registry: Arc::new(AgentRegistry::new()),
             adapters: RwLock::new(HashMap::new()),
@@ -61,12 +64,29 @@ impl A2AGateway {
             gateway.register_agent(agent_config).await?;
         }
 
+        // Start periodic health checks if enabled
+        if health_check_enabled {
+            AgentRegistry::start_health_check_task(
+                gateway.registry.clone(),
+                health_check_interval_secs,
+            );
+        }
+
         Ok(gateway)
     }
 
-    /// Register a new agent
+    /// Register a new agent and trigger an immediate health probe
     pub async fn register_agent(&self, config: AgentConfig) -> A2AResult<()> {
-        self.registry.register(config).await
+        let name = config.name.clone();
+        self.registry.register(config).await?;
+
+        // Spawn an initial health probe so the agent can become available
+        let registry = self.registry.clone();
+        tokio::spawn(async move {
+            registry.check_agent_health(&name).await;
+        });
+
+        Ok(())
     }
 
     /// Unregister an agent
@@ -254,8 +274,18 @@ impl A2AGateway {
         GatewayHealth {
             healthy,
             total_agents: stats.total_agents,
-            available_agents: stats.healthy_agents + stats.degraded_agents + stats.unknown_agents,
+            available_agents: stats.healthy_agents + stats.degraded_agents,
         }
+    }
+
+    /// Start periodic health checks using the gateway's registry
+    ///
+    /// Returns a `JoinHandle` that can be used to abort the background task.
+    pub fn start_health_check_task(
+        self: &Arc<Self>,
+        interval_secs: u64,
+    ) -> tokio::task::JoinHandle<()> {
+        AgentRegistry::start_health_check_task(self.registry.clone(), interval_secs)
     }
 }
 
@@ -396,5 +426,40 @@ mod tests {
         let adapter2 = gateway.get_adapter(AgentProvider::LangGraph).await;
 
         assert_eq!(adapter1.provider_type(), adapter2.provider_type());
+    }
+
+    #[tokio::test]
+    async fn test_health_check_excludes_unknown() {
+        let gateway = A2AGateway::new();
+
+        gateway
+            .register_agent(AgentConfig::new("test", "https://example.com/agent"))
+            .await
+            .unwrap();
+
+        // Agent starts as Unknown -- should not count as available
+        let health = gateway.health_check().await;
+        assert_eq!(health.available_agents, 0);
+
+        // After marking healthy, it counts
+        gateway.set_agent_state("test", AgentState::Healthy).await;
+        let health = gateway.health_check().await;
+        assert_eq!(health.available_agents, 1);
+    }
+
+    #[tokio::test]
+    async fn test_from_config_with_health_check() {
+        let config = A2AGatewayConfig {
+            health_check_enabled: true,
+            health_check_interval_secs: 60,
+            ..Default::default()
+        };
+        // Cannot use add_agent after construction via struct literal, so
+        // build a fresh config with agents included via the HashMap.
+        let mut config = config;
+        config.add_agent(AgentConfig::new("agent1", "https://example.com/agent1"));
+
+        let gateway = A2AGateway::from_config(config).await.unwrap();
+        assert_eq!(gateway.list_agents().await.len(), 1);
     }
 }

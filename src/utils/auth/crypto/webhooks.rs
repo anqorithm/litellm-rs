@@ -22,8 +22,13 @@ pub fn verify_webhook_signature(
     // Check timestamp is within acceptable range (e.g., 5 minutes)
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
+        .map(|d| d.as_secs())
+        .map_err(|e| {
+            crate::utils::error::gateway_error::GatewayError::Internal(format!(
+                "System clock error: {}",
+                e
+            ))
+        })?;
 
     if now.saturating_sub(timestamp) > 300 {
         return Ok(false); // Timestamp too old

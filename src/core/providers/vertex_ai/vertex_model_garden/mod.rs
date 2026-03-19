@@ -51,7 +51,7 @@ impl ModelGardenHandler {
 
     /// List available models in Model Garden
     pub async fn list_models(&self) -> Result<Vec<ModelGardenModel>, ProviderError> {
-        // TODO: Implement actual model listing
+        // NOTE: actual model listing not yet implemented
         Ok(vec![ModelGardenModel {
             model_id: "codey-completion".to_string(),
             display_name: "Codey Completion".to_string(),
@@ -70,7 +70,7 @@ impl ModelGardenHandler {
         _model_id: &str,
         _endpoint_display_name: &str,
     ) -> Result<String, ProviderError> {
-        // TODO: Implement model deployment
+        // NOTE: model deployment not yet implemented
         Ok(format!(
             "projects/{}/locations/{}/endpoints/{}",
             self.project_id,
@@ -85,7 +85,7 @@ impl ModelGardenHandler {
         _endpoint_id: &str,
         request: ModelGardenRequest,
     ) -> Result<ModelGardenResponse, ProviderError> {
-        // TODO: Implement prediction
+        // NOTE: prediction not yet implemented
         Ok(ModelGardenResponse {
             predictions: vec![request.inputs],
             metadata: None,

@@ -23,19 +23,6 @@ impl_from_serde_error!(ProviderError, |e| Self::serialization(
 
 // Azure provider uses ProviderError directly, no conversion needed
 
-// Add more error type conversions for better interoperability
-impl From<Box<dyn std::error::Error + Send + Sync>> for ProviderError {
-    fn from(err: Box<dyn std::error::Error + Send + Sync>) -> Self {
-        Self::network("unknown", format!("{}", err))
-    }
-}
-
-impl From<String> for ProviderError {
-    fn from(err: String) -> Self {
-        Self::network("unknown", err)
-    }
-}
-
 // Provider-specific error conversions for unified error handling
 // Note: MoonshotError, MistralError, and LlamaError are now type aliases for ProviderError, so no From impl needed
 

@@ -134,7 +134,7 @@ impl LLMProvider for GeminiProvider {
             ProviderCapability::ChatCompletion,
             ProviderCapability::ChatCompletionStream,
             ProviderCapability::ToolCalling,
-            // ProviderCapability::Vision, // TODO: Add to enum
+            // NOTE: Vision capability not yet added to ProviderCapability enum
         ]
     }
 
@@ -159,7 +159,7 @@ impl LLMProvider for GeminiProvider {
     }
 
     fn supports_embeddings(&self) -> bool {
-        false // TODO: Can be supported through dedicated embedding models
+        false // NOTE: could be supported via dedicated embedding models
     }
 
     fn supports_vision(&self) -> bool {

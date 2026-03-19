@@ -70,10 +70,7 @@ pub enum AgentState {
 impl AgentState {
     /// Check if agent is available for requests
     pub fn is_available(&self) -> bool {
-        matches!(
-            self,
-            AgentState::Healthy | AgentState::Degraded | AgentState::Unknown
-        )
+        matches!(self, AgentState::Healthy | AgentState::Degraded)
     }
 }
 
@@ -150,7 +147,7 @@ impl AgentRegistry {
         self.agents.read().await.keys().cloned().collect()
     }
 
-    /// List all available agents (healthy or unknown state)
+    /// List all available agents (healthy or degraded state)
     pub async fn list_available(&self) -> Vec<AgentConfig> {
         self.agents
             .read()
@@ -218,6 +215,58 @@ impl AgentRegistry {
             total_invocations,
             total_cost,
         }
+    }
+
+    /// Probe a single agent's health via HTTP GET to its URL
+    pub async fn check_agent_health(&self, name: &str) {
+        let url = {
+            let agents = self.agents.read().await;
+            match agents.get(name) {
+                Some(entry) if entry.config.enabled => entry.config.url.clone(),
+                _ => return,
+            }
+        };
+
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(10))
+            .build()
+            .unwrap_or_default();
+
+        let state = match client.get(&url).send().await {
+            Ok(resp) if resp.status().is_success() => AgentState::Healthy,
+            Ok(resp) if resp.status().is_server_error() => AgentState::Unhealthy,
+            Ok(_) => AgentState::Degraded,
+            Err(_) => AgentState::Unhealthy,
+        };
+
+        self.update_state(name, state).await;
+    }
+
+    /// Run health checks on all registered agents
+    pub async fn check_all_agents_health(&self) {
+        let names = self.list_names().await;
+        for name in names {
+            self.check_agent_health(&name).await;
+        }
+    }
+
+    /// Start a periodic health check background task
+    pub fn start_health_check_task(
+        registry: Arc<AgentRegistry>,
+        interval_secs: u64,
+    ) -> tokio::task::JoinHandle<()> {
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(interval_secs));
+            // First tick fires immediately, skip it so the caller can
+            // trigger an initial probe explicitly instead
+            interval.tick().await;
+
+            loop {
+                interval.tick().await;
+                tracing::debug!("Running periodic A2A agent health checks");
+                registry.check_all_agents_health().await;
+            }
+        })
     }
 }
 
@@ -382,8 +431,75 @@ mod tests {
     fn test_agent_state_availability() {
         assert!(AgentState::Healthy.is_available());
         assert!(AgentState::Degraded.is_available());
-        assert!(AgentState::Unknown.is_available());
+        assert!(!AgentState::Unknown.is_available());
         assert!(!AgentState::Unhealthy.is_available());
         assert!(!AgentState::Disabled.is_available());
+    }
+
+    #[tokio::test]
+    async fn test_unknown_agent_excluded_from_available() {
+        let registry = AgentRegistry::new();
+
+        let config = AgentConfig::new("agent1", "https://example.com/agent1");
+        registry.register(config).await.unwrap();
+        // New agents start as Unknown
+        let entry = registry.get("agent1").await.unwrap();
+        assert_eq!(entry.state, AgentState::Unknown);
+
+        // Unknown agents must not appear in available list
+        let available = registry.list_available().await;
+        assert!(available.is_empty());
+
+        // After marking healthy, agent becomes available
+        registry.update_state("agent1", AgentState::Healthy).await;
+        let available = registry.list_available().await;
+        assert_eq!(available.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_check_agent_health_unreachable() {
+        let registry = AgentRegistry::new();
+
+        // Use a URL that will fail to connect
+        let config = AgentConfig::new("bad-agent", "https://192.0.2.1/health");
+        registry.register(config).await.unwrap();
+
+        registry.check_agent_health("bad-agent").await;
+
+        let entry = registry.get("bad-agent").await.unwrap();
+        assert_eq!(entry.state, AgentState::Unhealthy);
+        assert!(entry.last_health_check.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_check_agent_health_skips_disabled() {
+        let registry = AgentRegistry::new();
+
+        let mut config = AgentConfig::new("disabled-agent", "https://example.com/agent");
+        config.enabled = false;
+        registry.register(config).await.unwrap();
+
+        registry.check_agent_health("disabled-agent").await;
+
+        // State should remain Unknown (skipped)
+        let entry = registry.get("disabled-agent").await.unwrap();
+        assert_eq!(entry.state, AgentState::Unknown);
+    }
+
+    #[tokio::test]
+    async fn test_check_agent_health_nonexistent() {
+        let registry = AgentRegistry::new();
+        // Should not panic for unknown agent name
+        registry.check_agent_health("does-not-exist").await;
+    }
+
+    #[tokio::test]
+    async fn test_start_health_check_task_runs() {
+        let registry = Arc::new(AgentRegistry::new());
+        let handle = AgentRegistry::start_health_check_task(registry.clone(), 1);
+
+        // Let it tick at least once
+        tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+        handle.abort();
     }
 }

@@ -365,12 +365,6 @@ mod provider_error_tests {
     // ==================== Conversion Tests ====================
 
     #[test]
-    fn test_from_string() {
-        let err: ProviderError = "Some error".to_string().into();
-        assert_eq!(err.provider(), "unknown");
-    }
-
-    #[test]
     fn test_from_serde_json_error() {
         let json_err = serde_json::from_str::<serde_json::Value>("invalid json").unwrap_err();
         let err: ProviderError = json_err.into();

@@ -44,7 +44,7 @@ impl AlertManager {
         }
 
         // Add email channel if configured
-        // TODO: Add email configuration support
+        // NOTE: email configuration support not yet implemented
 
         Ok(Self {
             config: config.clone(),
