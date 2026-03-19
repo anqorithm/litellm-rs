@@ -943,8 +943,8 @@ async fn test_concurrent_alias_resolution() {
         .store(HealthStatus::Healthy as u8, Ordering::Relaxed);
     router.add_deployment(d);
 
-    router.add_model_alias("gpt4", "gpt-4");
-    router.add_model_alias("gpt-4-latest", "gpt-4");
+    let _ = router.add_model_alias("gpt4", "gpt-4");
+    let _ = router.add_model_alias("gpt-4-latest", "gpt-4");
 
     let mut handles = Vec::new();
     let aliases = ["gpt4", "gpt-4-latest", "gpt-4"];
