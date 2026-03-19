@@ -412,8 +412,8 @@ pub struct OAuthGatewayConfig {
     pub auto_create_users: bool,
 
     /// Allowed origins for post-login client redirects (scheme + host, e.g. "https://app.example.com").
-    /// If non-empty, `client_redirect` URIs must match one of these origins; otherwise the redirect
-    /// is silently replaced with `/`. An empty list disables the whitelist check (permissive).
+    /// `client_redirect` URIs must match one of these origins; otherwise the redirect is rejected.
+    /// An empty list rejects all client redirects — origins must be configured explicitly.
     #[serde(default)]
     pub allowed_redirect_origins: Vec<String>,
 }

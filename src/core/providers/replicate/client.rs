@@ -127,7 +127,7 @@ impl ReplicateClient {
         // Build response
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_secs() as i64;
 
         Ok(ChatResponse {
@@ -241,7 +241,7 @@ impl ReplicateClient {
         // Build response
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_secs();
 
         let data: Vec<ImageData> = urls

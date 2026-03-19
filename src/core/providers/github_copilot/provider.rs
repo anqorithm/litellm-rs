@@ -238,11 +238,27 @@ impl GitHubCopilotProvider {
 
         // Add X-Initiator header
         let initiator = self.determine_initiator(messages);
-        headers.insert("x-initiator", initiator.parse().unwrap());
+        headers.insert(
+            "x-initiator",
+            initiator.parse().map_err(|e| {
+                ProviderError::configuration(
+                    "github_copilot",
+                    format!("Invalid x-initiator header value: {}", e),
+                )
+            })?,
+        );
 
         // Add Copilot-Vision-Request if contains images
         if self.has_vision_content(messages) {
-            headers.insert("copilot-vision-request", "true".parse().unwrap());
+            headers.insert(
+                "copilot-vision-request",
+                "true".parse().map_err(|e| {
+                    ProviderError::configuration(
+                        "github_copilot",
+                        format!("Invalid copilot-vision-request header value: {}", e),
+                    )
+                })?,
+            );
         }
 
         Ok(headers)
