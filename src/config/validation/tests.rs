@@ -169,14 +169,14 @@ fn test_auth_config_validation() {
 fn test_auth_config_jwt_secret_min_length() {
     // Exactly minimum length with mixed characters (required by validation)
     let config = AuthConfig {
-        jwt_secret: "aA1!".repeat(8), // 32 chars with mixed case, numbers, and special chars
+        jwt_secret: "aA1!".repeat(8), // 32 bytes with mixed case, numbers, and special chars
         ..Default::default()
     };
     assert!(config.validate().is_ok());
 
     // Just under minimum length
     let config = AuthConfig {
-        jwt_secret: "aA1!".repeat(7) + "aA1", // 31 chars
+        jwt_secret: "aA1!".repeat(7) + "aA1", // 31 bytes
         ..Default::default()
     };
     assert!(config.validate().is_err());

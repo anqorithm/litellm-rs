@@ -81,11 +81,11 @@ mod tests {
     #[test]
     fn test_auth_config_short_jwt_secret() {
         let mut config = create_valid_auth_config();
-        config.jwt_secret = "short".to_string(); // Less than 32 chars
+        config.jwt_secret = "short".to_string(); // Less than 32 bytes
 
         let result = validate_config(&config);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("at least 32 characters"));
+        assert!(result.unwrap_err().contains("at least 32 bytes"));
     }
 
     #[test]
