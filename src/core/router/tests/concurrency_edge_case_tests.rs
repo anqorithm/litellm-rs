@@ -581,7 +581,7 @@ async fn test_ema_latency_converges() {
     let avg = d.state.avg_latency_us.load(Ordering::Relaxed);
     // After many iterations of recording 500, the EMA should converge near 500
     assert!(
-        avg >= 499 && avg <= 510,
+        (499..=510).contains(&avg),
         "EMA should converge to ~500, got {}",
         avg
     );
