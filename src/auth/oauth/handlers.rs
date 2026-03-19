@@ -130,12 +130,17 @@ pub struct LoginQuery {
 
 /// Returns `true` when `redirect_uri` is safe to follow.
 ///
-/// If `allowed_origins` is empty the whitelist is disabled (permissive).
-/// Otherwise the URI's origin (scheme + host + optional port) must exactly
-/// match one of the entries in `allowed_origins`.
+/// If `allowed_origins` is empty all redirects are rejected — origins must be
+/// explicitly configured. Otherwise the URI's origin (scheme + host + optional
+/// port) must exactly match one of the entries in `allowed_origins`.
 fn is_redirect_origin_allowed(redirect_uri: &str, allowed_origins: &[String]) -> bool {
     if allowed_origins.is_empty() {
-        return true;
+        warn!(
+            "OAuth allowed_redirect_origins is empty; rejecting redirect to '{}'. \
+             Configure allowed_redirect_origins explicitly to permit client redirects.",
+            redirect_uri
+        );
+        return false;
     }
     let Ok(parsed) = url::Url::parse(redirect_uri) else {
         return false;
@@ -668,5 +673,55 @@ mod tests {
         let debug_str = format!("{:?}", state);
         assert!(debug_str.contains("OAuthState"));
         assert!(debug_str.contains("google"));
+    }
+
+    #[test]
+    fn test_empty_allowed_origins_rejects_all() {
+        let empty: Vec<String> = vec![];
+        assert!(!is_redirect_origin_allowed(
+            "https://evil.com/callback",
+            &empty
+        ));
+        assert!(!is_redirect_origin_allowed(
+            "https://app.example.com",
+            &empty
+        ));
+    }
+
+    #[test]
+    fn test_allowed_origins_permits_matching() {
+        let origins = vec!["https://app.example.com".to_string()];
+        assert!(is_redirect_origin_allowed(
+            "https://app.example.com/callback?foo=bar",
+            &origins
+        ));
+    }
+
+    #[test]
+    fn test_allowed_origins_rejects_non_matching() {
+        let origins = vec!["https://app.example.com".to_string()];
+        assert!(!is_redirect_origin_allowed(
+            "https://evil.com/callback",
+            &origins
+        ));
+    }
+
+    #[test]
+    fn test_allowed_origins_with_port() {
+        let origins = vec!["http://localhost:3000".to_string()];
+        assert!(is_redirect_origin_allowed(
+            "http://localhost:3000/cb",
+            &origins
+        ));
+        assert!(!is_redirect_origin_allowed(
+            "http://localhost:4000/cb",
+            &origins
+        ));
+    }
+
+    #[test]
+    fn test_invalid_redirect_uri_rejected() {
+        let origins = vec!["https://app.example.com".to_string()];
+        assert!(!is_redirect_origin_allowed("not-a-url", &origins));
     }
 }
