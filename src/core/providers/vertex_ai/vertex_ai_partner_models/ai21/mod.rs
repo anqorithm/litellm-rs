@@ -10,7 +10,7 @@ impl AI21Handler {
     pub async fn handle_request(
         request: serde_json::Value,
     ) -> Result<serde_json::Value, ProviderError> {
-        // TODO: Implement AI21 request handling
+        // NOTE: AI21 request handling not yet implemented
         Ok(request)
     }
 

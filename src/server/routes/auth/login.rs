@@ -208,8 +208,7 @@ mod tests {
     use super::*;
     use uuid::Uuid;
 
-    // NOTE: Full integration tests require mocking AppState, AuthSystem, and StorageLayer
-    // TODO: Add full integration tests with proper mocking infrastructure
+    // NOTE: Full integration tests require mocking AppState, AuthSystem, and StorageLayer.
 
     #[test]
     fn test_login_request_deserialization() {

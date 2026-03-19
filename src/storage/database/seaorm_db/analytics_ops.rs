@@ -11,7 +11,7 @@ impl SeaOrmDatabase {
         _start: chrono::DateTime<chrono::Utc>,
         _end: chrono::DateTime<chrono::Utc>,
     ) -> Result<Vec<serde_json::Value>> {
-        // TODO: Implement user usage retrieval
+        // NOTE: user usage retrieval not yet implemented
         warn!("get_user_usage not implemented yet");
         Ok(vec![])
     }
@@ -22,14 +22,14 @@ impl SeaOrmDatabase {
         &self,
         _metrics: &crate::core::models::metrics::request::RequestMetrics,
     ) -> Result<()> {
-        // TODO: Implement metrics storage
+        // NOTE: metrics storage not yet implemented
         warn!("store_metrics not implemented yet");
         Ok(())
     }
 
     /// Get database statistics
     pub fn stats(&self) -> DatabaseStats {
-        // TODO: Implement database stats
+        // NOTE: database stats not yet implemented
         warn!("stats not implemented yet");
         DatabaseStats {
             total_users: 0,

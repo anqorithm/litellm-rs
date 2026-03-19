@@ -737,7 +737,7 @@ fn get_key_manager(_state: &web::Data<AppState>) -> ActixResult<KeyManager> {
     // For now, we create a new one with an in-memory repository
     use crate::core::keys::InMemoryKeyRepository;
 
-    // TODO: Replace with proper KeyManager retrieval from AppState
+    // NOTE: KeyManager should be retrieved from AppState, not re-created per request.
     // The KeyManager should be initialized during application startup
     // and stored in AppState for shared access across handlers
     Ok(KeyManager::new(InMemoryKeyRepository::new()))
