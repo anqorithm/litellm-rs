@@ -13,7 +13,6 @@
 //! ## Documentation
 //! - API Docs: <https://llama.developer.meta.com/docs/features/compatibility/>
 
-use async_trait::async_trait;
 use futures::Stream;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -281,7 +280,6 @@ impl LlamaProvider {
     }
 }
 
-#[async_trait]
 impl LLMProvider for LlamaProvider {
     fn name(&self) -> &'static str {
         "meta"

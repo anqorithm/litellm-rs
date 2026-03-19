@@ -3,7 +3,6 @@
 //! Jina AI provides embeddings and reranking capabilities.
 //! Reference: <https://jina.ai/embeddings/> and <https://jina.ai/reranker/>
 
-use async_trait::async_trait;
 use futures::Stream;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -465,7 +464,6 @@ impl JinaProvider {
     }
 }
 
-#[async_trait]
 impl LLMProvider for JinaProvider {
     fn name(&self) -> &'static str {
         "jina"

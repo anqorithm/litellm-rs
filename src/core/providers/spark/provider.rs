@@ -2,7 +2,6 @@
 //!
 //! Implementation of LLMProvider for Spark with WebSocket support
 
-use async_trait::async_trait;
 use futures::Stream;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -108,7 +107,6 @@ impl ErrorMapper<ProviderError> for SparkErrorMapper {
     }
 }
 
-#[async_trait]
 impl LLMProvider for SparkProvider {
     fn name(&self) -> &'static str {
         "spark"

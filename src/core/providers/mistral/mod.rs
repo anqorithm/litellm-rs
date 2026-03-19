@@ -3,7 +3,6 @@
 //! Mistral AI model integration using the base infrastructure.
 //! This implementation eliminates the need for common_utils.rs.
 
-use async_trait::async_trait;
 use futures::Stream;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -251,7 +250,6 @@ impl MistralProvider {
     }
 }
 
-#[async_trait]
 impl LLMProvider for MistralProvider {
     fn name(&self) -> &'static str {
         "mistral"

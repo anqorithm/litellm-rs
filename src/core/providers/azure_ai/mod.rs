@@ -20,7 +20,6 @@ pub use image_generation::AzureAIImageHandler;
 pub use models::{AzureAIModelRegistry, AzureAIModelSpec, AzureAIModelType, get_azure_ai_registry};
 pub use rerank::{AzureAIRerankHandler, AzureAIRerankUtils, RerankRequest, RerankResponse};
 
-use async_trait::async_trait;
 use futures::Stream;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -127,7 +126,6 @@ impl AzureAIProvider {
     }
 }
 
-#[async_trait]
 impl LLMProvider for AzureAIProvider {
     fn name(&self) -> &'static str {
         "azure_ai"

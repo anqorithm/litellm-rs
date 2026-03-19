@@ -2,7 +2,6 @@
 //!
 //! SAP AI Core and Foundation integration
 
-use async_trait::async_trait;
 use futures::Stream;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -113,7 +112,6 @@ impl ErrorMapper<SapAIError> for SapAIErrorMapper {
     }
 }
 
-#[async_trait]
 impl LLMProvider for SapAIProvider {
     fn name(&self) -> &'static str {
         "sap_ai"

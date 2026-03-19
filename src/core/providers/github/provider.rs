@@ -3,7 +3,6 @@
 //! Implements the LLMProvider trait for GitHub Models API.
 //! The API is OpenAI-compatible, making the implementation straightforward.
 
-use async_trait::async_trait;
 use futures::Stream;
 use std::collections::HashMap;
 use std::pin::Pin;
@@ -149,7 +148,6 @@ impl GitHubProvider {
     }
 }
 
-#[async_trait]
 impl LLMProvider for GitHubProvider {
     fn name(&self) -> &'static str {
         "github"

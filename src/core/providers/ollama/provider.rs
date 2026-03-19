@@ -2,7 +2,6 @@
 //!
 //! Implements the LLMProvider trait for Ollama's local inference server.
 
-use async_trait::async_trait;
 use futures::Stream;
 use std::collections::HashMap;
 use std::pin::Pin;
@@ -452,7 +451,6 @@ impl OllamaProvider {
     }
 }
 
-#[async_trait]
 impl LLMProvider for OllamaProvider {
     fn name(&self) -> &'static str {
         "ollama"

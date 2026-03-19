@@ -2,7 +2,6 @@
 //!
 //! Implementation
 
-use async_trait::async_trait;
 use futures::Stream;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -112,7 +111,6 @@ impl AnthropicProvider {
     }
 }
 
-#[async_trait]
 impl LLMProvider for AnthropicProvider {
     fn name(&self) -> &'static str {
         "anthropic"

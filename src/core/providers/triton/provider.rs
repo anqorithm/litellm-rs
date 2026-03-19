@@ -2,7 +2,6 @@
 //!
 //! Implements the LLMProvider trait for NVIDIA Triton Inference Server.
 
-use async_trait::async_trait;
 use futures::Stream;
 use std::collections::HashMap;
 use std::pin::Pin;
@@ -378,7 +377,6 @@ impl TritonProvider {
     }
 }
 
-#[async_trait]
 impl LLMProvider for TritonProvider {
     fn name(&self) -> &'static str {
         PROVIDER_NAME

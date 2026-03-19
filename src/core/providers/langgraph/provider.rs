@@ -2,7 +2,6 @@
 //!
 //! Main provider implementation for LangGraph Cloud integration
 
-use async_trait::async_trait;
 use futures::Stream;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -370,7 +369,6 @@ impl LangGraphProvider {
     }
 }
 
-#[async_trait]
 impl LLMProvider for LangGraphProvider {
     fn name(&self) -> &'static str {
         PROVIDER_NAME

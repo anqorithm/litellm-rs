@@ -2,7 +2,6 @@
 //!
 //! Implements the LLMProvider trait for Oracle Cloud Infrastructure Generative AI.
 
-use async_trait::async_trait;
 use futures::Stream;
 use std::collections::HashMap;
 use std::pin::Pin;
@@ -270,7 +269,6 @@ impl OciProvider {
     }
 }
 
-#[async_trait]
 impl LLMProvider for OciProvider {
     fn name(&self) -> &'static str {
         "oci"

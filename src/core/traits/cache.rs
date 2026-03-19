@@ -2,14 +2,13 @@
 //!
 //! Provides unified cache interface supporting multiple cache backends
 
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
 /// Core cache trait
 ///
 /// Defines unified cache operation interface
-#[async_trait]
+#[allow(async_fn_in_trait)]
 pub trait Cache<K, V>: Send + Sync
 where
     K: Send + Sync,
@@ -156,7 +155,7 @@ impl Default for CacheStats {
 }
 
 /// Cache trait with statistics functionality
-#[async_trait]
+#[allow(async_fn_in_trait)]
 pub trait CacheWithStats<K, V>: Cache<K, V>
 where
     K: Send + Sync,
@@ -187,7 +186,7 @@ pub enum CacheEvent<K, V> {
 }
 
 /// Cache event listener
-#[async_trait]
+#[allow(async_fn_in_trait)]
 pub trait CacheEventListener<K, V>: Send + Sync
 where
     K: Send + Sync,

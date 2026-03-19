@@ -2,7 +2,6 @@
 //!
 //! Recraft AI image generation platform integration
 
-use async_trait::async_trait;
 use futures::Stream;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -110,7 +109,6 @@ impl ErrorMapper<RecraftError> for RecraftErrorMapper {
     }
 }
 
-#[async_trait]
 impl LLMProvider for RecraftProvider {
     fn name(&self) -> &'static str {
         "recraft"

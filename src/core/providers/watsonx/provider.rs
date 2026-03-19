@@ -2,7 +2,6 @@
 //!
 //! Implements the LLMProvider trait for IBM Watsonx.ai platform.
 
-use async_trait::async_trait;
 use futures::Stream;
 use std::collections::HashMap;
 use std::pin::Pin;
@@ -417,7 +416,6 @@ impl WatsonxProvider {
     }
 }
 
-#[async_trait]
 impl LLMProvider for WatsonxProvider {
     fn name(&self) -> &'static str {
         "watsonx"

@@ -1,6 +1,5 @@
 //! Main Morph AI Provider Implementation
 
-use async_trait::async_trait;
 use futures::Stream;
 use std::collections::HashMap;
 use std::pin::Pin;
@@ -137,7 +136,6 @@ impl MorphProvider {
     }
 }
 
-#[async_trait]
 impl LLMProvider for MorphProvider {
     fn name(&self) -> &'static str {
         "morph"

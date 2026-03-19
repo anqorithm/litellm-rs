@@ -2,7 +2,6 @@
 //!
 //! Implements the LLMProvider trait for Cloudflare's Workers AI models.
 
-use async_trait::async_trait;
 use futures::Stream;
 use std::collections::HashMap;
 use std::pin::Pin;
@@ -192,7 +191,6 @@ impl CloudflareProvider {
     }
 }
 
-#[async_trait]
 impl LLMProvider for CloudflareProvider {
     fn name(&self) -> &'static str {
         "cloudflare"

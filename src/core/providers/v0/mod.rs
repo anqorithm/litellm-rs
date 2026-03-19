@@ -19,7 +19,6 @@ use crate::core::{
     },
 };
 use crate::utils::net::http::create_custom_client;
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -226,7 +225,6 @@ impl V0Provider {
 /// Implementation of unified LLMProvider trait
 ///
 /// V0 is an OpenAI-compatible AI platform
-#[async_trait]
 impl LLMProvider for V0Provider {
     /// Get
     fn name(&self) -> &'static str {

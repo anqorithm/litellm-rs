@@ -5,7 +5,6 @@
 //! - Embeddings (embed models)
 //! - Reranking (rerank models)
 
-use async_trait::async_trait;
 use futures::Stream;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -342,7 +341,6 @@ impl CohereProvider {
     }
 }
 
-#[async_trait]
 impl LLMProvider for CohereProvider {
     fn name(&self) -> &'static str {
         "cohere"

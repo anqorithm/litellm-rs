@@ -1,6 +1,5 @@
 //! Main Predibase Provider Implementation
 
-use async_trait::async_trait;
 use futures::Stream;
 use std::collections::HashMap;
 use std::pin::Pin;
@@ -145,7 +144,6 @@ impl PredibaseProvider {
     }
 }
 
-#[async_trait]
 impl LLMProvider for PredibaseProvider {
     fn name(&self) -> &'static str {
         PROVIDER_NAME

@@ -1,6 +1,5 @@
 //! Codestral Provider Implementation
 
-use async_trait::async_trait;
 use futures::Stream;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -180,7 +179,6 @@ impl CodestralProvider {
     }
 }
 
-#[async_trait]
 impl LLMProvider for CodestralProvider {
     fn name(&self) -> &'static str {
         "codestral"

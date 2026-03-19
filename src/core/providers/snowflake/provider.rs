@@ -2,7 +2,6 @@
 //!
 //! Implements the LLMProvider trait for Snowflake Cortex AI.
 
-use async_trait::async_trait;
 use futures::Stream;
 use std::collections::HashMap;
 use std::pin::Pin;
@@ -126,7 +125,6 @@ impl SnowflakeProvider {
     }
 }
 
-#[async_trait]
 impl LLMProvider for SnowflakeProvider {
     fn name(&self) -> &'static str {
         "snowflake"

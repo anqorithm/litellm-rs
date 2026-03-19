@@ -71,8 +71,7 @@ macro_rules! define_openai_compatible_provider {
             }
         }
 
-        #[async_trait::async_trait]
-        impl $crate::core::traits::provider::llm_provider::trait_definition::LLMProvider for $struct_name {
+                impl $crate::core::traits::provider::llm_provider::trait_definition::LLMProvider for $struct_name {
 
             fn name(&self) -> &'static str {
                 $provider_name

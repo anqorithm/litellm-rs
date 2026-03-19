@@ -2,7 +2,6 @@
 //!
 //! Topaz AI platform integration
 
-use async_trait::async_trait;
 use futures::Stream;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -110,7 +109,6 @@ impl ErrorMapper<TopazError> for TopazErrorMapper {
     }
 }
 
-#[async_trait]
 impl LLMProvider for TopazProvider {
     fn name(&self) -> &'static str {
         "topaz"

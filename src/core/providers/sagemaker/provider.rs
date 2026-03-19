@@ -2,7 +2,6 @@
 //!
 //! Implements the LLMProvider trait for AWS Sagemaker endpoints.
 
-use async_trait::async_trait;
 use futures::Stream;
 use std::collections::HashMap;
 use std::pin::Pin;
@@ -105,7 +104,6 @@ impl SagemakerProvider {
     }
 }
 
-#[async_trait]
 impl LLMProvider for SagemakerProvider {
     fn name(&self) -> &'static str {
         "sagemaker"

@@ -2,7 +2,6 @@
 //!
 //! Main provider implementation for any OpenAI-compatible API endpoint
 
-use async_trait::async_trait;
 use futures::Stream;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -374,7 +373,6 @@ where
     }
 }
 
-#[async_trait]
 impl LLMProvider for OpenAILikeProvider {
     fn name(&self) -> &'static str {
         self.provider_name

@@ -46,7 +46,6 @@ pub use image::{AzureImageHandler, AzureImageUtils};
 // Re-export response processing functionality
 pub use responses::{AzureResponseHandler, AzureResponseProcessor, AzureResponseUtils};
 
-use async_trait::async_trait;
 use futures::Stream;
 use serde_json::Value;
 use std::pin::Pin;
@@ -128,7 +127,6 @@ impl AzureOpenAIProvider {
 // Azure error mapper is now re-exported from common_utils
 
 /// Implement the unified LLMProvider trait for AzureOpenAIProvider
-#[async_trait]
 impl LLMProvider for AzureOpenAIProvider {
     fn name(&self) -> &'static str {
         "azure_openai"

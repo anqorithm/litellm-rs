@@ -2,7 +2,6 @@
 //!
 //! Implements the LLMProvider trait for Baseten's serverless ML inference.
 
-use async_trait::async_trait;
 use futures::Stream;
 use std::collections::HashMap;
 use std::pin::Pin;
@@ -154,7 +153,6 @@ impl BasetenProvider {
     }
 }
 
-#[async_trait]
 impl LLMProvider for BasetenProvider {
     fn name(&self) -> &'static str {
         "baseten"

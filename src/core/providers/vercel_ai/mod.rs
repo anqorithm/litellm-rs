@@ -2,7 +2,6 @@
 //!
 //! Vercel AI SDK integration
 
-use async_trait::async_trait;
 use futures::Stream;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -114,7 +113,6 @@ impl ErrorMapper<VercelAIError> for VercelAIErrorMapper {
     }
 }
 
-#[async_trait]
 impl LLMProvider for VercelAIProvider {
     fn name(&self) -> &'static str {
         "vercel_ai"

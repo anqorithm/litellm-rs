@@ -1,6 +1,5 @@
 //! Main NLP Cloud Provider Implementation
 
-use async_trait::async_trait;
 use futures::Stream;
 use std::collections::HashMap;
 use std::pin::Pin;
@@ -139,7 +138,6 @@ impl NlpCloudProvider {
     }
 }
 
-#[async_trait]
 impl LLMProvider for NlpCloudProvider {
     fn name(&self) -> &'static str {
         PROVIDER_NAME

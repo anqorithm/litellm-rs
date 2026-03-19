@@ -2,7 +2,6 @@
 //!
 //! SearXNG meta search engine integration
 
-use async_trait::async_trait;
 use futures::Stream;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -110,7 +109,6 @@ impl ErrorMapper<SearXNGError> for SearXNGErrorMapper {
     }
 }
 
-#[async_trait]
 impl LLMProvider for SearXNGProvider {
     fn name(&self) -> &'static str {
         "searxng"

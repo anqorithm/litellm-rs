@@ -2,7 +2,6 @@
 //!
 //! Implements the LLMProvider trait for Clarifai's AI platform.
 
-use async_trait::async_trait;
 use futures::Stream;
 use std::collections::HashMap;
 use std::pin::Pin;
@@ -155,7 +154,6 @@ impl ClarifaiProvider {
     }
 }
 
-#[async_trait]
 impl LLMProvider for ClarifaiProvider {
     fn name(&self) -> &'static str {
         "clarifai"

@@ -73,8 +73,7 @@ macro_rules! define_pooled_http_provider_with_hooks {
             }
         }
 
-        #[async_trait::async_trait]
-        impl $crate::core::traits::provider::llm_provider::trait_definition::LLMProvider for $struct_name {
+                impl $crate::core::traits::provider::llm_provider::trait_definition::LLMProvider for $struct_name {
 
             fn name(&self) -> &'static str {
                 $provider_name

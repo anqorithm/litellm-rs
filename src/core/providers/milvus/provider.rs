@@ -11,7 +11,6 @@
 //!
 //! Reference: <https://milvus.io/docs/restful_api.md>
 
-use async_trait::async_trait;
 use futures::Stream;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -356,7 +355,6 @@ impl MilvusProvider {
     }
 }
 
-#[async_trait]
 impl LLMProvider for MilvusProvider {
     fn name(&self) -> &'static str {
         PROVIDER_NAME

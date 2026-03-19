@@ -3,7 +3,6 @@
 //! Implements the LLMProvider trait for GitHub Copilot API.
 //! Handles OAuth authentication and OpenAI-compatible chat completions.
 
-use async_trait::async_trait;
 use bytes::Bytes;
 use futures::Stream;
 use std::collections::HashMap;
@@ -249,7 +248,6 @@ impl GitHubCopilotProvider {
     }
 }
 
-#[async_trait]
 impl LLMProvider for GitHubCopilotProvider {
     fn name(&self) -> &'static str {
         "github_copilot"

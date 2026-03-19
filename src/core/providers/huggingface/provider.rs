@@ -2,7 +2,6 @@
 //!
 //! Main provider implementation integrating HuggingFace Hub capabilities.
 
-use async_trait::async_trait;
 use futures::Stream;
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -260,7 +259,6 @@ impl HuggingFaceProvider {
     }
 }
 
-#[async_trait]
 impl LLMProvider for HuggingFaceProvider {
     fn name(&self) -> &'static str {
         "huggingface"

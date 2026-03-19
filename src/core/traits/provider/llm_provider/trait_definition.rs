@@ -2,7 +2,6 @@
 //!
 //! Defines the unified interface for all AI providers
 
-use async_trait::async_trait;
 use futures::Stream;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -40,7 +39,7 @@ use crate::core::types::{
 /// The `LLMProvider` trait is the core abstraction for AI providers. All providers
 /// use `ProviderError` as the unified error type. See existing provider
 /// implementations in `src/core/providers/` for reference.
-#[async_trait]
+#[allow(async_fn_in_trait)]
 pub trait LLMProvider: Send + Sync + Debug + 'static {
     // ==================== Basic Metadata ====================
 

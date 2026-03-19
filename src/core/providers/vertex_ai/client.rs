@@ -1,6 +1,5 @@
 //! Vertex AI Client Implementation
 
-use async_trait::async_trait;
 use reqwest::{Client, Response};
 use serde_json::Value;
 use std::sync::Arc;
@@ -386,7 +385,6 @@ impl VertexAIProvider {
     }
 }
 
-#[async_trait]
 impl LLMProvider for VertexAIProvider {
     fn name(&self) -> &'static str {
         "vertex_ai"

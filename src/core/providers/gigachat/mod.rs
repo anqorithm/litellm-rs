@@ -2,7 +2,6 @@
 //!
 //! GigaChat (Sber) AI model integration with custom authentication.
 
-use async_trait::async_trait;
 use futures::Stream;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -192,7 +191,6 @@ impl GigaChatProvider {
     }
 }
 
-#[async_trait]
 impl LLMProvider for GigaChatProvider {
     fn name(&self) -> &'static str {
         "gigachat"

@@ -2,7 +2,6 @@
 //!
 //! Implements the LLMProvider trait for Gradient AI's agent and model platform.
 
-use async_trait::async_trait;
 use futures::Stream;
 use std::collections::HashMap;
 use std::pin::Pin;
@@ -188,7 +187,6 @@ impl GradientAIProvider {
     }
 }
 
-#[async_trait]
 impl LLMProvider for GradientAIProvider {
     fn name(&self) -> &'static str {
         "gradient_ai"

@@ -3,7 +3,6 @@
 //! Implements the LLMProvider trait for Voyage AI's specialized embedding platform.
 //! Voyage AI is focused on high-quality text embeddings for search and retrieval.
 
-use async_trait::async_trait;
 use futures::Stream;
 use std::collections::HashMap;
 use std::pin::Pin;
@@ -240,7 +239,6 @@ impl VoyageProvider {
     }
 }
 
-#[async_trait]
 impl LLMProvider for VoyageProvider {
     fn name(&self) -> &'static str {
         "voyage"

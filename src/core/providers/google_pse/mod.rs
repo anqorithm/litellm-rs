@@ -2,7 +2,6 @@
 //!
 //! Google Programmable Search Engine integration for search-augmented generation.
 
-use async_trait::async_trait;
 use futures::Stream;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -171,7 +170,6 @@ impl GooglePSEProvider {
     }
 }
 
-#[async_trait]
 impl LLMProvider for GooglePSEProvider {
     fn name(&self) -> &'static str {
         "google_pse"

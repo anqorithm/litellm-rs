@@ -2,7 +2,6 @@
 //!
 //! Main provider implementation for Fal AI image generation
 
-use async_trait::async_trait;
 use futures::Stream;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -161,7 +160,6 @@ impl FalAIProvider {
     }
 }
 
-#[async_trait]
 impl LLMProvider for FalAIProvider {
     fn name(&self) -> &'static str {
         "fal_ai"

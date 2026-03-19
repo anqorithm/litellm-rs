@@ -40,8 +40,7 @@ macro_rules! standard_provider {
             }
         }
 
-        #[async_trait::async_trait]
-        impl LLMProvider for $struct_name {
+                impl LLMProvider for $struct_name {
             fn name(&self) -> &str {
                 $name
             }

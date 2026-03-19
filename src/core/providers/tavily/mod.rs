@@ -2,7 +2,6 @@
 //!
 //! Tavily AI search API integration
 
-use async_trait::async_trait;
 use futures::Stream;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -110,7 +109,6 @@ impl ErrorMapper<TavilyError> for TavilyErrorMapper {
     }
 }
 
-#[async_trait]
 impl LLMProvider for TavilyProvider {
     fn name(&self) -> &'static str {
         "tavily"

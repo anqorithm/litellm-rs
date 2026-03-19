@@ -1,6 +1,5 @@
 //! Main Petals Provider Implementation
 
-use async_trait::async_trait;
 use futures::Stream;
 use std::collections::HashMap;
 use std::pin::Pin;
@@ -133,7 +132,6 @@ impl PetalsProvider {
     }
 }
 
-#[async_trait]
 impl LLMProvider for PetalsProvider {
     fn name(&self) -> &'static str {
         "petals"

@@ -2,7 +2,6 @@
 //!
 //! Main provider implementation for Runway ML video and image generation.
 
-use async_trait::async_trait;
 use futures::Stream;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -377,7 +376,6 @@ impl RunwayMLProvider {
     }
 }
 
-#[async_trait]
 impl LLMProvider for RunwayMLProvider {
     fn name(&self) -> &'static str {
         PROVIDER_NAME

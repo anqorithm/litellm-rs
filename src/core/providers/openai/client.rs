@@ -2,7 +2,6 @@
 //!
 //! Unified client following the new provider architecture
 
-use async_trait::async_trait;
 use futures::Stream;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -336,7 +335,6 @@ impl OpenAIProvider {
     }
 }
 
-#[async_trait]
 impl LLMProvider for OpenAIProvider {
     fn name(&self) -> &'static str {
         "openai"

@@ -2,7 +2,6 @@
 //!
 //! Main provider implementation for Stability AI image generation.
 
-use async_trait::async_trait;
 use futures::Stream;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -180,7 +179,6 @@ impl StabilityProvider {
     }
 }
 
-#[async_trait]
 impl LLMProvider for StabilityProvider {
     fn name(&self) -> &'static str {
         "stability"
