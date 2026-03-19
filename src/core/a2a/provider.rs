@@ -269,7 +269,7 @@ impl A2AProviderAdapter for LangGraphProvider {
 pub fn get_provider_adapter(provider: AgentProvider) -> Arc<dyn A2AProviderAdapter> {
     match provider {
         AgentProvider::LangGraph => Arc::new(LangGraphProvider::new()),
-        AgentProvider::VertexAI => Arc::new(GenericA2AProvider::new()), // TODO: Add specific adapter
+        AgentProvider::VertexAI => Arc::new(GenericA2AProvider::new()), // NOTE: dedicated VertexAI adapter not yet implemented
         AgentProvider::AzureAIFoundry => Arc::new(GenericA2AProvider::new()),
         AgentProvider::BedrockAgentCore => Arc::new(GenericA2AProvider::new()),
         AgentProvider::PydanticAI => Arc::new(GenericA2AProvider::new()),

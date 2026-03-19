@@ -365,7 +365,7 @@ impl VertexAuth {
 
     /// Get token from AWS metadata service
     async fn get_aws_token(&self, _source: &CredentialSource) -> Result<String> {
-        // TODO: Implement AWS metadata service token retrieval
+        // NOTE: AWS metadata service token retrieval not yet implemented
         Err(VertexAuthError::AwsTokenNotImplemented)
     }
 

@@ -44,7 +44,7 @@ pub mod types;
 // These modules require the following database methods to be implemented:
 // - virtual_keys: store_virtual_key, get_virtual_key, update_virtual_key, etc.
 // - user_management: get_user, create_user, get_team, create_team, etc.
-// TODO: Implement database methods and enable these modules
+// NOTE: Requires database method implementations (virtual_keys, user_management).
 // pub mod user_management;
 // pub mod virtual_keys;
 pub mod webhooks;

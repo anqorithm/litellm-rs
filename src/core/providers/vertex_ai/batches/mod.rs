@@ -143,7 +143,7 @@ impl BatchHandler {
         &self,
         request: CreateBatchJobRequest,
     ) -> Result<BatchJob, ProviderError> {
-        // TODO: Implement actual batch job creation via Vertex AI API
+        // NOTE: actual batch job creation via Vertex AI API not yet implemented
         Ok(BatchJob {
             id: uuid::Uuid::new_v4().to_string(),
             status: BatchJobStatus::Pending,
@@ -161,7 +161,7 @@ impl BatchHandler {
 
     /// Get batch job status
     pub async fn get_batch_job(&self, _job_id: &str) -> Result<BatchJob, ProviderError> {
-        // TODO: Implement actual job retrieval
+        // NOTE: actual job retrieval not yet implemented
         Err(ProviderError::not_supported(
             "vertex_ai",
             "Batch job retrieval not yet implemented",
@@ -175,19 +175,19 @@ impl BatchHandler {
         _page_size: Option<i32>,
         _page_token: Option<String>,
     ) -> Result<Vec<BatchJob>, ProviderError> {
-        // TODO: Implement actual job listing
+        // NOTE: actual job listing not yet implemented
         Ok(Vec::new())
     }
 
     /// Cancel a batch job
     pub async fn cancel_batch_job(&self, _job_id: &str) -> Result<(), ProviderError> {
-        // TODO: Implement actual job cancellation
+        // NOTE: actual job cancellation not yet implemented
         Ok(())
     }
 
     /// Delete a batch job
     pub async fn delete_batch_job(&self, _job_id: &str) -> Result<(), ProviderError> {
-        // TODO: Implement actual job deletion
+        // NOTE: actual job deletion not yet implemented
         Ok(())
     }
 }

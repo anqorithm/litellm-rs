@@ -9,23 +9,23 @@ pub mod base;
 // Tier 1 providers removed in favor of registry/catalog.rs are commented with their tier.
 #[cfg(feature = "providers-extended")]
 pub mod ai21;
-// aiml_api: Tier 1 → registry/catalog.rs
-// aleph_alpha: Tier 1 → registry/catalog.rs
+// aiml_api: Tier 1 -> registry/catalog.rs
+// aleph_alpha: Tier 1 -> registry/catalog.rs
 #[cfg(feature = "providers-extended")]
 pub mod amazon_nova;
 pub mod anthropic;
-// anyscale: Tier 1 → registry/catalog.rs
+// anyscale: Tier 1 -> registry/catalog.rs
 #[cfg(feature = "providers-extra")]
 pub mod azure;
 #[cfg(feature = "providers-extra")]
 pub mod azure_ai;
-// baichuan: Tier 1 → registry/catalog.rs
+// baichuan: Tier 1 -> registry/catalog.rs
 #[cfg(feature = "providers-extended")]
 pub mod baseten;
 #[cfg(feature = "providers-extra")]
 pub mod bedrock;
-// bytez: Tier 1 → registry/catalog.rs
-// cerebras: Tier 1 → registry/catalog.rs
+// bytez: Tier 1 -> registry/catalog.rs
+// cerebras: Tier 1 -> registry/catalog.rs
 #[cfg(feature = "providers-extended")]
 pub mod clarifai;
 pub mod cloudflare;
@@ -33,22 +33,22 @@ pub mod cloudflare;
 pub mod codestral;
 #[cfg(feature = "providers-extended")]
 pub mod cohere;
-// comet_api: Tier 1 → registry/catalog.rs
-// compactifai: Tier 1 → registry/catalog.rs
+// comet_api: Tier 1 -> registry/catalog.rs
+// compactifai: Tier 1 -> registry/catalog.rs
 #[cfg(feature = "providers-extended")]
 pub mod custom_api;
-// dashscope: Tier 1 → registry/catalog.rs
+// dashscope: Tier 1 -> registry/catalog.rs
 #[cfg(feature = "providers-extended")]
 pub mod databricks;
 #[cfg(feature = "providers-extended")]
 pub mod datarobot;
 #[cfg(feature = "providers-extended")]
 pub mod deepgram;
-// deepinfra: Tier 1 → registry/catalog.rs
+// deepinfra: Tier 1 -> registry/catalog.rs
 #[cfg(feature = "providers-extended")]
 pub mod deepl;
-// deepseek: Tier 1 → registry/catalog.rs
-// docker_model_runner: Tier 1 → registry/catalog.rs
+// deepseek: Tier 1 -> registry/catalog.rs
+// docker_model_runner: Tier 1 -> registry/catalog.rs
 #[cfg(feature = "providers-extended")]
 pub mod elevenlabs;
 #[cfg(feature = "providers-extended")]
@@ -57,12 +57,12 @@ pub mod empower;
 pub mod exa_ai;
 #[cfg(feature = "providers-extended")]
 pub mod fal_ai;
-// featherless: Tier 1 → registry/catalog.rs
+// featherless: Tier 1 -> registry/catalog.rs
 #[cfg(feature = "providers-extended")]
 pub mod firecrawl;
-// fireworks: Tier 1 → registry/catalog.rs
-// friendliai: Tier 1 → registry/catalog.rs
-// galadriel: Tier 1 → registry/catalog.rs
+// fireworks: Tier 1 -> registry/catalog.rs
+// friendliai: Tier 1 -> registry/catalog.rs
+// galadriel: Tier 1 -> registry/catalog.rs
 #[cfg(feature = "providers-extended")]
 pub mod gemini;
 #[cfg(feature = "providers-extended")]
@@ -75,59 +75,59 @@ pub mod github_copilot;
 pub mod google_pse;
 #[cfg(feature = "providers-extended")]
 pub mod gradient_ai;
-// groq: Tier 1 → registry/catalog.rs
-// heroku: Tier 1 → registry/catalog.rs
-// hosted_vllm: Tier 1 → registry/catalog.rs
+// groq: Tier 1 -> registry/catalog.rs
+// heroku: Tier 1 -> registry/catalog.rs
+// hosted_vllm: Tier 1 -> registry/catalog.rs
 #[cfg(feature = "providers-extended")]
 pub mod huggingface;
-// hyperbolic: Tier 1 → registry/catalog.rs
-// infinity: Tier 1 → registry/catalog.rs
+// hyperbolic: Tier 1 -> registry/catalog.rs
+// infinity: Tier 1 -> registry/catalog.rs
 #[cfg(feature = "providers-extended")]
 pub mod jina;
-// lambda_ai: Tier 1 → registry/catalog.rs
+// lambda_ai: Tier 1 -> registry/catalog.rs
 #[cfg(feature = "providers-extended")]
 pub mod langgraph;
-// lemonade: Tier 1 → registry/catalog.rs
-// linkup: Tier 1 → registry/catalog.rs
-// llamafile: Tier 1 → registry/catalog.rs
-// lm_studio: Tier 1 → registry/catalog.rs
+// lemonade: Tier 1 -> registry/catalog.rs
+// linkup: Tier 1 -> registry/catalog.rs
+// llamafile: Tier 1 -> registry/catalog.rs
+// lm_studio: Tier 1 -> registry/catalog.rs
 #[cfg(feature = "providers-extended")]
 pub mod manus;
-// maritalk: Tier 1 → registry/catalog.rs
+// maritalk: Tier 1 -> registry/catalog.rs
 #[cfg(feature = "providers-extra")]
 pub mod meta_llama;
 #[cfg(feature = "providers-extended")]
 pub mod milvus;
-// minimax: Tier 1 → registry/catalog.rs
+// minimax: Tier 1 -> registry/catalog.rs
 pub mod mistral;
-// moonshot: Tier 1 → registry/catalog.rs
+// moonshot: Tier 1 -> registry/catalog.rs
 #[cfg(feature = "providers-extended")]
 pub mod morph;
-// nanogpt: Tier 1 → registry/catalog.rs
-// nebius: Tier 1 → registry/catalog.rs
+// nanogpt: Tier 1 -> registry/catalog.rs
+// nebius: Tier 1 -> registry/catalog.rs
 #[cfg(feature = "providers-extended")]
 pub mod nlp_cloud;
-// novita: Tier 1 → registry/catalog.rs
-// nscale: Tier 1 → registry/catalog.rs
-// nvidia_nim: Tier 1 → registry/catalog.rs
+// novita: Tier 1 -> registry/catalog.rs
+// nscale: Tier 1 -> registry/catalog.rs
+// nvidia_nim: Tier 1 -> registry/catalog.rs
 #[cfg(feature = "providers-extended")]
 pub mod oci;
 #[cfg(feature = "providers-extended")]
 pub mod ollama;
-// oobabooga: Tier 1 → registry/catalog.rs
+// oobabooga: Tier 1 -> registry/catalog.rs
 pub mod openai;
 pub mod openai_like;
-// openrouter: Tier 1 → registry/catalog.rs
-// ovhcloud: Tier 1 → registry/catalog.rs
-// perplexity: Tier 1 → registry/catalog.rs
+// openrouter: Tier 1 -> registry/catalog.rs
+// ovhcloud: Tier 1 -> registry/catalog.rs
+// perplexity: Tier 1 -> registry/catalog.rs
 #[cfg(feature = "providers-extended")]
 pub mod petals;
 #[cfg(feature = "providers-extended")]
 pub mod pg_vector;
-// poe: Tier 1 → registry/catalog.rs
+// poe: Tier 1 -> registry/catalog.rs
 #[cfg(feature = "providers-extended")]
 pub mod predibase;
-// qwen: Tier 1 → registry/catalog.rs
+// qwen: Tier 1 -> registry/catalog.rs
 #[cfg(feature = "providers-extended")]
 pub mod ragflow;
 #[cfg(feature = "providers-extended")]
@@ -138,12 +138,12 @@ pub mod replicate;
 pub mod runwayml;
 #[cfg(feature = "providers-extended")]
 pub mod sagemaker;
-// sambanova: Tier 1 → registry/catalog.rs
+// sambanova: Tier 1 -> registry/catalog.rs
 #[cfg(feature = "providers-extended")]
 pub mod sap_ai;
 #[cfg(feature = "providers-extended")]
 pub mod searxng;
-// siliconflow: Tier 1 → registry/catalog.rs
+// siliconflow: Tier 1 -> registry/catalog.rs
 #[cfg(feature = "providers-extended")]
 pub mod snowflake;
 #[cfg(feature = "providers-extended")]
@@ -152,7 +152,7 @@ pub mod spark;
 pub mod stability;
 #[cfg(feature = "providers-extended")]
 pub mod tavily;
-// together: Tier 1 → registry/catalog.rs
+// together: Tier 1 -> registry/catalog.rs
 #[cfg(feature = "providers-extended")]
 pub mod topaz;
 #[cfg(feature = "providers-extended")]
@@ -163,18 +163,18 @@ pub mod v0;
 pub mod vercel_ai;
 #[cfg(feature = "providers-extra")]
 pub mod vertex_ai;
-// vllm: Tier 1 → registry/catalog.rs
-// volcengine: Tier 1 → registry/catalog.rs
+// vllm: Tier 1 -> registry/catalog.rs
+// volcengine: Tier 1 -> registry/catalog.rs
 #[cfg(feature = "providers-extended")]
 pub mod voyage;
-// wandb: Tier 1 → registry/catalog.rs
+// wandb: Tier 1 -> registry/catalog.rs
 #[cfg(feature = "providers-extended")]
 pub mod watsonx;
-// xai: Tier 1 → registry/catalog.rs
-// xiaomi_mimo: Tier 1 → registry/catalog.rs
-// xinference: Tier 1 → registry/catalog.rs
-// yi: Tier 1 → registry/catalog.rs
-// zhipu: Tier 1 → registry/catalog.rs
+// xai: Tier 1 -> registry/catalog.rs
+// xiaomi_mimo: Tier 1 -> registry/catalog.rs
+// xinference: Tier 1 -> registry/catalog.rs
+// yi: Tier 1 -> registry/catalog.rs
+// zhipu: Tier 1 -> registry/catalog.rs
 
 // Shared utilities and architecture
 pub mod macros; // Macros for reducing boilerplate
@@ -226,34 +226,63 @@ pub struct ModelPricing {
 }
 
 // ==================== Provider Dispatch Macros ====================
-// These macros eliminate repetitive match patterns across all provider methods
+//
+// Consolidated into a single `dispatch_provider!` macro with 4 dispatch kinds,
+// selected by the first token.  The Provider variant list appears once per
+// `@expand` arm (4 arms total).  To add or remove a variant, update only the
+// `@expand` arms below.
+//
+// Former macros -> new calling convention:
+//   dispatch_provider!(self, method)              -> dispatch_provider!(sync, self, method)
+//   dispatch_provider!(self, method, arg)         -> dispatch_provider!(sync, self, method, arg)
+//   dispatch_provider_async!(self, m, a, b)       -> dispatch_provider!(async_err, self, m, a, b)
+//   dispatch_provider_value!(self, method)        -> dispatch_provider!(value, self, method)
+//   dispatch_provider_value!(self, method, arg)   -> dispatch_provider!(value, self, method, arg)
+//   dispatch_provider_async_direct!(self, method) -> dispatch_provider!(async_direct, self, method)
 
-/// Macro for dispatching synchronous methods to all providers
 macro_rules! dispatch_provider {
-    ($self:expr, $method:ident) => {
+    // -- sync: p.$method(args...) --
+    (sync, $self:expr, $method:ident) => {
+        dispatch_provider!(@expand sync, $self, $method,)
+    };
+    (sync, $self:expr, $method:ident, $($arg:expr),+ $(,)?) => {
+        dispatch_provider!(@expand sync, $self, $method, $($arg),+)
+    };
+
+    // -- async_err: LLMProvider::$method(p, args...).await.map_err(ProviderError::from) --
+    (async_err, $self:expr, $method:ident $(, $arg:expr)* $(,)?) => {
+        dispatch_provider!(@expand async_err, $self, $method, $($arg),*)
+    };
+
+    // -- value: LLMProvider::$method(p, args...) --
+    (value, $self:expr, $method:ident) => {
+        dispatch_provider!(@expand value, $self, $method,)
+    };
+    (value, $self:expr, $method:ident, $($arg:expr),+ $(,)?) => {
+        dispatch_provider!(@expand value, $self, $method, $($arg),+)
+    };
+
+    // -- async_direct: LLMProvider::$method(p).await --
+    (async_direct, $self:expr, $method:ident) => {
+        dispatch_provider!(@expand async_direct, $self, $method,)
+    };
+
+    // ================================================================
+    // @expand arms: single source of truth for the Provider variant list.
+    // To add/remove a variant, update these 4 arms.
+    // ================================================================
+
+    (@expand sync, $self:expr, $method:ident, $($arg:expr),*) => {
         match $self {
-            Provider::OpenAI(p) => p.$method(),
-            Provider::Anthropic(p) => p.$method(),
-            Provider::Mistral(p) => p.$method(),
-            Provider::Cloudflare(p) => p.$method(),
-            Provider::OpenAILike(p) => p.$method(),
+            Provider::OpenAI(p) => p.$method($($arg),*),
+            Provider::Anthropic(p) => p.$method($($arg),*),
+            Provider::Mistral(p) => p.$method($($arg),*),
+            Provider::Cloudflare(p) => p.$method($($arg),*),
+            Provider::OpenAILike(p) => p.$method($($arg),*),
         }
     };
 
-    ($self:expr, $method:ident, $($arg:expr),+) => {
-        match $self {
-            Provider::OpenAI(p) => p.$method($($arg),+),
-            Provider::Anthropic(p) => p.$method($($arg),+),
-            Provider::Mistral(p) => p.$method($($arg),+),
-            Provider::Cloudflare(p) => p.$method($($arg),+),
-            Provider::OpenAILike(p) => p.$method($($arg),+),
-        }
-    };
-}
-
-/// Macro for dispatching async methods with unified error conversion
-macro_rules! dispatch_provider_async {
-    ($self:expr, $method:ident, $($arg:expr),*) => {
+    (@expand async_err, $self:expr, $method:ident, $($arg:expr),*) => {
         match $self {
             Provider::OpenAI(p) => LLMProvider::$method(p, $($arg),*).await.map_err(ProviderError::from),
             Provider::Anthropic(p) => LLMProvider::$method(p, $($arg),*).await.map_err(ProviderError::from),
@@ -262,36 +291,32 @@ macro_rules! dispatch_provider_async {
             Provider::OpenAILike(p) => LLMProvider::$method(p, $($arg),*).await.map_err(ProviderError::from),
         }
     };
-}
 
-/// Macro for dispatching methods that return values directly (no Result)
-macro_rules! dispatch_provider_value {
-    ($self:expr, $method:ident) => {
+    (@expand value, $self:expr, $method:ident, $($arg:expr),*) => {
         match $self {
-            Provider::OpenAI(p) => LLMProvider::$method(p),
-            Provider::Anthropic(p) => LLMProvider::$method(p),
-            Provider::Mistral(p) => LLMProvider::$method(p),
-            Provider::Cloudflare(p) => LLMProvider::$method(p),
-            Provider::OpenAILike(p) => LLMProvider::$method(p),
+            Provider::OpenAI(p) => LLMProvider::$method(p, $($arg),*),
+            Provider::Anthropic(p) => LLMProvider::$method(p, $($arg),*),
+            Provider::Mistral(p) => LLMProvider::$method(p, $($arg),*),
+            Provider::Cloudflare(p) => LLMProvider::$method(p, $($arg),*),
+            Provider::OpenAILike(p) => LLMProvider::$method(p, $($arg),*),
         }
     };
 
-    ($self:expr, $method:ident, $($arg:expr),+) => {
+    (@expand async_direct, $self:expr, $method:ident, $($arg:expr),*) => {
         match $self {
-            Provider::OpenAI(p) => LLMProvider::$method(p, $($arg),+),
-            Provider::Anthropic(p) => LLMProvider::$method(p, $($arg),+),
-            Provider::Mistral(p) => LLMProvider::$method(p, $($arg),+),
-            Provider::Cloudflare(p) => LLMProvider::$method(p, $($arg),+),
-            Provider::OpenAILike(p) => LLMProvider::$method(p, $($arg),+),
+            Provider::OpenAI(p) => LLMProvider::$method(p).await,
+            Provider::Anthropic(p) => LLMProvider::$method(p).await,
+            Provider::Mistral(p) => LLMProvider::$method(p).await,
+            Provider::Cloudflare(p) => LLMProvider::$method(p).await,
+            Provider::OpenAILike(p) => LLMProvider::$method(p).await,
         }
     };
 }
 
-/// Macro for selective provider dispatch with default fallback
-/// Use this when only some providers support a method
+/// Selective provider dispatch with default fallback.
+/// Already parametric over its own provider list, kept separate.
 #[allow(unused_macros)]
 macro_rules! dispatch_provider_selective {
-    // Dispatch to specific providers only, with a default for others
     ($self:expr, $method:ident, { $($provider:ident),+ }, $default:expr) => {
         match $self {
             $(Provider::$provider(p) => p.$method()),+,
@@ -303,19 +328,6 @@ macro_rules! dispatch_provider_selective {
         match $self {
             $(Provider::$provider(p) => p.$method($($arg),+)),+,
             _ => $default,
-        }
-    };
-}
-
-/// Macro for dispatching async methods without error transformation
-macro_rules! dispatch_provider_async_direct {
-    ($self:expr, $method:ident) => {
-        match $self {
-            Provider::OpenAI(p) => LLMProvider::$method(p).await,
-            Provider::Anthropic(p) => LLMProvider::$method(p).await,
-            Provider::Mistral(p) => LLMProvider::$method(p).await,
-            Provider::Cloudflare(p) => LLMProvider::$method(p).await,
-            Provider::OpenAILike(p) => LLMProvider::$method(p).await,
         }
     };
 }
@@ -391,21 +403,12 @@ impl Provider {
     /// Check if provider supports a specific model
     pub fn supports_model(&self, model: &str) -> bool {
         use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
-        dispatch_provider_value!(self, supports_model, model)
+        dispatch_provider!(value, self, supports_model, model)
     }
 
     /// Get provider capabilities
     pub fn capabilities(&self) -> &'static [ProviderCapability] {
-        // All providers implement capabilities, using generic macro
-        dispatch_provider!(self, capabilities)
-
-        // But if future providers don't implement it, can change to:
-        // dispatch_provider_selective!(
-        //     self,
-        //     capabilities,
-        //     { OpenAI, Anthropic, Azure, Mistral, Moonshot, V0 },
-        //     &[ProviderCapability::ChatCompletion]  // Default capability
-        // )
+        dispatch_provider!(sync, self, capabilities)
     }
 
     /// Execute chat completion
@@ -415,19 +418,19 @@ impl Provider {
         context: RequestContext,
     ) -> Result<ChatResponse, ProviderError> {
         use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
-        dispatch_provider_async!(self, chat_completion, request, context)
+        dispatch_provider!(async_err, self, chat_completion, request, context)
     }
 
     /// Execute health check
     pub async fn health_check(&self) -> crate::core::types::health::HealthStatus {
         use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
-        dispatch_provider_async_direct!(self, health_check)
+        dispatch_provider!(async_direct, self, health_check)
     }
 
     /// List available models
     pub fn list_models(&self) -> &[crate::core::types::model::ModelInfo] {
         use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
-        dispatch_provider_value!(self, models)
+        dispatch_provider!(value, self, models)
     }
 
     /// Calculate cost using unified pricing database
@@ -437,7 +440,6 @@ impl Provider {
         input_tokens: u32,
         output_tokens: u32,
     ) -> Result<f64, ProviderError> {
-        // Use unified pricing database instead of each provider implementing its own
         let usage = crate::core::providers::base::pricing::Usage {
             prompt_tokens: input_tokens,
             completion_tokens: output_tokens,
@@ -460,7 +462,7 @@ impl Provider {
         ProviderError,
     > {
         use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
-        dispatch_provider_async!(self, chat_completion_stream, request, context)
+        dispatch_provider!(async_err, self, chat_completion_stream, request, context)
     }
 
     /// Create embeddings
@@ -502,7 +504,6 @@ impl Provider {
         &self,
         model_id: &str,
     ) -> Result<Option<crate::core::types::model::ModelInfo>, ProviderError> {
-        // Look through available models for this provider
         let models = self.list_models();
         for model in models {
             if model.id == model_id || model.name == model_id {
@@ -510,7 +511,6 @@ impl Provider {
             }
         }
 
-        // Model not found in this provider
         Ok(None)
     }
 }
@@ -520,8 +520,6 @@ impl Provider {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // ==================== ModelPricing Tests ====================
 
     #[test]
     fn test_model_pricing_creation() {
@@ -583,8 +581,6 @@ mod tests {
         assert!(debug_str.contains("gpt-4"));
         assert!(debug_str.contains("0.03"));
     }
-
-    // ==================== Provider Enum Tests ====================
 
     #[test]
     fn test_provider_enum_is_send_sync() {

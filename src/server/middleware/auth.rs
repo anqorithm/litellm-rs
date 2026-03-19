@@ -81,8 +81,8 @@ where
                 return service.call(req).await;
             }
 
-            let auth_enabled =
-                app_state.config.auth().enable_jwt || app_state.config.auth().enable_api_key;
+            let cfg = app_state.config.load();
+            let auth_enabled = cfg.auth().enable_jwt || cfg.auth().enable_api_key;
             if !auth_enabled {
                 req.extensions_mut().insert(context);
                 return service.call(req).await;
@@ -96,13 +96,13 @@ where
             }
 
             let auth_method = match auth_method {
-                AuthMethod::Jwt(_) if !app_state.config.auth().enable_jwt => {
+                AuthMethod::Jwt(_) if !cfg.auth().enable_jwt => {
                     rate_limiter.record_failure(&client_id);
                     return Err(actix_web::error::ErrorUnauthorized(
                         "JWT authentication disabled",
                     ));
                 }
-                AuthMethod::ApiKey(_) if !app_state.config.auth().enable_api_key => {
+                AuthMethod::ApiKey(_) if !cfg.auth().enable_api_key => {
                     rate_limiter.record_failure(&client_id);
                     return Err(actix_web::error::ErrorUnauthorized(
                         "API key authentication disabled",

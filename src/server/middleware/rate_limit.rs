@@ -191,7 +191,7 @@ where
         let app_state = req.app_data::<web::Data<AppState>>().cloned();
         let trusted_proxies: Vec<String> = app_state
             .as_ref()
-            .map(|s| s.config.server().trusted_proxies.clone())
+            .map(|s| s.config.load().server().trusted_proxies.clone())
             .unwrap_or_default();
         let requests_per_minute = self.requests_per_minute;
         let start_time = Instant::now();

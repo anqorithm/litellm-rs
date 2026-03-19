@@ -174,7 +174,7 @@ impl V0ChatHandler {
                     }
                     None => String::new(),
                 },
-                tool_calls: None, // TODO: Transform tool calls if present
+                tool_calls: None, // NOTE: tool call transformation not yet implemented
                 tool_call_id: None,
             })
             .collect();

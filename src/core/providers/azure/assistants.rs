@@ -6,8 +6,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-// TODO: Implement assistant types in base_llm module
-// For now, using stub types
+// NOTE: Using local stub types; base_llm shared types not yet implemented.
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateAssistantRequest {
@@ -542,7 +541,7 @@ impl BaseAssistantHandler for AzureAssistantHandler {
     }
 
     // Additional methods not in the trait - commented out for now
-    // TODO: These methods need to be added to the trait or moved to an extension trait
+    // NOTE: Methods below not yet part of the trait; kept for reference.
     /*
     async fn create_thread(
         &self,
