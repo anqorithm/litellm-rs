@@ -89,15 +89,24 @@ pub struct ApiKeyHandler {
     pub(super) storage: Arc<StorageLayer>,
     /// Tracks when each key's `last_used_at` was last persisted to the DB.
     last_used_cache: Arc<DashMap<Uuid, Instant>>,
+    /// Optional HMAC secret for key hashing. When set, uses HMAC-SHA256
+    /// instead of plain SHA-256.
+    hmac_secret: Option<String>,
 }
 
 impl ApiKeyHandler {
     /// Create a new API key handler
-    pub async fn new(storage: Arc<StorageLayer>) -> Result<Self> {
+    pub async fn new(storage: Arc<StorageLayer>, hmac_secret: Option<String>) -> Result<Self> {
         Ok(Self {
             storage,
+            hmac_secret,
             last_used_cache: Arc::new(DashMap::new()),
         })
+    }
+
+    /// Get the HMAC secret as an Option<&str> for passing to hash_api_key.
+    fn hmac_secret(&self) -> Option<&str> {
+        self.hmac_secret.as_deref()
     }
 
     /// Create a new API key
@@ -114,7 +123,7 @@ impl ApiKeyHandler {
 
         // Generate API key
         let raw_key = generate_api_key();
-        let key_hash = hash_api_key(&raw_key);
+        let key_hash = hash_api_key(&raw_key, self.hmac_secret());
         let key_prefix = extract_api_key_prefix(&raw_key);
 
         // Create API key object
@@ -151,7 +160,7 @@ impl ApiKeyHandler {
 
         // Generate API key
         let raw_key = generate_api_key();
-        let key_hash = hash_api_key(&raw_key);
+        let key_hash = hash_api_key(&raw_key, self.hmac_secret());
         let key_prefix = extract_api_key_prefix(&raw_key);
 
         // Create API key object
@@ -243,7 +252,7 @@ impl ApiKeyHandler {
         debug!("Verifying API key");
 
         // Hash the provided key
-        let key_hash = hash_api_key(raw_key);
+        let key_hash = hash_api_key(raw_key, self.hmac_secret());
 
         // Find API key (cache-aside: Redis → PostgreSQL → populate Redis)
         let api_key = match self.find_api_key_cached(&key_hash).await? {
@@ -284,7 +293,7 @@ impl ApiKeyHandler {
 
     /// Verify API key with detailed result
     pub async fn verify_key_detailed(&self, raw_key: &str) -> Result<ApiKeyVerification> {
-        let key_hash = hash_api_key(raw_key);
+        let key_hash = hash_api_key(raw_key, self.hmac_secret());
 
         let api_key = match self.find_api_key_cached(&key_hash).await? {
             Some(key) => key,

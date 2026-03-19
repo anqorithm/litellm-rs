@@ -21,6 +21,11 @@ pub struct AuthConfig {
     /// API key header name
     #[serde(default = "default_api_key_header")]
     pub api_key_header: String,
+    /// HMAC secret for API key hashing. When set, API keys are hashed with
+    /// HMAC-SHA256(secret, key) instead of plain SHA-256. Strongly recommended
+    /// for production deployments.
+    #[serde(default)]
+    pub api_key_hmac_secret: Option<String>,
     /// RBAC configuration
     #[serde(default)]
     pub rbac: RbacConfig,
@@ -34,6 +39,10 @@ impl std::fmt::Debug for AuthConfig {
             .field("jwt_secret", &"[REDACTED]")
             .field("jwt_expiration", &self.jwt_expiration)
             .field("api_key_header", &self.api_key_header)
+            .field(
+                "api_key_hmac_secret",
+                &self.api_key_hmac_secret.as_ref().map(|_| "[REDACTED]"),
+            )
             .field("rbac", &self.rbac)
             .finish()
     }
@@ -47,6 +56,7 @@ impl Default for AuthConfig {
             jwt_secret: String::new(),
             jwt_expiration: default_jwt_expiration(),
             api_key_header: default_api_key_header(),
+            api_key_hmac_secret: None,
             rbac: RbacConfig::default(),
         }
     }
@@ -69,6 +79,9 @@ impl AuthConfig {
         }
         if other.api_key_header != default_api_key_header() {
             self.api_key_header = other.api_key_header;
+        }
+        if other.api_key_hmac_secret.is_some() {
+            self.api_key_hmac_secret = other.api_key_hmac_secret;
         }
         self.rbac = self.rbac.merge(other.rbac);
         self
@@ -177,6 +190,16 @@ pub fn warn_insecure_config(config: &AuthConfig) {
     if !config.is_production_ready() {
         warn!(
             "Authentication is disabled! This is insecure for production use. Enable JWT or API key authentication before deploying to production."
+        );
+    }
+
+    if config.enable_api_key && config.api_key_hmac_secret.is_none() {
+        warn!(
+            "API key authentication is enabled without api_key_hmac_secret. \
+             API keys are hashed with plain SHA-256, which is vulnerable to \
+             offline brute-force if the database is compromised. Set \
+             api_key_hmac_secret to a secure random value (>= 32 chars) to \
+             use HMAC-SHA256 instead."
         );
     }
 }
@@ -293,6 +316,7 @@ mod tests {
             jwt_secret: "A".repeat(64),
             jwt_expiration: 7200,
             api_key_header: "Authorization".to_string(),
+            api_key_hmac_secret: None,
             rbac: RbacConfig::default(),
         };
         assert!(config.enable_jwt);
@@ -308,6 +332,7 @@ mod tests {
             jwt_secret: "X".repeat(64),
             jwt_expiration: 1800,
             api_key_header: "X-Token".to_string(),
+            api_key_hmac_secret: None,
             rbac: RbacConfig::default(),
         };
         let json = serde_json::to_value(&config).unwrap();
@@ -323,6 +348,7 @@ mod tests {
             jwt_secret: "short".to_string(),
             jwt_expiration: 3600,
             api_key_header: "X-API-Key".to_string(),
+            api_key_hmac_secret: None,
             rbac: RbacConfig::default(),
         };
         assert!(config.validate().is_err());
@@ -353,6 +379,7 @@ mod tests {
             jwt_secret: "your-secret-key".to_string(),
             jwt_expiration: 3600,
             api_key_header: "X-API-Key".to_string(),
+            api_key_hmac_secret: None,
             rbac: RbacConfig::default(),
         };
         assert!(config.validate().is_err());
@@ -366,6 +393,7 @@ mod tests {
             jwt_secret: "a".repeat(64), // all lowercase
             jwt_expiration: 3600,
             api_key_header: "X-API-Key".to_string(),
+            api_key_hmac_secret: None,
             rbac: RbacConfig::default(),
         };
         assert!(config.validate().is_err());
@@ -379,6 +407,7 @@ mod tests {
             jwt_secret: secure_jwt_secret(),
             jwt_expiration: 100, // less than 300
             api_key_header: "X-API-Key".to_string(),
+            api_key_hmac_secret: None,
             rbac: RbacConfig::default(),
         };
         assert!(config.validate().is_err());
@@ -392,6 +421,7 @@ mod tests {
             jwt_secret: secure_jwt_secret(),
             jwt_expiration: 86400 * 31, // more than 30 days
             api_key_header: "X-API-Key".to_string(),
+            api_key_hmac_secret: None,
             rbac: RbacConfig::default(),
         };
         assert!(config.validate().is_err());
@@ -405,6 +435,7 @@ mod tests {
             jwt_secret: String::new(),
             jwt_expiration: 3600,
             api_key_header: "".to_string(),
+            api_key_hmac_secret: None,
             rbac: RbacConfig::default(),
         };
         assert!(config.validate().is_err());
@@ -418,6 +449,7 @@ mod tests {
             jwt_secret: secure_jwt_secret(),
             jwt_expiration: 3600,
             api_key_header: "X-API-Key".to_string(),
+            api_key_hmac_secret: None,
             rbac: RbacConfig::default(),
         };
         assert!(config.validate().is_ok());
@@ -434,6 +466,7 @@ mod tests {
             jwt_secret: String::new(),
             jwt_expiration: 3600,
             api_key_header: "X-API-Key".to_string(),
+            api_key_hmac_secret: None,
             rbac: RbacConfig::default(),
         };
         assert!(!disabled.is_production_ready());
@@ -448,6 +481,7 @@ mod tests {
             jwt_secret: "CustomSecret123!@#456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789".to_string(),
             jwt_expiration: 3600,
             api_key_header: "X-API-Key".to_string(),
+            api_key_hmac_secret: None,
             rbac: RbacConfig::default(),
         };
         let merged = base.merge(other);
@@ -463,6 +497,7 @@ mod tests {
             jwt_secret: String::new(),
             jwt_expiration: 7200,
             api_key_header: "X-API-Key".to_string(),
+            api_key_hmac_secret: None,
             rbac: RbacConfig::default(),
         };
         let merged = base.merge(other);

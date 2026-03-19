@@ -15,6 +15,7 @@ fn test_config_builder() {
             jwt_secret: "StrongJwtSecretWithMixedCaseAndNumbers1234!".to_string(),
             jwt_expiration: 3600,
             api_key_header: "X-API-Key".to_string(),
+            api_key_hmac_secret: None,
             rbac: RbacConfig::default(),
         })
         .add_provider(

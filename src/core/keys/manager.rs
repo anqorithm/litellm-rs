@@ -26,6 +26,8 @@ pub struct KeyManager {
     repository: Arc<dyn KeyRepository>,
     /// Tracks when each key's `last_used_at` was last persisted.
     last_used_cache: Arc<DashMap<Uuid, Instant>>,
+    /// Optional HMAC secret for key hashing.
+    hmac_secret: Option<String>,
 }
 
 impl std::fmt::Debug for KeyManager {
@@ -33,6 +35,10 @@ impl std::fmt::Debug for KeyManager {
         f.debug_struct("KeyManager")
             .field("repository", &"<KeyRepository>")
             .field("last_used_cache_size", &self.last_used_cache.len())
+            .field(
+                "hmac_secret",
+                &self.hmac_secret.as_ref().map(|_| "[REDACTED]"),
+            )
             .finish()
     }
 }
@@ -43,6 +49,7 @@ impl KeyManager {
         Self {
             repository: Arc::new(repository),
             last_used_cache: Arc::new(DashMap::new()),
+            hmac_secret: None,
         }
     }
 
@@ -51,7 +58,19 @@ impl KeyManager {
         Self {
             repository,
             last_used_cache: Arc::new(DashMap::new()),
+            hmac_secret: None,
         }
+    }
+
+    /// Set the HMAC secret for key hashing
+    pub fn with_hmac_secret(mut self, secret: Option<String>) -> Self {
+        self.hmac_secret = secret;
+        self
+    }
+
+    /// Get the HMAC secret as Option<&str>
+    fn hmac_secret(&self) -> Option<&str> {
+        self.hmac_secret.as_deref()
     }
 
     /// Generate a new API key
@@ -66,7 +85,7 @@ impl KeyManager {
 
         // Generate the raw key
         let raw_key = generate_api_key();
-        let key_hash = hash_api_key(&raw_key);
+        let key_hash = hash_api_key(&raw_key, self.hmac_secret());
         let key_prefix = extract_api_key_prefix(&raw_key);
 
         let now = Utc::now();
@@ -110,7 +129,7 @@ impl KeyManager {
         debug!("Validating API key");
 
         // Hash the provided key
-        let key_hash = hash_api_key(raw_key);
+        let key_hash = hash_api_key(raw_key, self.hmac_secret());
 
         // Find key by hash
         let key = match self.repository.find_by_hash(&key_hash).await? {

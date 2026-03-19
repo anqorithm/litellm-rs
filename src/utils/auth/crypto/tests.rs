@@ -30,7 +30,7 @@ fn test_jwt_secret_generation() {
 #[test]
 fn test_api_key_hashing() {
     let api_key = "gw-test123456789";
-    let hash = keys::hash_api_key(api_key);
+    let hash = keys::hash_api_key(api_key, None);
     assert_eq!(hash.len(), 64); // SHA256 hex string
 }
 
@@ -451,8 +451,8 @@ fn test_api_key_prefix_long_key() {
 #[test]
 fn test_api_key_hash_consistency() {
     let api_key = "gw-test123456789";
-    let hash1 = keys::hash_api_key(api_key);
-    let hash2 = keys::hash_api_key(api_key);
+    let hash1 = keys::hash_api_key(api_key, None);
+    let hash2 = keys::hash_api_key(api_key, None);
 
     // Same key should always produce same hash
     assert_eq!(hash1, hash2);
@@ -460,8 +460,8 @@ fn test_api_key_hash_consistency() {
 
 #[test]
 fn test_api_key_hash_different_keys() {
-    let hash1 = keys::hash_api_key("gw-key1");
-    let hash2 = keys::hash_api_key("gw-key2");
+    let hash1 = keys::hash_api_key("gw-key1", None);
+    let hash2 = keys::hash_api_key("gw-key2", None);
 
     // Different keys should produce different hashes
     assert_ne!(hash1, hash2);
@@ -469,7 +469,7 @@ fn test_api_key_hash_different_keys() {
 
 #[test]
 fn test_api_key_hash_empty() {
-    let hash = keys::hash_api_key("");
+    let hash = keys::hash_api_key("", None);
 
     // Should still produce a valid hash
     assert_eq!(hash.len(), 64);

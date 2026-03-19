@@ -101,7 +101,7 @@ mod tests {
         let api_key = ApiKey {
             metadata: Metadata::new(),
             name: "auth-middleware-test-key".to_string(),
-            key_hash: hash_api_key(&raw_api_key),
+            key_hash: hash_api_key(&raw_api_key, None),
             key_prefix: extract_api_key_prefix(&raw_api_key),
             user_id: Some(user.id()),
             team_id: None,

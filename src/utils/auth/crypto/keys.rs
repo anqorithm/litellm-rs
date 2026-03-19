@@ -1,8 +1,11 @@
 //! Key and token generation utilities
 
 use base64::{Engine as _, engine::general_purpose};
+use hmac::{Hmac, Mac, digest::KeyInit as HmacKeyInit};
 use rand::{Rng, distr::Alphanumeric};
 use sha2::{Digest, Sha256};
+
+type HmacSha256 = Hmac<Sha256>;
 
 /// Generate a secure API key
 pub fn generate_api_key() -> String {
@@ -41,11 +44,37 @@ pub fn generate_session_token() -> String {
     general_purpose::URL_SAFE_NO_PAD.encode(&bytes)
 }
 
-/// Hash API key for storage
-pub fn hash_api_key(api_key: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(api_key.as_bytes());
-    hex::encode(hasher.finalize())
+/// Hash API key for storage.
+///
+/// When `hmac_secret` is `Some`, computes `HMAC-SHA256(secret, api_key)`.
+/// When `hmac_secret` is `None`, falls back to plain `SHA-256(api_key)` for
+/// backward compatibility.
+pub fn hash_api_key(api_key: &str, hmac_secret: Option<&str>) -> String {
+    match hmac_secret {
+        Some(secret) => {
+            // HMAC accepts keys of any size; new_from_slice only fails for
+            // algorithms with a fixed key requirement, which HMAC does not have.
+            // Using unwrap_or_else to satisfy lint while keeping the infallible
+            // return type — a failure here would indicate a broken crypto backend.
+            let mut mac = match <HmacSha256 as HmacKeyInit>::new_from_slice(secret.as_bytes()) {
+                Ok(m) => m,
+                Err(_) => {
+                    // Unreachable for HMAC, but fall back to plain SHA-256 rather
+                    // than panicking.
+                    let mut hasher = Sha256::new();
+                    hasher.update(api_key.as_bytes());
+                    return hex::encode(hasher.finalize());
+                }
+            };
+            mac.update(api_key.as_bytes());
+            hex::encode(mac.finalize().into_bytes())
+        }
+        None => {
+            let mut hasher = Sha256::new();
+            hasher.update(api_key.as_bytes());
+            hex::encode(hasher.finalize())
+        }
+    }
 }
 
 /// Generate API key prefix for identification
@@ -168,37 +197,72 @@ mod tests {
         );
     }
 
-    // ==================== hash_api_key Tests ====================
+    // ==================== hash_api_key Tests (plain SHA-256 fallback) ====================
 
     #[test]
     fn test_hash_api_key_length() {
-        let hash = hash_api_key("test-key");
+        let hash = hash_api_key("test-key", None);
         assert_eq!(hash.len(), 64); // SHA256 hex is 64 chars
     }
 
     #[test]
     fn test_hash_api_key_consistency() {
-        let hash1 = hash_api_key("same-key");
-        let hash2 = hash_api_key("same-key");
+        let hash1 = hash_api_key("same-key", None);
+        let hash2 = hash_api_key("same-key", None);
         assert_eq!(hash1, hash2);
     }
 
     #[test]
     fn test_hash_api_key_different_keys() {
-        let hash1 = hash_api_key("key1");
-        let hash2 = hash_api_key("key2");
+        let hash1 = hash_api_key("key1", None);
+        let hash2 = hash_api_key("key2", None);
         assert_ne!(hash1, hash2);
     }
 
     #[test]
     fn test_hash_api_key_empty() {
-        let hash = hash_api_key("");
+        let hash = hash_api_key("", None);
         assert_eq!(hash.len(), 64);
     }
 
     #[test]
     fn test_hash_api_key_hex_format() {
-        let hash = hash_api_key("test");
+        let hash = hash_api_key("test", None);
+        assert!(hash.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    // ==================== hash_api_key Tests (HMAC-SHA256) ====================
+
+    #[test]
+    fn test_hash_api_key_hmac_length() {
+        let hash = hash_api_key("test-key", Some("server-secret"));
+        assert_eq!(hash.len(), 64);
+    }
+
+    #[test]
+    fn test_hash_api_key_hmac_consistency() {
+        let hash1 = hash_api_key("same-key", Some("secret"));
+        let hash2 = hash_api_key("same-key", Some("secret"));
+        assert_eq!(hash1, hash2);
+    }
+
+    #[test]
+    fn test_hash_api_key_hmac_differs_from_plain() {
+        let plain = hash_api_key("test-key", None);
+        let hmac = hash_api_key("test-key", Some("secret"));
+        assert_ne!(plain, hmac);
+    }
+
+    #[test]
+    fn test_hash_api_key_hmac_different_secrets() {
+        let hash1 = hash_api_key("same-key", Some("secret1"));
+        let hash2 = hash_api_key("same-key", Some("secret2"));
+        assert_ne!(hash1, hash2);
+    }
+
+    #[test]
+    fn test_hash_api_key_hmac_hex_format() {
+        let hash = hash_api_key("test", Some("secret"));
         assert!(hash.chars().all(|c| c.is_ascii_hexdigit()));
     }
 
