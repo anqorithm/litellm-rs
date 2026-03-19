@@ -1,5 +1,6 @@
 use crate::core::models::user::types::User;
 use crate::utils::error::gateway_error::{GatewayError, Result};
+use sea_orm::prelude::Expr;
 use sea_orm::*;
 use tracing::debug;
 
@@ -60,7 +61,7 @@ impl SeaOrmDatabase {
         Ok(user.clone())
     }
 
-    /// Update user password
+    /// Update user password with transaction wrapping and optimistic locking
     pub async fn update_user_password(
         &self,
         user_id: uuid::Uuid,
@@ -68,62 +69,111 @@ impl SeaOrmDatabase {
     ) -> Result<()> {
         debug!("Updating password for user: {}", user_id);
 
-        let mut user: user::ActiveModel = entities::User::find_by_id(user_id)
-            .one(&self.db)
+        let txn = self.db.begin().await.map_err(GatewayError::from)?;
+
+        let user_model = entities::User::find_by_id(user_id)
+            .one(&txn)
             .await
             .map_err(GatewayError::from)?
-            .ok_or_else(|| GatewayError::NotFound("User not found".to_string()))?
-            .into();
+            .ok_or_else(|| GatewayError::NotFound("User not found".to_string()))?;
 
-        user.password_hash = Set(password_hash.to_string());
-        user.updated_at = Set(chrono::Utc::now().into());
+        let current_version = user_model.version;
+        let next_version = current_version + 1;
 
-        user.update(&self.db).await.map_err(GatewayError::from)?;
+        let result = entities::User::update_many()
+            .col_expr(
+                user::Column::PasswordHash,
+                Expr::value(password_hash.to_string()),
+            )
+            .col_expr(user::Column::UpdatedAt, Expr::value(chrono::Utc::now()))
+            .col_expr(user::Column::Version, Expr::value(next_version))
+            .filter(user::Column::Id.eq(user_id))
+            .filter(user::Column::Version.eq(current_version))
+            .exec(&txn)
+            .await
+            .map_err(GatewayError::from)?;
 
+        if result.rows_affected == 0 {
+            txn.rollback().await.map_err(GatewayError::from)?;
+            return Err(GatewayError::Conflict(
+                "User was modified concurrently".to_string(),
+            ));
+        }
+
+        txn.commit().await.map_err(GatewayError::from)?;
         Ok(())
     }
 
-    /// Update user last login
+    /// Update user last login with transaction wrapping and optimistic locking
     pub async fn update_user_last_login(&self, user_id: uuid::Uuid) -> Result<()> {
         debug!("Updating last login for user: {}", user_id);
 
+        let txn = self.db.begin().await.map_err(GatewayError::from)?;
+
         let user_model = entities::User::find_by_id(user_id)
-            .one(&self.db)
+            .one(&txn)
             .await
             .map_err(GatewayError::from)?
             .ok_or_else(|| GatewayError::NotFound("User not found".to_string()))?;
 
-        let mut active_model: user::ActiveModel = user_model.into();
-        active_model.last_login_at = Set(Some(chrono::Utc::now().into()));
-        active_model.updated_at = Set(chrono::Utc::now().into());
+        let current_version = user_model.version;
+        let next_version = current_version + 1;
+        let now = chrono::Utc::now();
 
-        active_model
-            .update(&self.db)
+        let result = entities::User::update_many()
+            .col_expr(user::Column::LastLoginAt, Expr::value(Some(now)))
+            .col_expr(user::Column::UpdatedAt, Expr::value(now))
+            .col_expr(user::Column::Version, Expr::value(next_version))
+            .filter(user::Column::Id.eq(user_id))
+            .filter(user::Column::Version.eq(current_version))
+            .exec(&txn)
             .await
             .map_err(GatewayError::from)?;
 
+        if result.rows_affected == 0 {
+            txn.rollback().await.map_err(GatewayError::from)?;
+            return Err(GatewayError::Conflict(
+                "User was modified concurrently".to_string(),
+            ));
+        }
+
+        txn.commit().await.map_err(GatewayError::from)?;
         Ok(())
     }
 
-    /// Verify user email
+    /// Verify user email with transaction wrapping and optimistic locking
     pub async fn verify_user_email(&self, user_id: uuid::Uuid) -> Result<()> {
         debug!("Verifying email for user: {}", user_id);
 
+        let txn = self.db.begin().await.map_err(GatewayError::from)?;
+
         let user_model = entities::User::find_by_id(user_id)
-            .one(&self.db)
+            .one(&txn)
             .await
             .map_err(GatewayError::from)?
             .ok_or_else(|| GatewayError::NotFound("User not found".to_string()))?;
 
-        let mut active_model: user::ActiveModel = user_model.into();
-        active_model.email_verified = Set(true);
-        active_model.updated_at = Set(chrono::Utc::now().into());
+        let current_version = user_model.version;
+        let next_version = current_version + 1;
 
-        active_model
-            .update(&self.db)
+        let result = entities::User::update_many()
+            .col_expr(user::Column::EmailVerified, Expr::value(true))
+            .col_expr(user::Column::UpdatedAt, Expr::value(chrono::Utc::now()))
+            .col_expr(user::Column::Version, Expr::value(next_version))
+            .filter(user::Column::Id.eq(user_id))
+            .filter(user::Column::Version.eq(current_version))
+            .exec(&txn)
             .await
             .map_err(GatewayError::from)?;
 
+        if result.rows_affected == 0 {
+            txn.rollback().await.map_err(GatewayError::from)?;
+            return Err(GatewayError::Conflict(
+                "User was modified concurrently".to_string(),
+            ));
+        }
+
+        txn.commit().await.map_err(GatewayError::from)?;
         Ok(())
     }
 }

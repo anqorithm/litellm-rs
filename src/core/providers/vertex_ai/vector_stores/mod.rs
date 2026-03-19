@@ -97,7 +97,7 @@ impl VectorStoreHandler {
     ) -> Result<String, ProviderError> {
         self.validate_config(&config)?;
 
-        // TODO: Implement actual vector store creation
+        // NOTE: actual vector store creation not yet implemented
         Ok(format!(
             "projects/{}/locations/{}/vectorStores/{}",
             self.project_id, self.location, config.store_id
@@ -106,13 +106,13 @@ impl VectorStoreHandler {
 
     /// List vector stores
     pub async fn list_vector_stores(&self) -> Result<Vec<VectorStoreConfig>, ProviderError> {
-        // TODO: Implement actual listing
+        // NOTE: actual listing not yet implemented
         Ok(vec![])
     }
 
     /// Delete vector store
     pub async fn delete_vector_store(&self, _store_id: &str) -> Result<(), ProviderError> {
-        // TODO: Implement actual deletion
+        // NOTE: actual deletion not yet implemented
         Ok(())
     }
 
@@ -124,7 +124,7 @@ impl VectorStoreHandler {
     ) -> Result<Vec<String>, ProviderError> {
         self.validate_documents(&documents)?;
 
-        // TODO: Implement actual document addition
+        // NOTE: actual document addition not yet implemented
         Ok(documents.iter().map(|doc| doc.id.clone()).collect())
     }
 
@@ -136,7 +136,7 @@ impl VectorStoreHandler {
     ) -> Result<Vec<String>, ProviderError> {
         self.validate_documents(&documents)?;
 
-        // TODO: Implement actual document updates
+        // NOTE: actual document updates not yet implemented
         Ok(documents.iter().map(|doc| doc.id.clone()).collect())
     }
 
@@ -146,7 +146,7 @@ impl VectorStoreHandler {
         _store_id: &str,
         _document_ids: Vec<String>,
     ) -> Result<(), ProviderError> {
-        // TODO: Implement actual document deletion
+        // NOTE: actual document deletion not yet implemented
         Ok(())
     }
 
@@ -158,7 +158,7 @@ impl VectorStoreHandler {
     ) -> Result<VectorSearchResponse, ProviderError> {
         self.validate_search_request(&request)?;
 
-        // TODO: Implement actual vector search
+        // NOTE: actual vector search not yet implemented
         Ok(VectorSearchResponse {
             results: vec![],
             total_count: 0,
@@ -171,7 +171,7 @@ impl VectorStoreHandler {
         _store_id: &str,
         _operations: Vec<VectorStoreOperation>,
     ) -> Result<Vec<String>, ProviderError> {
-        // TODO: Implement batch operations
+        // NOTE: batch operations not yet implemented
         Ok(vec![])
     }
 

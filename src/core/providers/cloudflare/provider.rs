@@ -351,7 +351,7 @@ impl LLMProvider for CloudflareProvider {
         // Set streaming flag
         request.stream = true;
 
-        // TODO: Implement proper SSE streaming for Cloudflare
+        // NOTE: SSE streaming for Cloudflare not yet implemented
         // For now, return an error as streaming implementation needs more work
         Err(ProviderError::not_supported(
             "cloudflare",

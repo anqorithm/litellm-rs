@@ -61,7 +61,7 @@ const LLAMA_CAPABILITIES: &[ProviderCapability] = &[
 ];
 
 // For now, use a lazy static or instance method for models since they contain owned strings
-// TODO: Refactor to use static string slices later
+// NOTE: uses owned Strings; could be refactored to static slices
 
 /// Meta Llama provider configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

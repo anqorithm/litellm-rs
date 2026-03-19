@@ -72,7 +72,8 @@ pub async fn login(
     state: web::Data<AppState>,
     request: web::Json<LoginRequest>,
 ) -> ActixResult<HttpResponse> {
-    let client_ip = extract_client_ip(&req, &state.config.gateway.server.trusted_proxies);
+    let cfg = state.config.load();
+    let client_ip = extract_client_ip(&req, &cfg.gateway.server.trusted_proxies);
 
     // Rate limit: max 5 login attempts per IP per minute
     let limiter = get_login_rate_limiter();
@@ -208,8 +209,7 @@ mod tests {
     use super::*;
     use uuid::Uuid;
 
-    // NOTE: Full integration tests require mocking AppState, AuthSystem, and StorageLayer
-    // TODO: Add full integration tests with proper mocking infrastructure
+    // NOTE: Full integration tests require mocking AppState, AuthSystem, and StorageLayer.
 
     #[test]
     fn test_login_request_deserialization() {

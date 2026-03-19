@@ -113,6 +113,98 @@ impl ToolInputSchema {
     pub fn to_json_schema(&self) -> Value {
         serde_json::to_value(self).unwrap_or(Value::Object(serde_json::Map::new()))
     }
+
+    /// Validate arguments against this schema.
+    ///
+    /// Returns `Ok(())` if valid, or `Err(errors)` listing each violation.
+    /// Checks: required field presence, property type matching, additional
+    /// properties enforcement, and enum value constraints.
+    pub fn validate_arguments(&self, args: &Value) -> Result<(), Vec<String>> {
+        let obj = match args.as_object() {
+            Some(o) => o,
+            None => {
+                return Err(vec![format!(
+                    "expected object arguments, got {}",
+                    value_type_name(args)
+                )]);
+            }
+        };
+
+        let mut errors = Vec::new();
+
+        // Check required fields
+        for field in &self.required {
+            if !obj.contains_key(field) {
+                errors.push(format!("missing required field '{}'", field));
+            }
+        }
+
+        // Check property types and enum constraints
+        for (key, value) in obj {
+            if let Some(prop_schema) = self.properties.get(key) {
+                if let Some(type_err) = check_type(key, value, &prop_schema.property_type) {
+                    errors.push(type_err);
+                }
+
+                // Enum constraint
+                if let Some(ref allowed) = prop_schema.enum_values
+                    && let Some(s) = value.as_str()
+                    && !allowed.iter().any(|v| v == s)
+                {
+                    errors.push(format!(
+                        "field '{}' value '{}' not in allowed values [{}]",
+                        key,
+                        s,
+                        allowed.join(", ")
+                    ));
+                }
+            } else if self.additional_properties == Some(false) {
+                errors.push(format!("unexpected additional property '{}'", key));
+            }
+        }
+
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors)
+        }
+    }
+}
+
+/// Return a human-readable type name for a JSON value.
+fn value_type_name(v: &Value) -> &'static str {
+    match v {
+        Value::Null => "null",
+        Value::Bool(_) => "boolean",
+        Value::Number(_) => "number",
+        Value::String(_) => "string",
+        Value::Array(_) => "array",
+        Value::Object(_) => "object",
+    }
+}
+
+/// Check whether `value` matches the expected JSON Schema `type_name`.
+/// Returns `Some(error_message)` on mismatch, `None` on match.
+fn check_type(field: &str, value: &Value, type_name: &str) -> Option<String> {
+    let ok = match type_name {
+        "string" => value.is_string(),
+        "number" => value.is_number(),
+        "integer" => value.is_i64() || value.is_u64(),
+        "boolean" => value.is_boolean(),
+        "array" => value.is_array(),
+        "object" => value.is_object(),
+        _ => true, // unknown type, pass through
+    };
+    if ok {
+        None
+    } else {
+        Some(format!(
+            "field '{}' expected type '{}', got '{}'",
+            field,
+            type_name,
+            value_type_name(value)
+        ))
+    }
 }
 
 /// Property schema definition
@@ -525,5 +617,157 @@ mod tests {
         let json = serde_json::to_string(&tool).unwrap();
         assert!(json.contains("test_tool"));
         assert!(json.contains("inputSchema"));
+    }
+
+    // --- validate_arguments tests ---
+
+    #[test]
+    fn test_validate_valid_arguments() {
+        let schema = ToolInputSchema::object()
+            .with_property("name", PropertySchema::string(), true)
+            .with_property("age", PropertySchema::integer(), false);
+
+        let args = serde_json::json!({"name": "Alice", "age": 30});
+        assert!(schema.validate_arguments(&args).is_ok());
+    }
+
+    #[test]
+    fn test_validate_missing_required_field() {
+        let schema = ToolInputSchema::object()
+            .with_property("name", PropertySchema::string(), true)
+            .with_property("city", PropertySchema::string(), true);
+
+        let args = serde_json::json!({"name": "Alice"});
+        let err = schema.validate_arguments(&args).unwrap_err();
+        assert_eq!(err.len(), 1);
+        assert!(err[0].contains("missing required field 'city'"));
+    }
+
+    #[test]
+    fn test_validate_wrong_type() {
+        let schema =
+            ToolInputSchema::object().with_property("count", PropertySchema::integer(), true);
+
+        let args = serde_json::json!({"count": "not_a_number"});
+        let err = schema.validate_arguments(&args).unwrap_err();
+        assert_eq!(err.len(), 1);
+        assert!(err[0].contains("expected type 'integer'"));
+        assert!(err[0].contains("got 'string'"));
+    }
+
+    #[test]
+    fn test_validate_additional_properties_forbidden() {
+        let schema =
+            ToolInputSchema::object().with_property("name", PropertySchema::string(), true);
+
+        let args = serde_json::json!({"name": "Alice", "extra": "field"});
+        let err = schema.validate_arguments(&args).unwrap_err();
+        assert_eq!(err.len(), 1);
+        assert!(err[0].contains("unexpected additional property 'extra'"));
+    }
+
+    #[test]
+    fn test_validate_additional_properties_allowed() {
+        let mut schema =
+            ToolInputSchema::object().with_property("name", PropertySchema::string(), true);
+        schema.additional_properties = Some(true);
+
+        let args = serde_json::json!({"name": "Alice", "extra": "field"});
+        assert!(schema.validate_arguments(&args).is_ok());
+    }
+
+    #[test]
+    fn test_validate_additional_properties_unset_allows() {
+        let mut schema =
+            ToolInputSchema::object().with_property("name", PropertySchema::string(), true);
+        schema.additional_properties = None;
+
+        let args = serde_json::json!({"name": "Alice", "extra": 42});
+        assert!(schema.validate_arguments(&args).is_ok());
+    }
+
+    #[test]
+    fn test_validate_enum_values() {
+        let schema = ToolInputSchema::object().with_property(
+            "color",
+            PropertySchema::string().with_enum(vec![
+                "red".to_string(),
+                "green".to_string(),
+                "blue".to_string(),
+            ]),
+            true,
+        );
+
+        let valid = serde_json::json!({"color": "red"});
+        assert!(schema.validate_arguments(&valid).is_ok());
+
+        let invalid = serde_json::json!({"color": "purple"});
+        let err = schema.validate_arguments(&invalid).unwrap_err();
+        assert_eq!(err.len(), 1);
+        assert!(err[0].contains("not in allowed values"));
+        assert!(err[0].contains("purple"));
+    }
+
+    #[test]
+    fn test_validate_non_object_args() {
+        let schema = ToolInputSchema::object();
+
+        let args = serde_json::json!("a string");
+        let err = schema.validate_arguments(&args).unwrap_err();
+        assert_eq!(err.len(), 1);
+        assert!(err[0].contains("expected object"));
+        assert!(err[0].contains("string"));
+    }
+
+    #[test]
+    fn test_validate_multiple_errors() {
+        let schema = ToolInputSchema::object()
+            .with_property("name", PropertySchema::string(), true)
+            .with_property("age", PropertySchema::integer(), true);
+
+        let args = serde_json::json!({"age": "not_int"});
+        let err = schema.validate_arguments(&args).unwrap_err();
+        assert!(err.len() >= 2);
+        let joined = err.join("; ");
+        assert!(joined.contains("missing required field 'name'"));
+        assert!(joined.contains("expected type 'integer'"));
+    }
+
+    #[test]
+    fn test_validate_boolean_type() {
+        let schema =
+            ToolInputSchema::object().with_property("flag", PropertySchema::boolean(), true);
+
+        let valid = serde_json::json!({"flag": true});
+        assert!(schema.validate_arguments(&valid).is_ok());
+
+        let invalid = serde_json::json!({"flag": "yes"});
+        let err = schema.validate_arguments(&invalid).unwrap_err();
+        assert!(err[0].contains("expected type 'boolean'"));
+    }
+
+    #[test]
+    fn test_validate_array_type() {
+        let schema = ToolInputSchema::object().with_property(
+            "tags",
+            PropertySchema::array(PropertySchema::string()),
+            true,
+        );
+
+        let valid = serde_json::json!({"tags": ["a", "b"]});
+        assert!(schema.validate_arguments(&valid).is_ok());
+
+        let invalid = serde_json::json!({"tags": "not_array"});
+        let err = schema.validate_arguments(&invalid).unwrap_err();
+        assert!(err[0].contains("expected type 'array'"));
+    }
+
+    #[test]
+    fn test_validate_empty_args_with_no_required() {
+        let schema =
+            ToolInputSchema::object().with_property("name", PropertySchema::string(), false);
+
+        let args = serde_json::json!({});
+        assert!(schema.validate_arguments(&args).is_ok());
     }
 }

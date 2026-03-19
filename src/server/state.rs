@@ -5,6 +5,7 @@
 use crate::config::Config;
 use crate::core::budget::UnifiedBudgetLimits;
 use crate::services::pricing::PricingService;
+use crate::utils::sync::AtomicValue;
 use std::sync::Arc;
 
 /// HTTP server state shared across handlers
@@ -12,10 +13,14 @@ use std::sync::Arc;
 /// This struct contains shared resources that need to be accessed across
 /// multiple request handlers. All fields are wrapped in Arc for efficient
 /// sharing across threads.
+///
+/// `config` uses [`AtomicValue`] so the entire configuration can be swapped
+/// atomically at runtime (hot reload) while readers obtain lock-free
+/// `Arc<Config>` snapshots.
 #[derive(Clone)]
 pub struct AppState {
-    /// Gateway configuration (shared read-only)
-    pub config: Arc<Config>,
+    /// Gateway configuration (atomically swappable for hot reload)
+    pub config: AtomicValue<Config>,
     /// Authentication system
     pub auth: Arc<crate::auth::AuthSystem>,
     /// Unified router (new UnifiedRouter implementation)
@@ -38,7 +43,7 @@ impl AppState {
         pricing: Arc<PricingService>,
     ) -> Self {
         Self {
-            config: Arc::new(config),
+            config: AtomicValue::new(config),
             auth: Arc::new(auth),
             unified_router: Arc::new(unified_router),
             storage: Arc::new(storage),
@@ -47,9 +52,12 @@ impl AppState {
         }
     }
 
-    /// Get gateway configuration
-    #[allow(dead_code)] // May be used by handlers
-    pub fn config(&self) -> &Config {
-        &self.config
+    /// Load a snapshot of the current gateway configuration.
+    ///
+    /// Returns an `Arc<Config>` that is valid for the lifetime of the
+    /// caller — subsequent hot-reload swaps will not affect already-loaded
+    /// snapshots.
+    pub fn config(&self) -> Arc<Config> {
+        self.config.load()
     }
 }

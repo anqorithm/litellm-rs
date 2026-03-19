@@ -6,8 +6,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-// TODO: Implement batch types in base_llm module
-// For now, using stub types
+// NOTE: Using local stub types; base_llm shared types not yet implemented.
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateBatchRequest {

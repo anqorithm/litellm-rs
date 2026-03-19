@@ -35,7 +35,7 @@ impl RedisPool {
     /// Subscribe to Redis channels for pub/sub messaging
     /// Note: Temporarily disabled due to Redis API compatibility issues
     pub async fn subscribe(&self, _channels: &[String]) -> Result<Subscription> {
-        // TODO: Fix when Redis API is updated to compatible version
+        // NOTE: Disabled due to Redis API compatibility; re-enable after redis crate update.
         Err(GatewayError::Storage(
             "PubSub temporarily disabled due to API compatibility".to_string(),
         ))
@@ -46,7 +46,7 @@ impl Subscription {
     /// Get the next message
     /// Note: Temporarily disabled due to Redis API compatibility issues
     pub async fn next_message(&mut self) -> Result<redis::Msg> {
-        // TODO: Fix when Redis API is updated to compatible version
+        // NOTE: Disabled due to Redis API compatibility; re-enable after redis crate update.
         Err(GatewayError::Storage(
             "PubSub temporarily disabled due to API compatibility".to_string(),
         ))

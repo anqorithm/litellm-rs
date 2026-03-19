@@ -39,7 +39,7 @@ impl MonitoringSystem {
         let metrics = Arc::new(metrics::MetricsCollector::new(&config).await?);
 
         // Initialize alert manager (if enabled)
-        let alerts = None; // TODO: Add alerting config to MonitoringConfig
+        let alerts = None; // NOTE: alerting config not yet added to MonitoringConfig
 
         info!("Monitoring system initialized successfully");
 

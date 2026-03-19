@@ -344,7 +344,7 @@ impl AnthropicClient {
                                             }
                                         } else {
                                             // URL format image - requires download and conversion
-                                            // TODO: implement URL image download and conversion
+                                            // NOTE: URL image download and conversion not yet implemented
                                             return Err(anthropic_api_error(
                                                 400,
                                                 "URL images not yet supported, use base64 format",

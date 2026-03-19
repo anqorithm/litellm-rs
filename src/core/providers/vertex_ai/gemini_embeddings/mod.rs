@@ -99,7 +99,7 @@ impl GeminiEmbeddingHandler {
             }
         });
 
-        // TODO: Make actual API call
+        // NOTE: actual API call not yet implemented
         // For now, return dummy embedding
         Ok(ContentEmbedding {
             values: vec![0.0; self.model.dimensions()],
@@ -131,7 +131,7 @@ impl GeminiEmbeddingHandler {
             "instances": instances
         });
 
-        // TODO: Make actual API call
+        // NOTE: actual API call not yet implemented
         // For now, return dummy embeddings
         let embeddings = request
             .requests

@@ -122,6 +122,16 @@ impl Router {
         for (model_idx, model) in models_to_try.iter().enumerate() {
             let is_fallback = model_idx > 0;
 
+            if is_fallback {
+                tracing::info!(
+                    original_model = %model_name,
+                    fallback_model = %model,
+                    fallback_index = model_idx,
+                    error_type = %last_error.as_ref().map_or("unknown".to_string(), |e| format!("{e}")),
+                    "fallback triggered, trying next model"
+                );
+            }
+
             match self.execute_with_retry(model, operation.clone()).await {
                 Ok((result, deployment_id, attempts, _latency_us)) => {
                     total_attempts += attempts;
