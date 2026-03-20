@@ -364,6 +364,7 @@ mod tests {
             jwt_secret: "A1!abcde\u{4e00}\u{4e01}\u{4e02}\u{4e03}\u{4e04}\u{4e05}\u{4e06}\u{4e07}\u{4e08}\u{4e09}\u{4e0a}\u{4e0b}".to_string(),
             jwt_expiration: 3600,
             api_key_header: "X-API-Key".to_string(),
+            api_key_hmac_secret: None,
             rbac: RbacConfig::default(),
         };
         // 8 ASCII bytes + 12 CJK * 3 bytes = 44 bytes >= 32, should pass length check
