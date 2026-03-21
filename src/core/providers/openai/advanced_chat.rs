@@ -271,9 +271,13 @@ impl AdvancedChatUtils {
             "gpt-4.1-nano",
             // GPT-5 family
             "gpt-5",
+            "gpt-5-2025-08-01",
             "gpt-5-mini",
+            "gpt-5-nano",
             "gpt-5.1",
+            "gpt-5.1-2025-11-01",
             "gpt-5.1-thinking",
+            "gpt-5.1-thinking-mini",
             "gpt-5.2",
             "gpt-5.2-pro",
             // GPT-5.4 family (2026)
@@ -506,26 +510,77 @@ impl AdvancedChatUtils {
         }
     }
 
-    /// Estimate cost for advanced features
+    /// Estimate cost for advanced features.
+    ///
+    /// Uses prefix-based lookup ordered most-specific to least-specific within each
+    /// family, so dated snapshots (e.g. `gpt-5-2025-08-01`) are covered automatically.
+    /// Costs are in USD per 1 000 tokens.
     pub fn estimate_advanced_cost(
         model: &str,
         input_tokens: u32,
         output_tokens: u32,
         reasoning_tokens: Option<u32>,
     ) -> Result<f64, ProviderError> {
-        let (input_cost, output_cost) = match model {
-            "gpt-4o" | "gpt-4o-2024-08-06" => (0.0025, 0.01),
-            "gpt-4o-mini" | "gpt-4o-mini-2024-07-18" => (0.00015, 0.0006),
-            "o1-preview" | "o1-preview-2024-09-12" => (0.015, 0.06),
-            "o1-mini" | "o1-mini-2024-09-12" => (0.003, 0.012),
-            "gpt-4o-audio-preview" | "gpt-4o-audio-preview-2024-10-01" => (0.0025, 0.01),
-            _ => {
-                return Err(ProviderError::InvalidRequest {
-                    provider: "openai",
-                    message: format!("Unknown advanced model: {}", model),
-                });
+        // (prefix, input_cost_per_1k, output_cost_per_1k)
+        let prefix_costs: &[(&str, f64, f64)] = &[
+            // O1 Pro (must precede "o1")
+            ("o1-pro", 0.150, 0.600),
+            // O1 legacy
+            ("o1-preview", 0.015, 0.060),
+            ("o1-mini", 0.003, 0.012),
+            // O1 GA
+            ("o1", 0.015, 0.060),
+            // O3 family
+            ("o3-pro", 0.020, 0.080),
+            ("o3-mini", 0.0011, 0.0044),
+            ("o3", 0.0011, 0.0044),
+            // O4 family
+            ("o4-mini", 0.0011, 0.0044),
+            // GPT-5.4 family (most specific first)
+            ("gpt-5.4-turbo", 0.002, 0.008),
+            ("gpt-5.4-mini", 0.0006, 0.0024),
+            ("gpt-5.4", 0.003, 0.012),
+            // GPT-5.2 family
+            ("gpt-5.2-pro", 0.021, 0.168),
+            ("gpt-5.2", 0.00175, 0.014),
+            // GPT-5.1 family (most specific first)
+            ("gpt-5.1-thinking-mini", 0.00125, 0.010),
+            ("gpt-5.1-thinking", 0.00250, 0.020),
+            ("gpt-5.1-codex-mini", 0.00025, 0.002),
+            ("gpt-5.1", 0.00125, 0.010),
+            // GPT-5 base family (most specific first)
+            ("gpt-5-nano", 0.00005, 0.0004),
+            ("gpt-5-mini", 0.00025, 0.002),
+            ("gpt-5", 0.00125, 0.010),
+            // GPT-4.1 family
+            ("gpt-4.1-nano", 0.0001, 0.0004),
+            ("gpt-4.1-mini", 0.0004, 0.0016),
+            ("gpt-4.1", 0.002, 0.008),
+            // GPT-4O family
+            ("gpt-4o-audio", 0.0025, 0.010),
+            ("gpt-4o-mini", 0.00015, 0.0006),
+            ("gpt-4o", 0.0025, 0.010),
+            // Codex
+            ("codex-mini-latest", 0.0009, 0.0072),
+        ];
+
+        let mut input_cost = 0.0_f64;
+        let mut output_cost = 0.0_f64;
+        let mut found = false;
+        for &(prefix, ic, oc) in prefix_costs {
+            if model.starts_with(prefix) {
+                input_cost = ic;
+                output_cost = oc;
+                found = true;
+                break;
             }
-        };
+        }
+        if !found {
+            return Err(ProviderError::InvalidRequest {
+                provider: "openai",
+                message: format!("Unknown advanced model: {}", model),
+            });
+        }
 
         let mut total_cost = (input_tokens as f64 / 1000.0) * input_cost;
         total_cost += (output_tokens as f64 / 1000.0) * output_cost;
@@ -802,6 +857,42 @@ mod tests {
             AdvancedChatUtils::estimate_advanced_cost("o1-preview", 1000, 500, Some(2000)).unwrap();
         // (1000/1000 * 0.015) + (500/1000 * 0.06) + (2000/1000 * 0.06)
         assert_eq!(cost_with_reasoning, 0.015 + 0.03 + 0.12);
+
+        // Newly supported models must not return Unknown advanced model
+        assert!(AdvancedChatUtils::estimate_advanced_cost("o1-pro", 100, 50, None).is_ok());
+        assert!(AdvancedChatUtils::estimate_advanced_cost("o3", 100, 50, None).is_ok());
+        assert!(AdvancedChatUtils::estimate_advanced_cost("o3-mini", 100, 50, None).is_ok());
+        assert!(AdvancedChatUtils::estimate_advanced_cost("o4-mini", 100, 50, None).is_ok());
+        assert!(AdvancedChatUtils::estimate_advanced_cost("gpt-5.4", 100, 50, None).is_ok());
+        assert!(
+            AdvancedChatUtils::estimate_advanced_cost("gpt-5-2025-08-01", 100, 50, None).is_ok()
+        );
+        assert!(AdvancedChatUtils::estimate_advanced_cost("gpt-5-nano", 100, 50, None).is_ok());
+        assert!(
+            AdvancedChatUtils::estimate_advanced_cost("gpt-5.1-2025-11-01", 100, 50, None).is_ok()
+        );
+        assert!(AdvancedChatUtils::estimate_advanced_cost("gpt-4.1", 100, 50, None).is_ok());
+        assert!(AdvancedChatUtils::estimate_advanced_cost("unknown-model", 100, 50, None).is_err());
+    }
+
+    #[test]
+    fn test_supports_structured_outputs_gpt5_catalog_ids() {
+        // Dated snapshots and nano/mini variants from the OpenAI catalog must be accepted
+        assert!(AdvancedChatUtils::supports_structured_outputs(
+            "gpt-5-2025-08-01"
+        ));
+        assert!(AdvancedChatUtils::supports_structured_outputs("gpt-5-nano"));
+        assert!(AdvancedChatUtils::supports_structured_outputs(
+            "gpt-5.1-2025-11-01"
+        ));
+        assert!(AdvancedChatUtils::supports_structured_outputs(
+            "gpt-5.1-thinking-mini"
+        ));
+        // o1-pro is not legacy, so it must be accepted
+        assert!(AdvancedChatUtils::supports_structured_outputs("o1-pro"));
+        assert!(AdvancedChatUtils::supports_structured_outputs(
+            "o1-pro-2024-12-17"
+        ));
     }
 
     #[test]
