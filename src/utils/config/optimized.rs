@@ -10,6 +10,7 @@
 use crate::utils::error::gateway_error::{GatewayError, Result};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
+use std::any::Any;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
@@ -18,8 +19,8 @@ use std::sync::LazyLock;
 /// Optimized configuration manager with caching support
 #[derive(Debug)]
 pub struct OptimizedConfigManager {
-    /// Cached configurations
-    cache: Arc<RwLock<HashMap<String, Arc<ConfigValue>>>>,
+    /// Cached configurations, keyed by file path, stored as type-erased `Arc`s
+    cache: Arc<RwLock<HashMap<String, Arc<dyn Any + Send + Sync>>>>,
 }
 
 /// Generic configuration value wrapper
@@ -102,13 +103,13 @@ impl OptimizedConfigManager {
     where
         T: for<'de> Deserialize<'de> + Serialize + Send + Sync + 'static,
     {
-        // Check cache first
+        // Check cache first — downcast the stored Arc<dyn Any> back to Arc<T>
         {
             let cache = self.cache.read();
-            if let Some(cached) = cache.get(file_path)
-                && let Ok(config) = self.try_downcast_config::<T>(cached.clone())
-            {
-                return Ok(config);
+            if let Some(cached) = cache.get(file_path) {
+                if let Ok(typed) = Arc::clone(cached).downcast::<T>() {
+                    return Ok(typed);
+                }
             }
         }
 
@@ -116,12 +117,13 @@ impl OptimizedConfigManager {
         let config = self.load_from_file::<T>(file_path).await?;
         let config_arc = Arc::new(config);
 
-        // Cache the result
+        // Store Arc<T> type-erased as Arc<dyn Any + Send + Sync>
         {
             let mut cache = self.cache.write();
-            // Store as ConfigValue for generic caching
-            let config_value = self.serialize_to_config_value(&*config_arc)?;
-            cache.insert(file_path.to_string(), Arc::new(config_value));
+            cache.insert(
+                file_path.to_string(),
+                config_arc.clone() as Arc<dyn Any + Send + Sync>,
+            );
         }
 
         Ok(config_arc)
@@ -176,25 +178,6 @@ impl OptimizedConfigManager {
             .iter()
             .map(|(k, v)| (k.clone(), std::mem::size_of_val(&**v)))
             .collect()
-    }
-
-    // Helper methods
-    fn try_downcast_config<T>(&self, _config_value: Arc<ConfigValue>) -> Result<Arc<T>>
-    where
-        T: for<'de> Deserialize<'de> + Send + Sync + 'static,
-    {
-        // This would require more complex type erasure in a real implementation
-        Err(GatewayError::Config(
-            "Type downcast not implemented".to_string(),
-        ))
-    }
-
-    fn serialize_to_config_value<T>(&self, _config: &T) -> Result<ConfigValue>
-    where
-        T: Serialize,
-    {
-        // Simplified implementation
-        Ok(ConfigValue::Object(HashMap::new()))
     }
 }
 
