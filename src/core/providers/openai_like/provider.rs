@@ -301,8 +301,20 @@ impl OpenAILikeProvider {
                     match obj.get_mut(&key) {
                         Some(Value::Object(existing)) if value.is_object() => {
                             // Deep merge: add thinking-param keys not already set by the user.
+                            // Special case: within a "reasoning" object, `effort` and
+                            // `max_tokens` are mutually exclusive on OpenRouter — sending both
+                            // causes 400 validation failures.  If the user already set one,
+                            // drop the other from the thinking transform.
                             if let Value::Object(incoming) = value {
+                                let user_has_effort = existing.contains_key("effort");
+                                let user_has_max_tokens = existing.contains_key("max_tokens");
                                 for (k, v) in incoming {
+                                    if k == "effort" && user_has_max_tokens {
+                                        continue; // max_tokens wins; skip effort
+                                    }
+                                    if k == "max_tokens" && user_has_effort {
+                                        continue; // effort wins; skip max_tokens
+                                    }
                                     existing.entry(k).or_insert(v);
                                 }
                             }
@@ -764,5 +776,91 @@ mod tests {
             Some("high"),
             "reasoning.effort must be forwarded"
         );
+    }
+
+    /// When the user supplies `reasoning.max_tokens` via extra_params and the
+    /// thinking transform emits `reasoning.effort`, the merge must NOT produce
+    /// both — OpenRouter rejects requests containing both fields (400).
+    #[tokio::test]
+    async fn test_reasoning_mutual_exclusion_max_tokens_wins()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use crate::core::types::thinking::{ThinkingConfig, ThinkingEffort};
+
+        let config = OpenAILikeConfig::new("https://openrouter.ai/api/v1")
+            .with_provider_name("openrouter")
+            .with_skip_api_key(true);
+        let provider = OpenAILikeProvider::new(config).await?;
+
+        // User sets reasoning.max_tokens in extra_params; thinking adds effort=high.
+        let mut request = ChatRequest {
+            model: "unknown-model".to_string(),
+            messages: vec![],
+            thinking: Some(
+                ThinkingConfig::new()
+                    .enabled()
+                    .with_effort(ThinkingEffort::High),
+            ),
+            ..Default::default()
+        };
+        request.extra_params.insert(
+            "reasoning".to_string(),
+            serde_json::json!({"max_tokens": 1024}),
+        );
+
+        let json = provider.transform_chat_request(request)?;
+        let reasoning = json
+            .get("reasoning")
+            .ok_or("reasoning key missing from output")?;
+
+        assert!(
+            reasoning.get("max_tokens").is_some(),
+            "user-supplied max_tokens must be preserved"
+        );
+        assert!(
+            reasoning.get("effort").is_none(),
+            "effort must not appear when user set max_tokens (mutual exclusion)"
+        );
+        Ok(())
+    }
+
+    /// Mirror test: user-supplied `reasoning.effort` must block the thinking
+    /// transform from adding `reasoning.max_tokens`.
+    #[tokio::test]
+    async fn test_reasoning_mutual_exclusion_effort_wins() -> Result<(), Box<dyn std::error::Error>>
+    {
+        use crate::core::types::thinking::ThinkingConfig;
+
+        let config = OpenAILikeConfig::new("https://openrouter.ai/api/v1")
+            .with_provider_name("openrouter")
+            .with_skip_api_key(true);
+        let provider = OpenAILikeProvider::new(config).await?;
+
+        // User sets reasoning.effort; thinking config has budget_tokens only.
+        let mut request = ChatRequest {
+            model: "unknown-model".to_string(),
+            messages: vec![],
+            thinking: Some(ThinkingConfig::new().enabled().with_budget(2048)),
+            ..Default::default()
+        };
+        request.extra_params.insert(
+            "reasoning".to_string(),
+            serde_json::json!({"effort": "low"}),
+        );
+
+        let json = provider.transform_chat_request(request)?;
+        let reasoning = json
+            .get("reasoning")
+            .ok_or("reasoning key missing from output")?;
+
+        assert_eq!(
+            reasoning.get("effort").and_then(|v| v.as_str()),
+            Some("low"),
+            "user-supplied effort must be preserved"
+        );
+        assert!(
+            reasoning.get("max_tokens").is_none(),
+            "max_tokens must not appear when user set effort (mutual exclusion)"
+        );
+        Ok(())
     }
 }

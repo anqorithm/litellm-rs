@@ -12,8 +12,8 @@ use tracing::debug;
 
 // Use base infrastructure instead of common_utils
 use crate::core::providers::base::{
-    BaseConfig, BaseHttpClient, HttpErrorMapper, OpenAIRequestTransformer, UrlBuilder,
-    apply_headers, get_pricing_db, header, header_static,
+    BaseConfig, BaseHttpClient, HttpErrorMapper, UrlBuilder, apply_headers, get_pricing_db, header,
+    header_static,
 };
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::{
@@ -486,6 +486,13 @@ impl LLMProvider for MistralProvider {
             "tools",
             "tool_choice",
             "response_format",
+            "frequency_penalty",
+            "presence_penalty",
+            "n",
+            "parallel_tool_calls",
+            // Mistral-specific (passed via extra_params)
+            "guardrails",
+            "safe_prompt",
         ]
     }
 
@@ -517,18 +524,11 @@ impl LLMProvider for MistralProvider {
         request: ChatRequest,
         _context: RequestContext,
     ) -> Result<Value, ProviderError> {
-        // Use the OpenAI transformer from base_provider
-        let mut body = OpenAIRequestTransformer::transform_chat_request(&request);
-
-        // Mistral-specific adjustments
-        if let Some(seed) = body.get("seed").cloned()
-            && let Some(obj) = body.as_object_mut()
-        {
-            obj.remove("seed");
-            obj.insert("random_seed".to_string(), seed);
-        }
-
-        Ok(body)
+        // Use the Mistral-specific transformer so that n, parallel_tool_calls,
+        // guardrails, safe_prompt and the seed→random_seed mapping are all applied.
+        crate::core::providers::mistral::chat::transformation::MistralChatTransformation::new()
+            .transform_request(request)
+            .map_err(Into::into)
     }
 
     async fn transform_response(
@@ -1182,5 +1182,50 @@ mod tests {
         assert_eq!(config.api_base, "https://custom.api.com");
         assert_eq!(config.timeout_seconds, 60);
         assert_eq!(config.max_retries, 5);
+    }
+
+    /// Verify that the LLMProvider::transform_request runtime path now routes
+    /// through MistralChatTransformation so that n, parallel_tool_calls, and
+    /// extra_params guardrails/safe_prompt reach the outgoing request body.
+    #[tokio::test]
+    async fn test_transform_request_mistral_params_wired() -> Result<(), Box<dyn std::error::Error>>
+    {
+        use std::collections::HashMap;
+        let provider = MistralProvider::new(create_test_config()).await?;
+
+        let mut extra_params = HashMap::new();
+        extra_params.insert("guardrails".to_string(), serde_json::json!(true));
+
+        let request = ChatRequest {
+            model: "mistral-large".to_string(),
+            messages: vec![ChatMessage {
+                role: MessageRole::User,
+                content: Some(MessageContent::Text("Hi".to_string())),
+                ..Default::default()
+            }],
+            n: Some(2),
+            parallel_tool_calls: Some(false),
+            extra_params,
+            ..Default::default()
+        };
+
+        let body = provider
+            .transform_request(request, RequestContext::default())
+            .await?;
+
+        assert_eq!(body["n"], 2, "n must be forwarded by the runtime path");
+        assert_eq!(
+            body["parallel_tool_calls"], false,
+            "parallel_tool_calls must be forwarded"
+        );
+        assert_eq!(
+            body["guardrails"], true,
+            "guardrails must be forwarded from extra_params"
+        );
+        assert!(
+            body.get("safe_prompt").is_none(),
+            "safe_prompt must not appear when guardrails is set"
+        );
+        Ok(())
     }
 }
