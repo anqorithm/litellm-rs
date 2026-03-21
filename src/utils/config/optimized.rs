@@ -3,8 +3,9 @@
 //! This module provides optimized configuration loading and management
 //! with better performance and reduced memory usage.
 //!
-//! Note: Hot reload is not yet implemented. The `OptimizedConfigManager` currently
-//! provides caching for configuration files loaded at startup.
+//! Hot reload is not supported. Configuration is loaded once at startup and
+//! cached for the lifetime of the process. Restart the server to pick up
+//! configuration changes.
 
 use crate::utils::error::gateway_error::{GatewayError, Result};
 use parking_lot::RwLock;
@@ -228,7 +229,6 @@ impl ConfigPresets {
         );
         config.insert("cache_size".to_string(), ConfigValue::Integer(1000));
         config.insert("enable_metrics".to_string(), ConfigValue::Boolean(true));
-        config.insert("hot_reload".to_string(), ConfigValue::Boolean(true));
         config
     }
 
@@ -241,7 +241,6 @@ impl ConfigPresets {
         );
         config.insert("cache_size".to_string(), ConfigValue::Integer(10000));
         config.insert("enable_metrics".to_string(), ConfigValue::Boolean(true));
-        config.insert("hot_reload".to_string(), ConfigValue::Boolean(false));
         config
     }
 
@@ -254,7 +253,6 @@ impl ConfigPresets {
         );
         config.insert("cache_size".to_string(), ConfigValue::Integer(100));
         config.insert("enable_metrics".to_string(), ConfigValue::Boolean(false));
-        config.insert("hot_reload".to_string(), ConfigValue::Boolean(false));
         config
     }
 }
