@@ -156,6 +156,23 @@ impl OptimizedConfigManager {
         }
     }
 
+    /// Enable hot-reload for a configuration file.
+    ///
+    /// # Deprecated
+    ///
+    /// Hot reload is not yet implemented. This method exists for API compatibility
+    /// only and always returns an error. Support may be added in a future release.
+    #[deprecated(since = "0.1.0", note = "Hot reload is not yet implemented")]
+    pub async fn enable_hot_reload<T, F>(&self, _file_path: &str, _callback: F) -> Result<()>
+    where
+        T: for<'de> Deserialize<'de> + Serialize + Send + Sync + 'static,
+        F: Fn(Arc<T>) + Send + Sync + 'static,
+    {
+        Err(GatewayError::Config(
+            "Hot reload is not yet implemented".to_string(),
+        ))
+    }
+
     /// Clear cache for a specific file
     pub fn clear_cache(&self, file_path: &str) {
         let mut cache = self.cache.write();
