@@ -283,6 +283,9 @@ impl AdvancedChatUtils {
             // O1 GA and newer support structured outputs
             "o1",
             "o1-2024-12-17",
+            // O1 Pro
+            "o1-pro",
+            "o1-pro-2024-12-17",
             // O3 family
             "o3",
             "o3-mini",
@@ -332,6 +335,18 @@ impl AdvancedChatUtils {
     /// Get models that support audio responses
     pub fn get_audio_models() -> Vec<&'static str> {
         vec!["gpt-4o-audio-preview", "gpt-4o-audio-preview-2024-10-01"]
+    }
+
+    /// Get the maximum allowed reasoning tokens for a model.
+    ///
+    /// Legacy reasoning models (o1-preview, o1-mini) are capped at 20 000.
+    /// Current o-series models (o1 GA, o1-pro, o3, o4-mini) support up to 100 000.
+    pub fn max_reasoning_tokens_for_model(model: &str) -> u32 {
+        if Self::is_legacy_reasoning_model(model) {
+            20_000
+        } else {
+            100_000
+        }
     }
 
     /// Check if model supports structured outputs
@@ -432,13 +447,17 @@ impl AdvancedChatUtils {
                 }
             }
 
-            if let Some(max_reasoning) = reasoning_config.max_reasoning_tokens
-                && max_reasoning > 20000
-            {
-                return Err(ProviderError::InvalidRequest {
-                    provider: "openai",
-                    message: "max_reasoning_tokens cannot exceed 20000".to_string(),
-                });
+            if let Some(max_reasoning) = reasoning_config.max_reasoning_tokens {
+                let limit = Self::max_reasoning_tokens_for_model(&request.model);
+                if max_reasoning > limit {
+                    return Err(ProviderError::InvalidRequest {
+                        provider: "openai",
+                        message: format!(
+                            "max_reasoning_tokens cannot exceed {} for model {}",
+                            limit, request.model
+                        ),
+                    });
+                }
             }
         }
 
