@@ -274,6 +274,26 @@ mod tests {
     }
 
     #[test]
+    fn test_serde_yml_error_conversion() {
+        let yml_result: std::result::Result<serde_yml::Value, _> =
+            serde_yml::from_str("key: [unclosed");
+        let yml_error = yml_result.unwrap_err();
+        let gateway_error: GatewayError = yml_error.into();
+        assert!(matches!(gateway_error, GatewayError::Serialization(_)));
+        assert!(gateway_error.to_string().contains("Serialization error"));
+    }
+
+    #[test]
+    fn test_jwt_error_conversion() {
+        use jsonwebtoken::{errors::Error as JwtError, errors::ErrorKind};
+        let jwt_error = JwtError::from(ErrorKind::InvalidToken);
+        let gateway_error: GatewayError = jwt_error.into();
+        assert!(matches!(gateway_error, GatewayError::Auth(_)));
+        assert!(gateway_error.to_string().contains("Authentication error"));
+        assert!(gateway_error.to_string().contains("JWT error"));
+    }
+
+    #[test]
     fn test_error_is_std_error() {
         let error = GatewayError::Config("test".to_string());
         let _: &dyn std::error::Error = &error;
