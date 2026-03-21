@@ -464,19 +464,23 @@ pub mod openrouter_thinking {
             "deepseek" => deepseek_thinking::transform_config(config, model),
             "gemini" => gemini_thinking::transform_config(config, model),
             _ => {
-                // Use OpenRouter's native reasoning object for generic/unknown models
+                // Use OpenRouter's native reasoning object for generic/unknown models.
+                // effort and max_tokens are mutually exclusive per OpenRouter's API:
+                // use effort when set, otherwise fall back to budget_tokens as max_tokens.
                 let mut params = serde_json::Map::new();
+                let mut reasoning = serde_json::Map::new();
                 if let Some(effort) = &config.effort {
                     let effort_str = match effort {
                         ThinkingEffort::Low => "low",
                         ThinkingEffort::Medium => "medium",
                         ThinkingEffort::High => "high",
                     };
-                    let mut reasoning = serde_json::Map::new();
                     reasoning.insert("effort".into(), effort_str.into());
-                    if let Some(budget) = config.budget_tokens {
-                        reasoning.insert("max_tokens".into(), budget.into());
-                    }
+                } else if let Some(budget) = config.budget_tokens {
+                    // Only emit max_tokens when effort is absent (one-of semantics)
+                    reasoning.insert("max_tokens".into(), budget.into());
+                }
+                if !reasoning.is_empty() {
                     params.insert("reasoning".into(), Value::Object(reasoning));
                 }
                 Ok(Value::Object(params))

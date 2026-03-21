@@ -290,13 +290,26 @@ impl OpenAILikeProvider {
 
         // Forward extra_params (e.g. OpenRouter-specific params, frequency_penalty, etc.)
         if let Some(obj) = openai_request.as_object_mut() {
-            for (key, value) in request.extra_params {
-                obj.insert(key, value);
-            }
-            // Merge OpenRouter reasoning params (reasoning.effort etc.)
+            // Insert provider-computed reasoning params first as a base layer
             if let Some(Value::Object(params)) = openrouter_thinking_params {
                 for (key, value) in params {
                     obj.insert(key, value);
+                }
+            }
+            // Deep-merge caller-supplied extra_params on top so user-provided keys win.
+            // For object values (e.g. "reasoning"), sub-keys are merged individually
+            // rather than replacing the entire object, preserving fields like
+            // reasoning.exclude / reasoning.enabled that the provider does not set.
+            for (key, value) in request.extra_params {
+                match (obj.get_mut(&key), &value) {
+                    (Some(Value::Object(existing)), Value::Object(incoming)) => {
+                        for (k, v) in incoming {
+                            existing.insert(k.clone(), v.clone());
+                        }
+                    }
+                    _ => {
+                        obj.insert(key, value);
+                    }
                 }
             }
         }
