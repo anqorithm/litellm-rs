@@ -301,7 +301,7 @@ async fn handle_chat_completion_internal(
     Ok(convert_core_chat_response(execution.0))
 }
 
-fn build_core_chat_request(
+pub(crate) fn build_core_chat_request(
     request: ChatCompletionRequest,
     model: String,
     stream: bool,
@@ -387,9 +387,9 @@ fn build_core_chat_request(
         top_logprobs: request.top_logprobs,
         thinking: None,
         reasoning_effort: request.reasoning_effort,
-        store: None,
-        metadata: None,
-        service_tier: None,
+        store: request.store,
+        metadata: request.metadata,
+        service_tier: request.service_tier,
         extra_params,
     })
 }
