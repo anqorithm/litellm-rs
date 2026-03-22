@@ -102,6 +102,31 @@ pub struct ResponseFormat {
     pub response_type: Option<String>,
 }
 
+/// Anthropic server-side built-in tool type identifiers.
+///
+/// These represent tools hosted by Anthropic that do not require
+/// a client-side function definition (no `input_schema` needed).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum AnthropicBuiltinToolType {
+    /// Web search tool (released 2025-03-05)
+    #[serde(rename = "web_search_20250305")]
+    WebSearch,
+    /// Computer use tool (released 2025-01-24)
+    #[serde(rename = "computer_20250124")]
+    ComputerUse,
+}
+
+/// An Anthropic server-side (built-in) tool that is executed by Anthropic
+/// without a client-provided function implementation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnthropicBuiltinTool {
+    /// Tool type identifier
+    #[serde(rename = "type")]
+    pub tool_type: AnthropicBuiltinToolType,
+    /// Tool name used when referencing the tool in messages
+    pub name: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

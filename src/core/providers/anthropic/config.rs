@@ -8,6 +8,16 @@ use std::env;
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::provider::ProviderConfig;
 
+/// Known `anthropic-beta` header values for Anthropic API feature gating.
+pub mod beta {
+    /// Extended (interleaved) thinking support.
+    pub const EXTENDED_THINKING: &str = "interleaved-thinking-2025-05-14";
+    /// Computer use tool support.
+    pub const COMPUTER_USE: &str = "computer-use-2025-01-24";
+    /// Citations support for grounded responses.
+    pub const CITATIONS: &str = "citations-2025-01-15";
+}
+
 /// Configuration
 #[derive(Debug, Clone)]
 pub struct AnthropicConfig {
@@ -37,6 +47,12 @@ pub struct AnthropicConfig {
     pub enable_computer_use: bool,
     /// Enable experimental features
     pub enable_experimental: bool,
+    /// Explicit `anthropic-beta` feature identifiers to include in every request.
+    ///
+    /// Well-known values are available in the [`beta`] module.  Additional
+    /// beta features detected from the request (e.g. extended thinking) are
+    /// added automatically and do not need to be listed here.
+    pub beta_features: Vec<String>,
 }
 
 impl Default for AnthropicConfig {
@@ -55,6 +71,7 @@ impl Default for AnthropicConfig {
             enable_cache_control: true,
             enable_computer_use: false, // Default disabled
             enable_experimental: false,
+            beta_features: Vec::new(),
         }
     }
 }
@@ -128,6 +145,16 @@ impl AnthropicConfig {
             config.enable_experimental = experimental.parse().unwrap_or(false);
         }
 
+        // Comma-separated beta feature identifiers, e.g.
+        // ANTHROPIC_BETA_FEATURES="interleaved-thinking-2025-05-14,citations-2025-01-15"
+        if let Ok(betas) = env::var("ANTHROPIC_BETA_FEATURES") {
+            config.beta_features = betas
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+        }
+
         Ok(config)
     }
 
@@ -188,6 +215,17 @@ impl AnthropicConfig {
     /// Enable experimental features
     pub fn with_experimental(mut self, enabled: bool) -> Self {
         self.enable_experimental = enabled;
+        self
+    }
+
+    /// Append a beta feature identifier sent in the `anthropic-beta` header.
+    ///
+    /// Well-known identifiers are in [`beta`].  Duplicates are ignored.
+    pub fn with_beta_feature(mut self, feature: impl Into<String>) -> Self {
+        let f = feature.into();
+        if !self.beta_features.contains(&f) {
+            self.beta_features.push(f);
+        }
         self
     }
 

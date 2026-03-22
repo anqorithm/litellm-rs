@@ -21,7 +21,7 @@ use crate::core::types::{
     responses::{ChatChoice, ChatResponse, Usage},
 };
 
-use super::config::AnthropicConfig;
+use super::config::{AnthropicConfig, beta};
 use super::error::{
     anthropic_api_error, anthropic_auth_error, anthropic_network_error, anthropic_parse_error,
     anthropic_rate_limit_error,
@@ -61,14 +61,34 @@ impl AnthropicClient {
 
     /// Request
     pub async fn chat(&self, request: ChatRequest) -> Result<ChatResponse, ProviderError> {
-        // Request
+        let using_json_schema = request
+            .response_format
+            .as_ref()
+            .map(|f| f.format_type == "json_schema")
+            .unwrap_or(false);
+
+        let beta_features = self.collect_beta_features(&request);
         let anthropic_request = self.transform_chat_request(&request)?;
+        let response = self
+            .send_request("/v1/messages", anthropic_request, &beta_features)
+            .await?;
+        let mut chat_response = self.transform_chat_response(response)?;
 
-        // Request
-        let response = self.send_request("/v1/messages", anthropic_request).await?;
+        // For json_schema mode: surface the "json_response" tool-call input as
+        // regular text content so callers see a uniform ChatResponse.
+        if using_json_schema
+            && let Some(choice) = chat_response.choices.first_mut()
+            && let Some(tool_calls) = choice.message.tool_calls.take()
+            && let Some(tc) = tool_calls
+                .into_iter()
+                .find(|t| t.function.name == "json_response")
+        {
+            choice.message.content = Some(crate::core::types::message::MessageContent::Text(
+                tc.function.arguments,
+            ));
+        }
 
-        // Response
-        self.transform_chat_response(response)
+        Ok(chat_response)
     }
 
     /// Request
@@ -76,19 +96,42 @@ impl AnthropicClient {
         &self,
         request: ChatRequest,
     ) -> Result<reqwest::Response, ProviderError> {
-        // Request
+        let beta_features = self.collect_beta_features(&request);
         let mut anthropic_request = self.transform_chat_request(&request)?;
         anthropic_request["stream"] = json!(true);
-
-        // Request
-        self.send_stream_request("/v1/messages", anthropic_request)
+        self.send_stream_request("/v1/messages", anthropic_request, &beta_features)
             .await
     }
 
+    /// Collect `anthropic-beta` feature identifiers for the given request.
+    ///
+    /// Starts from the explicit list in `config.beta_features` and appends
+    /// any features that can be auto-detected from the request parameters.
+    fn collect_beta_features(&self, request: &ChatRequest) -> Vec<String> {
+        let mut features = self.config.beta_features.clone();
+
+        // Auto-detect: extended thinking requires the interleaved-thinking beta.
+        if let Some(thinking) = &request.thinking
+            && thinking.enabled
+        {
+            let key = beta::EXTENDED_THINKING.to_string();
+            if !features.contains(&key) {
+                features.push(key);
+            }
+        }
+
+        features
+    }
+
     /// Request
-    async fn send_request(&self, endpoint: &str, body: Value) -> Result<Value, ProviderError> {
+    async fn send_request(
+        &self,
+        endpoint: &str,
+        body: Value,
+        beta_features: &[String],
+    ) -> Result<Value, ProviderError> {
         let url = format!("{}{}", self.config.base_url.trim_end_matches('/'), endpoint);
-        let headers = self.get_request_headers();
+        let headers = self.get_request_headers(beta_features);
 
         let response = timeout(
             Duration::from_secs(self.config.request_timeout),
@@ -106,9 +149,10 @@ impl AnthropicClient {
         &self,
         endpoint: &str,
         body: Value,
+        beta_features: &[String],
     ) -> Result<Response, ProviderError> {
         let url = format!("{}{}", self.config.base_url.trim_end_matches('/'), endpoint);
-        let headers = self.get_request_headers();
+        let headers = self.get_request_headers(beta_features);
 
         let response = timeout(
             Duration::from_secs(self.config.request_timeout),
@@ -132,8 +176,12 @@ impl AnthropicClient {
     }
 
     /// Build request headers using the unified HeaderPair pattern.
-    fn get_request_headers(&self) -> Vec<HeaderPair> {
-        let mut headers = Vec::with_capacity(5);
+    ///
+    /// `beta_features` is a list of `anthropic-beta` identifiers collected by
+    /// [`Self::collect_beta_features`].  When non-empty they are joined with
+    /// commas and sent as a single `anthropic-beta` header.
+    fn get_request_headers(&self, beta_features: &[String]) -> Vec<HeaderPair> {
+        let mut headers = Vec::with_capacity(6);
 
         // Authentication header
         if let Some(ref api_key) = self.config.api_key {
@@ -142,6 +190,11 @@ impl AnthropicClient {
 
         // Version header
         headers.push(header("anthropic-version", self.config.api_version.clone()));
+
+        // Beta features header (only when at least one feature is requested)
+        if !beta_features.is_empty() {
+            headers.push(header("anthropic-beta", beta_features.join(",")));
+        }
 
         // Content type and user agent - zero allocation for static values
         headers.push(header_static("Content-Type", "application/json"));
@@ -238,6 +291,29 @@ impl AnthropicClient {
             if let Some(tool_choice) = &request.tool_choice {
                 anthropic_request["tool_choice"] = self.transform_tool_choice(tool_choice)?;
             }
+        }
+
+        // JSON schema structured output: use tool-based extraction.
+        // A virtual tool named "json_response" is injected and forced so that
+        // Anthropic returns the structured data as the tool's input object.
+        if let Some(response_format) = &request.response_format
+            && response_format.format_type == "json_schema"
+            && let Some(schema) = &response_format.json_schema
+        {
+            let existing = anthropic_request
+                .get("tools")
+                .and_then(|t| t.as_array())
+                .cloned()
+                .unwrap_or_default();
+            let mut tools = existing;
+            tools.push(json!({
+                "name": "json_response",
+                "description": "Return a structured JSON response conforming to the provided schema.",
+                "input_schema": schema
+            }));
+            anthropic_request["tools"] = json!(tools);
+            anthropic_request["tool_choice"] =
+                json!({"type": "tool", "name": "json_response"});
         }
 
         // Add thinking configuration
@@ -638,7 +714,7 @@ mod tests {
     fn test_header_building() {
         let config = AnthropicConfig::new_test("test-key");
         let client = AnthropicClient::new(config).unwrap();
-        let headers = client.get_request_headers();
+        let headers = client.get_request_headers(&[]);
 
         // Anthropic uses x-api-key header instead of Authorization
         assert!(has_header(&headers, "x-api-key"));
@@ -651,7 +727,7 @@ mod tests {
     fn test_header_content_type() {
         let config = AnthropicConfig::new_test("test-key");
         let client = AnthropicClient::new(config).unwrap();
-        let headers = client.get_request_headers();
+        let headers = client.get_request_headers(&[]);
 
         assert_eq!(
             get_header(&headers, "Content-Type").unwrap(),
@@ -663,7 +739,7 @@ mod tests {
     fn test_header_user_agent() {
         let config = AnthropicConfig::new_test("test-key");
         let client = AnthropicClient::new(config).unwrap();
-        let headers = client.get_request_headers();
+        let headers = client.get_request_headers(&[]);
 
         assert_eq!(
             get_header(&headers, "User-Agent").unwrap(),
@@ -678,7 +754,7 @@ mod tests {
             .custom_headers
             .insert("X-Custom-Header".to_string(), "custom-value".to_string());
         let client = AnthropicClient::new(config).unwrap();
-        let headers = client.get_request_headers();
+        let headers = client.get_request_headers(&[]);
 
         assert!(has_header(&headers, "X-Custom-Header"));
     }
