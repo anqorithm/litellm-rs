@@ -7,11 +7,19 @@ use crate::core::providers::provider_type::ProviderType;
 use crate::core::providers::registry as provider_registry;
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::providers::{Provider, anthropic, cloudflare, mistral, openai, openai_like};
+#[cfg(feature = "providers-extra")]
+use crate::core::providers::{azure, azure_ai, bedrock, meta_llama, v0, vertex_ai};
 
 use super::builder::{
     build_anthropic_config_from_factory, build_cloudflare_config_from_factory,
     build_mistral_config_from_factory, build_openai_config_from_factory,
     build_openai_like_config_from_factory, config_str, config_u32, config_u64,
+};
+#[cfg(feature = "providers-extra")]
+use super::builder::{
+    build_azure_ai_config_from_factory, build_azure_config_from_factory,
+    build_bedrock_config_from_factory, build_meta_llama_config_from_factory,
+    build_v0_config_from_factory, build_vertex_ai_config_from_factory,
 };
 
 impl Provider {
@@ -89,6 +97,50 @@ impl Provider {
                     .await
                     .map_err(|e| ProviderError::initialization(def.name, e.to_string()))?;
                 Ok(Provider::OpenAILike(provider))
+            }
+            #[cfg(feature = "providers-extra")]
+            ProviderType::Azure => {
+                let azure_config = build_azure_config_from_factory(&config)?;
+                let provider = azure::AzureOpenAIProvider::new(azure_config)
+                    .map_err(|e| ProviderError::initialization("azure", e.to_string()))?;
+                Ok(Provider::Azure(provider))
+            }
+            #[cfg(feature = "providers-extra")]
+            ProviderType::AzureAI => {
+                let azure_ai_config = build_azure_ai_config_from_factory(&config)?;
+                let provider = azure_ai::AzureAIProvider::new(azure_ai_config)
+                    .map_err(|e| ProviderError::initialization("azure_ai", e.to_string()))?;
+                Ok(Provider::AzureAI(provider))
+            }
+            #[cfg(feature = "providers-extra")]
+            ProviderType::Bedrock => {
+                let bedrock_config = build_bedrock_config_from_factory(&config)?;
+                let provider = bedrock::BedrockProvider::new(bedrock_config)
+                    .await
+                    .map_err(|e| ProviderError::initialization("bedrock", e.to_string()))?;
+                Ok(Provider::Bedrock(provider))
+            }
+            #[cfg(feature = "providers-extra")]
+            ProviderType::MetaLlama => {
+                let llama_config = build_meta_llama_config_from_factory(&config)?;
+                let provider = meta_llama::LlamaProvider::new(llama_config)
+                    .map_err(|e| ProviderError::initialization("meta_llama", e.to_string()))?;
+                Ok(Provider::MetaLlama(provider))
+            }
+            #[cfg(feature = "providers-extra")]
+            ProviderType::V0 => {
+                let v0_config = build_v0_config_from_factory(&config)?;
+                let provider = v0::V0Provider::new(v0_config)
+                    .map_err(|e| ProviderError::initialization("v0", e.to_string()))?;
+                Ok(Provider::V0(provider))
+            }
+            #[cfg(feature = "providers-extra")]
+            ProviderType::VertexAI => {
+                let vertex_config = build_vertex_ai_config_from_factory(&config)?;
+                let provider = vertex_ai::VertexAIProvider::new(vertex_config)
+                    .await
+                    .map_err(|e| ProviderError::initialization("vertex_ai", e.to_string()))?;
+                Ok(Provider::VertexAI(provider))
             }
             _ => Err(ProviderError::not_implemented(
                 "unknown",

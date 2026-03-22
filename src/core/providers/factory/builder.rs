@@ -5,6 +5,8 @@
 
 use super::super::unified_provider::ProviderError;
 use super::super::{anthropic, cloudflare, macros, mistral, openai, openai_like};
+#[cfg(feature = "providers-extra")]
+use super::super::{azure, azure_ai, bedrock, meta_llama, v0, vertex_ai};
 
 // ==================== Config Extraction Helpers ====================
 
@@ -352,6 +354,161 @@ pub(super) fn build_openai_like_config_from_factory(
     merge_string_headers(&mut oai_like.custom_headers, config, "custom_headers");
 
     Ok(oai_like)
+}
+
+// ==================== providers-extra Builder Functions ====================
+
+#[cfg(feature = "providers-extra")]
+pub(super) fn build_azure_config_from_factory(
+    config: &serde_json::Value,
+) -> Result<azure::AzureConfig, ProviderError> {
+    let mut azure_config = azure::AzureConfig::new();
+    if let Some(api_key) = config_str(config, "api_key") {
+        azure_config.api_key = Some(api_key.to_string());
+    }
+    if let Some(endpoint) = config_str(config, "azure_endpoint")
+        .or_else(|| config_str(config, "base_url"))
+        .or_else(|| config_str(config, "api_base"))
+    {
+        azure_config.azure_endpoint = Some(endpoint.to_string());
+    }
+    if let Some(api_version) = config_str(config, "api_version") {
+        azure_config.api_version = api_version.to_string();
+    }
+    if let Some(deployment) = config_str(config, "deployment_name") {
+        azure_config.deployment_name = Some(deployment.to_string());
+    }
+    merge_string_headers(&mut azure_config.custom_headers, config, "headers");
+    merge_string_headers(&mut azure_config.custom_headers, config, "custom_headers");
+    Ok(azure_config)
+}
+
+#[cfg(feature = "providers-extra")]
+pub(super) fn build_azure_ai_config_from_factory(
+    config: &serde_json::Value,
+) -> Result<azure_ai::AzureAIConfig, ProviderError> {
+    let mut azure_ai_config = azure_ai::AzureAIConfig::new("azure_ai");
+    if let Some(api_key) = config_str(config, "api_key") {
+        azure_ai_config.base.api_key = Some(api_key.to_string());
+    }
+    if let Some(api_base) =
+        config_str(config, "base_url").or_else(|| config_str(config, "api_base"))
+    {
+        azure_ai_config.base.api_base = Some(api_base.to_string());
+    }
+    if let Some(timeout) = config_u64(config, "timeout") {
+        azure_ai_config.base.timeout = timeout;
+    }
+    if let Some(max_retries) = config_u32(config, "max_retries") {
+        azure_ai_config.base.max_retries = max_retries;
+    }
+    Ok(azure_ai_config)
+}
+
+#[cfg(feature = "providers-extra")]
+pub(super) fn build_bedrock_config_from_factory(
+    config: &serde_json::Value,
+) -> Result<bedrock::BedrockConfig, ProviderError> {
+    let access_key = macros::require_config_str(config, "aws_access_key_id", "bedrock")?;
+    let secret_key = macros::require_config_str(config, "aws_secret_access_key", "bedrock")?;
+    let mut bedrock_config = bedrock::BedrockConfig {
+        aws_access_key_id: access_key.to_string(),
+        aws_secret_access_key: secret_key.to_string(),
+        ..Default::default()
+    };
+    if let Some(region) = config_str(config, "aws_region").or_else(|| config_str(config, "region"))
+    {
+        bedrock_config.aws_region = region.to_string();
+    }
+    if let Some(session_token) = config_str(config, "aws_session_token") {
+        bedrock_config.aws_session_token = Some(session_token.to_string());
+    }
+    if let Some(timeout) = config_u64(config, "timeout") {
+        bedrock_config.timeout_seconds = timeout;
+    }
+    if let Some(max_retries) = config_u32(config, "max_retries") {
+        bedrock_config.max_retries = max_retries;
+    }
+    Ok(bedrock_config)
+}
+
+#[cfg(feature = "providers-extra")]
+pub(super) fn build_meta_llama_config_from_factory(
+    config: &serde_json::Value,
+) -> Result<meta_llama::LlamaProviderConfig, ProviderError> {
+    let api_key = macros::require_config_str(config, "api_key", "meta_llama")?;
+    let mut llama_config = meta_llama::LlamaProviderConfig {
+        api_key: api_key.to_string(),
+        ..Default::default()
+    };
+    if let Some(api_base) =
+        config_str(config, "base_url").or_else(|| config_str(config, "api_base"))
+    {
+        llama_config.api_base = Some(api_base.to_string());
+    }
+    if let Some(timeout) = config_u64(config, "timeout") {
+        llama_config.timeout = Some(timeout);
+    }
+    if let Some(max_retries) = config_u32(config, "max_retries") {
+        llama_config.max_retries = Some(max_retries);
+    }
+    if let Some(org) = config_str(config, "organization") {
+        llama_config.organization_id = Some(org.to_string());
+    }
+    Ok(llama_config)
+}
+
+#[cfg(feature = "providers-extra")]
+pub(super) fn build_v0_config_from_factory(
+    config: &serde_json::Value,
+) -> Result<v0::V0Config, ProviderError> {
+    let api_key = macros::require_config_str(config, "api_key", "v0")?;
+    let mut v0_config = v0::V0Config {
+        api_key: api_key.to_string(),
+        ..Default::default()
+    };
+    if let Some(api_base) =
+        config_str(config, "base_url").or_else(|| config_str(config, "api_base"))
+    {
+        v0_config.api_base = api_base.to_string();
+    }
+    if let Some(timeout) = config_u64(config, "timeout") {
+        v0_config.timeout_seconds = timeout;
+    }
+    if let Some(max_retries) = config_u32(config, "max_retries") {
+        v0_config.max_retries = max_retries;
+    }
+    Ok(v0_config)
+}
+
+#[cfg(feature = "providers-extra")]
+pub(super) fn build_vertex_ai_config_from_factory(
+    config: &serde_json::Value,
+) -> Result<vertex_ai::VertexAIProviderConfig, ProviderError> {
+    let project_id = macros::require_config_str(config, "project_id", "vertex_ai")?;
+    let mut vertex_config = vertex_ai::VertexAIProviderConfig {
+        project_id: project_id.to_string(),
+        ..Default::default()
+    };
+    if let Some(location) = config_str(config, "location").or_else(|| config_str(config, "region"))
+    {
+        vertex_config.location = location.to_string();
+    }
+    if let Some(api_version) = config_str(config, "api_version") {
+        vertex_config.api_version = api_version.to_string();
+    }
+    if let Some(api_base) =
+        config_str(config, "base_url").or_else(|| config_str(config, "api_base"))
+    {
+        vertex_config.api_base = Some(api_base.to_string());
+    }
+    if let Some(timeout) = config_u64(config, "timeout") {
+        vertex_config.timeout_seconds = timeout;
+    }
+    if let Some(max_retries) = config_u32(config, "max_retries") {
+        vertex_config.max_retries = max_retries;
+    }
+    Ok(vertex_config)
 }
 
 #[cfg(test)]

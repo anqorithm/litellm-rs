@@ -270,14 +270,14 @@ pub(crate) fn convert_to_responses_api(
                 Some(MessageContent::Parts(parts)) => parts
                     .iter()
                     .filter_map(|part| {
-                        if let ContentPart::Text { text } = part {
-                            if !text.is_empty() {
-                                return Some(ResponseOutputContent::OutputText {
-                                    text: text.clone(),
-                                    annotations: None,
-                                    logprobs: None,
-                                });
-                            }
+                        if let ContentPart::Text { text } = part
+                            && !text.is_empty()
+                        {
+                            return Some(ResponseOutputContent::OutputText {
+                                text: text.clone(),
+                                annotations: None,
+                                logprobs: None,
+                            });
                         }
                         None
                     })
