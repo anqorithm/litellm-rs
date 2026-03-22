@@ -76,16 +76,28 @@ impl AnthropicClient {
 
         // For json_schema mode: surface the "json_response" tool-call input as
         // regular text content so callers see a uniform ChatResponse.
-        if using_json_schema
-            && let Some(choice) = chat_response.choices.first_mut()
-            && let Some(tool_calls) = choice.message.tool_calls.take()
-            && let Some(tc) = tool_calls
-                .into_iter()
-                .find(|t| t.function.name == "json_response")
-        {
-            choice.message.content = Some(crate::core::types::message::MessageContent::Text(
-                tc.function.arguments,
-            ));
+        if using_json_schema {
+            if let Some(choice) = chat_response.choices.first_mut() {
+                let json_tc_idx =
+                    choice.message.tool_calls.as_ref().and_then(|tcs| {
+                        tcs.iter().position(|t| t.function.name == "json_response")
+                    });
+                if let Some(idx) = json_tc_idx {
+                    let tc = choice.message.tool_calls.as_mut().unwrap().remove(idx);
+                    if choice
+                        .message
+                        .tool_calls
+                        .as_ref()
+                        .map(|v| v.is_empty())
+                        .unwrap_or(true)
+                    {
+                        choice.message.tool_calls = None;
+                    }
+                    choice.message.content = Some(
+                        crate::core::types::message::MessageContent::Text(tc.function.arguments),
+                    );
+                }
+            }
         }
 
         Ok(chat_response)
@@ -117,6 +129,29 @@ impl AnthropicClient {
             let key = beta::EXTENDED_THINKING.to_string();
             if !features.contains(&key) {
                 features.push(key);
+            }
+        }
+
+        // Honor per-request beta flags supplied via extra_params["anthropic_beta"].
+        // Value may be a JSON string ("flag1,flag2") or an array (["flag1","flag2"]).
+        if let Some(beta_val) = request.extra_params.get("anthropic_beta") {
+            let extra: Vec<String> = if let Some(s) = beta_val.as_str() {
+                s.split(',')
+                    .map(|v| v.trim().to_string())
+                    .filter(|v| !v.is_empty())
+                    .collect()
+            } else if let Some(arr) = beta_val.as_array() {
+                arr.iter()
+                    .filter_map(|v| v.as_str())
+                    .map(|v| v.to_string())
+                    .collect()
+            } else {
+                vec![]
+            };
+            for flag in extra {
+                if !features.contains(&flag) {
+                    features.push(flag);
+                }
             }
         }
 
@@ -293,6 +328,21 @@ impl AnthropicClient {
             }
         }
 
+        // Merge built-in / extra tools from extra_params["anthropic_tools"].
+        // These may be Anthropic built-in tools (e.g. computer_use, web_search)
+        // that callers pass in without going through the standard tools field.
+        if let Some(extra_tools_val) = request.extra_params.get("anthropic_tools") {
+            if let Some(extra_arr) = extra_tools_val.as_array() {
+                let mut tools: Vec<Value> = anthropic_request
+                    .get("tools")
+                    .and_then(|t| t.as_array())
+                    .cloned()
+                    .unwrap_or_default();
+                tools.extend(extra_arr.iter().cloned());
+                anthropic_request["tools"] = json!(tools);
+            }
+        }
+
         // JSON schema structured output: use tool-based extraction.
         // A virtual tool named "json_response" is injected and forced so that
         // Anthropic returns the structured data as the tool's input object.
@@ -300,20 +350,24 @@ impl AnthropicClient {
             && response_format.format_type == "json_schema"
             && let Some(schema) = &response_format.json_schema
         {
-            let existing = anthropic_request
+            let mut tools: Vec<Value> = anthropic_request
                 .get("tools")
                 .and_then(|t| t.as_array())
                 .cloned()
                 .unwrap_or_default();
-            let mut tools = existing;
-            tools.push(json!({
-                "name": "json_response",
-                "description": "Return a structured JSON response conforming to the provided schema.",
-                "input_schema": schema
-            }));
+            // Only inject if not already present to avoid Anthropic validation errors.
+            let already_present = tools
+                .iter()
+                .any(|t| t.get("name").and_then(|n| n.as_str()) == Some("json_response"));
+            if !already_present {
+                tools.push(json!({
+                    "name": "json_response",
+                    "description": "Return a structured JSON response conforming to the provided schema.",
+                    "input_schema": schema
+                }));
+            }
             anthropic_request["tools"] = json!(tools);
-            anthropic_request["tool_choice"] =
-                json!({"type": "tool", "name": "json_response"});
+            anthropic_request["tool_choice"] = json!({"type": "tool", "name": "json_response"});
         }
 
         // Add thinking configuration

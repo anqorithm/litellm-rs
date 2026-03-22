@@ -497,11 +497,24 @@ impl SSETransformer for AnthropicTransformer {
                 }))
             }
             "content_block_delta" => {
-                let text = json
-                    .get("delta")
-                    .and_then(|d| d.get("text"))
+                let delta = json.get("delta");
+                let delta_type = delta
+                    .and_then(|d| d.get("type"))
                     .and_then(|t| t.as_str())
                     .unwrap_or("");
+
+                // text_delta → regular content; input_json_delta → tool/structured-output JSON
+                let text = if delta_type == "input_json_delta" {
+                    delta
+                        .and_then(|d| d.get("partial_json"))
+                        .and_then(|t| t.as_str())
+                        .unwrap_or("")
+                } else {
+                    delta
+                        .and_then(|d| d.get("text"))
+                        .and_then(|t| t.as_str())
+                        .unwrap_or("")
+                };
 
                 Ok(Some(ChatChunk {
                     id: String::new(),
