@@ -259,8 +259,18 @@ impl LLMProvider for AnthropicProvider {
             ));
         }
 
+        let using_json_schema = request
+            .response_format
+            .as_ref()
+            .map(|f| f.format_type == "json_schema")
+            .unwrap_or(false);
+
         let response = self.client.chat_stream(request.clone()).await?;
-        let stream = AnthropicStream::from_response(response, request.model);
+        let stream = if using_json_schema {
+            AnthropicStream::from_response_json_schema(response, request.model)
+        } else {
+            AnthropicStream::from_response(response, request.model)
+        };
 
         Ok(Box::pin(stream))
     }

@@ -430,19 +430,35 @@ impl SSETransformer for OpenAICompatibleTransformer {
 #[derive(Debug, Clone)]
 pub struct AnthropicTransformer {
     model: String,
+    /// When true the stream is for a json_schema structured-output request.
+    /// Anthropic reports stop_reason="tool_use" for the virtual json_response
+    /// tool; in that mode we must map it to Stop (not ToolCalls) so the caller
+    /// sees a consistent finish_reason alongside the text content delta.
+    json_schema_mode: bool,
 }
 
 impl AnthropicTransformer {
     pub fn new(model: impl Into<String>) -> Self {
         Self {
             model: model.into(),
+            json_schema_mode: false,
         }
     }
 
-    fn parse_anthropic_finish_reason(reason: &str) -> FinishReason {
+    /// Enable json_schema mode so `tool_use` stop_reason is normalised to `Stop`.
+    pub fn with_json_schema_mode(mut self) -> Self {
+        self.json_schema_mode = true;
+        self
+    }
+
+    fn parse_finish_reason(&self, reason: &str) -> FinishReason {
         match reason {
             "end_turn" => FinishReason::Stop,
             "max_tokens" => FinishReason::Length,
+            // In json_schema mode the only tool call is the virtual json_response
+            // tool; once its payload has been emitted as text content the stream
+            // should be treated as a normal completion.
+            "tool_use" if self.json_schema_mode => FinishReason::Stop,
             "tool_use" => FinishReason::ToolCalls,
             _ => FinishReason::Stop,
         }
@@ -542,7 +558,7 @@ impl SSETransformer for AnthropicTransformer {
                     .get("delta")
                     .and_then(|d| d.get("stop_reason"))
                     .and_then(|r| r.as_str())
-                    .map(Self::parse_anthropic_finish_reason);
+                    .map(|r| self.parse_finish_reason(r));
 
                 let usage = json.get("usage").map(|u| {
                     let input = u.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0) as u32;

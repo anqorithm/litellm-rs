@@ -18,7 +18,7 @@ use crate::core::types::{
     chat::ChatRequest,
     content::ContentPart,
     message::MessageRole,
-    responses::{ChatChoice, ChatResponse, Usage},
+    responses::{ChatChoice, ChatResponse, FinishReason, Usage},
 };
 
 use super::config::{AnthropicConfig, beta};
@@ -76,26 +76,40 @@ impl AnthropicClient {
 
         // For json_schema mode: surface the "json_response" tool-call input as
         // regular text content so callers see a uniform ChatResponse.
+        //
+        // Take ownership of the Vec first (Issue 2 fix): this guarantees we never
+        // partially mutate tool_calls before we've confirmed json_response exists.
+        // Any non-json_response calls are put back so they are not silently dropped.
         if using_json_schema {
             if let Some(choice) = chat_response.choices.first_mut() {
-                let json_tc_idx =
-                    choice.message.tool_calls.as_ref().and_then(|tcs| {
-                        tcs.iter().position(|t| t.function.name == "json_response")
-                    });
-                if let Some(idx) = json_tc_idx {
-                    let tc = choice.message.tool_calls.as_mut().unwrap().remove(idx);
-                    if choice
-                        .message
-                        .tool_calls
-                        .as_ref()
-                        .map(|v| v.is_empty())
-                        .unwrap_or(true)
-                    {
-                        choice.message.tool_calls = None;
+                if let Some(tcs) = choice.message.tool_calls.take() {
+                    let mut remaining = Vec::new();
+                    let mut json_tc = None;
+                    for tc in tcs {
+                        if tc.function.name == "json_response" && json_tc.is_none() {
+                            json_tc = Some(tc);
+                        } else {
+                            remaining.push(tc);
+                        }
                     }
-                    choice.message.content = Some(
-                        crate::core::types::message::MessageContent::Text(tc.function.arguments),
-                    );
+                    choice.message.tool_calls = if remaining.is_empty() {
+                        None
+                    } else {
+                        Some(remaining)
+                    };
+                    if let Some(tc) = json_tc {
+                        choice.message.content =
+                            Some(crate::core::types::message::MessageContent::Text(
+                                tc.function.arguments,
+                            ));
+                        // Issue 1 fix: Anthropic sets stop_reason="tool_use" for the
+                        // virtual json_response call, which would otherwise be mapped to
+                        // FinishReason::ToolCalls.  Now that we've surfaced the payload
+                        // as normal text content, correct the finish_reason to Stop.
+                        if choice.message.tool_calls.is_none() {
+                            choice.finish_reason = Some(FinishReason::Stop);
+                        }
+                    }
                 }
             }
         }

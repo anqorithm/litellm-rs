@@ -29,7 +29,27 @@ pin_project! {
 impl AnthropicStream {
     /// Create stream from response
     pub fn from_response(response: reqwest::Response, model: String) -> Self {
-        let transformer = AnthropicTransformer::new(model);
+        Self::from_response_impl(response, model, false)
+    }
+
+    /// Create stream for a json_schema structured-output request.
+    ///
+    /// Enables json_schema_mode on the transformer so that the `tool_use`
+    /// stop_reason is normalised to `Stop` instead of `ToolCalls`.
+    pub fn from_response_json_schema(response: reqwest::Response, model: String) -> Self {
+        Self::from_response_impl(response, model, true)
+    }
+
+    fn from_response_impl(
+        response: reqwest::Response,
+        model: String,
+        json_schema_mode: bool,
+    ) -> Self {
+        let transformer = if json_schema_mode {
+            AnthropicTransformer::new(model).with_json_schema_mode()
+        } else {
+            AnthropicTransformer::new(model)
+        };
         let stream = UnifiedSSEStream::new(Box::pin(response.bytes_stream()), transformer);
         Self {
             inner: Box::pin(stream),
