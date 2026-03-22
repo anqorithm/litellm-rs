@@ -618,4 +618,33 @@ mod tests {
         let params = msg.params.unwrap();
         assert!(params.configuration.unwrap().streaming.unwrap());
     }
+
+    #[test]
+    fn test_request_ids_are_unique() {
+        let msg1 = A2AMessage::send("first");
+        let msg2 = A2AMessage::send("second");
+        let msg3 = A2AMessage::get_task("task-1");
+        let msg4 = A2AMessage::cancel_task("task-2");
+
+        // Each message must receive a distinct ID.
+        assert_ne!(msg1.id, msg2.id);
+        assert_ne!(msg2.id, msg3.id);
+        assert_ne!(msg3.id, msg4.id);
+    }
+
+    #[test]
+    fn test_request_id_is_numeric() {
+        let msg = A2AMessage::send("test");
+        assert!(
+            msg.id.is_number(),
+            "request ID must be a JSON number, got: {:?}",
+            msg.id
+        );
+    }
+
+    #[test]
+    fn test_with_id_override() {
+        let msg = A2AMessage::send("test").with_id(42u64);
+        assert_eq!(msg.id, serde_json::json!(42));
+    }
 }
