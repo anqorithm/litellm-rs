@@ -211,9 +211,19 @@ A provider requires Tier 2 treatment when **any** of the following apply:
 - Rerank, embed, image-generation, or audio endpoints with diverging schemas
 
 **How to add a Tier 2 provider**: create a directory under `src/core/providers/<name>/`
-containing at minimum `mod.rs`, then add a variant to `ProviderType` and implement
-the relevant trait methods. Also add the `pub mod <name>;` declaration in
-`src/core/providers/mod.rs` (guarded by the appropriate feature flag).
+containing at minimum `mod.rs`, then:
+
+1. Add a variant to `ProviderType` in `src/core/providers/provider_type.rs`.
+2. Add a `pub mod <name>;` declaration in `src/core/providers/mod.rs` (guarded by
+   the appropriate feature flag).
+3. Add a match arm to `Provider::from_config_async` in
+   `src/core/providers/factory/registry.rs` — without this arm the factory falls
+   through to `ProviderError::NotImplemented` at runtime.
+4. Add the new `ProviderType` variant to the `SUPPORTED` slice in
+   `Provider::factory_supported_provider_types()` (in `src/core/providers/mod.rs`)
+   so the resolver and factory gate logic recognise it.
+5. Implement the relevant trait methods or add stubs that return
+   `ProviderError::not_implemented`.
 
 ### Resolving half-migrated providers
 
@@ -221,9 +231,14 @@ If `git status` shows `DU` (deleted-by-us, unresolved) files under `src/core/pro
 
 1. Decide the tier using the criteria above.
 2. **Tier 1**: delete the directory and add a catalog entry + `mod.rs` comment.
-3. **Tier 2**: restore the directory (`git checkout HEAD -- <path>`) and complete
-   the implementation, or add stub methods that return `ProviderError::not_implemented`.
-4. Verify with `cargo check --all-features` — zero DU files means no unresolved paths.
+3. **Tier 2**: restore the directory with `git checkout --theirs -- <path>` (use
+   `--theirs` because in a `DU` conflict HEAD is the side that deleted the file, so
+   `HEAD` does not contain the provider code; `--theirs` selects the incoming branch
+   that still has it). Complete the implementation or add stub methods that return
+   `ProviderError::not_implemented`.
+4. Verify clean resolution with `git diff --name-only --diff-filter=U` — an empty
+   result means no unmerged paths remain. (`cargo check --all-features` validates
+   Rust compilation but does not inspect Git merge state.)
 
 ## Common Development Patterns
 
