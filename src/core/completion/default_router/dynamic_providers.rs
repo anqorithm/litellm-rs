@@ -9,120 +9,87 @@ struct DynamicProviderRoute<'a> {
     api_base: String,
 }
 
+struct DynamicProviderPrefix {
+    prefix: &'static str,
+    provider_type: &'static str,
+    provider_label: &'static str,
+    default_api_base: &'static str,
+}
+
+const DYNAMIC_PROVIDER_PREFIXES: &[DynamicProviderPrefix] = &[
+    DynamicProviderPrefix {
+        prefix: "openrouter/",
+        provider_type: "openrouter",
+        provider_label: "OpenRouter",
+        default_api_base: "https://openrouter.ai/api/v1",
+    },
+    DynamicProviderPrefix {
+        prefix: "anthropic/",
+        provider_type: "anthropic",
+        provider_label: "Anthropic",
+        default_api_base: "https://api.anthropic.com",
+    },
+    DynamicProviderPrefix {
+        prefix: "deepseek/",
+        provider_type: "deepseek",
+        provider_label: "DeepSeek",
+        default_api_base: "https://api.deepseek.com",
+    },
+    DynamicProviderPrefix {
+        prefix: "moonshot/",
+        provider_type: "moonshot",
+        provider_label: "Moonshot",
+        default_api_base: "https://api.moonshot.cn/v1",
+    },
+    DynamicProviderPrefix {
+        prefix: "minimax/",
+        provider_type: "minimax",
+        provider_label: "MiniMax",
+        default_api_base: "https://api.minimax.chat/v1",
+    },
+    DynamicProviderPrefix {
+        prefix: "zhipu/",
+        provider_type: "zhipu",
+        provider_label: "Zhipu",
+        default_api_base: "https://open.bigmodel.cn/api/paas/v4",
+    },
+    DynamicProviderPrefix {
+        prefix: "glm/",
+        provider_type: "zhipu",
+        provider_label: "Zhipu",
+        default_api_base: "https://open.bigmodel.cn/api/paas/v4",
+    },
+    DynamicProviderPrefix {
+        prefix: "zai/",
+        provider_type: "zhipu",
+        provider_label: "Zhipu",
+        default_api_base: "https://open.bigmodel.cn/api/paas/v4",
+    },
+    DynamicProviderPrefix {
+        prefix: "openai/",
+        provider_type: "openai",
+        provider_label: "OpenAI",
+        default_api_base: "https://api.openai.com/v1",
+    },
+];
+
 fn resolve_dynamic_provider_route<'a>(
     model: &'a str,
     options: &CompletionOptions,
 ) -> Option<DynamicProviderRoute<'a>> {
-    if model.starts_with("openrouter/") {
-        let actual_model = model.strip_prefix("openrouter/").unwrap_or(model);
-        let api_base = options
-            .api_base
-            .clone()
-            .unwrap_or_else(|| "https://openrouter.ai/api/v1".to_string());
-        return Some(DynamicProviderRoute {
-            provider_type: "openrouter",
-            provider_label: "OpenRouter",
-            actual_model,
-            api_base,
-        });
-    }
-
-    if model.starts_with("anthropic/") {
-        let actual_model = model.strip_prefix("anthropic/").unwrap_or(model);
-        let api_base = options
-            .api_base
-            .clone()
-            .unwrap_or_else(|| "https://api.anthropic.com".to_string());
-        return Some(DynamicProviderRoute {
-            provider_type: "anthropic",
-            provider_label: "Anthropic",
-            actual_model,
-            api_base,
-        });
-    }
-
-    if model.starts_with("deepseek/") {
-        let actual_model = model.strip_prefix("deepseek/").unwrap_or(model);
-        let api_base = options
-            .api_base
-            .clone()
-            .unwrap_or_else(|| "https://api.deepseek.com".to_string());
-        return Some(DynamicProviderRoute {
-            provider_type: "deepseek",
-            provider_label: "DeepSeek",
-            actual_model,
-            api_base,
-        });
-    }
-
-    if model.starts_with("moonshot/") {
-        let actual_model = model.strip_prefix("moonshot/").unwrap_or(model);
-        let api_base = options
-            .api_base
-            .clone()
-            .unwrap_or_else(|| "https://api.moonshot.cn/v1".to_string());
-        return Some(DynamicProviderRoute {
-            provider_type: "moonshot",
-            provider_label: "Moonshot",
-            actual_model,
-            api_base,
-        });
-    }
-
-    if model.starts_with("minimax/") {
-        let actual_model = model.strip_prefix("minimax/").unwrap_or(model);
-        let api_base = options
-            .api_base
-            .clone()
-            .unwrap_or_else(|| "https://api.minimax.chat/v1".to_string());
-        return Some(DynamicProviderRoute {
-            provider_type: "minimax",
-            provider_label: "MiniMax",
-            actual_model,
-            api_base,
-        });
-    }
-
-    if model.starts_with("zhipu/") {
-        let actual_model = model.strip_prefix("zhipu/").unwrap_or(model);
-        let api_base = options
-            .api_base
-            .clone()
-            .unwrap_or_else(|| "https://open.bigmodel.cn/api/paas/v4".to_string());
-        return Some(DynamicProviderRoute {
-            provider_type: "zhipu",
-            provider_label: "Zhipu",
-            actual_model,
-            api_base,
-        });
-    }
-
-    if model.starts_with("glm/") {
-        let actual_model = model.strip_prefix("glm/").unwrap_or(model);
-        let api_base = options
-            .api_base
-            .clone()
-            .unwrap_or_else(|| "https://open.bigmodel.cn/api/paas/v4".to_string());
-        return Some(DynamicProviderRoute {
-            provider_type: "zhipu",
-            provider_label: "Zhipu",
-            actual_model,
-            api_base,
-        });
-    }
-
-    if model.starts_with("zai/") {
-        let actual_model = model.strip_prefix("zai/").unwrap_or(model);
-        let api_base = options
-            .api_base
-            .clone()
-            .unwrap_or_else(|| "https://open.bigmodel.cn/api/paas/v4".to_string());
-        return Some(DynamicProviderRoute {
-            provider_type: "zhipu",
-            provider_label: "Zhipu",
-            actual_model,
-            api_base,
-        });
+    for config in DYNAMIC_PROVIDER_PREFIXES {
+        if let Some(actual_model) = model.strip_prefix(config.prefix) {
+            let api_base = options
+                .api_base
+                .clone()
+                .unwrap_or_else(|| config.default_api_base.to_string());
+            return Some(DynamicProviderRoute {
+                provider_type: config.provider_type,
+                provider_label: config.provider_label,
+                actual_model,
+                api_base,
+            });
+        }
     }
 
     if model.starts_with("azure_ai/") || model.starts_with("azure-ai/") {
@@ -138,20 +105,6 @@ fn resolve_dynamic_provider_route<'a>(
         return Some(DynamicProviderRoute {
             provider_type: "azure_ai",
             provider_label: "Azure AI",
-            actual_model,
-            api_base,
-        });
-    }
-
-    if model.starts_with("openai/") {
-        let actual_model = model.strip_prefix("openai/").unwrap_or(model);
-        let api_base = options
-            .api_base
-            .clone()
-            .unwrap_or_else(|| "https://api.openai.com/v1".to_string());
-        return Some(DynamicProviderRoute {
-            provider_type: "openai",
-            provider_label: "OpenAI",
             actual_model,
             api_base,
         });

@@ -22,8 +22,8 @@ let response = completion("gpt-3.5-turbo", messages).await?;
 | **Mistral** | `mistral_completion.rs` | Mistral Small/Medium/Large, Codestral | `MISTRAL_API_KEY` |
 | **DeepSeek** | `deepseek_completion.rs` | DeepSeek Chat, DeepSeek Coder | `DEEPSEEK_API_KEY` |
 | **Moonshot** | `moonshot_completion.rs` | Kimi K2.5, Kimi K2 Thinking, Moonshot v1 | `MOONSHOT_API_KEY` |
-| **MiniMax** | `moonshot_completion.rs` | MiniMax M2.5 series (OpenAI-compatible) | `MINIMAX_API_KEY` |
-| **Zhipu** | `moonshot_completion.rs` | GLM-5 / GLM-4.7 / GLM-4.6 (OpenAI-compatible) | `ZHIPU_API_KEY` |
+| **MiniMax** | `moonshot_completion.rs` (shared OpenAI-compatible example) | MiniMax M2.5 series (OpenAI-compatible) | `MINIMAX_API_KEY` |
+| **Zhipu** | `moonshot_completion.rs` (shared OpenAI-compatible example) | GLM-5 / GLM-4.7 / GLM-4.6 (OpenAI-compatible) | `ZHIPU_API_KEY` |
 | **Meta Llama** | `meta_llama_completion.rs` | Llama 3 (8B, 70B), Code Llama | Various providers |
 | **OpenRouter** | `openrouter_completion.rs` | 100+ models from all providers | `OPENROUTER_API_KEY` |
 | **Vertex AI** | `vertex_ai_completion.rs` | Gemini Pro, PaLM 2 | `GCP_PROJECT_ID` |

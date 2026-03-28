@@ -5,7 +5,7 @@
 //! `m20240301_000002_create_teams_table`.  Works with both SQLite and
 //! PostgreSQL backends via the live `SeaOrmDatabase` connection.
 
-use crate::core::models::team::{Team, TeamMember, TeamRole, TeamStatus};
+use crate::core::models::team::{Team, TeamMember, TeamRole};
 use crate::core::teams::repository::TeamRepository;
 use crate::utils::error::gateway_error::{GatewayError, Result};
 use async_trait::async_trait;
@@ -47,6 +47,18 @@ impl SeaOrmTeamRepository {
 
     fn from_json<T: serde::de::DeserializeOwned>(s: &str) -> Result<T> {
         serde_json::from_str(s).map_err(|e| GatewayError::Internal(e.to_string()))
+    }
+
+    /// SQL predicate for filtering logically deleted teams from JSON payload.
+    fn non_deleted_team_predicate(&self) -> &'static str {
+        match self.db.backend_type {
+            DatabaseBackendType::PostgreSQL => {
+                "((data::jsonb ->> 'status') IS NULL OR (data::jsonb ->> 'status') <> 'deleted')"
+            }
+            DatabaseBackendType::SQLite => {
+                "(json_extract(data, '$.status') IS NULL OR json_extract(data, '$.status') <> 'deleted')"
+            }
+        }
     }
 }
 
@@ -169,11 +181,19 @@ impl TeamRepository for SeaOrmTeamRepository {
     }
 
     async fn list(&self, offset: u32, limit: u32) -> Result<(Vec<Team>, u64)> {
-        // Filter out logically deleted teams before pagination so `total`
-        // and paged list stay consistent.
-        let stmt = Statement::from_string(
+        let sql = format!(
+            "SELECT data FROM teams WHERE {} ORDER BY created_at ASC LIMIT {} OFFSET {}",
+            self.non_deleted_team_predicate(),
+            self.ph(1),
+            self.ph(2)
+        );
+        let stmt = Statement::from_sql_and_values(
             self.backend(),
-            "SELECT data FROM teams ORDER BY created_at ASC".to_owned(),
+            &sql,
+            [
+                Value::BigUnsigned(Some(limit as u64)),
+                Value::BigUnsigned(Some(offset as u64)),
+            ],
         );
         let rows = self
             .db
@@ -188,36 +208,38 @@ impl TeamRepository for SeaOrmTeamRepository {
                 let data: String = row.try_get("", "data").map_err(GatewayError::from)?;
                 Self::from_json::<Team>(&data)
             })
-            .filter(|t| !matches!(t, Ok(team) if matches!(team.status, TeamStatus::Deleted)))
             .collect();
-        let teams = teams?;
-        let total = teams.len() as u64;
-        let paged = teams
-            .into_iter()
-            .skip(offset as usize)
-            .take(limit as usize)
-            .collect::<Vec<_>>();
-        Ok((paged, total))
+        let count_sql = format!(
+            "SELECT COUNT(*) as cnt FROM teams WHERE {}",
+            self.non_deleted_team_predicate()
+        );
+        let count_stmt = Statement::from_string(self.backend(), count_sql);
+        let total = self
+            .db
+            .db
+            .query_one(count_stmt)
+            .await
+            .map_err(GatewayError::from)?
+            .map(|row| row.try_get::<i64>("", "cnt").unwrap_or(0) as u64)
+            .unwrap_or(0);
+
+        Ok((teams?, total))
     }
 
     async fn count(&self) -> Result<u64> {
-        let stmt = Statement::from_string(self.backend(), "SELECT data FROM teams".to_owned());
-        let rows = self
+        let sql = format!(
+            "SELECT COUNT(*) as cnt FROM teams WHERE {}",
+            self.non_deleted_team_predicate()
+        );
+        let stmt = Statement::from_string(self.backend(), sql);
+        Ok(self
             .db
             .db
-            .query_all(stmt)
+            .query_one(stmt)
             .await
-            .map_err(GatewayError::from)?;
-
-        let teams: Result<Vec<Team>> = rows
-            .into_iter()
-            .map(|row| {
-                let data: String = row.try_get("", "data").map_err(GatewayError::from)?;
-                Self::from_json::<Team>(&data)
-            })
-            .filter(|t| !matches!(t, Ok(team) if matches!(team.status, TeamStatus::Deleted)))
-            .collect();
-        Ok(teams?.len() as u64)
+            .map_err(GatewayError::from)?
+            .map(|row| row.try_get::<i64>("", "cnt").unwrap_or(0) as u64)
+            .unwrap_or(0))
     }
 
     async fn add_member(&self, member: TeamMember) -> Result<TeamMember> {
