@@ -7,14 +7,20 @@
 //! - Permission and rate limit management
 //! - Usage tracking and statistics
 
+mod database_repository;
+mod db_mapping;
+mod db_update;
 mod manager;
 mod repository;
 mod types;
 
 #[cfg(test)]
+mod database_repository_tests;
+#[cfg(test)]
 mod tests;
 
 // Re-export public types
+pub use database_repository::DatabaseKeyRepository;
 pub use manager::KeyManager;
 pub use repository::{InMemoryKeyRepository, KeyRepository};
 pub use types::{

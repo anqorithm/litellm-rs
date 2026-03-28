@@ -169,31 +169,11 @@ impl TeamRepository for SeaOrmTeamRepository {
     }
 
     async fn list(&self, offset: u32, limit: u32) -> Result<(Vec<Team>, u64)> {
-        let count_stmt = Statement::from_string(
+        // Filter out logically deleted teams before pagination so `total`
+        // and paged list stay consistent.
+        let stmt = Statement::from_string(
             self.backend(),
-            "SELECT COUNT(*) as cnt FROM teams".to_owned(),
-        );
-        let total: u64 = self
-            .db
-            .db
-            .query_one(count_stmt)
-            .await
-            .map_err(GatewayError::from)?
-            .map(|r| r.try_get::<i64>("", "cnt").unwrap_or(0) as u64)
-            .unwrap_or(0);
-
-        let sql = format!(
-            "SELECT data FROM teams ORDER BY created_at ASC LIMIT {} OFFSET {}",
-            self.ph(1),
-            self.ph(2)
-        );
-        let stmt = Statement::from_sql_and_values(
-            self.backend(),
-            &sql,
-            [
-                Value::BigUnsigned(Some(limit as u64)),
-                Value::BigUnsigned(Some(offset as u64)),
-            ],
+            "SELECT data FROM teams ORDER BY created_at ASC".to_owned(),
         );
         let rows = self
             .db
@@ -201,31 +181,43 @@ impl TeamRepository for SeaOrmTeamRepository {
             .query_all(stmt)
             .await
             .map_err(GatewayError::from)?;
+
         let teams: Result<Vec<Team>> = rows
             .into_iter()
-            .filter_map(|row| {
-                row.try_get::<String>("", "data")
-                    .ok()
-                    .map(|d| Self::from_json::<Team>(&d))
+            .map(|row| {
+                let data: String = row.try_get("", "data").map_err(GatewayError::from)?;
+                Self::from_json::<Team>(&data)
             })
             .filter(|t| !matches!(t, Ok(team) if matches!(team.status, TeamStatus::Deleted)))
             .collect();
-        Ok((teams?, total))
+        let teams = teams?;
+        let total = teams.len() as u64;
+        let paged = teams
+            .into_iter()
+            .skip(offset as usize)
+            .take(limit as usize)
+            .collect::<Vec<_>>();
+        Ok((paged, total))
     }
 
     async fn count(&self) -> Result<u64> {
-        let stmt = Statement::from_string(
-            self.backend(),
-            "SELECT COUNT(*) as cnt FROM teams".to_owned(),
-        );
-        Ok(self
+        let stmt = Statement::from_string(self.backend(), "SELECT data FROM teams".to_owned());
+        let rows = self
             .db
             .db
-            .query_one(stmt)
+            .query_all(stmt)
             .await
-            .map_err(GatewayError::from)?
-            .map(|r| r.try_get::<i64>("", "cnt").unwrap_or(0) as u64)
-            .unwrap_or(0))
+            .map_err(GatewayError::from)?;
+
+        let teams: Result<Vec<Team>> = rows
+            .into_iter()
+            .map(|row| {
+                let data: String = row.try_get("", "data").map_err(GatewayError::from)?;
+                Self::from_json::<Team>(&data)
+            })
+            .filter(|t| !matches!(t, Ok(team) if matches!(team.status, TeamStatus::Deleted)))
+            .collect();
+        Ok(teams?.len() as u64)
     }
 
     async fn add_member(&self, member: TeamMember) -> Result<TeamMember> {
