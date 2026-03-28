@@ -111,6 +111,20 @@ fn resolve_dynamic_provider_route<'a>(
         });
     }
 
+    if model.starts_with("zai/") {
+        let actual_model = model.strip_prefix("zai/").unwrap_or(model);
+        let api_base = options
+            .api_base
+            .clone()
+            .unwrap_or_else(|| "https://open.bigmodel.cn/api/paas/v4".to_string());
+        return Some(DynamicProviderRoute {
+            provider_type: "zhipu",
+            provider_label: "Zhipu",
+            actual_model,
+            api_base,
+        });
+    }
+
     if model.starts_with("azure_ai/") || model.starts_with("azure-ai/") {
         let actual_model = model
             .strip_prefix("azure_ai/")
@@ -394,6 +408,17 @@ mod tests {
     fn test_resolve_dynamic_route_for_glm_alias() {
         let options = CompletionOptions::default();
         let route = resolve_dynamic_provider_route("glm/glm-5", &options).unwrap();
+
+        assert_eq!(route.provider_type, "zhipu");
+        assert_eq!(route.provider_label, "Zhipu");
+        assert_eq!(route.actual_model, "glm-5");
+        assert_eq!(route.api_base, "https://open.bigmodel.cn/api/paas/v4");
+    }
+
+    #[test]
+    fn test_resolve_dynamic_route_for_zai_alias() {
+        let options = CompletionOptions::default();
+        let route = resolve_dynamic_provider_route("zai/glm-5", &options).unwrap();
 
         assert_eq!(route.provider_type, "zhipu");
         assert_eq!(route.provider_label, "Zhipu");
