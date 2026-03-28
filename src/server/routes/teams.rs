@@ -100,7 +100,7 @@ fn get_team_manager(state: &web::Data<AppState>) -> Arc<TeamManager> {
 
 #[derive(Debug, Clone)]
 enum RequestCaller {
-    User(User),
+    User(Box<User>),
     Team(Uuid),
 }
 
@@ -126,7 +126,7 @@ fn forbidden_response(message: &str) -> HttpResponse {
 
 fn get_request_caller(req: &HttpRequest) -> Option<RequestCaller> {
     if let Some(user) = req.extensions().get::<User>() {
-        return Some(RequestCaller::User(user.clone()));
+        return Some(RequestCaller::User(Box::new(user.clone())));
     }
 
     req.extensions()
@@ -848,7 +848,7 @@ mod tests {
             .await
             .unwrap();
 
-        let caller = RequestCaller::User(make_user(UserRole::Admin));
+        let caller = RequestCaller::User(Box::new(make_user(UserRole::Admin)));
         let can_manage = has_team_access(&manager, &caller, team.id(), TeamPermission::Admin)
             .await
             .unwrap();
@@ -880,7 +880,7 @@ mod tests {
             )
             .await
             .unwrap();
-        let caller = RequestCaller::User(user);
+        let caller = RequestCaller::User(Box::new(user));
 
         let can_read = has_team_access(&manager, &caller, team.id(), TeamPermission::Member)
             .await

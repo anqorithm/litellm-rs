@@ -239,7 +239,7 @@ impl SeaOrmDatabase {
         let rate_limits = api_key
             .rate_limits
             .as_ref()
-            .map(|limits| serde_json::to_string(limits))
+            .map(serde_json::to_string)
             .transpose()
             .map_err(|e| GatewayError::validation(format!("Invalid rate limits: {}", e)))?;
         let usage_stats = serde_json::to_string(&api_key.usage_stats)

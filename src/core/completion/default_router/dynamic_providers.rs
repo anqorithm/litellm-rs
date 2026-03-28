@@ -428,8 +428,10 @@ mod tests {
 
     #[test]
     fn test_resolve_dynamic_route_with_custom_api_base() {
-        let mut options = CompletionOptions::default();
-        options.api_base = Some("http://localhost:5567/v1".to_string());
+        let options = CompletionOptions {
+            api_base: Some("http://localhost:5567/v1".to_string()),
+            ..CompletionOptions::default()
+        };
 
         let route = resolve_dynamic_provider_route("my-custom-model", &options).unwrap();
         assert_eq!(route.provider_type, "openai-compatible");
