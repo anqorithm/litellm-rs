@@ -105,6 +105,8 @@ pub fn get_model_pricing(model: &str, provider: &str) -> Result<ModelPricing, Co
         "vertex_ai" | "vertexai" => get_vertex_ai_pricing(model),
         "deepseek" => get_deepseek_pricing(model),
         "moonshot" => get_moonshot_pricing(model),
+        "minimax" => get_minimax_pricing(model),
+        "zhipu" | "zhipuai" | "glm" | "zai" => get_zhipu_pricing(model),
         _ => Err(CostError::ProviderNotSupported {
             provider: provider.to_string(),
         }),
@@ -557,37 +559,175 @@ fn get_deepseek_pricing(model: &str) -> Result<ModelPricing, CostError> {
 fn get_moonshot_pricing(model: &str) -> Result<ModelPricing, CostError> {
     use chrono::Utc;
 
-    let pricing = match model.to_lowercase().as_str() {
-        "moonshot-v1-8k" => ModelPricing {
+    let normalized_model = model.to_lowercase();
+
+    let pricing = if normalized_model.contains("kimi-k2.5") {
+        ModelPricing {
             model: model.to_string(),
-            input_cost_per_1k_tokens: 0.01,
-            output_cost_per_1k_tokens: 0.02,
+            input_cost_per_1k_tokens: 0.0006,
+            output_cost_per_1k_tokens: 0.003,
             currency: "USD".to_string(),
             updated_at: Utc::now(),
             ..Default::default()
-        },
-        "moonshot-v1-32k" => ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.02,
-            output_cost_per_1k_tokens: 0.04,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        },
-        "moonshot-v1-128k" => ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.03,
-            output_cost_per_1k_tokens: 0.06,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        },
-        _ => {
-            return Err(CostError::ModelNotSupported {
-                model: model.to_string(),
-                provider: "moonshot".to_string(),
-            });
         }
+    } else if normalized_model.contains("kimi-k2-thinking-turbo")
+        || normalized_model.contains("kimi-k2-turbo-preview")
+    {
+        ModelPricing {
+            model: model.to_string(),
+            input_cost_per_1k_tokens: 0.00115,
+            output_cost_per_1k_tokens: 0.008,
+            currency: "USD".to_string(),
+            updated_at: Utc::now(),
+            ..Default::default()
+        }
+    } else if normalized_model.contains("kimi-k2-thinking")
+        || normalized_model.contains("kimi-k2-0905-preview")
+        || normalized_model.contains("kimi-k2-0711-preview")
+    {
+        ModelPricing {
+            model: model.to_string(),
+            input_cost_per_1k_tokens: 0.0006,
+            output_cost_per_1k_tokens: 0.0025,
+            currency: "USD".to_string(),
+            updated_at: Utc::now(),
+            ..Default::default()
+        }
+    } else if normalized_model.contains("moonshot-v1-8k") {
+        ModelPricing {
+            model: model.to_string(),
+            input_cost_per_1k_tokens: 0.0002,
+            output_cost_per_1k_tokens: 0.002,
+            currency: "USD".to_string(),
+            updated_at: Utc::now(),
+            ..Default::default()
+        }
+    } else if normalized_model.contains("moonshot-v1-32k") {
+        ModelPricing {
+            model: model.to_string(),
+            input_cost_per_1k_tokens: 0.001,
+            output_cost_per_1k_tokens: 0.003,
+            currency: "USD".to_string(),
+            updated_at: Utc::now(),
+            ..Default::default()
+        }
+    } else if normalized_model.contains("moonshot-v1-128k") {
+        ModelPricing {
+            model: model.to_string(),
+            input_cost_per_1k_tokens: 0.002,
+            output_cost_per_1k_tokens: 0.005,
+            currency: "USD".to_string(),
+            updated_at: Utc::now(),
+            ..Default::default()
+        }
+    } else {
+        return Err(CostError::ModelNotSupported {
+            model: model.to_string(),
+            provider: "moonshot".to_string(),
+        });
+    };
+
+    Ok(pricing)
+}
+
+fn get_minimax_pricing(model: &str) -> Result<ModelPricing, CostError> {
+    use chrono::Utc;
+
+    let normalized_model = model.to_lowercase();
+
+    let pricing = if normalized_model.contains("m2.5-lightning") {
+        ModelPricing {
+            model: model.to_string(),
+            input_cost_per_1k_tokens: 0.0003,
+            output_cost_per_1k_tokens: 0.0024,
+            currency: "USD".to_string(),
+            updated_at: Utc::now(),
+            ..Default::default()
+        }
+    } else if normalized_model.contains("m2.5")
+        || normalized_model.contains("m2.1")
+        || normalized_model.contains("minimax-m2")
+    {
+        ModelPricing {
+            model: model.to_string(),
+            input_cost_per_1k_tokens: 0.0003,
+            output_cost_per_1k_tokens: 0.0012,
+            currency: "USD".to_string(),
+            updated_at: Utc::now(),
+            ..Default::default()
+        }
+    } else {
+        return Err(CostError::ModelNotSupported {
+            model: model.to_string(),
+            provider: "minimax".to_string(),
+        });
+    };
+
+    Ok(pricing)
+}
+
+fn get_zhipu_pricing(model: &str) -> Result<ModelPricing, CostError> {
+    use chrono::Utc;
+
+    let normalized_model = model.to_lowercase();
+
+    let pricing = if normalized_model.contains("glm-5-code") {
+        ModelPricing {
+            model: model.to_string(),
+            input_cost_per_1k_tokens: 0.0012,
+            output_cost_per_1k_tokens: 0.005,
+            currency: "USD".to_string(),
+            updated_at: Utc::now(),
+            ..Default::default()
+        }
+    } else if normalized_model.contains("glm-5") {
+        ModelPricing {
+            model: model.to_string(),
+            input_cost_per_1k_tokens: 0.001,
+            output_cost_per_1k_tokens: 0.0032,
+            currency: "USD".to_string(),
+            updated_at: Utc::now(),
+            ..Default::default()
+        }
+    } else if normalized_model.contains("glm-4.7")
+        || normalized_model.contains("glm-4-7")
+        || normalized_model.contains("glm-4.6")
+        || normalized_model.contains("glm-4.5")
+    {
+        ModelPricing {
+            model: model.to_string(),
+            input_cost_per_1k_tokens: 0.0006,
+            output_cost_per_1k_tokens: 0.0022,
+            currency: "USD".to_string(),
+            updated_at: Utc::now(),
+            ..Default::default()
+        }
+    } else if normalized_model.contains("glm-4-flash") {
+        ModelPricing {
+            model: model.to_string(),
+            input_cost_per_1k_tokens: 0.00005,
+            output_cost_per_1k_tokens: 0.0001,
+            currency: "USD".to_string(),
+            updated_at: Utc::now(),
+            ..Default::default()
+        }
+    } else if normalized_model.contains("glm-4-plus")
+        || normalized_model.contains("glm-4-air")
+        || normalized_model.contains("glm-4")
+    {
+        ModelPricing {
+            model: model.to_string(),
+            input_cost_per_1k_tokens: 0.0001,
+            output_cost_per_1k_tokens: 0.0003,
+            currency: "USD".to_string(),
+            updated_at: Utc::now(),
+            ..Default::default()
+        }
+    } else {
+        return Err(CostError::ModelNotSupported {
+            model: model.to_string(),
+            provider: "zhipu".to_string(),
+        });
     };
 
     Ok(pricing)
@@ -793,8 +933,8 @@ mod tests {
         let pricing = get_model_pricing("moonshot-v1-8k", "moonshot");
         assert!(pricing.is_ok());
         let pricing = pricing.unwrap();
-        assert_eq!(pricing.input_cost_per_1k_tokens, 0.01);
-        assert_eq!(pricing.output_cost_per_1k_tokens, 0.02);
+        assert_eq!(pricing.input_cost_per_1k_tokens, 0.0002);
+        assert_eq!(pricing.output_cost_per_1k_tokens, 0.002);
     }
 
     #[test]
@@ -802,8 +942,8 @@ mod tests {
         let pricing = get_model_pricing("moonshot-v1-32k", "moonshot");
         assert!(pricing.is_ok());
         let pricing = pricing.unwrap();
-        assert_eq!(pricing.input_cost_per_1k_tokens, 0.02);
-        assert_eq!(pricing.output_cost_per_1k_tokens, 0.04);
+        assert_eq!(pricing.input_cost_per_1k_tokens, 0.001);
+        assert_eq!(pricing.output_cost_per_1k_tokens, 0.003);
     }
 
     #[test]
@@ -811,8 +951,44 @@ mod tests {
         let pricing = get_model_pricing("moonshot-v1-128k", "moonshot");
         assert!(pricing.is_ok());
         let pricing = pricing.unwrap();
-        assert_eq!(pricing.input_cost_per_1k_tokens, 0.03);
-        assert_eq!(pricing.output_cost_per_1k_tokens, 0.06);
+        assert_eq!(pricing.input_cost_per_1k_tokens, 0.002);
+        assert_eq!(pricing.output_cost_per_1k_tokens, 0.005);
+    }
+
+    #[test]
+    fn test_get_moonshot_pricing_kimi_k2_5() {
+        let pricing = get_model_pricing("kimi-k2.5", "moonshot");
+        assert!(pricing.is_ok());
+        let pricing = pricing.unwrap();
+        assert_eq!(pricing.input_cost_per_1k_tokens, 0.0006);
+        assert_eq!(pricing.output_cost_per_1k_tokens, 0.003);
+    }
+
+    #[test]
+    fn test_get_minimax_pricing_m2_5() {
+        let pricing = get_model_pricing("MiniMax-M2.5", "minimax");
+        assert!(pricing.is_ok());
+        let pricing = pricing.unwrap();
+        assert_eq!(pricing.input_cost_per_1k_tokens, 0.0003);
+        assert_eq!(pricing.output_cost_per_1k_tokens, 0.0012);
+    }
+
+    #[test]
+    fn test_get_zhipu_pricing_glm_5() {
+        let pricing = get_model_pricing("glm-5", "zhipuai");
+        assert!(pricing.is_ok());
+        let pricing = pricing.unwrap();
+        assert_eq!(pricing.input_cost_per_1k_tokens, 0.001);
+        assert_eq!(pricing.output_cost_per_1k_tokens, 0.0032);
+    }
+
+    #[test]
+    fn test_get_zhipu_pricing_glm_4_flash() {
+        let pricing = get_model_pricing("glm-4-flash", "zhipuai");
+        assert!(pricing.is_ok());
+        let pricing = pricing.unwrap();
+        assert_eq!(pricing.input_cost_per_1k_tokens, 0.00005);
+        assert_eq!(pricing.output_cost_per_1k_tokens, 0.0001);
     }
 
     #[test]
