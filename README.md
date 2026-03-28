@@ -1,6 +1,6 @@
 # litellm-rs
 
-A high-performance AI Gateway written in Rust - call 100+ LLM APIs using OpenAI format.
+A high-performance Rust library and gateway for calling 100+ LLM APIs in an OpenAI-compatible format.
 
 [![Crates.io](https://img.shields.io/crates/v/litellm-rs.svg)](https://crates.io/crates/litellm-rs)
 [![Documentation](https://docs.rs/litellm-rs/badge.svg)](https://docs.rs/litellm-rs)
@@ -14,7 +14,36 @@ A high-performance AI Gateway written in Rust - call 100+ LLM APIs using OpenAI 
 - **Intelligent Routing** - Load balancing, failover, cost optimization
 - **Enterprise Ready** - Auth, rate limiting, caching, observability
 
-## Quick Start
+## Quick Start (5 Minutes, API-Only Recommended)
+
+Most users use this project as a unified API library, not as a gateway server. Start with API-only mode first.
+
+```toml
+[dependencies]
+litellm-rs = { version = "0.3", default-features = false, features = ["lite"] }
+```
+
+```bash
+# In this repository (lightweight defaults)
+make build
+make test
+```
+
+When you need gateway capabilities, move to `standard` profile:
+
+```bash
+make build-standard
+make test-standard
+```
+
+Use full feature validation only before release or in nightly CI:
+
+```bash
+make build-full
+make test-full
+```
+
+## Usage
 
 ### As a Library (API Integration)
 
@@ -171,6 +200,20 @@ while let Some(chunk) = stream.next().await {
 - **Memory**: ~50MB base footprint
 - **Concurrency**: Fully async with Tokio
 
+## Troubleshooting
+
+### Build/test uses too much CPU or memory
+
+- Use API-only defaults first: `make build`, `make test`
+- Limit local parallelism: `DEV_BUILD_JOBS=4 DEV_TEST_THREADS=4 make test`
+- For direct Cargo use: `cargo test --lib --tests --no-default-features --features "lite"`
+- Avoid `--all-features` unless you are doing release/nightly validation
+
+### I only need provider API aggregation, not gateway
+
+- Prefer `default-features = false` with `features = ["lite"]`
+- Use gateway commands only when you need HTTP server/auth/storage middleware
+
 ## Documentation
 
 - [API Documentation](https://docs.rs/litellm-rs)
@@ -192,4 +235,3 @@ MIT License - see [LICENSE](./LICENSE) for details.
 ## Acknowledgments
 
 Inspired by [LiteLLM](https://github.com/BerriAI/litellm) (Python).
-
