@@ -20,7 +20,7 @@ Most users use this project as a unified API library, not as a gateway server. S
 
 ```toml
 [dependencies]
-litellm-rs = { version = "0.3", default-features = false, features = ["lite"] }
+litellm-rs = { version = "0.4", default-features = false, features = ["lite"] }
 ```
 
 ```bash
@@ -75,8 +75,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 # Install
 cargo install litellm-rs
 
-# Run
-gateway --config config/gateway.yaml
+# Prepare config (in this repository)
+cp config/gateway.yaml.example config/gateway.yaml
+
+# Run (auto-loads config/gateway.yaml)
+gateway
+
+# Alternative when running from source repo
+cargo run --bin gateway
 ```
 
 ## Installation
@@ -84,19 +90,19 @@ gateway --config config/gateway.yaml
 ```toml
 # Full gateway with SQLite + Redis (default)
 [dependencies]
-litellm-rs = "0.3"
+litellm-rs = "0.4"
 
 # API-only - lightweight, no actix-web/argon2/aes-gcm/clap
 [dependencies]
-litellm-rs = { version = "0.3", default-features = false }
+litellm-rs = { version = "0.4", default-features = false }
 
 # API-only with metrics
 [dependencies]
-litellm-rs = { version = "0.3", default-features = false, features = ["lite"] }
+litellm-rs = { version = "0.4", default-features = false, features = ["lite"] }
 
 # Gateway server without storage
 [dependencies]
-litellm-rs = { version = "0.3", default-features = false, features = ["gateway"] }
+litellm-rs = { version = "0.4", default-features = false, features = ["gateway"] }
 ```
 
 ## Supported Providers
@@ -111,6 +117,9 @@ litellm-rs = { version = "0.3", default-features = false, features = ["gateway"]
 | Google Vertex AI | ✅ | ✅ | ✅ | - |
 | Groq | ✅ | - | - | ✅ |
 | DeepSeek | ✅ | - | - | - |
+| Kimi (Moonshot AI) | ✅ | - | - | - |
+| GLM (Zhipu AI) | ✅ | - | - | - |
+| MiniMax | ✅ | - | - | - |
 | Mistral | ✅ | ✅ | - | - |
 | Cohere | ✅ | ✅ | - | - |
 | OpenRouter | ✅ | - | - | - |
@@ -134,6 +143,9 @@ AWS_ACCESS_KEY_ID=...
 AWS_SECRET_ACCESS_KEY=...
 GROQ_API_KEY=...
 DEEPSEEK_API_KEY=...
+MOONSHOT_API_KEY=...
+ZHIPU_API_KEY=...
+MINIMAX_API_KEY=...
 
 # Optional
 LITELLM_VERBOSE=true  # Enable verbose logging
