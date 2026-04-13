@@ -100,7 +100,42 @@ pub fn is_public_route(path: &str) -> bool {
 pub fn is_admin_route(path: &str) -> bool {
     const ADMIN_ROUTES: &[&str] = &["/admin", "/api/admin"];
 
-    ADMIN_ROUTES.iter().any(|&route| path.starts_with(route))
+    ADMIN_ROUTES
+        .iter()
+        .any(|&route| path == route || path.starts_with(&format!("{route}/")))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_admin_route_exact_match() {
+        assert!(is_admin_route("/admin"));
+        assert!(is_admin_route("/api/admin"));
+    }
+
+    #[test]
+    fn test_is_admin_route_subpath() {
+        assert!(is_admin_route("/admin/users"));
+        assert!(is_admin_route("/admin/settings"));
+        assert!(is_admin_route("/api/admin/users"));
+    }
+
+    #[test]
+    fn test_is_admin_route_no_prefix_confusion() {
+        assert!(!is_admin_route("/adminevil"));
+        assert!(!is_admin_route("/api/adminevil"));
+        assert!(!is_admin_route("/administrator"));
+        assert!(!is_admin_route("/adminX"));
+    }
+
+    #[test]
+    fn test_is_admin_route_unrelated() {
+        assert!(!is_admin_route("/health"));
+        assert!(!is_admin_route("/v1/chat/completions"));
+        assert!(!is_admin_route("/"));
+    }
 }
 
 /// Check if a route is for API access
