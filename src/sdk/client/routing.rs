@@ -35,24 +35,34 @@ impl LLMClient {
 
     /// Select provider for streaming
     ///
-    /// Only providers with a streaming implementation (OpenAI-compatible and Anthropic)
-    /// are considered. Non-streaming provider types earlier in the list are skipped so
-    /// that a valid streaming provider configured later is still used.
+    /// Pre-filters providers to those with a streaming implementation (OpenAI-compatible
+    /// and Anthropic), then delegates to the load balancer so that RoundRobin,
+    /// WeightedRandom, HealthBased, and LeastLatency strategies are respected.
     pub(crate) async fn select_provider_for_stream(
         &self,
         _messages: &[Message],
     ) -> Result<&crate::sdk::config::SdkProviderConfig> {
-        for provider in &self.config.providers {
-            if !provider.enabled {
-                continue;
-            }
-            match provider.provider_type {
-                crate::sdk::config::ProviderType::OpenAI
-                | crate::sdk::config::ProviderType::Anthropic => return Ok(provider),
-                _ => continue,
-            }
+        let streaming_providers: Vec<&crate::sdk::config::SdkProviderConfig> = self
+            .config
+            .providers
+            .iter()
+            .filter(|p| {
+                p.enabled
+                    && matches!(
+                        p.provider_type,
+                        crate::sdk::config::ProviderType::OpenAI
+                            | crate::sdk::config::ProviderType::Anthropic
+                    )
+            })
+            .collect();
+
+        if streaming_providers.is_empty() {
+            return Err(SDKError::NoDefaultProvider);
         }
-        Err(SDKError::NoDefaultProvider)
+
+        self.load_balancer
+            .select_from_refs(&streaming_providers, &self.provider_stats)
+            .await
     }
 }
 
@@ -60,6 +70,62 @@ impl LLMClient {
 use super::types::LoadBalancer;
 
 impl LoadBalancer {
+    /// Select provider from a pre-filtered slice of references using the configured strategy.
+    pub(crate) async fn select_from_refs<'a>(
+        &self,
+        providers: &[&'a crate::sdk::config::SdkProviderConfig],
+        stats: &Arc<RwLock<HashMap<String, ProviderStats>>>,
+    ) -> Result<&'a crate::sdk::config::SdkProviderConfig> {
+        match self.strategy {
+            LoadBalancingStrategy::RoundRobin => Ok(providers[0]),
+            LoadBalancingStrategy::WeightedRandom => {
+                use rand::Rng;
+                let total_weight: f32 = providers.iter().map(|p| p.weight).sum();
+                let mut rng = rand::rng();
+                let mut random_weight = rng.random::<f32>() * total_weight;
+                for provider in providers {
+                    random_weight -= provider.weight;
+                    if random_weight <= 0.0 {
+                        return Ok(provider);
+                    }
+                }
+                Ok(providers[0])
+            }
+            LoadBalancingStrategy::HealthBased => {
+                let stats_guard = stats.read().await;
+                let mut best = providers[0];
+                let mut best_score = 0.0f64;
+                for provider in providers {
+                    let score = stats_guard
+                        .get(&provider.id)
+                        .map(|s| s.health_score)
+                        .unwrap_or(1.0);
+                    if score > best_score {
+                        best_score = score;
+                        best = provider;
+                    }
+                }
+                Ok(best)
+            }
+            LoadBalancingStrategy::LeastLatency => {
+                let stats_guard = stats.read().await;
+                let mut best = providers[0];
+                let mut best_latency = f64::INFINITY;
+                for provider in providers {
+                    let latency = stats_guard
+                        .get(&provider.id)
+                        .map(|s| s.avg_latency_ms)
+                        .unwrap_or(0.0);
+                    if latency < best_latency {
+                        best_latency = latency;
+                        best = provider;
+                    }
+                }
+                Ok(best)
+            }
+        }
+    }
+
     /// Select provider using load balancing strategy
     pub(crate) async fn select_provider<'a>(
         &self,
