@@ -84,10 +84,11 @@ pub struct Message {
 /// Tool call
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolCall {
-    /// Call ID
+    /// Call ID (absent in subsequent streaming deltas; default to empty string)
+    #[serde(default)]
     pub id: String,
-    /// Tool type
-    #[serde(rename = "type")]
+    /// Tool type (absent in subsequent streaming deltas; default to empty string)
+    #[serde(rename = "type", default)]
     pub tool_type: String,
     /// Function call
     pub function: Function,
@@ -100,7 +101,8 @@ pub struct Function {
     pub name: String,
     /// Function description
     pub description: Option<String>,
-    /// Function parameter schema
+    /// Function parameter schema (absent in streaming tool-call deltas, so default to null)
+    #[serde(default)]
     pub parameters: serde_json::Value,
     /// Function parameters (used for calls)
     #[serde(skip_serializing_if = "Option::is_none")]
