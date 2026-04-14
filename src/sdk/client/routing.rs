@@ -34,14 +34,22 @@ impl LLMClient {
     }
 
     /// Select provider for streaming
+    ///
+    /// Only providers with a streaming implementation (OpenAI-compatible and Anthropic)
+    /// are considered. Non-streaming provider types earlier in the list are skipped so
+    /// that a valid streaming provider configured later is still used.
     pub(crate) async fn select_provider_for_stream(
         &self,
         _messages: &[Message],
     ) -> Result<&crate::sdk::config::SdkProviderConfig> {
-        // Find provider that supports streaming
         for provider in &self.config.providers {
-            if provider.enabled {
-                return Ok(provider);
+            if !provider.enabled {
+                continue;
+            }
+            match provider.provider_type {
+                crate::sdk::config::ProviderType::OpenAI
+                | crate::sdk::config::ProviderType::Anthropic => return Ok(provider),
+                _ => continue,
             }
         }
         Err(SDKError::NoDefaultProvider)

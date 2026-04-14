@@ -121,9 +121,13 @@ impl LLMClient {
             "stream": true
         });
 
-        let default_url = "https://api.openai.com".to_string();
+        let default_url = "https://api.openai.com/v1".to_string();
         let base_url = provider.base_url.as_ref().unwrap_or(&default_url);
-        let url = format!("{}/v1/chat/completions", base_url.trim_end_matches('/'));
+        let url = if base_url.contains("/v1") {
+            format!("{}/chat/completions", base_url.trim_end_matches('/'))
+        } else {
+            format!("{}/v1/chat/completions", base_url.trim_end_matches('/'))
+        };
 
         debug!("Calling OpenAI streaming API: {}", url);
 
@@ -296,9 +300,13 @@ impl LLMClient {
             "stream": false
         });
 
-        let default_url = "https://api.openai.com".to_string();
+        let default_url = "https://api.openai.com/v1".to_string();
         let base_url = provider.base_url.as_ref().unwrap_or(&default_url);
-        let url = format!("{}/v1/chat/completions", base_url.trim_end_matches('/'));
+        let url = if base_url.contains("/v1") {
+            format!("{}/chat/completions", base_url.trim_end_matches('/'))
+        } else {
+            format!("{}/v1/chat/completions", base_url.trim_end_matches('/'))
+        };
 
         debug!("Calling OpenAI API: {}", url);
 
@@ -466,17 +474,29 @@ impl LLMClient {
     }
 }
 
+/// Trim trailing `\r` and `\n` bytes from a byte slice.
+fn trim_line_end(b: &[u8]) -> &[u8] {
+    let mut end = b.len();
+    while end > 0 && (b[end - 1] == b'\n' || b[end - 1] == b'\r') {
+        end -= 1;
+    }
+    &b[..end]
+}
+
 /// Parse an OpenAI-compatible SSE response into a stream of `ChatChunk`s.
 ///
 /// OpenAI sends newline-delimited `data: <json>` lines ending with `data: [DONE]`.
 /// The JSON structure matches `ChatChunk` directly, so each line is deserialized
 /// straight into that type.
+///
+/// Bytes are accumulated in a raw buffer and split on `\n` boundaries so that
+/// multi-byte UTF-8 characters split across HTTP chunks are handled correctly.
 fn parse_sse_stream_openai(
     response: reqwest::Response,
 ) -> impl futures::Stream<Item = Result<ChatChunk>> + Send {
     async_stream::stream! {
         let mut byte_stream = response.bytes_stream();
-        let mut buffer = String::new();
+        let mut raw_buffer: Vec<u8> = Vec::new();
 
         while let Some(chunk_result) = byte_stream.next().await {
             match chunk_result {
@@ -485,18 +505,18 @@ fn parse_sse_stream_openai(
                     return;
                 }
                 Ok(chunk) => {
-                    let text = match std::str::from_utf8(&chunk) {
-                        Ok(t) => t.to_string(),
-                        Err(e) => {
-                            yield Err(SDKError::ParseError(e.to_string()));
-                            return;
-                        }
-                    };
-                    buffer.push_str(&text);
+                    raw_buffer.extend_from_slice(&chunk);
 
-                    while let Some(pos) = buffer.find('\n') {
-                        let line = buffer[..pos].trim_end_matches('\r').trim().to_string();
-                        buffer = buffer[pos + 1..].to_string();
+                    while let Some(pos) = raw_buffer.iter().position(|&b| b == b'\n') {
+                        let line_bytes: Vec<u8> = raw_buffer.drain(..=pos).collect();
+                        let trimmed = trim_line_end(&line_bytes);
+                        let line = match std::str::from_utf8(trimmed) {
+                            Ok(s) => s,
+                            Err(e) => {
+                                yield Err(SDKError::ParseError(e.to_string()));
+                                return;
+                            }
+                        };
 
                         if let Some(data) = line.strip_prefix("data: ") {
                             if data == "[DONE]" {
@@ -523,14 +543,19 @@ fn parse_sse_stream_openai(
 ///
 /// Anthropic sends typed events (`message_start`, `content_block_delta`, etc.).
 /// Only `content_block_delta` events with a `text_delta` produce output chunks.
+///
+/// Bytes are accumulated in a raw buffer and split on `\n` boundaries so that
+/// multi-byte UTF-8 characters split across HTTP chunks are handled correctly.
+/// `event: error` lines are propagated as stream errors rather than silently dropped.
 fn parse_sse_stream_anthropic(
     response: reqwest::Response,
 ) -> impl futures::Stream<Item = Result<ChatChunk>> + Send {
     async_stream::stream! {
         let mut byte_stream = response.bytes_stream();
-        let mut buffer = String::new();
+        let mut raw_buffer: Vec<u8> = Vec::new();
         let mut message_id = String::from("msg_stream");
         let mut model = String::from("claude");
+        let mut current_event = String::new();
 
         while let Some(chunk_result) = byte_stream.next().await {
             match chunk_result {
@@ -539,25 +564,48 @@ fn parse_sse_stream_anthropic(
                     return;
                 }
                 Ok(chunk) => {
-                    let text = match std::str::from_utf8(&chunk) {
-                        Ok(t) => t.to_string(),
-                        Err(e) => {
-                            yield Err(SDKError::ParseError(e.to_string()));
-                            return;
+                    raw_buffer.extend_from_slice(&chunk);
+
+                    while let Some(pos) = raw_buffer.iter().position(|&b| b == b'\n') {
+                        let line_bytes: Vec<u8> = raw_buffer.drain(..=pos).collect();
+                        let trimmed = trim_line_end(&line_bytes);
+                        let line = match std::str::from_utf8(trimmed) {
+                            Ok(s) => s,
+                            Err(e) => {
+                                yield Err(SDKError::ParseError(e.to_string()));
+                                return;
+                            }
+                        };
+
+                        if line.is_empty() {
+                            current_event.clear();
+                            continue;
                         }
-                    };
-                    buffer.push_str(&text);
 
-                    while let Some(pos) = buffer.find('\n') {
-                        let line = buffer[..pos].trim_end_matches('\r').trim().to_string();
-                        buffer = buffer[pos + 1..].to_string();
-
-                        // Skip event-type lines and blanks
-                        if line.is_empty() || line.starts_with("event: ") {
+                        if let Some(event_name) = line.strip_prefix("event: ") {
+                            current_event = event_name.trim().to_string();
                             continue;
                         }
 
                         if let Some(data) = line.strip_prefix("data: ") {
+                            // Propagate in-band Anthropic stream errors (event: error)
+                            if current_event == "error" {
+                                let error_msg = serde_json::from_str::<serde_json::Value>(data)
+                                    .ok()
+                                    .and_then(|v| {
+                                        v.get("error")
+                                            .and_then(|e| e.get("message"))
+                                            .and_then(|m| m.as_str())
+                                            .map(|s| s.to_string())
+                                    })
+                                    .unwrap_or_else(|| data.to_string());
+                                yield Err(SDKError::ApiError(format!(
+                                    "Anthropic stream error: {}",
+                                    error_msg
+                                )));
+                                return;
+                            }
+
                             let value: serde_json::Value = match serde_json::from_str(data) {
                                 Ok(v) => v,
                                 Err(_) => continue,
@@ -594,6 +642,19 @@ fn parse_sse_stream_anthropic(
                                             }],
                                         });
                                     }
+                                }
+                                "error" => {
+                                    let error_msg = value
+                                        .get("error")
+                                        .and_then(|e| e.get("message"))
+                                        .and_then(|m| m.as_str())
+                                        .unwrap_or("unknown stream error")
+                                        .to_string();
+                                    yield Err(SDKError::ApiError(format!(
+                                        "Anthropic stream error: {}",
+                                        error_msg
+                                    )));
+                                    return;
                                 }
                                 "message_stop" => return,
                                 _ => {}
