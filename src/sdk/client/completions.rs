@@ -523,8 +523,28 @@ fn parse_sse_stream_openai(
                                 return;
                             }
                             if !data.is_empty() {
-                                match serde_json::from_str::<ChatChunk>(data) {
-                                    Ok(chunk) => yield Ok(chunk),
+                                // Parse as a generic Value first so in-band SSE errors
+                                // (`data: {"error":{...}}`) are surfaced as ApiError rather
+                                // than a confusing ParseError.
+                                match serde_json::from_str::<serde_json::Value>(data) {
+                                    Ok(v) if v.get("error").is_some() => {
+                                        let msg = v["error"]
+                                            .get("message")
+                                            .and_then(|m| m.as_str())
+                                            .unwrap_or(data);
+                                        yield Err(SDKError::ApiError(format!(
+                                            "Stream error: {}",
+                                            msg
+                                        )));
+                                        return;
+                                    }
+                                    Ok(v) => match serde_json::from_value::<ChatChunk>(v) {
+                                        Ok(chunk) => yield Ok(chunk),
+                                        Err(e) => yield Err(SDKError::ParseError(format!(
+                                            "Failed to parse OpenAI chunk: {}",
+                                            e
+                                        ))),
+                                    },
                                     Err(e) => yield Err(SDKError::ParseError(format!(
                                         "Failed to parse OpenAI chunk: {}",
                                         e
@@ -643,6 +663,36 @@ fn parse_sse_stream_anthropic(
                                         });
                                     }
                                 }
+                                "message_delta" => {
+                                    // `message_delta` carries the terminal `stop_reason` (maps
+                                    // to OpenAI `finish_reason`) and the final usage counts.
+                                    // Emit a chunk so callers receive finish_reason; without
+                                    // this the stream looks like an incomplete completion.
+                                    let finish_reason = value
+                                        .get("delta")
+                                        .and_then(|d| d.get("stop_reason"))
+                                        .and_then(|r| r.as_str())
+                                        .map(|r| match r {
+                                            "end_turn" => "stop".to_string(),
+                                            "max_tokens" => "length".to_string(),
+                                            other => other.to_string(),
+                                        });
+                                    if finish_reason.is_some() {
+                                        yield Ok(ChatChunk {
+                                            id: message_id.clone(),
+                                            model: model.clone(),
+                                            choices: vec![ChunkChoice {
+                                                index: 0,
+                                                delta: MessageDelta {
+                                                    role: None,
+                                                    content: None,
+                                                    tool_calls: None,
+                                                },
+                                                finish_reason,
+                                            }],
+                                        });
+                                    }
+                                }
                                 "error" => {
                                     let error_msg = value
                                         .get("error")
@@ -656,7 +706,16 @@ fn parse_sse_stream_anthropic(
                                     )));
                                     return;
                                 }
-                                "message_stop" => return,
+                                "message_stop" => {
+                                    // Emit a terminal empty-choices chunk matching the core
+                                    // SSE transformer, then close the stream.
+                                    yield Ok(ChatChunk {
+                                        id: message_id.clone(),
+                                        model: model.clone(),
+                                        choices: vec![],
+                                    });
+                                    return;
+                                }
                                 _ => {}
                             }
                         }
