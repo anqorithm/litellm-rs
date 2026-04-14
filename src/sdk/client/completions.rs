@@ -36,13 +36,27 @@ impl LLMClient {
         result
     }
 
-    /// Streaming chat
+    /// Streaming chat (uses default ChatOptions)
     pub async fn chat_stream(
         &self,
         messages: Vec<Message>,
     ) -> Result<Pin<Box<dyn futures::Stream<Item = Result<ChatChunk>> + Send>>> {
-        let provider = self.select_provider_for_stream(&messages).await?;
-        self.execute_stream_request(&provider.id, messages).await
+        let request = SdkChatRequest {
+            model: String::new(),
+            messages,
+            options: ChatOptions::default(),
+        };
+        self.chat_stream_with_options(request).await
+    }
+
+    /// Streaming chat with full options control (mirrors `chat_with_options`)
+    pub async fn chat_stream_with_options(
+        &self,
+        request: SdkChatRequest,
+    ) -> Result<Pin<Box<dyn futures::Stream<Item = Result<ChatChunk>> + Send>>> {
+        let provider = self.select_provider_for_stream(&request.messages).await?;
+        let provider_id = provider.id.clone();
+        self.execute_stream_request(&provider_id, request).await
     }
 
     /// Execute chat request with a specific provider
@@ -81,7 +95,7 @@ impl LLMClient {
     pub(crate) async fn execute_stream_request(
         &self,
         provider_id: &str,
-        messages: Vec<Message>,
+        request: SdkChatRequest,
     ) -> Result<Pin<Box<dyn futures::Stream<Item = Result<ChatChunk>> + Send>>> {
         let provider = self
             .config
@@ -92,10 +106,12 @@ impl LLMClient {
 
         match provider.provider_type {
             crate::sdk::config::ProviderType::OpenAI => {
-                self.stream_openai_request(provider, messages).await
+                self.stream_openai_request(provider, request.messages, &request.options)
+                    .await
             }
             crate::sdk::config::ProviderType::Anthropic => {
-                self.stream_anthropic_request(provider, messages).await
+                self.stream_anthropic_request(provider, request.messages, &request.options)
+                    .await
             }
             _ => Err(SDKError::NotSupported(format!(
                 "Streaming is not implemented for provider type {:?}",
@@ -109,17 +125,25 @@ impl LLMClient {
         &self,
         provider: &crate::sdk::config::SdkProviderConfig,
         messages: Vec<Message>,
+        options: &ChatOptions,
     ) -> Result<Pin<Box<dyn futures::Stream<Item = Result<ChatChunk>> + Send>>> {
         let model = provider
             .models
             .first()
             .cloned()
             .unwrap_or_else(|| "gpt-4".to_string());
-        let body = serde_json::json!({
+        let mut body = serde_json::json!({
             "model": model,
             "messages": messages,
-            "stream": true
+            "stream": true,
+            "max_tokens": options.max_tokens.unwrap_or(1000),
         });
+        if let Some(temp) = options.temperature {
+            body["temperature"] = serde_json::json!(temp);
+        }
+        if let Some(top_p) = options.top_p {
+            body["top_p"] = serde_json::json!(top_p);
+        }
 
         let default_url = "https://api.openai.com/v1".to_string();
         let base_url = provider.base_url.as_ref().unwrap_or(&default_url);
@@ -158,6 +182,7 @@ impl LLMClient {
         &self,
         provider: &crate::sdk::config::SdkProviderConfig,
         messages: Vec<Message>,
+        options: &ChatOptions,
     ) -> Result<Pin<Box<dyn futures::Stream<Item = Result<ChatChunk>> + Send>>> {
         let (system_message, anthropic_messages) = self.convert_messages_to_anthropic(&messages);
 
@@ -169,9 +194,15 @@ impl LLMClient {
         let mut body = serde_json::json!({
             "model": model,
             "messages": anthropic_messages,
-            "max_tokens": 1024,
+            "max_tokens": options.max_tokens.unwrap_or(1024),
             "stream": true
         });
+        if let Some(temp) = options.temperature {
+            body["temperature"] = serde_json::json!(temp);
+        }
+        if let Some(top_p) = options.top_p {
+            body["top_p"] = serde_json::json!(top_p);
+        }
 
         if let Some(system) = system_message {
             body["system"] = serde_json::json!(system);
