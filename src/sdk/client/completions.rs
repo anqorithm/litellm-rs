@@ -102,7 +102,7 @@ impl LLMClient {
     ) -> Result<ChatResponse> {
         // Convert message format
         let (system_message, anthropic_messages) =
-            self.convert_messages_to_anthropic(&request.messages);
+            self.convert_messages_to_anthropic(&request.messages)?;
 
         // Build request body
         let mut body = serde_json::json!({
@@ -234,7 +234,7 @@ impl LLMClient {
     fn convert_messages_to_anthropic(
         &self,
         messages: &[Message],
-    ) -> (Option<String>, Vec<serde_json::Value>) {
+    ) -> Result<(Option<String>, Vec<serde_json::Value>)> {
         let mut system_message = None;
         let mut anthropic_messages = Vec::new();
 
@@ -248,35 +248,42 @@ impl LLMClient {
                 Role::User => {
                     anthropic_messages.push(serde_json::json!({
                         "role": "user",
-                        "content": self.convert_content_to_anthropic(message.content.as_ref())
+                        "content": self.convert_content_to_anthropic(message.content.as_ref())?
                     }));
                 }
                 Role::Assistant => {
                     anthropic_messages.push(serde_json::json!({
                         "role": "assistant",
-                        "content": self.convert_content_to_anthropic(message.content.as_ref())
+                        "content": self.convert_content_to_anthropic(message.content.as_ref())?
                     }));
                 }
-                _ => {} // Ignore other roles
+                _ => {}
             }
         }
 
-        (system_message, anthropic_messages)
+        Ok((system_message, anthropic_messages))
     }
 
     /// Parse `data:<media_type>;base64,<data>` into `(media_type, base64_data)`.
-    /// Returns `None` for plain URLs or malformed data URIs.
+    /// Returns `None` for plain URLs, non-base64 data URIs, or malformed data URIs.
+    /// Requires the explicit `;base64,` marker — `data:image/png;charset=utf-8,…` returns `None`.
     fn parse_data_uri(url: &str) -> Option<(&str, &str)> {
         let rest = url.strip_prefix("data:")?;
-        let (media_type, rest) = rest.split_once(';')?;
-        let data = rest.strip_prefix("base64,")?;
+        // Split on the explicit ";base64," marker so non-base64 params (charset, name, …) are rejected.
+        let (header, data) = rest.split_once(";base64,")?;
+        // Strip any trailing media-type parameters (e.g. `image/png;charset=utf-8` → `image/png`).
+        let media_type = header.split(';').next().filter(|s| !s.is_empty())?;
         Some((media_type, data))
     }
 
-    /// Convert content to Anthropic format
-    fn convert_content_to_anthropic(&self, content: Option<&Content>) -> serde_json::Value {
+    /// Convert content to Anthropic format.
+    /// Returns `Err(SDKError::InvalidRequest)` for `data:` URIs that lack the `;base64,` marker.
+    fn convert_content_to_anthropic(
+        &self,
+        content: Option<&Content>,
+    ) -> Result<serde_json::Value> {
         match content {
-            Some(Content::Text(text)) => serde_json::json!(text),
+            Some(Content::Text(text)) => Ok(serde_json::json!(text)),
             Some(Content::Multimodal(parts)) => {
                 let mut anthropic_content = Vec::new();
                 for part in parts {
@@ -288,31 +295,44 @@ impl LLMClient {
                             }));
                         }
                         ContentPart::Image { image_url } => {
-                            if let Some((media_type, data)) = Self::parse_data_uri(&image_url.url) {
-                                anthropic_content.push(serde_json::json!({
-                                    "type": "image",
-                                    "source": {
-                                        "type": "base64",
-                                        "media_type": media_type,
-                                        "data": data
+                            let url = &image_url.url;
+                            if url.starts_with("data:") {
+                                match Self::parse_data_uri(url) {
+                                    Some((media_type, data)) => {
+                                        anthropic_content.push(serde_json::json!({
+                                            "type": "image",
+                                            "source": {
+                                                "type": "base64",
+                                                "media_type": media_type,
+                                                "data": data
+                                            }
+                                        }));
                                     }
-                                }));
+                                    None => {
+                                        // Truncate to 100 chars to avoid large binary payloads in logs/responses.
+                                        let preview: String = url.chars().take(100).collect();
+                                        return Err(SDKError::InvalidRequest(format!(
+                                            "data URI must use ';base64,' encoding: {}",
+                                            preview
+                                        )));
+                                    }
+                                }
                             } else {
                                 anthropic_content.push(serde_json::json!({
                                     "type": "image",
                                     "source": {
                                         "type": "url",
-                                        "url": image_url.url
+                                        "url": url
                                     }
                                 }));
                             }
                         }
-                        _ => {} // Ignore other types
+                        _ => {}
                     }
                 }
-                serde_json::json!(anthropic_content)
+                Ok(serde_json::json!(anthropic_content))
             }
-            None => serde_json::json!(""),
+            None => Ok(serde_json::json!("")),
         }
     }
 
@@ -447,7 +467,7 @@ mod tests {
                 detail: None,
             },
         }]);
-        let result = client.convert_content_to_anthropic(Some(&content));
+        let result = client.convert_content_to_anthropic(Some(&content)).unwrap();
         let source = &result[0]["source"];
         assert_eq!(source["media_type"], "image/png");
         assert_eq!(source["data"], "iVBORw0KGgo=");
@@ -463,7 +483,7 @@ mod tests {
                 detail: None,
             },
         }]);
-        let result = client.convert_content_to_anthropic(Some(&content));
+        let result = client.convert_content_to_anthropic(Some(&content)).unwrap();
         let source = &result[0]["source"];
         assert_eq!(source["media_type"], "image/webp");
         assert_eq!(source["data"], "UklGRgAA");
@@ -478,7 +498,7 @@ mod tests {
                 detail: None,
             },
         }]);
-        let result = client.convert_content_to_anthropic(Some(&content));
+        let result = client.convert_content_to_anthropic(Some(&content)).unwrap();
         let source = &result[0]["source"];
         assert_eq!(source["media_type"], "image/jpeg");
         assert_eq!(source["data"], "/9j/4AAQ");
@@ -493,9 +513,70 @@ mod tests {
                 detail: None,
             },
         }]);
-        let result = client.convert_content_to_anthropic(Some(&content));
+        let result = client.convert_content_to_anthropic(Some(&content)).unwrap();
         let source = &result[0]["source"];
         assert_eq!(source["type"], "url");
         assert_eq!(source["url"], "https://example.com/photo.png");
+    }
+
+    #[test]
+    fn test_non_base64_data_uri_returns_error() {
+        let client = make_client();
+        let content = Content::Multimodal(vec![ContentPart::Image {
+            image_url: ImageUrl {
+                url: "data:image/png;charset=utf-8,abc".to_string(),
+                detail: None,
+            },
+        }]);
+        let err = client.convert_content_to_anthropic(Some(&content)).unwrap_err();
+        assert!(matches!(err, SDKError::InvalidRequest(_)));
+    }
+
+    #[test]
+    fn test_non_base64_data_uri_name_param_returns_error() {
+        let client = make_client();
+        let content = Content::Multimodal(vec![ContentPart::Image {
+            image_url: ImageUrl {
+                url: "data:image/png;name=foo,abc".to_string(),
+                detail: None,
+            },
+        }]);
+        let err = client.convert_content_to_anthropic(Some(&content)).unwrap_err();
+        assert!(matches!(err, SDKError::InvalidRequest(_)));
+    }
+
+    #[test]
+    fn test_non_base64_error_message_truncated() {
+        let client = make_client();
+        let long_payload = "data:image/png;name=foo,".to_string() + &"A".repeat(500);
+        let content = Content::Multimodal(vec![ContentPart::Image {
+            image_url: ImageUrl {
+                url: long_payload,
+                detail: None,
+            },
+        }]);
+        let err = client.convert_content_to_anthropic(Some(&content)).unwrap_err();
+        if let SDKError::InvalidRequest(msg) = err {
+            // Error message must not embed large payloads (truncated to 100 chars of the URI).
+            assert!(msg.len() < 200, "error message too long: {} chars", msg.len());
+        } else {
+            panic!("expected InvalidRequest");
+        }
+    }
+
+    #[test]
+    fn test_parse_data_uri_with_media_type_params() {
+        // Valid base64 URI with a media-type parameter before ;base64,
+        let (mt, data) =
+            LLMClient::parse_data_uri("data:image/png;charset=utf-8;base64,iVBOR").unwrap();
+        assert_eq!(mt, "image/png");
+        assert_eq!(data, "iVBOR");
+    }
+
+    #[test]
+    fn test_parse_data_uri_non_base64_returns_none() {
+        assert!(LLMClient::parse_data_uri("data:image/png;charset=utf-8,abc").is_none());
+        assert!(LLMClient::parse_data_uri("data:image/png;name=foo,abc").is_none());
+        assert!(LLMClient::parse_data_uri("data:image/png,abc").is_none());
     }
 }
