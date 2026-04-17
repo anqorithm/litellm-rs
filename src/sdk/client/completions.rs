@@ -264,6 +264,15 @@ impl LLMClient {
         (system_message, anthropic_messages)
     }
 
+    /// Parse `data:<media_type>;base64,<data>` into `(media_type, base64_data)`.
+    /// Returns `None` for plain URLs or malformed data URIs.
+    fn parse_data_uri(url: &str) -> Option<(&str, &str)> {
+        let rest = url.strip_prefix("data:")?;
+        let (media_type, rest) = rest.split_once(';')?;
+        let data = rest.strip_prefix("base64,")?;
+        Some((media_type, data))
+    }
+
     /// Convert content to Anthropic format
     fn convert_content_to_anthropic(&self, content: Option<&Content>) -> serde_json::Value {
         match content {
@@ -279,14 +288,24 @@ impl LLMClient {
                             }));
                         }
                         ContentPart::Image { image_url } => {
-                            anthropic_content.push(serde_json::json!({
-                                "type": "image",
-                                "source": {
-                                    "type": "base64",
-                                    "media_type": "image/jpeg",
-                                    "data": image_url.url.trim_start_matches("data:image/jpeg;base64,")
-                                }
-                            }));
+                            if let Some((media_type, data)) = Self::parse_data_uri(&image_url.url) {
+                                anthropic_content.push(serde_json::json!({
+                                    "type": "image",
+                                    "source": {
+                                        "type": "base64",
+                                        "media_type": media_type,
+                                        "data": data
+                                    }
+                                }));
+                            } else {
+                                anthropic_content.push(serde_json::json!({
+                                    "type": "image",
+                                    "source": {
+                                        "type": "url",
+                                        "url": image_url.url
+                                    }
+                                }));
+                            }
                         }
                         _ => {} // Ignore other types
                     }
@@ -351,5 +370,132 @@ impl LLMClient {
                 .unwrap()
                 .as_secs(),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::sdk::{
+        config::{ConfigBuilder, ProviderType, SdkProviderConfig},
+        types::{Content, ContentPart, ImageUrl},
+    };
+    use std::collections::HashMap;
+
+    fn make_client() -> LLMClient {
+        let config = ConfigBuilder::new()
+            .add_provider(SdkProviderConfig {
+                id: "anthropic".to_string(),
+                provider_type: ProviderType::Anthropic,
+                name: "Anthropic".to_string(),
+                api_key: "test-key".to_string(),
+                base_url: None,
+                models: vec!["claude-3-5-sonnet-20241022".to_string()],
+                enabled: true,
+                weight: 1.0,
+                rate_limit_rpm: None,
+                rate_limit_tpm: None,
+                settings: HashMap::new(),
+            })
+            .build();
+        LLMClient::new(config).unwrap()
+    }
+
+    // parse_data_uri tests
+
+    #[test]
+    fn test_parse_data_uri_jpeg() {
+        let (mt, data) = LLMClient::parse_data_uri("data:image/jpeg;base64,/9j/abc").unwrap();
+        assert_eq!(mt, "image/jpeg");
+        assert_eq!(data, "/9j/abc");
+    }
+
+    #[test]
+    fn test_parse_data_uri_png() {
+        let (mt, data) = LLMClient::parse_data_uri("data:image/png;base64,iVBOR").unwrap();
+        assert_eq!(mt, "image/png");
+        assert_eq!(data, "iVBOR");
+    }
+
+    #[test]
+    fn test_parse_data_uri_webp() {
+        let (mt, data) = LLMClient::parse_data_uri("data:image/webp;base64,UklGR").unwrap();
+        assert_eq!(mt, "image/webp");
+        assert_eq!(data, "UklGR");
+    }
+
+    #[test]
+    fn test_parse_data_uri_gif() {
+        let (mt, data) = LLMClient::parse_data_uri("data:image/gif;base64,R0lGO").unwrap();
+        assert_eq!(mt, "image/gif");
+        assert_eq!(data, "R0lGO");
+    }
+
+    #[test]
+    fn test_parse_data_uri_plain_url_returns_none() {
+        assert!(LLMClient::parse_data_uri("https://example.com/image.png").is_none());
+    }
+
+    // convert_content_to_anthropic tests
+
+    #[test]
+    fn test_png_image_uses_correct_media_type() {
+        let client = make_client();
+        let content = Content::Multimodal(vec![ContentPart::Image {
+            image_url: ImageUrl {
+                url: "data:image/png;base64,iVBORw0KGgo=".to_string(),
+                detail: None,
+            },
+        }]);
+        let result = client.convert_content_to_anthropic(Some(&content));
+        let source = &result[0]["source"];
+        assert_eq!(source["media_type"], "image/png");
+        assert_eq!(source["data"], "iVBORw0KGgo=");
+        assert_eq!(source["type"], "base64");
+    }
+
+    #[test]
+    fn test_webp_image_uses_correct_media_type() {
+        let client = make_client();
+        let content = Content::Multimodal(vec![ContentPart::Image {
+            image_url: ImageUrl {
+                url: "data:image/webp;base64,UklGRgAA".to_string(),
+                detail: None,
+            },
+        }]);
+        let result = client.convert_content_to_anthropic(Some(&content));
+        let source = &result[0]["source"];
+        assert_eq!(source["media_type"], "image/webp");
+        assert_eq!(source["data"], "UklGRgAA");
+    }
+
+    #[test]
+    fn test_jpeg_image_still_works() {
+        let client = make_client();
+        let content = Content::Multimodal(vec![ContentPart::Image {
+            image_url: ImageUrl {
+                url: "data:image/jpeg;base64,/9j/4AAQ".to_string(),
+                detail: None,
+            },
+        }]);
+        let result = client.convert_content_to_anthropic(Some(&content));
+        let source = &result[0]["source"];
+        assert_eq!(source["media_type"], "image/jpeg");
+        assert_eq!(source["data"], "/9j/4AAQ");
+    }
+
+    #[test]
+    fn test_plain_url_image_uses_url_source_type() {
+        let client = make_client();
+        let content = Content::Multimodal(vec![ContentPart::Image {
+            image_url: ImageUrl {
+                url: "https://example.com/photo.png".to_string(),
+                detail: None,
+            },
+        }]);
+        let result = client.convert_content_to_anthropic(Some(&content));
+        let source = &result[0]["source"];
+        assert_eq!(source["type"], "url");
+        assert_eq!(source["url"], "https://example.com/photo.png");
     }
 }
