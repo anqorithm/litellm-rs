@@ -187,7 +187,11 @@ impl ModelUtils {
                     },
                 ),
                 context_window: Some(
-                    if model_lower.contains("gemini-3") || model_lower.contains("gemini-2.5") {
+                    if model_lower.contains("gemini-3")
+                        || model_lower.contains("gemini-2.5")
+                        || model_lower.contains("gemini-1.5")
+                        || model_lower.contains("gemini-15")
+                    {
                         1_048_576
                     } else {
                         32768

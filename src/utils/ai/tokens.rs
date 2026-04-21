@@ -254,8 +254,7 @@ impl TokenUtils {
         match model.to_lowercase().as_str() {
             m if m.contains("gpt-5.4")
                 && !m.contains("gpt-5.4-mini")
-                && !m.contains("gpt-5.4-nano")
-                && !m.contains("gpt-5.4-pro") =>
+                && !m.contains("gpt-5.4-nano") =>
             {
                 Some(1_000_000)
             }
