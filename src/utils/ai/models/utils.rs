@@ -385,11 +385,14 @@ impl ModelUtils {
             "o3-pro",
             "o3-mini",
             "o4-mini",
+            "claude-opus-4",
+            "claude-sonnet-4",
             "claude-opus-4-7",
             "claude-sonnet-4-6",
             "claude-haiku-4-5",
             "claude-3",
             "claude-2",
+            "gemini",
             "gemini-3.1-pro-preview",
             "gemini-3-flash-preview",
             "gemini-3.1-flash-lite-preview",
@@ -491,6 +494,7 @@ impl ModelUtils {
                 "claude-opus-4-6".to_string(),
                 "claude-opus-4-5".to_string(),
                 "claude-sonnet-4-5".to_string(),
+                "claude-sonnet-4".to_string(),
                 "claude-3-opus".to_string(),
                 "claude-3-sonnet".to_string(),
                 "claude-3-haiku".to_string(),
@@ -498,6 +502,12 @@ impl ModelUtils {
                 "claude-instant".to_string(),
             ],
             "google" => vec![
+                "gemini-pro".to_string(),
+                "gemini-pro-vision".to_string(),
+                "gemini-1.5-pro".to_string(),
+                "gemini-1.5-flash".to_string(),
+                "gemini-1.5-flash-8b".to_string(),
+                "gemini-2.0-flash".to_string(),
                 "gemini-3.1-pro-preview".to_string(),
                 "gemini-3-flash-preview".to_string(),
                 "gemini-3.1-flash-lite-preview".to_string(),
@@ -810,6 +820,10 @@ mod tests {
         assert!(ModelUtils::is_valid_model("gpt-4"));
         assert!(ModelUtils::is_valid_model("gpt-3.5-turbo"));
         assert!(ModelUtils::is_valid_model("claude-3-opus"));
+        assert!(ModelUtils::is_valid_model("claude-opus-4-6"));
+        assert!(ModelUtils::is_valid_model("claude-sonnet-4-5"));
+        assert!(ModelUtils::is_valid_model("gemini-pro"));
+        assert!(ModelUtils::is_valid_model("gemini-2.5-pro"));
         assert!(ModelUtils::is_valid_model("gemini-3.1-pro-preview"));
         assert!(ModelUtils::is_valid_model("command-r"));
         assert!(ModelUtils::is_valid_model("mistral-large"));
@@ -909,6 +923,8 @@ mod tests {
     #[test]
     fn test_get_compatible_models_google() {
         let models = ModelUtils::get_compatible_models_for_provider("google");
+        assert!(models.contains(&"gemini-pro".to_string()));
+        assert!(models.contains(&"gemini-1.5-pro".to_string()));
         assert!(models.contains(&"gemini-3.1-pro-preview".to_string()));
         assert!(models.contains(&"gemini-3-flash-preview".to_string()));
     }

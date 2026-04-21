@@ -251,7 +251,7 @@ impl LLMClient {
         let (system_message, anthropic_messages) = convert_messages_to_anthropic(&messages)?;
 
         let mut body = serde_json::json!({
-            "model": provider.models.first().unwrap_or(&"claude-sonnet-4-5".to_string()),
+            "model": provider.models.first().unwrap_or(&"claude-sonnet-4-6".to_string()),
             "messages": anthropic_messages,
             "max_tokens": 1000,
             "stream": true,

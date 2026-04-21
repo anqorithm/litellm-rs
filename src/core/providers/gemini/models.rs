@@ -43,6 +43,7 @@ pub enum ModelFeature {
 pub enum GeminiModelFamily {
     /// Gemini 3.1 series (2026 - Latest)
     Gemini31ProPreview,
+    Gemini31Flash,
     Gemini31FlashLite,
 
     /// Gemini 3 series (2025-2026)
@@ -202,6 +203,66 @@ impl GeminiModelRegistry {
                     max_video_seconds: Some(3600),
                     max_audio_seconds: Some(9600),
                     rpm_limit: Some(1000),
+                    tpm_limit: Some(4_000_000),
+                },
+            },
+        );
+
+        // Gemini 3.1 Flash
+        self.register_model(
+            "gemini-3.1-flash",
+            ModelSpec {
+                model_info: ModelInfo {
+                    id: "gemini-3.1-flash".to_string(),
+                    name: "Gemini 3.1 Flash".to_string(),
+                    provider: "gemini".to_string(),
+                    max_context_length: 1_048_576,
+                    max_output_length: Some(65536),
+                    supports_streaming: true,
+                    supports_tools: true,
+                    supports_multimodal: true,
+                    input_cost_per_1k_tokens: Some(0.000075),
+                    output_cost_per_1k_tokens: Some(0.0003),
+                    currency: "USD".to_string(),
+                    capabilities: vec![
+                        crate::core::types::model::ProviderCapability::ChatCompletion,
+                        crate::core::types::model::ProviderCapability::ChatCompletionStream,
+                        crate::core::types::model::ProviderCapability::ToolCalling,
+                    ],
+                    created_at: None,
+                    updated_at: None,
+                    metadata: std::collections::HashMap::new(),
+                },
+                family: GeminiModelFamily::Gemini31Flash,
+                features: vec![
+                    ModelFeature::MultimodalSupport,
+                    ModelFeature::ToolCalling,
+                    ModelFeature::FunctionCalling,
+                    ModelFeature::StreamingSupport,
+                    ModelFeature::ContextCaching,
+                    ModelFeature::SystemInstructions,
+                    ModelFeature::BatchProcessing,
+                    ModelFeature::JsonMode,
+                    ModelFeature::CodeExecution,
+                    ModelFeature::SearchGrounding,
+                    ModelFeature::VideoUnderstanding,
+                    ModelFeature::AudioUnderstanding,
+                ],
+                pricing: ModelPricing {
+                    input_price: 0.075,
+                    output_price: 0.30,
+                    cached_input_price: Some(0.01875),
+                    image_price: Some(0.0002),
+                    video_price_per_second: Some(0.0002),
+                    audio_price_per_second: Some(0.00002),
+                },
+                limits: ModelLimits {
+                    max_context_length: 1_048_576,
+                    max_output_tokens: 65536,
+                    max_images: Some(3000),
+                    max_video_seconds: Some(3600),
+                    max_audio_seconds: Some(9600),
+                    rpm_limit: Some(2000),
                     tpm_limit: Some(4_000_000),
                 },
             },
@@ -1068,6 +1129,8 @@ impl GeminiModelRegistry {
         // Gemini 3.1 series (check before 3.0 as more specific)
         if model_lower.contains("gemini-3.1-flash-lite") {
             Some(GeminiModelFamily::Gemini31FlashLite)
+        } else if model_lower.contains("gemini-3.1-flash") {
+            Some(GeminiModelFamily::Gemini31Flash)
         } else if model_lower.contains("gemini-3.1-pro") {
             Some(GeminiModelFamily::Gemini31ProPreview)
         }
@@ -1245,6 +1308,11 @@ mod tests {
         assert_eq!(
             GeminiModelRegistry::from_model_name("gemini-2.0-flash-exp"),
             Some(GeminiModelFamily::Gemini20Flash)
+        );
+
+        assert_eq!(
+            GeminiModelRegistry::from_model_name("gemini-3.1-flash"),
+            Some(GeminiModelFamily::Gemini31Flash)
         );
 
         assert_eq!(

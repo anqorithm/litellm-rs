@@ -271,6 +271,7 @@ impl TokenUtils {
             m if m.contains("claude-opus-4-7") => Some(1_000_000),
             m if m.contains("claude-opus-4-6") => Some(1_000_000),
             m if m.contains("claude-sonnet-4-6") => Some(1_000_000),
+            m if m.contains("claude-haiku-4-5") => Some(200_000),
             m if m.contains("claude-opus-4") => Some(200000),
             m if m.contains("claude-sonnet-4") => Some(200000),
             m if m.contains("claude-3") => Some(200000),
@@ -430,6 +431,10 @@ mod tests {
         assert_eq!(
             TokenUtils::get_max_tokens_for_model("claude-opus-4-6"),
             Some(1_000_000)
+        );
+        assert_eq!(
+            TokenUtils::get_max_tokens_for_model("claude-haiku-4-5"),
+            Some(200_000)
         );
         assert_eq!(
             TokenUtils::get_max_tokens_for_model("claude-3"),
