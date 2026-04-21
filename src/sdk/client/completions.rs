@@ -405,7 +405,7 @@ impl LLMClient {
         provider: &crate::sdk::config::SdkProviderConfig,
         request: SdkChatRequest,
     ) -> Result<ChatResponse> {
-        let model = self.provider_default_model(provider, "claude-sonnet-4-5");
+        let model = self.provider_default_model(provider, "claude-sonnet-4-6");
         let body = build_anthropic_request_body(&request, model)?;
         let url = self.anthropic_messages_endpoint(provider);
 
@@ -436,7 +436,7 @@ impl LLMClient {
         provider: &crate::sdk::config::SdkProviderConfig,
         request: SdkChatRequest,
     ) -> Result<ChatResponse> {
-        let model = self.provider_default_model(provider, "gpt-5.2-chat");
+        let model = self.provider_default_model(provider, "gpt-5.4");
         let body = build_openai_request_body(&request, model);
         let url = self.provider_endpoint(provider, "https://api.openai.com", "v1/chat/completions");
 

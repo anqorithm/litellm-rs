@@ -493,12 +493,12 @@ mod tests {
                     "output_tokens": 7
                 }
             }),
-            "claude-sonnet-4-5",
+            "claude-sonnet-4-6",
         )
         .unwrap();
 
         assert_eq!(response.id, "anthropic-response-1");
-        assert_eq!(response.model, "claude-sonnet-4-5");
+        assert_eq!(response.model, "claude-sonnet-4-6");
         assert_eq!(response.usage.prompt_tokens, 11);
         assert_eq!(response.usage.completion_tokens, 7);
         assert_eq!(response.usage.total_tokens, 18);
@@ -536,9 +536,9 @@ mod tests {
             },
         };
 
-        let body = build_anthropic_request_body(&request, "claude-sonnet-4-5").unwrap();
+        let body = build_anthropic_request_body(&request, "claude-sonnet-4-6").unwrap();
 
-        assert_eq!(body["model"], "claude-sonnet-4-5");
+        assert_eq!(body["model"], "claude-sonnet-4-6");
         assert_eq!(body["system"], "system prompt");
         assert_eq!(body["max_tokens"], 42);
         assert!((body["temperature"].as_f64().unwrap() - 0.2).abs() < 1e-6);
@@ -569,9 +569,9 @@ mod tests {
             options: ChatOptions::default(),
         };
 
-        let body = build_openai_request_body(&request, "gpt-5.2-chat");
+        let body = build_openai_request_body(&request, "gpt-5.4");
 
-        assert_eq!(body["model"], "gpt-5.2-chat");
+        assert_eq!(body["model"], "gpt-5.4");
         assert_eq!(body["max_tokens"], 1000);
         assert!((body["temperature"].as_f64().unwrap() - 0.7).abs() < 1e-6);
         assert_eq!(body["stream"], false);

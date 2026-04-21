@@ -499,6 +499,14 @@ fn get_anthropic_pricing(model: &str) -> Result<ModelPricing, CostError> {
     use chrono::Utc;
 
     let pricing = match model.to_lowercase().as_str() {
+        m if m.contains("claude-opus-4-7") => ModelPricing {
+            model: model.to_string(),
+            input_cost_per_1k_tokens: 0.005,
+            output_cost_per_1k_tokens: 0.025,
+            currency: "USD".to_string(),
+            updated_at: Utc::now(),
+            ..Default::default()
+        },
         m if m.contains("claude-opus-4-6") => ModelPricing {
             model: model.to_string(),
             input_cost_per_1k_tokens: 0.005,
@@ -689,7 +697,16 @@ fn get_moonshot_pricing(model: &str) -> Result<ModelPricing, CostError> {
 
     let normalized_model = model.to_lowercase();
 
-    let pricing = if normalized_model.contains("kimi-k2.5") {
+    let pricing = if normalized_model.contains("kimi-k2.6") {
+        ModelPricing {
+            model: model.to_string(),
+            input_cost_per_1k_tokens: 0.00095,
+            output_cost_per_1k_tokens: 0.004,
+            currency: "USD".to_string(),
+            updated_at: Utc::now(),
+            ..Default::default()
+        }
+    } else if normalized_model.contains("kimi-k2.5") {
         ModelPricing {
             model: model.to_string(),
             input_cost_per_1k_tokens: 0.0006,
@@ -811,8 +828,8 @@ fn get_zhipu_pricing(model: &str) -> Result<ModelPricing, CostError> {
     } else if normalized_model.contains("glm-5.1") || normalized_model.contains("glm-5-1") {
         ModelPricing {
             model: model.to_string(),
-            input_cost_per_1k_tokens: 0.0015,
-            output_cost_per_1k_tokens: 0.005,
+            input_cost_per_1k_tokens: 0.0014,
+            output_cost_per_1k_tokens: 0.0044,
             currency: "USD".to_string(),
             updated_at: Utc::now(),
             ..Default::default()
@@ -1035,6 +1052,15 @@ mod tests {
     }
 
     #[test]
+    fn test_get_anthropic_pricing_claude_opus_47() {
+        let pricing = get_model_pricing("claude-opus-4-7", "anthropic");
+        assert!(pricing.is_ok());
+        let pricing = pricing.unwrap();
+        assert_eq!(pricing.input_cost_per_1k_tokens, 0.005);
+        assert_eq!(pricing.output_cost_per_1k_tokens, 0.025);
+    }
+
+    #[test]
     fn test_get_anthropic_pricing_claude_sonnet_45() {
         let pricing = get_model_pricing("claude-sonnet-4-5", "anthropic");
         assert!(pricing.is_ok());
@@ -1125,6 +1151,15 @@ mod tests {
     }
 
     #[test]
+    fn test_get_moonshot_pricing_kimi_k2_6() {
+        let pricing = get_model_pricing("kimi-k2.6", "moonshot");
+        assert!(pricing.is_ok());
+        let pricing = pricing.unwrap();
+        assert_eq!(pricing.input_cost_per_1k_tokens, 0.00095);
+        assert_eq!(pricing.output_cost_per_1k_tokens, 0.004);
+    }
+
+    #[test]
     fn test_get_minimax_pricing_m2_5() {
         let pricing = get_model_pricing("MiniMax-M2.5", "minimax");
         assert!(pricing.is_ok());
@@ -1140,6 +1175,15 @@ mod tests {
         let pricing = pricing.unwrap();
         assert_eq!(pricing.input_cost_per_1k_tokens, 0.001);
         assert_eq!(pricing.output_cost_per_1k_tokens, 0.0032);
+    }
+
+    #[test]
+    fn test_get_zhipu_pricing_glm_5_1() {
+        let pricing = get_model_pricing("glm-5.1", "zhipuai");
+        assert!(pricing.is_ok());
+        let pricing = pricing.unwrap();
+        assert_eq!(pricing.input_cost_per_1k_tokens, 0.0014);
+        assert_eq!(pricing.output_cost_per_1k_tokens, 0.0044);
     }
 
     #[test]
@@ -1508,6 +1552,10 @@ mod tests {
 
     #[test]
     fn test_new_anthropic_models_have_cost_pricing() {
+        let opus47 = get_model_pricing("claude-opus-4-7", "anthropic").unwrap();
+        assert_eq!(opus47.input_cost_per_1k_tokens, 0.005);
+        assert_eq!(opus47.output_cost_per_1k_tokens, 0.025);
+
         let opus41 = get_model_pricing("claude-opus-4-1-20250805", "anthropic").unwrap();
         assert_eq!(opus41.input_cost_per_1k_tokens, 0.015);
         assert_eq!(opus41.output_cost_per_1k_tokens, 0.075);

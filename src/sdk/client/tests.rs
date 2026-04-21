@@ -317,7 +317,7 @@ fn test_anthropic_messages_endpoint_avoids_duplicate_v1() {
     let config = ConfigBuilder::new()
         .add_provider(SdkProviderConfig {
             base_url: Some("https://api.anthropic.com/v1".to_string()),
-            ..test_provider_config("anthropic", ProviderType::Anthropic, "claude-sonnet-4-5")
+            ..test_provider_config("anthropic", ProviderType::Anthropic, "claude-sonnet-4-6")
         })
         .build();
 

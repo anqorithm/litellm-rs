@@ -20,7 +20,16 @@ impl ModelUtils {
                 supports_vision: true,
                 supports_streaming: true,
                 max_tokens: Some(128000),
-                context_window: Some(400000),
+                context_window: Some(
+                    if model_lower.starts_with("gpt-5.4")
+                        && !model_lower.contains("mini")
+                        && !model_lower.contains("nano")
+                    {
+                        1_000_000
+                    } else {
+                        400_000
+                    },
+                ),
             }
         } else if model_lower.starts_with("gpt-image-") || model_lower.starts_with("chatgpt-image-")
         {
@@ -109,7 +118,10 @@ impl ModelUtils {
                     4096
                 }),
             }
-        } else if model_lower.starts_with("claude-opus-4-6") {
+        } else if model_lower.starts_with("claude-opus-4-7")
+            || model_lower.starts_with("claude-opus-4-6")
+            || model_lower.starts_with("claude-sonnet-4-6")
+        {
             ModelCapabilities {
                 supports_function_calling: true,
                 supports_parallel_function_calling: false,
@@ -163,10 +175,24 @@ impl ModelUtils {
                 supports_system_messages: true,
                 supports_web_search: true,
                 supports_url_context: true,
-                supports_vision: model_lower.contains("vision") || model_lower.contains("pro"),
+                supports_vision: model_lower.contains("vision")
+                    || model_lower.contains("pro")
+                    || model_lower.contains("flash"),
                 supports_streaming: true,
-                max_tokens: Some(32768),
-                context_window: Some(32768),
+                max_tokens: Some(
+                    if model_lower.contains("gemini-3") || model_lower.contains("gemini-2.5") {
+                        65536
+                    } else {
+                        32768
+                    },
+                ),
+                context_window: Some(
+                    if model_lower.contains("gemini-3") || model_lower.contains("gemini-2.5") {
+                        1_048_576
+                    } else {
+                        32768
+                    },
+                ),
             }
         } else {
             ModelCapabilities::default()
@@ -236,7 +262,15 @@ impl ModelUtils {
         let model_lower = model.to_lowercase();
 
         if model_lower.starts_with("gpt-5") {
-            if model_lower.contains("nano") {
+            if model_lower.contains("5.4-nano") {
+                "gpt-5.4-nano".to_string()
+            } else if model_lower.contains("5.4-pro") {
+                "gpt-5.4-pro".to_string()
+            } else if model_lower.contains("5.4-mini") {
+                "gpt-5.4-mini".to_string()
+            } else if model_lower.contains("5.4") {
+                "gpt-5.4".to_string()
+            } else if model_lower.contains("nano") {
                 "gpt-5-nano".to_string()
             } else if model_lower.contains("mini") {
                 "gpt-5-mini".to_string()
@@ -246,8 +280,6 @@ impl ModelUtils {
                 } else {
                     "gpt-5-codex".to_string()
                 }
-            } else if model_lower.contains("chat") {
-                "gpt-5.2-chat".to_string()
             } else {
                 "gpt-5.2".to_string()
             }
@@ -284,8 +316,14 @@ impl ModelUtils {
             } else {
                 "gpt-3.5-turbo".to_string()
             }
+        } else if model_lower.starts_with("claude-opus-4-7") {
+            "claude-opus-4-7".to_string()
         } else if model_lower.starts_with("claude-opus-4-6") {
             "claude-opus-4-6".to_string()
+        } else if model_lower.starts_with("claude-sonnet-4-6") {
+            "claude-sonnet-4-6".to_string()
+        } else if model_lower.starts_with("claude-haiku-4-5") {
+            "claude-haiku-4-5".to_string()
         } else if model_lower.starts_with("claude-opus-4-5") {
             "claude-opus-4-5".to_string()
         } else if model_lower.starts_with("claude-sonnet-4-5") {
@@ -302,6 +340,18 @@ impl ModelUtils {
             } else {
                 "claude-3".to_string()
             }
+        } else if model_lower.starts_with("gemini-3.1-pro") {
+            "gemini-3.1-pro-preview".to_string()
+        } else if model_lower.starts_with("gemini-3.1-flash-lite") {
+            "gemini-3.1-flash-lite-preview".to_string()
+        } else if model_lower.starts_with("gemini-3-flash") {
+            "gemini-3-flash-preview".to_string()
+        } else if model_lower.starts_with("gemini-2.5-flash-lite") {
+            "gemini-2.5-flash-lite".to_string()
+        } else if model_lower.starts_with("gemini-2.5-flash") {
+            "gemini-2.5-flash".to_string()
+        } else if model_lower.starts_with("gemini-2.5-pro") {
+            "gemini-2.5-pro".to_string()
         } else {
             model.to_string()
         }
@@ -320,10 +370,10 @@ impl ModelUtils {
         ];
 
         let known_models = [
-            "gpt-5.2",
-            "gpt-5-codex",
-            "gpt-5-mini",
-            "gpt-5-nano",
+            "gpt-5.4",
+            "gpt-5.4-mini",
+            "gpt-5.4-nano",
+            "gpt-5.4-pro",
             "gpt-image-1",
             "gpt-4.1",
             "gpt-4",
@@ -331,11 +381,14 @@ impl ModelUtils {
             "o3-pro",
             "o3-mini",
             "o4-mini",
-            "claude-opus-4",
-            "claude-sonnet-4",
+            "claude-opus-4-7",
+            "claude-sonnet-4-6",
+            "claude-haiku-4-5",
             "claude-3",
             "claude-2",
-            "gemini",
+            "gemini-3.1-pro-preview",
+            "gemini-3-flash-preview",
+            "gemini-3.1-flash-lite-preview",
             "command",
             "mistral",
         ];
@@ -406,14 +459,11 @@ impl ModelUtils {
     pub fn get_compatible_models_for_provider(provider: &str) -> Vec<String> {
         match provider.to_lowercase().as_str() {
             "openai" => vec![
+                "gpt-5.4".to_string(),
+                "gpt-5.4-mini".to_string(),
+                "gpt-5.4-nano".to_string(),
+                "gpt-5.4-pro".to_string(),
                 "gpt-5.2".to_string(),
-                "gpt-5.2-chat".to_string(),
-                "gpt-5.2-codex".to_string(),
-                "gpt-5-codex".to_string(),
-                "gpt-5.1".to_string(),
-                "gpt-5.1-thinking".to_string(),
-                "gpt-5-mini".to_string(),
-                "gpt-5-nano".to_string(),
                 "gpt-image-1".to_string(),
                 "gpt-image-1-mini".to_string(),
                 "gpt-image-1.5".to_string(),
@@ -431,10 +481,12 @@ impl ModelUtils {
                 "gpt-3.5-turbo-16k".to_string(),
             ],
             "anthropic" => vec![
+                "claude-opus-4-7".to_string(),
+                "claude-sonnet-4-6".to_string(),
+                "claude-haiku-4-5".to_string(),
                 "claude-opus-4-6".to_string(),
                 "claude-opus-4-5".to_string(),
                 "claude-sonnet-4-5".to_string(),
-                "claude-sonnet-4".to_string(),
                 "claude-3-opus".to_string(),
                 "claude-3-sonnet".to_string(),
                 "claude-3-haiku".to_string(),
@@ -442,9 +494,12 @@ impl ModelUtils {
                 "claude-instant".to_string(),
             ],
             "google" => vec![
-                "gemini-pro".to_string(),
-                "gemini-pro-vision".to_string(),
-                "gemini-1.5-pro".to_string(),
+                "gemini-3.1-pro-preview".to_string(),
+                "gemini-3-flash-preview".to_string(),
+                "gemini-3.1-flash-lite-preview".to_string(),
+                "gemini-2.5-pro".to_string(),
+                "gemini-2.5-flash".to_string(),
+                "gemini-2.5-flash-lite".to_string(),
             ],
             "cohere" => vec![
                 "command".to_string(),
@@ -517,8 +572,8 @@ mod tests {
     }
 
     #[test]
-    fn test_get_model_capabilities_claude_opus_46() {
-        let caps = ModelUtils::get_model_capabilities("claude-opus-4-6");
+    fn test_get_model_capabilities_claude_opus_47() {
+        let caps = ModelUtils::get_model_capabilities("claude-opus-4-7");
         assert!(caps.supports_function_calling);
         assert!(caps.supports_vision);
         assert_eq!(caps.max_tokens, Some(1_000_000));
@@ -542,11 +597,11 @@ mod tests {
 
     #[test]
     fn test_get_model_capabilities_gemini() {
-        let caps = ModelUtils::get_model_capabilities("gemini-pro");
+        let caps = ModelUtils::get_model_capabilities("gemini-3.1-pro-preview");
         assert!(caps.supports_function_calling);
         assert!(caps.supports_web_search);
         assert!(caps.supports_vision);
-        assert_eq!(caps.max_tokens, Some(32768));
+        assert_eq!(caps.max_tokens, Some(65536));
     }
 
     #[test]
@@ -592,7 +647,7 @@ mod tests {
 
     #[test]
     fn test_supports_web_search() {
-        assert!(ModelUtils::supports_web_search("gemini-pro"));
+        assert!(ModelUtils::supports_web_search("gemini-3.1-pro-preview"));
         assert!(!ModelUtils::supports_web_search("gpt-4"));
     }
 
@@ -653,7 +708,7 @@ mod tests {
     #[test]
     fn test_get_provider_from_model_google() {
         assert_eq!(
-            ModelUtils::get_provider_from_model("gemini-pro"),
+            ModelUtils::get_provider_from_model("gemini-3.1-pro-preview"),
             Some("google".to_string())
         );
     }
@@ -730,12 +785,12 @@ mod tests {
     #[test]
     fn test_get_base_model_claude4() {
         assert_eq!(
-            ModelUtils::get_base_model("claude-opus-4-6-20260114"),
-            "claude-opus-4-6"
+            ModelUtils::get_base_model("claude-opus-4-7"),
+            "claude-opus-4-7"
         );
         assert_eq!(
-            ModelUtils::get_base_model("claude-sonnet-4-5-20250929"),
-            "claude-sonnet-4-5"
+            ModelUtils::get_base_model("claude-sonnet-4-6"),
+            "claude-sonnet-4-6"
         );
     }
 
@@ -751,7 +806,7 @@ mod tests {
         assert!(ModelUtils::is_valid_model("gpt-4"));
         assert!(ModelUtils::is_valid_model("gpt-3.5-turbo"));
         assert!(ModelUtils::is_valid_model("claude-3-opus"));
-        assert!(ModelUtils::is_valid_model("gemini-pro"));
+        assert!(ModelUtils::is_valid_model("gemini-3.1-pro-preview"));
         assert!(ModelUtils::is_valid_model("command-r"));
         assert!(ModelUtils::is_valid_model("mistral-large"));
     }
@@ -783,7 +838,10 @@ mod tests {
 
     #[test]
     fn test_get_model_family_gemini() {
-        assert_eq!(ModelUtils::get_model_family("gemini-pro"), "gemini");
+        assert_eq!(
+            ModelUtils::get_model_family("gemini-3.1-pro-preview"),
+            "gemini"
+        );
     }
 
     #[test]
@@ -812,7 +870,9 @@ mod tests {
     fn test_validate_model_with_provider_valid() {
         assert!(ModelUtils::validate_model_with_provider("gpt-4", "openai").is_ok());
         assert!(ModelUtils::validate_model_with_provider("claude-3-opus", "anthropic").is_ok());
-        assert!(ModelUtils::validate_model_with_provider("gemini-pro", "google").is_ok());
+        assert!(
+            ModelUtils::validate_model_with_provider("gemini-3.1-pro-preview", "google").is_ok()
+        );
     }
 
     #[test]
@@ -845,7 +905,8 @@ mod tests {
     #[test]
     fn test_get_compatible_models_google() {
         let models = ModelUtils::get_compatible_models_for_provider("google");
-        assert!(models.contains(&"gemini-pro".to_string()));
+        assert!(models.contains(&"gemini-3.1-pro-preview".to_string()));
+        assert!(models.contains(&"gemini-3-flash-preview".to_string()));
     }
 
     #[test]

@@ -192,11 +192,13 @@ pub fn validate_usage(usage: &UsageTokens) -> Result<(), CostError> {
 pub fn get_model_category(model: &str) -> &'static str {
     let model_lower = model.to_lowercase();
 
-    if model_lower.contains("gpt-5.2")
+    if model_lower.contains("gpt-5.4")
+        || model_lower.contains("gpt-5.2")
         || model_lower.contains("gpt-5.1")
         || model_lower.contains("gpt-5-codex")
         || model_lower.contains("o3-pro")
         || model_lower.contains("gpt-4o")
+        || model_lower.contains("claude-opus-4-7")
         || model_lower.contains("claude-opus-4-6")
         || model_lower.contains("claude-opus-4-5")
     {
@@ -205,6 +207,7 @@ pub fn get_model_category(model: &str) -> &'static str {
         || model_lower.contains("o3-mini")
         || model_lower.contains("o4-mini")
         || model_lower.contains("gpt-4")
+        || model_lower.contains("claude-sonnet-4-6")
         || model_lower.contains("claude-sonnet-4-5")
         || model_lower.contains("claude-sonnet-4")
         || model_lower.contains("claude-3-5-sonnet")

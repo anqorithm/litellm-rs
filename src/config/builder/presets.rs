@@ -30,8 +30,8 @@ pub fn openai_provider(name: &str, api_key: &str) -> Result<ProviderConfigBuilde
         .name(name)?
         .provider_type("openai")?
         .api_key(api_key)
-        .add_model("gpt-3.5-turbo")
-        .add_model("gpt-4")
+        .add_model("gpt-5.4")
+        .add_model("gpt-5.4-mini")
         .rate_limit(3000))
 }
 
@@ -41,8 +41,9 @@ pub fn anthropic_provider(name: &str, api_key: &str) -> Result<ProviderConfigBui
         .name(name)?
         .provider_type("anthropic")?
         .api_key(api_key)
-        .add_model("claude-opus-4-6")
-        .add_model("claude-sonnet-4-5")
+        .add_model("claude-opus-4-7")
+        .add_model("claude-sonnet-4-6")
+        .add_model("claude-haiku-4-5-20251001")
         .add_model("claude-3-5-haiku-20241022")
         .rate_limit(1000))
 }
@@ -171,8 +172,8 @@ mod tests {
     fn test_openai_provider_models() {
         let builder = openai_provider("test", "key").unwrap();
         assert_eq!(builder.models.len(), 2);
-        assert!(builder.models.contains(&"gpt-3.5-turbo".to_string()));
-        assert!(builder.models.contains(&"gpt-4".to_string()));
+        assert!(builder.models.contains(&"gpt-5.4".to_string()));
+        assert!(builder.models.contains(&"gpt-5.4-mini".to_string()));
     }
 
     #[test]
@@ -228,9 +229,14 @@ mod tests {
     #[test]
     fn test_anthropic_provider_models() {
         let builder = anthropic_provider("test", "key").unwrap();
-        assert_eq!(builder.models.len(), 3);
-        assert!(builder.models.contains(&"claude-opus-4-6".to_string()));
-        assert!(builder.models.contains(&"claude-sonnet-4-5".to_string()));
+        assert_eq!(builder.models.len(), 4);
+        assert!(builder.models.contains(&"claude-opus-4-7".to_string()));
+        assert!(builder.models.contains(&"claude-sonnet-4-6".to_string()));
+        assert!(
+            builder
+                .models
+                .contains(&"claude-haiku-4-5-20251001".to_string())
+        );
         assert!(
             builder
                 .models

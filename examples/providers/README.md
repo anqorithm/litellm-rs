@@ -9,21 +9,21 @@ All examples use the Python-style `completion()` function that works with any pr
 ```rust
 use litellm_rs::completion;
 
-let response = completion("gpt-3.5-turbo", messages).await?;
+let response = completion("gpt-5.4", messages).await?;
 ```
 
 ## Provider Examples
 
 | Provider | Example File | Models | API Key Required |
 |----------|-------------|---------|------------------|
-| **OpenAI** | `openai_completion.rs` | GPT-3.5, GPT-4, GPT-4o | `OPENAI_API_KEY` |
-| **Anthropic** | `anthropic_completion.rs` | Claude 3 (Haiku, Sonnet, Opus) | `ANTHROPIC_API_KEY` |
+| **OpenAI** | `openai_completion.rs` | GPT-5.4, GPT-5.4 mini, GPT-4.1 | `OPENAI_API_KEY` |
+| **Anthropic** | `anthropic_completion.rs` | Claude Opus 4.7, Sonnet 4.6, Haiku 4.5 | `ANTHROPIC_API_KEY` |
 | **Azure OpenAI** | `azure_completion.rs` | GPT models via Azure | `AZURE_API_KEY`, `AZURE_API_BASE` |
 | **Mistral** | `mistral_completion.rs` | Mistral Small/Medium/Large, Codestral | `MISTRAL_API_KEY` |
 | **DeepSeek** | `deepseek_completion.rs` | DeepSeek Chat, DeepSeek Coder | `DEEPSEEK_API_KEY` |
-| **Moonshot** | `moonshot_completion.rs` | Kimi K2.5, Kimi K2 Thinking, Moonshot v1 | `MOONSHOT_API_KEY` |
+| **Moonshot** | `moonshot_completion.rs` | Kimi K2.6, Kimi K2.5, Moonshot v1 | `MOONSHOT_API_KEY` |
 | **MiniMax** | `moonshot_completion.rs` (shared OpenAI-compatible example) | MiniMax M2.5 series (OpenAI-compatible) | `MINIMAX_API_KEY` |
-| **Zhipu** | `moonshot_completion.rs` (shared OpenAI-compatible example) | GLM-5 / GLM-4.7 / GLM-4.6 (OpenAI-compatible) | `ZHIPU_API_KEY` |
+| **Zhipu** | `moonshot_completion.rs` (shared OpenAI-compatible example) | GLM-5.1 / GLM-5 / GLM-5-Turbo (OpenAI-compatible) | `ZHIPU_API_KEY` |
 | **Meta Llama** | `meta_llama_completion.rs` | Llama 3 (8B, 70B), Code Llama | Various providers |
 | **OpenRouter** | `openrouter_completion.rs` | 100+ models from all providers | `OPENROUTER_API_KEY` |
 | **Vertex AI** | `vertex_ai_completion.rs` | Gemini Pro, PaLM 2 | `GCP_PROJECT_ID` |
@@ -67,18 +67,18 @@ cargo run --example openrouter_completion
 
 ### Direct Provider Access
 ```rust
-completion("gpt-3.5-turbo", messages)           // OpenAI
-completion("claude-3-sonnet-20240229", messages) // Anthropic
+completion("gpt-5.4", messages)                // OpenAI
+completion("claude-opus-4-7", messages)        // Anthropic
 completion("mistral-large-latest", messages)     // Mistral
-completion("moonshot/kimi-k2.5", messages)       // Moonshot/Kimi
+completion("moonshot/kimi-k2.6", messages)       // Moonshot/Kimi
 completion("minimax/MiniMax-M2.5", messages)     // MiniMax
-completion("glm/glm-5", messages)                // Zhipu GLM
+completion("glm/glm-5.1", messages)              // Zhipu GLM
 ```
 
 ### Via OpenRouter
 ```rust
-completion("openrouter/openai/gpt-4", messages)
-completion("openrouter/anthropic/claude-3-opus", messages)
+completion("openrouter/openai/gpt-5.4", messages)
+completion("openrouter/anthropic/claude-opus-4-7", messages)
 completion("openrouter/meta-llama/llama-3-70b", messages)
 ```
 
@@ -112,8 +112,8 @@ completion("vertex_ai/gemini-pro", messages)     // Google Vertex AI
 - Code review capabilities
 
 ### Moonshot (Kimi)
-- Kimi K2.5 / K2 Thinking support
-- Ultra-long context (up to 262K tokens on K2.5)
+- Kimi K2.6 / K2.5 support
+- Ultra-long context (up to 262K tokens on K2.6)
 - Excellent at document analysis
 - Chinese language optimization
 

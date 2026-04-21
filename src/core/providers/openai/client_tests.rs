@@ -595,7 +595,7 @@ fn test_model_recommendations() {
 
     assert_eq!(
         provider.get_best_model_for_task(super::client::OpenAITask::GeneralChat),
-        Some("gpt-5.2-chat".to_string())
+        Some("gpt-5.4".to_string())
     );
 
     assert_eq!(
@@ -605,7 +605,7 @@ fn test_model_recommendations() {
 
     assert_eq!(
         provider.get_best_model_for_task(super::client::OpenAITask::CostSensitive),
-        Some("gpt-5-nano".to_string())
+        Some("gpt-5.4-nano".to_string())
     );
 }
 

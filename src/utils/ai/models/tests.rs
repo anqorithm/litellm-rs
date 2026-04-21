@@ -27,7 +27,7 @@ fn test_provider_detection() {
         Some("anthropic".to_string())
     );
     assert_eq!(
-        ModelUtils::get_provider_from_model("gemini-pro"),
+        ModelUtils::get_provider_from_model("gemini-3.1-pro-preview"),
         Some("google".to_string())
     );
     assert_eq!(ModelUtils::get_provider_from_model("unknown-model"), None);
@@ -50,7 +50,7 @@ fn test_base_model_extraction() {
 fn test_model_validation() {
     assert!(ModelUtils::is_valid_model("gpt-4"));
     assert!(ModelUtils::is_valid_model("claude-3-opus"));
-    assert!(ModelUtils::is_valid_model("gemini-pro"));
+    assert!(ModelUtils::is_valid_model("gemini-3.1-pro-preview"));
     assert!(!ModelUtils::is_valid_model("unknown-model-xyz"));
 }
 
@@ -58,7 +58,10 @@ fn test_model_validation() {
 fn test_model_family() {
     assert_eq!(ModelUtils::get_model_family("gpt-4-turbo"), "gpt");
     assert_eq!(ModelUtils::get_model_family("claude-3-opus"), "claude");
-    assert_eq!(ModelUtils::get_model_family("gemini-pro"), "gemini");
+    assert_eq!(
+        ModelUtils::get_model_family("gemini-3.1-pro-preview"),
+        "gemini"
+    );
 }
 
 #[test]
@@ -97,5 +100,8 @@ fn test_recommended_temperature() {
         ModelUtils::get_recommended_temperature("claude-3-opus"),
         0.9
     );
-    assert_eq!(ModelUtils::get_recommended_temperature("gemini-pro"), 0.8);
+    assert_eq!(
+        ModelUtils::get_recommended_temperature("gemini-3.1-pro-preview"),
+        0.8
+    );
 }

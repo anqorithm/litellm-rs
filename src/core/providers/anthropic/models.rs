@@ -33,7 +33,9 @@ pub enum ModelFeature {
 /// Model
 #[derive(Debug, Clone, PartialEq)]
 pub enum AnthropicModelFamily {
-    /// Claude Opus 4.6 models (latest flagship)
+    /// Claude Opus 4.7 models (latest flagship)
+    ClaudeOpus47,
+    /// Claude Opus 4.6 models
     ClaudeOpus46,
     /// Claude Opus 4.5 models (latest flagship)
     ClaudeOpus45,
@@ -139,7 +141,61 @@ impl AnthropicModelRegistry {
 
     /// Initialize model registry
     fn initialize_models(&mut self) {
-        // Claude Opus 4.6 (Latest flagship model - January 2026)
+        // Claude Opus 4.7 (Latest generally available flagship - April 2026)
+        self.register_model(
+            "claude-opus-4-7",
+            ModelSpec {
+                model_info: ModelInfo {
+                    id: "claude-opus-4-7".to_string(),
+                    name: "Claude Opus 4.7".to_string(),
+                    provider: "anthropic".to_string(),
+                    max_context_length: 1_000_000,
+                    max_output_length: Some(128_000),
+                    supports_streaming: true,
+                    supports_tools: true,
+                    supports_multimodal: true,
+                    input_cost_per_1k_tokens: Some(0.005),
+                    output_cost_per_1k_tokens: Some(0.025),
+                    currency: "USD".to_string(),
+                    capabilities: vec![
+                        crate::core::types::model::ProviderCapability::ChatCompletion,
+                        crate::core::types::model::ProviderCapability::ChatCompletionStream,
+                        crate::core::types::model::ProviderCapability::ToolCalling,
+                    ],
+                    created_at: None,
+                    updated_at: None,
+                    metadata: std::collections::HashMap::new(),
+                },
+                family: AnthropicModelFamily::ClaudeOpus47,
+                features: vec![
+                    ModelFeature::MultimodalSupport,
+                    ModelFeature::ToolCalling,
+                    ModelFeature::FunctionCalling,
+                    ModelFeature::StreamingSupport,
+                    ModelFeature::CacheControl,
+                    ModelFeature::SystemMessages,
+                    ModelFeature::BatchProcessing,
+                    ModelFeature::ThinkingMode,
+                    ModelFeature::ComputerUse,
+                ],
+                pricing: ModelPricing {
+                    input_price: 5.0,
+                    output_price: 25.0,
+                    cache_write_price: Some(6.25),
+                    cache_read_price: Some(0.50),
+                    batch_discount: Some(0.5),
+                },
+                limits: ModelLimits {
+                    max_context_length: 1_000_000,
+                    max_output_tokens: 128_000,
+                    max_images: Some(100),
+                    max_document_size_mb: Some(100),
+                },
+                config: ModelConfig::default(),
+            },
+        );
+
+        // Claude Opus 4.6 (Previous flagship model - January 2026)
         self.register_model(
             "claude-opus-4-6",
             ModelSpec {
@@ -919,6 +975,7 @@ impl AnthropicModelRegistry {
         );
 
         // Stable aliases and partner-platform naming variants.
+        self.register_alias("claude-opus-4-7-latest", "claude-opus-4-7");
         self.register_alias("claude-opus-4-6-20260205", "claude-opus-4-6");
         self.register_alias("claude-opus-4-5", "claude-opus-4-5-20251101");
         self.register_alias("claude-opus-4-5-20251110", "claude-opus-4-5-20251101");
@@ -990,7 +1047,10 @@ impl AnthropicModelRegistry {
         let model_lower = model_name.to_lowercase();
 
         // Check newest models first (most specific)
-        if model_lower.contains("claude-opus-4-6") || model_lower.contains("claude-opus-4.6") {
+        if model_lower.contains("claude-opus-4-7") || model_lower.contains("claude-opus-4.7") {
+            Some(AnthropicModelFamily::ClaudeOpus47)
+        } else if model_lower.contains("claude-opus-4-6") || model_lower.contains("claude-opus-4.6")
+        {
             Some(AnthropicModelFamily::ClaudeOpus46)
         } else if model_lower.contains("claude-opus-4-5") || model_lower.contains("claude-opus-4.5")
         {
@@ -1147,8 +1207,8 @@ mod tests {
         let registry = get_anthropic_registry();
 
         // Test latest flagship model
-        let opus_spec = registry.get_model_spec("claude-opus-4-6").unwrap();
-        assert_eq!(opus_spec.family, AnthropicModelFamily::ClaudeOpus46);
+        let opus_spec = registry.get_model_spec("claude-opus-4-7").unwrap();
+        assert_eq!(opus_spec.family, AnthropicModelFamily::ClaudeOpus47);
         assert!(
             opus_spec
                 .features
@@ -1164,8 +1224,8 @@ mod tests {
     #[test]
     fn test_model_family_detection() {
         assert_eq!(
-            AnthropicModelRegistry::from_model_name("claude-opus-4-6"),
-            Some(AnthropicModelFamily::ClaudeOpus46)
+            AnthropicModelRegistry::from_model_name("claude-opus-4-7"),
+            Some(AnthropicModelFamily::ClaudeOpus47)
         );
 
         assert_eq!(
@@ -1186,7 +1246,7 @@ mod tests {
 
     #[test]
     fn test_cost_calculation() {
-        let cost = CostCalculator::calculate_cost("claude-opus-4-6", 1000, 500);
+        let cost = CostCalculator::calculate_cost("claude-opus-4-7", 1000, 500);
         assert!(cost.is_some());
 
         let cost_value = cost.unwrap();
@@ -1198,8 +1258,8 @@ mod tests {
     fn test_feature_support() {
         let registry = get_anthropic_registry();
 
-        // Claude Opus 4.6 supports computer tools
-        assert!(registry.supports_feature("claude-opus-4-6", &ModelFeature::ComputerUse));
+        // Claude Opus 4.7 supports computer tools
+        assert!(registry.supports_feature("claude-opus-4-7", &ModelFeature::ComputerUse));
 
         // Claude 2.1 does not support computer tools
         assert!(!registry.supports_feature("claude-2.1", &ModelFeature::ComputerUse));
