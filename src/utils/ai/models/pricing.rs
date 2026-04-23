@@ -41,8 +41,11 @@ impl ModelUtils {
             m if m.starts_with("gemini-3-flash-preview") => Some((0.0005, 0.003)),
             m if m.starts_with("gemini-3.1-flash-lite-preview") => Some((0.00025, 0.0015)),
             m if m.starts_with("gemini-2.5-pro") => Some((0.00125, 0.010)),
-            m if m.starts_with("gemini-2.5-flash") => Some((0.0003, 0.0025)),
             m if m.starts_with("gemini-2.5-flash-lite") => Some((0.0001, 0.0004)),
+            m if m.starts_with("gemini-2.5-flash") => Some((0.0003, 0.0025)),
+            m if m.starts_with("gemini-2.0-flash-thinking-exp") => Some((0.0, 0.0)),
+            m if m.starts_with("gemini-2.0-flash-lite") => Some((0.000075, 0.0003)),
+            m if m.starts_with("gemini-2.0-flash") => Some((0.0001, 0.0004)),
             m if m.starts_with("gemini-pro") => Some((0.0005, 0.0015)),
             _ => None,
         }
@@ -243,6 +246,18 @@ mod tests {
     fn test_get_model_pricing_gemini() {
         let pricing = ModelUtils::get_model_pricing("gemini-3.1-pro-preview");
         assert!(pricing.is_some());
+    }
+
+    #[test]
+    fn test_get_model_pricing_gemini_20_flash() {
+        let pricing = ModelUtils::get_model_pricing("gemini-2.0-flash");
+        assert_eq!(pricing, Some((0.0001, 0.0004)));
+    }
+
+    #[test]
+    fn test_get_model_pricing_gemini_25_flash_lite_prefers_lite_rate() {
+        let pricing = ModelUtils::get_model_pricing("gemini-2.5-flash-lite");
+        assert_eq!(pricing, Some((0.0001, 0.0004)));
     }
 
     #[test]

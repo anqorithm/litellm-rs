@@ -135,7 +135,8 @@ impl ModelUtils {
                 max_tokens: Some(1_000_000),
                 context_window: Some(1_000_000),
             }
-        } else if model_lower.starts_with("claude-opus-4")
+        } else if model_lower.starts_with("claude-haiku-4-5")
+            || model_lower.starts_with("claude-opus-4")
             || model_lower.starts_with("claude-sonnet-4")
             || model_lower.starts_with("claude-3")
         {
@@ -167,6 +168,17 @@ impl ModelUtils {
                 context_window: Some(100000),
             }
         } else if model_lower.starts_with("gemini") {
+            let is_gemini_3_or_25 =
+                model_lower.contains("gemini-3") || model_lower.contains("gemini-2.5");
+            let is_gemini_20_thinking = model_lower.contains("gemini-2.0-flash-thinking")
+                || model_lower.contains("gemini-20-flash-thinking");
+            let is_gemini_20 =
+                model_lower.contains("gemini-2.0") || model_lower.contains("gemini-20");
+            let is_gemini_15_pro =
+                model_lower.contains("gemini-1.5-pro") || model_lower.contains("gemini-15-pro");
+            let is_gemini_15 =
+                model_lower.contains("gemini-1.5") || model_lower.contains("gemini-15");
+
             ModelCapabilities {
                 supports_function_calling: true,
                 supports_parallel_function_calling: false,
@@ -179,24 +191,22 @@ impl ModelUtils {
                     || model_lower.contains("pro")
                     || model_lower.contains("flash"),
                 supports_streaming: true,
-                max_tokens: Some(
-                    if model_lower.contains("gemini-3") || model_lower.contains("gemini-2.5") {
-                        65536
-                    } else {
-                        32768
-                    },
-                ),
-                context_window: Some(
-                    if model_lower.contains("gemini-3")
-                        || model_lower.contains("gemini-2.5")
-                        || model_lower.contains("gemini-1.5")
-                        || model_lower.contains("gemini-15")
-                    {
-                        1_048_576
-                    } else {
-                        32768
-                    },
-                ),
+                max_tokens: Some(if is_gemini_3_or_25 {
+                    65536
+                } else if is_gemini_20 || is_gemini_15 {
+                    8192
+                } else {
+                    32768
+                }),
+                context_window: Some(if is_gemini_15_pro {
+                    2_097_152
+                } else if is_gemini_20_thinking {
+                    32_000
+                } else if is_gemini_3_or_25 || is_gemini_20 || is_gemini_15 {
+                    1_048_576
+                } else {
+                    32768
+                }),
             }
         } else {
             ModelCapabilities::default()
@@ -348,8 +358,22 @@ impl ModelUtils {
             "gemini-3.1-pro-preview".to_string()
         } else if model_lower.starts_with("gemini-3.1-flash-lite") {
             "gemini-3.1-flash-lite-preview".to_string()
+        } else if model_lower.starts_with("gemini-3.1-flash") {
+            "gemini-3.1-flash".to_string()
         } else if model_lower.starts_with("gemini-3-flash") {
             "gemini-3-flash-preview".to_string()
+        } else if model_lower.starts_with("gemini-2.0-flash-thinking")
+            || model_lower.starts_with("gemini-20-flash-thinking")
+        {
+            "gemini-2.0-flash-thinking-exp".to_string()
+        } else if model_lower.starts_with("gemini-2.0-flash-lite")
+            || model_lower.starts_with("gemini-20-flash-lite")
+        {
+            "gemini-2.0-flash-lite".to_string()
+        } else if model_lower.starts_with("gemini-2.0-flash")
+            || model_lower.starts_with("gemini-20-flash")
+        {
+            "gemini-2.0-flash".to_string()
         } else if model_lower.starts_with("gemini-2.5-flash-lite") {
             "gemini-2.5-flash-lite".to_string()
         } else if model_lower.starts_with("gemini-2.5-flash") {
@@ -508,7 +532,10 @@ impl ModelUtils {
                 "gemini-1.5-flash".to_string(),
                 "gemini-1.5-flash-8b".to_string(),
                 "gemini-2.0-flash".to_string(),
+                "gemini-2.0-flash-lite".to_string(),
+                "gemini-2.0-flash-thinking-exp".to_string(),
                 "gemini-3.1-pro-preview".to_string(),
+                "gemini-3.1-flash".to_string(),
                 "gemini-3-flash-preview".to_string(),
                 "gemini-3.1-flash-lite-preview".to_string(),
                 "gemini-2.5-pro".to_string(),
@@ -595,6 +622,15 @@ mod tests {
     }
 
     #[test]
+    fn test_get_model_capabilities_claude_haiku_45() {
+        let caps = ModelUtils::get_model_capabilities("claude-haiku-4-5");
+        assert!(caps.supports_function_calling);
+        assert!(caps.supports_streaming);
+        assert_eq!(caps.max_tokens, Some(200000));
+        assert_eq!(caps.context_window, Some(200000));
+    }
+
+    #[test]
     fn test_get_model_capabilities_claude2() {
         let caps = ModelUtils::get_model_capabilities("claude-2.1");
         assert!(!caps.supports_function_calling);
@@ -616,6 +652,20 @@ mod tests {
         assert!(caps.supports_web_search);
         assert!(caps.supports_vision);
         assert_eq!(caps.max_tokens, Some(65536));
+    }
+
+    #[test]
+    fn test_get_model_capabilities_gemini_15_pro() {
+        let caps = ModelUtils::get_model_capabilities("gemini-1.5-pro");
+        assert_eq!(caps.max_tokens, Some(8192));
+        assert_eq!(caps.context_window, Some(2_097_152));
+    }
+
+    #[test]
+    fn test_get_model_capabilities_gemini_20_flash() {
+        let caps = ModelUtils::get_model_capabilities("gemini-2.0-flash");
+        assert_eq!(caps.max_tokens, Some(8192));
+        assert_eq!(caps.context_window, Some(1_048_576));
     }
 
     #[test]
@@ -806,6 +856,14 @@ mod tests {
             ModelUtils::get_base_model("claude-sonnet-4-6"),
             "claude-sonnet-4-6"
         );
+        assert_eq!(
+            ModelUtils::get_base_model("gemini-2.0-flash-exp"),
+            "gemini-2.0-flash"
+        );
+        assert_eq!(
+            ModelUtils::get_base_model("gemini-2.0-flash-thinking-exp"),
+            "gemini-2.0-flash-thinking-exp"
+        );
     }
 
     #[test]
@@ -925,6 +983,8 @@ mod tests {
         let models = ModelUtils::get_compatible_models_for_provider("google");
         assert!(models.contains(&"gemini-pro".to_string()));
         assert!(models.contains(&"gemini-1.5-pro".to_string()));
+        assert!(models.contains(&"gemini-2.0-flash".to_string()));
+        assert!(models.contains(&"gemini-3.1-flash".to_string()));
         assert!(models.contains(&"gemini-3.1-pro-preview".to_string()));
         assert!(models.contains(&"gemini-3-flash-preview".to_string()));
     }

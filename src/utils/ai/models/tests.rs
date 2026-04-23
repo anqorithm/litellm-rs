@@ -44,12 +44,17 @@ fn test_base_model_extraction() {
         ModelUtils::get_base_model("claude-3-opus-20240229"),
         "claude-3-opus"
     );
+    assert_eq!(
+        ModelUtils::get_base_model("gemini-2.0-flash-exp"),
+        "gemini-2.0-flash"
+    );
 }
 
 #[test]
 fn test_model_validation() {
     assert!(ModelUtils::is_valid_model("gpt-4"));
     assert!(ModelUtils::is_valid_model("claude-3-opus"));
+    assert!(ModelUtils::is_valid_model("gemini-2.0-flash"));
     assert!(ModelUtils::is_valid_model("gemini-3.1-pro-preview"));
     assert!(!ModelUtils::is_valid_model("unknown-model-xyz"));
 }
