@@ -30,8 +30,8 @@ impl ConfigUtils {
                 message: format!("Failed to read config file: {}", e),
             })?;
 
-        let config: HashMap<String, serde_norway::Value> =
-            serde_norway::from_str(&content).map_err(|e| ProviderError::InvalidRequest {
+        let config: HashMap<String, serde_norway::Value> = serde_norway::from_str(&content)
+            .map_err(|e| ProviderError::InvalidRequest {
                 provider: "config",
                 message: format!("Failed to parse YAML config: {}", e),
             })?;
