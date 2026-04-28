@@ -4,6 +4,7 @@
 
 use crate::config::Config;
 use crate::core::budget::UnifiedBudgetLimits;
+use crate::core::keys::{InMemoryKeyRepository, KeyManager};
 use crate::core::teams::TeamManager;
 use crate::services::pricing::PricingService;
 use crate::storage::database::SeaOrmTeamRepository;
@@ -35,6 +36,8 @@ pub struct AppState {
     pub budget_limits: Arc<UnifiedBudgetLimits>,
     /// Team manager for team lifecycle operations (shared, in-memory by default)
     pub team_manager: Arc<TeamManager>,
+    /// API key manager shared across all key management requests.
+    pub key_manager: Arc<KeyManager>,
 }
 
 impl AppState {
@@ -49,6 +52,7 @@ impl AppState {
         let team_manager = Arc::new(TeamManager::new(Arc::new(SeaOrmTeamRepository::new(
             storage.database.clone(),
         ))));
+        let key_manager = Arc::new(KeyManager::new(InMemoryKeyRepository::new()));
         Self {
             config: AtomicValue::new(config),
             auth: Arc::new(auth),
@@ -57,6 +61,7 @@ impl AppState {
             pricing,
             budget_limits: Arc::new(UnifiedBudgetLimits::new()),
             team_manager,
+            key_manager,
         }
     }
 

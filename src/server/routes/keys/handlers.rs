@@ -722,19 +722,9 @@ pub async fn verify_key(
     }
 }
 
-/// Helper function to get KeyManager from AppState
-///
-/// Note: This is a placeholder. In a real implementation, the KeyManager
-/// would be stored in AppState or created with the appropriate repository.
-fn get_key_manager(_state: &web::Data<AppState>) -> ActixResult<KeyManager> {
-    // In production, this would retrieve the KeyManager from AppState
-    // For now, we create a new one with an in-memory repository
-    use crate::core::keys::InMemoryKeyRepository;
-
-    // NOTE: KeyManager should be retrieved from AppState, not re-created per request.
-    // The KeyManager should be initialized during application startup
-    // and stored in AppState for shared access across handlers
-    Ok(KeyManager::new(InMemoryKeyRepository::new()))
+/// Helper function to get the shared KeyManager from AppState.
+fn get_key_manager(state: &web::Data<AppState>) -> ActixResult<KeyManager> {
+    Ok((*state.key_manager).clone())
 }
 
 #[cfg(test)]
