@@ -7,6 +7,7 @@ mod m20240101_000004_create_user_sessions_table;
 mod m20240101_000005_create_api_keys_table;
 mod m20240301_000001_create_user_management_tables;
 mod m20240301_000002_create_teams_table;
+mod m20240301_000003_create_virtual_keys_table;
 
 /// Database migrator for SeaORM
 pub struct Migrator;
@@ -22,6 +23,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20240101_000005_create_api_keys_table::Migration),
             Box::new(m20240301_000001_create_user_management_tables::Migration),
             Box::new(m20240301_000002_create_teams_table::Migration),
+            Box::new(m20240301_000003_create_virtual_keys_table::Migration),
         ]
     }
 }
