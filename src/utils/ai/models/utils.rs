@@ -26,7 +26,7 @@ impl ModelUtils {
                         && !model_lower.contains("mini")
                         && !model_lower.contains("nano")
                     {
-                        1_000_000
+                        1_048_576
                     } else {
                         400_000
                     },
@@ -582,6 +582,12 @@ mod tests {
     fn test_get_model_capabilities_gpt4_turbo_vision() {
         let caps = ModelUtils::get_model_capabilities("gpt-4-turbo-preview");
         assert!(caps.supports_vision);
+    }
+
+    #[test]
+    fn test_get_model_capabilities_gpt54_pro_uses_long_context() {
+        let caps = ModelUtils::get_model_capabilities("gpt-5.4-pro");
+        assert_eq!(caps.context_window, Some(1_048_576));
     }
 
     #[test]

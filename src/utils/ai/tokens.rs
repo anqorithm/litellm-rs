@@ -256,7 +256,7 @@ impl TokenUtils {
                 && !m.contains("gpt-5.4-mini")
                 && !m.contains("gpt-5.4-nano") =>
             {
-                Some(1_000_000)
+                Some(1_048_576)
             }
             m if m.contains("gpt-5.4-mini") || m.contains("gpt-5.4-nano") => Some(400_000),
             m if m.contains("gpt-5.2") => Some(400000),
@@ -427,6 +427,10 @@ mod tests {
         assert_eq!(
             TokenUtils::get_max_tokens_for_model("gpt-4-32k"),
             Some(32768)
+        );
+        assert_eq!(
+            TokenUtils::get_max_tokens_for_model("gpt-5.4-pro"),
+            Some(1_048_576)
         );
         assert_eq!(
             TokenUtils::get_max_tokens_for_model("claude-opus-4-6"),
