@@ -1,6 +1,6 @@
 //! Storage configuration
 
-use super::file_storage::VectorDbConfig;
+use super::file_storage::{FileStorageConfig, VectorDbConfig};
 use super::*;
 use super::{default_connection_timeout, default_redis_max_connections};
 use serde::{Deserialize, Serialize};
@@ -12,6 +12,9 @@ pub struct StorageConfig {
     pub database: DatabaseConfig,
     /// Redis configuration
     pub redis: RedisConfig,
+    /// File storage configuration
+    #[serde(default, alias = "file_storage")]
+    pub files: FileStorageConfig,
     /// Vector database configuration (optional)
     #[serde(default)]
     pub vector_db: Option<VectorDbConfig>,
@@ -22,6 +25,7 @@ impl StorageConfig {
     pub fn merge(mut self, other: Self) -> Self {
         self.database = self.database.merge(other.database);
         self.redis = self.redis.merge(other.redis);
+        self.files = self.files.merge(other.files);
         if other.vector_db.is_some() {
             self.vector_db = other.vector_db;
         }
@@ -466,6 +470,7 @@ mod tests {
         let config = StorageConfig::default();
         assert_eq!(config.database.url, "postgresql://localhost/litellm");
         assert_eq!(config.redis.url, "redis://localhost:6379");
+        assert_eq!(config.files.storage_type, "local");
         assert!(config.vector_db.is_none());
     }
 
@@ -474,6 +479,7 @@ mod tests {
         let config = StorageConfig {
             database: DatabaseConfig::default(),
             redis: RedisConfig::default(),
+            files: FileStorageConfig::default(),
             vector_db: None,
         };
         assert!(config.vector_db.is_none());
@@ -485,6 +491,26 @@ mod tests {
         let json = serde_json::to_value(&config).unwrap();
         assert!(json["database"].is_object());
         assert!(json["redis"].is_object());
+        assert!(json["files"].is_object());
+    }
+
+    #[test]
+    fn test_storage_config_deserializes_file_storage_alias() {
+        let json = serde_json::json!({
+            "database": DatabaseConfig::default(),
+            "redis": RedisConfig::default(),
+            "file_storage": {
+                "local_path": "/configured/files"
+            }
+        });
+
+        let config: StorageConfig = serde_json::from_value(json).unwrap();
+
+        assert_eq!(
+            config.files.local_path,
+            Some("/configured/files".to_string())
+        );
+        assert_eq!(config.files.storage_type, "local");
     }
 
     #[test]
@@ -500,10 +526,32 @@ mod tests {
                 fallback_to_sqlite: false,
             },
             redis: RedisConfig::default(),
+            files: FileStorageConfig::default(),
             vector_db: None,
         };
         let merged = base.merge(other);
         assert_eq!(merged.database.url, "postgresql://new/db");
+    }
+
+    #[test]
+    fn test_storage_config_merge_files() {
+        let base = StorageConfig::default();
+        let other = StorageConfig {
+            database: DatabaseConfig::default(),
+            redis: RedisConfig::default(),
+            files: FileStorageConfig {
+                storage_type: "local".to_string(),
+                local_path: Some("/var/lib/litellm/files".to_string()),
+                s3: None,
+            },
+            vector_db: None,
+        };
+
+        let merged = base.merge(other);
+        assert_eq!(
+            merged.files.local_path,
+            Some("/var/lib/litellm/files".to_string())
+        );
     }
 
     #[test]

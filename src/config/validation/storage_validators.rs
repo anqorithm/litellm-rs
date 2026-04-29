@@ -4,7 +4,7 @@
 //! structures including StorageConfig, DatabaseConfig, RedisConfig, and VectorDbConfig.
 
 use super::trait_def::Validate;
-use crate::config::models::file_storage::VectorDbConfig;
+use crate::config::models::file_storage::{FileStorageConfig, VectorDbConfig};
 use crate::config::models::storage::{DatabaseConfig, RedisConfig, StorageConfig};
 use tracing::debug;
 
@@ -19,11 +19,49 @@ impl Validate for StorageConfig {
             self.redis.validate()?;
         }
 
+        self.files.validate()?;
+
         if let Some(vector_db) = &self.vector_db {
             vector_db.validate()?;
         }
 
         Ok(())
+    }
+}
+
+impl Validate for FileStorageConfig {
+    fn validate(&self) -> Result<(), String> {
+        match self.storage_type.as_str() {
+            "local" => {
+                if self
+                    .local_path
+                    .as_deref()
+                    .is_some_and(|path| path.trim().is_empty())
+                {
+                    return Err("File storage local_path cannot be empty".to_string());
+                }
+                Ok(())
+            }
+            "s3" => {
+                let s3 = self.s3.as_ref().ok_or_else(|| {
+                    "File storage s3 configuration is required when storage_type is s3".to_string()
+                })?;
+                if s3.bucket.trim().is_empty() {
+                    return Err("File storage S3 bucket cannot be empty".to_string());
+                }
+                if s3.region.trim().is_empty() {
+                    return Err("File storage S3 region cannot be empty".to_string());
+                }
+                if s3.access_key_id.trim().is_empty() {
+                    return Err("File storage S3 access_key_id cannot be empty".to_string());
+                }
+                if s3.secret_access_key.trim().is_empty() {
+                    return Err("File storage S3 secret_access_key cannot be empty".to_string());
+                }
+                Ok(())
+            }
+            other => Err(format!("Unsupported file storage type: {}", other)),
+        }
     }
 }
 
@@ -141,5 +179,30 @@ mod tests {
                 .expect_err("placeholder vector backend must fail validation");
             assert!(err.contains("not implemented yet"));
         }
+    }
+
+    #[test]
+    fn file_storage_validation_accepts_configured_local_path() {
+        let config = FileStorageConfig {
+            storage_type: "local".to_string(),
+            local_path: Some("/var/lib/litellm/files".to_string()),
+            s3: None,
+        };
+
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn file_storage_validation_rejects_missing_s3_config() {
+        let config = FileStorageConfig {
+            storage_type: "s3".to_string(),
+            local_path: None,
+            s3: None,
+        };
+
+        let err = config
+            .validate()
+            .expect_err("s3 file storage should require s3 config");
+        assert!(err.contains("s3 configuration is required"));
     }
 }

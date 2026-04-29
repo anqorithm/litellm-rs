@@ -60,10 +60,9 @@ impl StorageLayer {
             }
         };
 
-        // Initialize file storage (using default config for now)
+        // Initialize file storage
         debug!("Initializing file storage");
-        let default_file_config = crate::config::models::file_storage::FileStorageConfig::default();
-        let files = Arc::new(files::FileStorage::new(&default_file_config).await?);
+        let files = Arc::new(files::FileStorage::new(&config.files).await?);
 
         // Initialize vector database (optional)
         let vector = if let Some(ref vector_config) = config.vector_db {
@@ -366,7 +365,9 @@ pub struct StorageHealthStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::models::file_storage::FileStorageConfig;
     use crate::config::models::storage::{DatabaseConfig, RedisConfig};
+    use tempfile::TempDir;
 
     #[tokio::test]
     async fn test_storage_layer_creation() {
@@ -386,6 +387,7 @@ mod tests {
                 connection_timeout: 5,
                 cluster: false,
             },
+            files: FileStorageConfig::default(),
             vector_db: None,
         };
 
@@ -393,5 +395,38 @@ mod tests {
         // For now, we'll just test that the config is properly structured
         assert_eq!(config.database.url, "postgresql://localhost:5432/test");
         assert_eq!(config.redis.url, "redis://localhost:6379");
+    }
+
+    #[tokio::test]
+    async fn test_storage_layer_uses_configured_file_storage_path() {
+        let temp_dir = TempDir::new().expect("temp dir should be created");
+        let configured_path = temp_dir.path().join("configured-files");
+        let config = StorageConfig {
+            database: DatabaseConfig::default(),
+            redis: RedisConfig::default(),
+            files: FileStorageConfig {
+                storage_type: "local".to_string(),
+                local_path: Some(configured_path.to_string_lossy().to_string()),
+                s3: None,
+            },
+            vector_db: None,
+        };
+
+        let storage = StorageLayer::new(&config)
+            .await
+            .expect("storage layer should initialize with configured local file storage");
+        let file_id = storage
+            .store_file("configured.txt", b"configured storage")
+            .await
+            .expect("file should be stored");
+
+        let expected_path = configured_path
+            .join(&file_id[..2.min(file_id.len())])
+            .join(&file_id);
+        assert!(
+            expected_path.exists(),
+            "stored file should use configured path: {}",
+            expected_path.display()
+        );
     }
 }
