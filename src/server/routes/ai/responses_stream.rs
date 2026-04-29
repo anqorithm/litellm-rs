@@ -12,7 +12,7 @@ use crate::core::providers::ProviderError;
 use crate::core::streaming::types::Event;
 use crate::core::types::{context::RequestContext, model::ProviderCapability};
 use crate::server::routes::ai::chat::build_core_chat_request;
-use crate::server::routes::ai::execution::execute_with_selected_deployment;
+use crate::server::routes::ai::execution::execute_stream_with_selected_deployment;
 use crate::server::routes::ai::responses::{
     current_unix_ts, finish_reason_enum_to_status, uuid_v4_hex,
 };
@@ -75,8 +75,8 @@ pub(crate) async fn handle_streaming_response(
     let requested_model = core_request.model.clone();
     let context_clone = context.clone();
 
-    match execute_with_selected_deployment(
-        unified_router,
+    match execute_stream_with_selected_deployment(
+        state.unified_router.clone(),
         &requested_model,
         move |provider, selected_model| {
             let core_request = core_request.clone();
@@ -84,18 +84,19 @@ pub(crate) async fn handle_streaming_response(
             async move {
                 let mut req = core_request.clone();
                 req.model = selected_model;
-                let stream = provider.chat_completion_stream(req, ctx).await?;
-                Ok((stream, 0))
+                provider.chat_completion_stream(req, ctx).await
             }
         },
     )
     .await
     {
-        Ok(mut stream) => {
+        Ok((mut stream, lease)) => {
             let (tx, rx) = mpsc::channel::<Bytes>(8);
             let idle_timeout = state.config.load().gateway.server.stream_idle_timeout;
 
             tokio::spawn(async move {
+                let mut lease = Some(lease);
+
                 // ── response.created ──────────────────────────────────────────
                 let shell = make_shell(&resp_id, created_at, &model_name, "in_progress", &original);
                 if emit(
@@ -142,6 +143,13 @@ pub(crate) async fn handle_streaming_response(
                                         "timeout",
                                     ))
                                     .await;
+                                if let Some(lease) = lease.take() {
+                                    let error = ProviderError::timeout(
+                                        "router",
+                                        format!("stream idle timeout after {idle_timeout}s"),
+                                    );
+                                    lease.finish_failure(&error);
+                                }
                                 return;
                             }
                         }
@@ -316,6 +324,9 @@ pub(crate) async fn handle_streaming_response(
                             error!("Responses API stream error: {e}");
                             let (et, ec) = classify(&e);
                             let _ = tx.send(sse_error(&e.to_string(), et, ec)).await;
+                            if let Some(lease) = lease.take() {
+                                lease.finish_failure(&e);
+                            }
                             return;
                         }
                     }
@@ -459,6 +470,9 @@ pub(crate) async fn handle_streaming_response(
 
                 // Final SSE terminator
                 let _ = tx.send(Event::default().data("[DONE]").to_bytes()).await;
+                if let Some(lease) = lease.take() {
+                    lease.finish_success(u64::from(in_tokens) + u64::from(out_tokens));
+                }
             });
 
             let body = tokio_stream::wrappers::ReceiverStream::new(rx)
