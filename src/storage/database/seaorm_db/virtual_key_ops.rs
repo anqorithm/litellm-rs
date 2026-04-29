@@ -34,11 +34,11 @@ impl SeaOrmDatabase {
         serde_json::from_str(data).map_err(|e| GatewayError::Internal(e.to_string()))
     }
 
-    async fn fetch_virtual_key_by_column(
+    async fn fetch_virtual_key_data_by_column(
         &self,
         column: &str,
         value: &str,
-    ) -> Result<Option<VirtualKey>> {
+    ) -> Result<Option<(String, VirtualKey)>> {
         let sql = format!(
             "SELECT data FROM virtual_keys WHERE {} = {}",
             column,
@@ -53,9 +53,21 @@ impl SeaOrmDatabase {
             None => Ok(None),
             Some(row) => {
                 let data: String = row.try_get("", "data").map_err(GatewayError::from)?;
-                Ok(Some(Self::deserialize_virtual_key(&data)?))
+                let key = Self::deserialize_virtual_key(&data)?;
+                Ok(Some((data, key)))
             }
         }
+    }
+
+    async fn fetch_virtual_key_by_column(
+        &self,
+        column: &str,
+        value: &str,
+    ) -> Result<Option<VirtualKey>> {
+        Ok(self
+            .fetch_virtual_key_data_by_column(column, value)
+            .await?
+            .map(|(_, key)| key))
     }
 
     async fn persist_virtual_key_snapshot(&self, key: &VirtualKey) -> Result<()> {
@@ -83,6 +95,39 @@ impl SeaOrmDatabase {
         );
         self.db.execute(stmt).await.map_err(GatewayError::from)?;
         Ok(())
+    }
+
+    async fn persist_virtual_key_snapshot_if_data_matches(
+        &self,
+        key: &VirtualKey,
+        expected_data: &str,
+    ) -> Result<bool> {
+        let data = Self::serialize_virtual_key(key)?;
+        let sql = format!(
+            "UPDATE virtual_keys SET user_id = {}, data = {}, spend = {}, budget_reset_at = {}, is_active = {} WHERE key_id = {} AND data = {}",
+            self.virtual_key_ph(1),
+            self.virtual_key_ph(2),
+            self.virtual_key_ph(3),
+            self.virtual_key_ph(4),
+            self.virtual_key_ph(5),
+            self.virtual_key_ph(6),
+            self.virtual_key_ph(7),
+        );
+        let stmt = Statement::from_sql_and_values(
+            self.virtual_key_db_backend(),
+            &sql,
+            [
+                Value::String(Some(Box::new(key.user_id.clone()))),
+                Value::String(Some(Box::new(data))),
+                Value::Double(Some(key.spend)),
+                Value::ChronoDateTimeUtc(key.budget_reset_at.map(Box::new)),
+                Value::Bool(Some(key.is_active)),
+                Value::String(Some(Box::new(key.key_id.clone()))),
+                Value::String(Some(Box::new(expected_data.to_owned()))),
+            ],
+        );
+        let result = self.db.execute(stmt).await.map_err(GatewayError::from)?;
+        Ok(result.rows_affected() == 1)
     }
 
     /// Store a new virtual key in the database.
@@ -125,9 +170,26 @@ impl SeaOrmDatabase {
     /// Update the usage statistics (last_used_at, usage_count) for a virtual key.
     pub async fn update_virtual_key_usage(&self, key: &VirtualKey) -> Result<()> {
         debug!("virtual_keys: update usage {}", key.key_id);
-        // The manager updates last_used_at and usage_count before calling this
-        // method. Persist the provided snapshot as-is to avoid double-counting.
-        self.persist_virtual_key_snapshot(key).await
+        for _ in 0..3 {
+            let (old_data, mut updated) = self
+                .fetch_virtual_key_data_by_column("key_id", &key.key_id)
+                .await?
+                .ok_or_else(|| GatewayError::NotFound("Virtual key not found".to_string()))?;
+
+            updated.last_used_at = key.last_used_at.or_else(|| Some(Utc::now()));
+            updated.usage_count = updated.usage_count.saturating_add(1);
+
+            if self
+                .persist_virtual_key_snapshot_if_data_matches(&updated, &old_data)
+                .await?
+            {
+                return Ok(());
+            }
+        }
+
+        Err(GatewayError::Conflict(
+            "Virtual key usage was modified concurrently".to_string(),
+        ))
     }
 
     /// Add `cost` to the recorded spend for the given key ID.
@@ -135,37 +197,19 @@ impl SeaOrmDatabase {
         debug!("virtual_keys: update spend {} += {}", key_id, cost);
 
         // Optimistic read-modify-write on the JSON snapshot. The data predicate
-        // prevents concurrent spend updates from overwriting each other; a
-        // conflicting update retries with the latest snapshot.
+        // uses the raw stored JSON so concurrent updates cannot be missed due to
+        // serialization ordering differences.
         for _ in 0..3 {
-            let current = self
-                .get_virtual_key_by_id(key_id)
+            let (old_data, mut updated) = self
+                .fetch_virtual_key_data_by_column("key_id", key_id)
                 .await?
                 .ok_or_else(|| GatewayError::NotFound("Virtual key not found".to_string()))?;
-            let old_data = Self::serialize_virtual_key(&current)?;
-            let mut updated = current;
             updated.spend += cost;
-            let new_data = Self::serialize_virtual_key(&updated)?;
 
-            let sql = format!(
-                "UPDATE virtual_keys SET data = {}, spend = {} WHERE key_id = {} AND data = {}",
-                self.virtual_key_ph(1),
-                self.virtual_key_ph(2),
-                self.virtual_key_ph(3),
-                self.virtual_key_ph(4),
-            );
-            let stmt = Statement::from_sql_and_values(
-                self.virtual_key_db_backend(),
-                &sql,
-                [
-                    Value::String(Some(Box::new(new_data))),
-                    Value::Double(Some(updated.spend)),
-                    Value::String(Some(Box::new(key_id.to_owned()))),
-                    Value::String(Some(Box::new(old_data))),
-                ],
-            );
-            let result = self.db.execute(stmt).await.map_err(GatewayError::from)?;
-            if result.rows_affected() == 1 {
+            if self
+                .persist_virtual_key_snapshot_if_data_matches(&updated, &old_data)
+                .await?
+            {
                 return Ok(());
             }
         }
@@ -298,24 +342,19 @@ mod tests {
         let by_user = db.list_user_keys(&key.user_id).await.unwrap();
         assert_eq!(by_user.len(), 1);
 
-        let mut used_key = by_hash.clone();
-        used_key.last_used_at = Some(Utc::now());
-        used_key.usage_count = 1;
-        db.update_virtual_key_usage(&used_key).await.unwrap();
+        db.update_key_spend(&key.key_id, 12.5).await.unwrap();
+
+        let mut stale_used_key = by_hash.clone();
+        stale_used_key.last_used_at = Some(Utc::now());
+        stale_used_key.usage_count = 1;
+        db.update_virtual_key_usage(&stale_used_key).await.unwrap();
         let usage_updated = db
             .get_virtual_key_by_id(&key.key_id)
             .await
             .unwrap()
             .unwrap();
         assert_eq!(usage_updated.usage_count, 1);
-
-        db.update_key_spend(&key.key_id, 12.5).await.unwrap();
-        let updated = db
-            .get_virtual_key_by_id(&key.key_id)
-            .await
-            .unwrap()
-            .unwrap();
-        assert_eq!(updated.spend, 12.5);
+        assert_eq!(usage_updated.spend, 12.5);
 
         let expired = db.get_keys_with_expired_budgets().await.unwrap();
         assert_eq!(expired.len(), 1);
