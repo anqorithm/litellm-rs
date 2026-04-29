@@ -118,7 +118,7 @@ pub enum VertexAIModel {
     // Gemini 2.5 models (2025 - Latest)
     Gemini25Pro,       // gemini-2.5-pro
     Gemini25Flash,     // gemini-2.5-flash
-    Gemini25FlashLite, // gemini-2.5-flash-lite-preview
+    Gemini25FlashLite, // gemini-2.5-flash-lite
 
     // Gemini 2.0 models (2024-2025)
     Gemini20Flash,         // gemini-2.0-flash
@@ -136,9 +136,12 @@ pub enum VertexAIModel {
     GeminiUltra, // gemini-ultra (deprecated)
 
     // Partner models - Claude
+    ClaudeOpus47,   // claude-opus-4-7
     ClaudeOpus46,   // claude-opus-4-6@20260114
     ClaudeOpus45,   // claude-opus-4-5@20251110
+    ClaudeSonnet46, // claude-sonnet-4-6
     ClaudeSonnet45, // claude-sonnet-4-5@20250929
+    ClaudeHaiku45,  // claude-haiku-4-5@20251001
     ClaudeSonnet4,  // claude-sonnet-4@20250514
     Claude3Opus,
     Claude3Sonnet,
@@ -173,9 +176,9 @@ impl VertexAIModel {
     pub fn model_id(&self) -> String {
         match self {
             // Gemini 2.5 models
-            Self::Gemini25Pro => "gemini-2.5-pro-preview-05-06".to_string(),
-            Self::Gemini25Flash => "gemini-2.5-flash-preview-05-20".to_string(),
-            Self::Gemini25FlashLite => "gemini-2.5-flash-lite-preview-06-17".to_string(),
+            Self::Gemini25Pro => "gemini-2.5-pro".to_string(),
+            Self::Gemini25Flash => "gemini-2.5-flash".to_string(),
+            Self::Gemini25FlashLite => "gemini-2.5-flash-lite".to_string(),
 
             // Gemini 2.0 models
             Self::Gemini20Flash => "gemini-2.0-flash".to_string(),
@@ -193,9 +196,12 @@ impl VertexAIModel {
             Self::GeminiUltra => "gemini-ultra".to_string(),
 
             // Claude models
+            Self::ClaudeOpus47 => "claude-opus-4-7".to_string(),
             Self::ClaudeOpus46 => "claude-opus-4-6@20260114".to_string(),
             Self::ClaudeOpus45 => "claude-opus-4-5@20251110".to_string(),
+            Self::ClaudeSonnet46 => "claude-sonnet-4-6".to_string(),
             Self::ClaudeSonnet45 => "claude-sonnet-4-5@20250929".to_string(),
+            Self::ClaudeHaiku45 => "claude-haiku-4-5@20251001".to_string(),
             Self::ClaudeSonnet4 => "claude-sonnet-4@20250514".to_string(),
             Self::Claude3Opus => "claude-3-opus@20240229".to_string(),
             Self::Claude3Sonnet => "claude-3-sonnet@20240229".to_string(),
@@ -248,9 +254,12 @@ impl VertexAIModel {
     pub fn is_partner_model(&self) -> bool {
         matches!(
             self,
-            Self::ClaudeOpus46
+            Self::ClaudeOpus47
+                | Self::ClaudeOpus46
                 | Self::ClaudeOpus45
+                | Self::ClaudeSonnet46
                 | Self::ClaudeSonnet45
+                | Self::ClaudeHaiku45
                 | Self::ClaudeSonnet4
                 | Self::Claude3Opus
                 | Self::Claude3Sonnet
@@ -287,9 +296,12 @@ impl VertexAIModel {
                 | Self::GeminiProVision
                 | Self::GeminiFlash
                 | Self::GeminiFlash8B
+                | Self::ClaudeOpus47
                 | Self::ClaudeOpus46
                 | Self::ClaudeOpus45
+                | Self::ClaudeSonnet46
                 | Self::ClaudeSonnet45
+                | Self::ClaudeHaiku45
                 | Self::ClaudeSonnet4
                 | Self::Claude3Opus
                 | Self::Claude3Sonnet
@@ -316,9 +328,12 @@ impl VertexAIModel {
         self.is_gemini()
             || matches!(
                 self,
-                Self::ClaudeOpus46
+                Self::ClaudeOpus47
+                    | Self::ClaudeOpus46
                     | Self::ClaudeOpus45
+                    | Self::ClaudeSonnet46
                     | Self::ClaudeSonnet45
+                    | Self::ClaudeHaiku45
                     | Self::ClaudeSonnet4
                     | Self::Claude3Opus
                     | Self::Claude3Sonnet
@@ -360,9 +375,12 @@ impl VertexAIModel {
             Self::GeminiUltra => 1_048_576,
 
             // Claude models
+            Self::ClaudeOpus47 => 1_000_000,
             Self::ClaudeOpus46 => 1_000_000,
             Self::ClaudeOpus45 => 200_000,
+            Self::ClaudeSonnet46 => 1_000_000,
             Self::ClaudeSonnet45 => 200_000,
+            Self::ClaudeHaiku45 => 200_000,
             Self::ClaudeSonnet4 => 200_000,
             Self::Claude3Opus => 200_000,
             Self::Claude3Sonnet => 200_000,
@@ -442,16 +460,28 @@ pub fn parse_vertex_model(model: &str) -> VertexAIModel {
     }
 
     // Claude models (check more specific first)
+    if model_lower.contains("claude-opus-4-7") || model_lower.contains("claude-opus-4.7") {
+        return VertexAIModel::ClaudeOpus47;
+    }
     if model_lower.contains("claude-opus-4-6") || model_lower.contains("claude-opus-4.6") {
         return VertexAIModel::ClaudeOpus46;
     }
     if model_lower.contains("claude-opus-4-5") || model_lower.contains("claude-opus-4.5") {
         return VertexAIModel::ClaudeOpus45;
     }
+    if model_lower.contains("claude-sonnet-4-6") || model_lower.contains("claude-sonnet-4.6") {
+        return VertexAIModel::ClaudeSonnet46;
+    }
     if model_lower.contains("claude-sonnet-4-5") || model_lower.contains("claude-sonnet-4.5") {
         return VertexAIModel::ClaudeSonnet45;
     }
-    if model_lower.contains("claude-sonnet-4") && !model_lower.contains("claude-sonnet-4-5") {
+    if model_lower.contains("claude-haiku-4-5") || model_lower.contains("claude-haiku-4.5") {
+        return VertexAIModel::ClaudeHaiku45;
+    }
+    if model_lower.contains("claude-sonnet-4")
+        && !model_lower.contains("claude-sonnet-4-5")
+        && !model_lower.contains("claude-sonnet-4-6")
+    {
         return VertexAIModel::ClaudeSonnet4;
     }
     if model_lower.contains("claude-3-5-sonnet") || model_lower.contains("claude-3.5-sonnet") {
@@ -608,14 +638,8 @@ mod tests {
 
     #[test]
     fn test_vertex_ai_model_gemini_ids() {
-        assert_eq!(
-            VertexAIModel::Gemini25Pro.model_id(),
-            "gemini-2.5-pro-preview-05-06"
-        );
-        assert_eq!(
-            VertexAIModel::Gemini25Flash.model_id(),
-            "gemini-2.5-flash-preview-05-20"
-        );
+        assert_eq!(VertexAIModel::Gemini25Pro.model_id(), "gemini-2.5-pro");
+        assert_eq!(VertexAIModel::Gemini25Flash.model_id(), "gemini-2.5-flash");
         assert_eq!(VertexAIModel::Gemini20Flash.model_id(), "gemini-2.0-flash");
         assert_eq!(VertexAIModel::GeminiPro.model_id(), "gemini-1.5-pro-002");
         assert_eq!(
@@ -626,6 +650,7 @@ mod tests {
 
     #[test]
     fn test_vertex_ai_model_claude_ids() {
+        assert_eq!(VertexAIModel::ClaudeOpus47.model_id(), "claude-opus-4-7");
         assert_eq!(
             VertexAIModel::ClaudeOpus46.model_id(),
             "claude-opus-4-6@20260114"
@@ -635,8 +660,16 @@ mod tests {
             "claude-opus-4-5@20251110"
         );
         assert_eq!(
+            VertexAIModel::ClaudeSonnet46.model_id(),
+            "claude-sonnet-4-6"
+        );
+        assert_eq!(
             VertexAIModel::ClaudeSonnet45.model_id(),
             "claude-sonnet-4-5@20250929"
+        );
+        assert_eq!(
+            VertexAIModel::ClaudeHaiku45.model_id(),
+            "claude-haiku-4-5@20251001"
         );
         assert_eq!(
             VertexAIModel::ClaudeSonnet4.model_id(),
@@ -696,8 +729,12 @@ mod tests {
 
     #[test]
     fn test_vertex_ai_model_is_partner_model() {
+        assert!(VertexAIModel::ClaudeOpus47.is_partner_model());
         assert!(VertexAIModel::ClaudeOpus46.is_partner_model());
+        assert!(VertexAIModel::ClaudeOpus45.is_partner_model());
+        assert!(VertexAIModel::ClaudeSonnet46.is_partner_model());
         assert!(VertexAIModel::ClaudeSonnet45.is_partner_model());
+        assert!(VertexAIModel::ClaudeHaiku45.is_partner_model());
         assert!(VertexAIModel::Claude3Opus.is_partner_model());
         assert!(VertexAIModel::Claude35Sonnet.is_partner_model());
         assert!(VertexAIModel::Llama3_70B.is_partner_model());
@@ -718,6 +755,7 @@ mod tests {
         assert!(VertexAIModel::Llama32_90B.supports_vision());
         assert!(VertexAIModel::Llama4Scout.supports_vision());
 
+        assert!(VertexAIModel::ClaudeOpus47.supports_vision());
         assert!(VertexAIModel::ClaudeOpus46.supports_vision());
         assert!(VertexAIModel::Claude3Opus.supports_vision());
         assert!(!VertexAIModel::Llama3_70B.supports_vision());
@@ -770,7 +808,9 @@ mod tests {
         // Gemini 1.5 Pro has largest
         assert_eq!(VertexAIModel::GeminiPro.max_context_tokens(), 2_097_152);
 
+        assert_eq!(VertexAIModel::ClaudeOpus47.max_context_tokens(), 1_000_000);
         assert_eq!(VertexAIModel::ClaudeOpus46.max_context_tokens(), 1_000_000);
+        assert_eq!(VertexAIModel::ClaudeOpus45.max_context_tokens(), 200_000);
 
         // Claude
         assert_eq!(VertexAIModel::Claude3Opus.max_context_tokens(), 200_000);
@@ -853,16 +893,32 @@ mod tests {
     #[test]
     fn test_parse_vertex_model_claude() {
         assert!(matches!(
+            parse_vertex_model("claude-opus-4-7"),
+            VertexAIModel::ClaudeOpus47
+        ));
+        assert!(matches!(
             parse_vertex_model("claude-opus-4-6"),
             VertexAIModel::ClaudeOpus46
         ));
         assert!(matches!(
-            parse_vertex_model("claude-opus-4.6"),
-            VertexAIModel::ClaudeOpus46
+            parse_vertex_model("claude-opus-4-5"),
+            VertexAIModel::ClaudeOpus45
+        ));
+        assert!(matches!(
+            parse_vertex_model("claude-opus-4.7"),
+            VertexAIModel::ClaudeOpus47
+        ));
+        assert!(matches!(
+            parse_vertex_model("claude-sonnet-4-6"),
+            VertexAIModel::ClaudeSonnet46
         ));
         assert!(matches!(
             parse_vertex_model("claude-sonnet-4-5"),
             VertexAIModel::ClaudeSonnet45
+        ));
+        assert!(matches!(
+            parse_vertex_model("claude-haiku-4-5"),
+            VertexAIModel::ClaudeHaiku45
         ));
         assert!(matches!(
             parse_vertex_model("claude-sonnet-4"),

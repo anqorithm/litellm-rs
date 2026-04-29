@@ -50,7 +50,7 @@ pub enum GeminiModelFamily {
     Gemini31Flash,
     Gemini31FlashLite,
 
-    /// Gemini 3.0 series (2025 - Deprecated 2026-03-09)
+    /// Gemini 3 series (2025-2026)
     Gemini3Pro,
     Gemini3ProDeepThink,
     Gemini3Flash,
@@ -195,7 +195,7 @@ impl GeminiModelRegistry {
                 pricing: ModelPricing {
                     input_price: 2.0,
                     output_price: 12.0,
-                    cached_input_price: Some(0.5),
+                    cached_input_price: Some(0.2),
                     image_price: Some(0.005),
                     video_price_per_second: Some(0.005),
                     audio_price_per_second: Some(0.0005),
@@ -274,19 +274,19 @@ impl GeminiModelRegistry {
 
         // Gemini 3.1 Flash Lite
         self.register_model(
-            "gemini-3.1-flash-lite",
+            "gemini-3.1-flash-lite-preview",
             ModelSpec {
                 model_info: ModelInfo {
-                    id: "gemini-3.1-flash-lite".to_string(),
-                    name: "Gemini 3.1 Flash Lite".to_string(),
+                    id: "gemini-3.1-flash-lite-preview".to_string(),
+                    name: "Gemini 3.1 Flash-Lite Preview".to_string(),
                     provider: "gemini".to_string(),
                     max_context_length: 1_048_576,
-                    max_output_length: Some(32768),
+                    max_output_length: Some(65536),
                     supports_streaming: true,
                     supports_tools: true,
                     supports_multimodal: true,
-                    input_cost_per_1k_tokens: Some(0.0000375),
-                    output_cost_per_1k_tokens: Some(0.00015),
+                    input_cost_per_1k_tokens: Some(0.00025),
+                    output_cost_per_1k_tokens: Some(0.0015),
                     currency: "USD".to_string(),
                     capabilities: vec![
                         crate::core::types::model::ProviderCapability::ChatCompletion,
@@ -303,23 +303,29 @@ impl GeminiModelRegistry {
                     ModelFeature::ToolCalling,
                     ModelFeature::FunctionCalling,
                     ModelFeature::StreamingSupport,
+                    ModelFeature::ContextCaching,
+                    ModelFeature::BatchProcessing,
                     ModelFeature::SystemInstructions,
                     ModelFeature::JsonMode,
+                    ModelFeature::CodeExecution,
+                    ModelFeature::SearchGrounding,
+                    ModelFeature::VideoUnderstanding,
+                    ModelFeature::AudioUnderstanding,
                 ],
                 pricing: ModelPricing {
-                    input_price: 0.0375,
-                    output_price: 0.15,
-                    cached_input_price: Some(0.01),
+                    input_price: 0.25,
+                    output_price: 1.5,
+                    cached_input_price: Some(0.025),
                     image_price: None,
                     video_price_per_second: None,
                     audio_price_per_second: None,
                 },
                 limits: ModelLimits {
                     max_context_length: 1_048_576,
-                    max_output_tokens: 32768,
-                    max_images: Some(1000),
-                    max_video_seconds: None,
-                    max_audio_seconds: None,
+                    max_output_tokens: 65536,
+                    max_images: Some(3000),
+                    max_video_seconds: Some(3600),
+                    max_audio_seconds: Some(9600),
                     rpm_limit: Some(4000),
                     tpm_limit: Some(4_000_000),
                 },
@@ -490,7 +496,7 @@ impl GeminiModelRegistry {
                 pricing: ModelPricing {
                     input_price: 0.5,  // $0.50 per 1M tokens
                     output_price: 3.0, // $3 per 1M tokens
-                    cached_input_price: Some(0.125),
+                    cached_input_price: Some(0.05),
                     image_price: Some(0.002),
                     video_price_per_second: Some(0.002),
                     audio_price_per_second: Some(0.0002),
@@ -1306,6 +1312,11 @@ mod tests {
         assert_eq!(
             GeminiModelRegistry::from_model_name("gemini-2.0-flash-exp"),
             Some(GeminiModelFamily::Gemini20Flash)
+        );
+
+        assert_eq!(
+            GeminiModelRegistry::from_model_name("gemini-3.1-flash"),
+            Some(GeminiModelFamily::Gemini31Flash)
         );
 
         assert_eq!(

@@ -5,6 +5,10 @@ impl ModelUtils {
         let model_lower = model.to_lowercase();
 
         match model_lower.as_str() {
+            m if m.starts_with("gpt-5.4-pro") => Some((0.030, 0.180)),
+            m if m.starts_with("gpt-5.4-mini") => Some((0.00075, 0.0045)),
+            m if m.starts_with("gpt-5.4-nano") => Some((0.0002, 0.00125)),
+            m if m.starts_with("gpt-5.4") => Some((0.0025, 0.015)),
             m if m.starts_with("gpt-5.2-pro") => Some((0.021, 0.168)),
             m if m.starts_with("gpt-5.2-codex") => Some((0.00175, 0.014)),
             m if m.starts_with("gpt-5-codex") => Some((0.00125, 0.010)),
@@ -23,15 +27,26 @@ impl ModelUtils {
             m if m.starts_with("gpt-4-turbo") => Some((0.01, 0.03)),
             m if m.starts_with("gpt-4") => Some((0.03, 0.06)),
             m if m.starts_with("gpt-3.5-turbo") => Some((0.0015, 0.002)),
+            m if m.contains("claude-opus-4-7") => Some((0.005, 0.025)),
             m if m.contains("claude-opus-4-6") => Some((0.005, 0.025)),
             m if m.contains("claude-opus-4-5") => Some((0.005, 0.025)),
+            m if m.contains("claude-sonnet-4-6") => Some((0.003, 0.015)),
+            m if m.contains("claude-haiku-4-5") => Some((0.001, 0.005)),
             m if m.contains("claude-sonnet-4-5") => Some((0.003, 0.015)),
             m if m.contains("claude-sonnet-4") => Some((0.003, 0.015)),
             m if m.contains("claude-3-opus") => Some((0.015, 0.075)),
             m if m.contains("claude-3-sonnet") => Some((0.003, 0.015)),
             m if m.contains("claude-3-haiku") => Some((0.00025, 0.00125)),
+            m if m.starts_with("gemini-3.1-pro-preview") => Some((0.002, 0.012)),
             m if m.starts_with("gemini-3.1-flash-lite") => Some((0.0000375, 0.00015)),
             m if m.starts_with("gemini-3.1-flash") => Some((0.000075, 0.0003)),
+            m if m.starts_with("gemini-3-flash-preview") => Some((0.0005, 0.003)),
+            m if m.starts_with("gemini-2.5-pro") => Some((0.00125, 0.010)),
+            m if m.starts_with("gemini-2.5-flash-lite") => Some((0.0001, 0.0004)),
+            m if m.starts_with("gemini-2.5-flash") => Some((0.0003, 0.0025)),
+            m if m.starts_with("gemini-2.0-flash-thinking-exp") => Some((0.0, 0.0)),
+            m if m.starts_with("gemini-2.0-flash-lite") => Some((0.000075, 0.0003)),
+            m if m.starts_with("gemini-2.0-flash") => Some((0.0001, 0.0004)),
             m if m.starts_with("gemini-1.5-flash") => Some((0.000075, 0.0003)),
             m if m.starts_with("gemini-pro") => Some((0.0005, 0.0015)),
             _ => None,
@@ -43,6 +58,14 @@ impl ModelUtils {
         let mut aliases = vec![];
 
         match model_lower.as_str() {
+            "gpt-5.4" => {
+                aliases.extend_from_slice(&[
+                    "openai/gpt-5.4".to_string(),
+                    "gpt-5.4-mini".to_string(),
+                    "gpt-5.4-nano".to_string(),
+                    "gpt-5.4-pro".to_string(),
+                ]);
+            }
             "gpt-5.2" => {
                 aliases.extend_from_slice(&[
                     "openai/gpt-5.2".to_string(),
@@ -51,10 +74,22 @@ impl ModelUtils {
                     "gpt-5-codex".to_string(),
                 ]);
             }
+            "claude-opus-4-7" => {
+                aliases.extend_from_slice(&[
+                    "anthropic/claude-opus-4.7".to_string(),
+                    "claude-opus-4-7-latest".to_string(),
+                ]);
+            }
             "claude-opus-4-6" => {
                 aliases.extend_from_slice(&[
                     "anthropic/claude-opus-4.6".to_string(),
                     "claude-opus-4-6-20260114".to_string(),
+                ]);
+            }
+            "claude-sonnet-4-6" => {
+                aliases.extend_from_slice(&[
+                    "anthropic/claude-sonnet-4.6".to_string(),
+                    "claude-sonnet-4-6-20251001".to_string(),
                 ]);
             }
             "claude-sonnet-4-5" => {
@@ -74,6 +109,12 @@ impl ModelUtils {
                 aliases.extend_from_slice(&[
                     "anthropic/claude-3-opus".to_string(),
                     "claude-3-opus-20240229".to_string(),
+                ]);
+            }
+            "gemini-3.1-pro-preview" => {
+                aliases.extend_from_slice(&[
+                    "google/gemini-3.1-pro-preview".to_string(),
+                    "gemini-3.1-pro-preview-customtools".to_string(),
                 ]);
             }
             "gemini-pro" => {
@@ -142,6 +183,15 @@ mod tests {
     }
 
     #[test]
+    fn test_get_model_pricing_gpt54() {
+        let pricing = ModelUtils::get_model_pricing("gpt-5.4");
+        assert!(pricing.is_some());
+        let (input, output) = pricing.unwrap();
+        assert!((input - 0.0025).abs() < f64::EPSILON);
+        assert!((output - 0.015).abs() < f64::EPSILON);
+    }
+
+    #[test]
     fn test_get_model_pricing_gpt4_turbo() {
         let pricing = ModelUtils::get_model_pricing("gpt-4-turbo-preview");
         assert!(pricing.is_some());
@@ -174,8 +224,8 @@ mod tests {
     }
 
     #[test]
-    fn test_get_model_pricing_claude_opus_46() {
-        let pricing = ModelUtils::get_model_pricing("claude-opus-4-6");
+    fn test_get_model_pricing_claude_opus_47() {
+        let pricing = ModelUtils::get_model_pricing("claude-opus-4-7");
         assert!(pricing.is_some());
         let (input, output) = pricing.unwrap();
         assert!((input - 0.005).abs() < f64::EPSILON);
@@ -196,8 +246,20 @@ mod tests {
 
     #[test]
     fn test_get_model_pricing_gemini() {
-        let pricing = ModelUtils::get_model_pricing("gemini-pro");
+        let pricing = ModelUtils::get_model_pricing("gemini-3.1-pro-preview");
         assert!(pricing.is_some());
+    }
+
+    #[test]
+    fn test_get_model_pricing_gemini_20_flash() {
+        let pricing = ModelUtils::get_model_pricing("gemini-2.0-flash");
+        assert_eq!(pricing, Some((0.0001, 0.0004)));
+    }
+
+    #[test]
+    fn test_get_model_pricing_gemini_25_flash_lite_prefers_lite_rate() {
+        let pricing = ModelUtils::get_model_pricing("gemini-2.5-flash-lite");
+        assert_eq!(pricing, Some((0.0001, 0.0004)));
     }
 
     #[test]
@@ -256,15 +318,15 @@ mod tests {
     }
 
     #[test]
-    fn test_get_model_aliases_claude_opus_46() {
-        let aliases = ModelUtils::get_model_aliases("claude-opus-4-6");
+    fn test_get_model_aliases_claude_opus_47() {
+        let aliases = ModelUtils::get_model_aliases("claude-opus-4-7");
         assert!(!aliases.is_empty());
-        assert!(aliases.iter().any(|a| a.contains("4.6")));
+        assert!(aliases.iter().any(|a| a.contains("4.7")));
     }
 
     #[test]
     fn test_get_model_aliases_gemini() {
-        let aliases = ModelUtils::get_model_aliases("gemini-pro");
+        let aliases = ModelUtils::get_model_aliases("gemini-3.1-pro-preview");
         assert!(!aliases.is_empty());
         assert!(aliases.iter().any(|a| a.contains("google")));
     }

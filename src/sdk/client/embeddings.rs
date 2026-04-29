@@ -293,7 +293,7 @@ mod tests {
             .add_provider(test_provider_config(
                 "anthropic",
                 ProviderType::Anthropic,
-                "claude-sonnet-4-5",
+                "claude-sonnet-4-6",
             ))
             .build();
 
@@ -379,7 +379,7 @@ mod tests {
             .add_provider(test_provider_config(
                 "openai",
                 ProviderType::OpenAI,
-                "gpt-5.2-chat",
+                "gpt-5.4",
             ))
             .build();
 
@@ -422,7 +422,7 @@ mod tests {
             .default_provider("azure")
             .add_provider(SdkProviderConfig {
                 base_url: Some("https://azure.example.com/openai/deployments/foo".to_string()),
-                ..test_provider_config("azure", ProviderType::Azure, "gpt-5.2-chat")
+                ..test_provider_config("azure", ProviderType::Azure, "gpt-5.4")
             })
             .build();
 

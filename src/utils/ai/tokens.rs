@@ -20,6 +20,10 @@ pub struct TokenUtils;
 
 impl TokenUtils {
     const OPENAI_MODELS: &'static [&'static str] = &[
+        "gpt-5.4",
+        "gpt-5.4-mini",
+        "gpt-5.4-nano",
+        "gpt-5.4-pro",
         "gpt-5.2",
         "gpt-5.2-chat",
         "gpt-5.2-codex",
@@ -52,6 +56,9 @@ impl TokenUtils {
     ];
 
     const CLAUDE_MODELS: &'static [&'static str] = &[
+        "claude-opus-4-7",
+        "claude-sonnet-4-6",
+        "claude-haiku-4-5",
         "claude-opus-4-6",
         "claude-opus-4-5",
         "claude-sonnet-4-5",
@@ -245,6 +252,13 @@ impl TokenUtils {
 
     pub fn get_max_tokens_for_model(model: &str) -> Option<usize> {
         match model.to_lowercase().as_str() {
+            m if m.contains("gpt-5.4")
+                && !m.contains("gpt-5.4-mini")
+                && !m.contains("gpt-5.4-nano") =>
+            {
+                Some(1_048_576)
+            }
+            m if m.contains("gpt-5.4-mini") || m.contains("gpt-5.4-nano") => Some(400_000),
             m if m.contains("gpt-5.2") => Some(400000),
             m if m.contains("gpt-5.1-thinking") => Some(400000),
             m if m.contains("gpt-5") => Some(272000),
@@ -254,7 +268,10 @@ impl TokenUtils {
             m if m.contains("gpt-4") => Some(8192),
             m if m.contains("gpt-3.5-turbo-16k") => Some(16384),
             m if m.contains("gpt-3.5-turbo") => Some(4096),
+            m if m.contains("claude-opus-4-7") => Some(1_000_000),
             m if m.contains("claude-opus-4-6") => Some(1_000_000),
+            m if m.contains("claude-sonnet-4-6") => Some(1_000_000),
+            m if m.contains("claude-haiku-4-5") => Some(200_000),
             m if m.contains("claude-opus-4") => Some(200000),
             m if m.contains("claude-sonnet-4") => Some(200000),
             m if m.contains("claude-3") => Some(200000),
@@ -270,6 +287,10 @@ impl TokenUtils {
         output_tokens: usize,
     ) -> Result<f64, ProviderError> {
         let (input_price, output_price) = match model.to_lowercase().as_str() {
+            m if m.contains("gpt-5.4-pro") => (0.030, 0.180),
+            m if m.contains("gpt-5.4-mini") => (0.00075, 0.0045),
+            m if m.contains("gpt-5.4-nano") => (0.0002, 0.00125),
+            m if m.contains("gpt-5.4") => (0.0025, 0.015),
             m if m.contains("gpt-5.2-pro") => (0.021, 0.168),
             m if m.contains("gpt-5.2-codex") => (0.00175, 0.014),
             m if m.contains("gpt-5-codex") => (0.00125, 0.010),
@@ -287,8 +308,11 @@ impl TokenUtils {
             m if m.contains("gpt-4.1") => (0.002, 0.008),
             m if m.contains("gpt-4") => (0.03, 0.06),
             m if m.contains("gpt-3.5-turbo") => (0.0015, 0.002),
+            m if m.contains("claude-opus-4-7") => (0.005, 0.025),
             m if m.contains("claude-opus-4-6") => (0.005, 0.025),
             m if m.contains("claude-opus-4-5") => (0.005, 0.025),
+            m if m.contains("claude-sonnet-4-6") => (0.003, 0.015),
+            m if m.contains("claude-haiku-4-5") => (0.001, 0.005),
             m if m.contains("claude-sonnet-4-5") => (0.003, 0.015),
             m if m.contains("claude-sonnet-4") => (0.003, 0.015),
             m if m.contains("claude-3-opus") => (0.015, 0.075),
@@ -405,8 +429,16 @@ mod tests {
             Some(32768)
         );
         assert_eq!(
+            TokenUtils::get_max_tokens_for_model("gpt-5.4-pro"),
+            Some(1_048_576)
+        );
+        assert_eq!(
             TokenUtils::get_max_tokens_for_model("claude-opus-4-6"),
             Some(1_000_000)
+        );
+        assert_eq!(
+            TokenUtils::get_max_tokens_for_model("claude-haiku-4-5"),
+            Some(200_000)
         );
         assert_eq!(
             TokenUtils::get_max_tokens_for_model("claude-3"),

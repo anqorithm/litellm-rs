@@ -446,15 +446,15 @@ impl OpenAIModelRegistry {
     /// Get the best model for a specific use case
     pub fn get_recommended_model(&self, use_case: OpenAIUseCase) -> Option<String> {
         match use_case {
-            OpenAIUseCase::GeneralChat => Some("gpt-5.2-chat".to_string()),
-            OpenAIUseCase::CodeGeneration => Some("gpt-5.2-codex".to_string()),
+            OpenAIUseCase::GeneralChat => Some("gpt-5.4".to_string()),
+            OpenAIUseCase::CodeGeneration => Some("gpt-5.4".to_string()),
             OpenAIUseCase::Reasoning => Some("o3-pro".to_string()),
-            OpenAIUseCase::Vision => Some("gpt-5.2".to_string()),
+            OpenAIUseCase::Vision => Some("gpt-5.4".to_string()),
             OpenAIUseCase::ImageGeneration => Some("gpt-image-1.5".to_string()),
             OpenAIUseCase::AudioTranscription => Some("whisper-1".to_string()),
             OpenAIUseCase::TextToSpeech => Some("tts-1-hd".to_string()),
             OpenAIUseCase::Embeddings => Some("text-embedding-3-large".to_string()),
-            OpenAIUseCase::CostOptimized => Some("gpt-5-nano".to_string()),
+            OpenAIUseCase::CostOptimized => Some("gpt-5.4-nano".to_string()),
         }
     }
 }
@@ -512,7 +512,7 @@ mod tests {
 
         assert_eq!(
             registry.get_recommended_model(OpenAIUseCase::GeneralChat),
-            Some("gpt-5.2-chat".to_string())
+            Some("gpt-5.4".to_string())
         );
         assert_eq!(
             registry.get_recommended_model(OpenAIUseCase::Reasoning),
@@ -520,7 +520,7 @@ mod tests {
         );
         assert_eq!(
             registry.get_recommended_model(OpenAIUseCase::CostOptimized),
-            Some("gpt-5-nano".to_string())
+            Some("gpt-5.4-nano".to_string())
         );
     }
 
