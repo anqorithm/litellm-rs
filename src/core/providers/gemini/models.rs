@@ -5,6 +5,10 @@
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
+use crate::core::providers::shared::{
+    GEMINI_15_PRO_CONTEXT_WINDOW, GEMINI_20_FLASH_CONTEXT_WINDOW,
+    GEMINI_20_FLASH_THINKING_CONTEXT_WINDOW,
+};
 use crate::core::types::model::ModelInfo;
 
 /// Model features
@@ -751,7 +755,7 @@ impl GeminiModelRegistry {
                     id: "gemini-2.0-flash-exp".to_string(),
                     name: "Gemini 2.0 Flash".to_string(),
                     provider: "gemini".to_string(),
-                    max_context_length: 1_000_000,
+                    max_context_length: GEMINI_20_FLASH_CONTEXT_WINDOW,
                     max_output_length: Some(8192),
                     supports_streaming: true,
                     supports_tools: true,
@@ -792,7 +796,7 @@ impl GeminiModelRegistry {
                     audio_price_per_second: Some(0.0001),
                 },
                 limits: ModelLimits {
-                    max_context_length: 1_000_000,
+                    max_context_length: GEMINI_20_FLASH_CONTEXT_WINDOW,
                     max_output_tokens: 8192,
                     max_images: Some(3000),
                     max_video_seconds: Some(3600),
@@ -811,7 +815,7 @@ impl GeminiModelRegistry {
                     id: "gemini-2.0-flash-thinking-exp".to_string(),
                     name: "Gemini 2.0 Flash Thinking".to_string(),
                     provider: "gemini".to_string(),
-                    max_context_length: 32_000,
+                    max_context_length: GEMINI_20_FLASH_THINKING_CONTEXT_WINDOW,
                     max_output_length: Some(8192),
                     supports_streaming: true,
                     supports_tools: true,
@@ -842,7 +846,7 @@ impl GeminiModelRegistry {
                     audio_price_per_second: None,
                 },
                 limits: ModelLimits {
-                    max_context_length: 32_000,
+                    max_context_length: GEMINI_20_FLASH_THINKING_CONTEXT_WINDOW,
                     max_output_tokens: 8192,
                     max_images: Some(50),
                     max_video_seconds: None,
@@ -861,7 +865,7 @@ impl GeminiModelRegistry {
                     id: "gemini-1.5-pro".to_string(),
                     name: "Gemini 1.5 Pro".to_string(),
                     provider: "gemini".to_string(),
-                    max_context_length: 2_000_000,
+                    max_context_length: GEMINI_15_PRO_CONTEXT_WINDOW,
                     max_output_length: Some(8192),
                     supports_streaming: true,
                     supports_tools: true,
@@ -902,7 +906,7 @@ impl GeminiModelRegistry {
                     audio_price_per_second: Some(0.000125),
                 },
                 limits: ModelLimits {
-                    max_context_length: 2_000_000,
+                    max_context_length: GEMINI_15_PRO_CONTEXT_WINDOW,
                     max_output_tokens: 8192,
                     max_images: Some(3000),
                     max_video_seconds: Some(3600),

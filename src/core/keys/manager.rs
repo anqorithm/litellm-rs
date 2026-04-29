@@ -18,6 +18,8 @@ use uuid::Uuid;
 
 /// Minimum interval between DB writes for the same key's last_used timestamp.
 const LAST_USED_THROTTLE: Duration = Duration::from_secs(5 * 60);
+/// Maximum number of entries retained in the last-used throttle cache.
+const LAST_USED_CACHE_MAX_ENTRIES: usize = 10_000;
 
 /// API Key Manager for handling all key operations
 #[derive(Clone)]
@@ -71,6 +73,25 @@ impl KeyManager {
     /// Get the HMAC secret as Option<&str>
     fn hmac_secret(&self) -> Option<&str> {
         self.hmac_secret.as_deref()
+    }
+
+    /// Bound the last-used throttle cache when the manager is process-scoped.
+    fn prune_last_used_cache(&self, now: Instant) {
+        self.last_used_cache
+            .retain(|_, last_persisted| now.duration_since(*last_persisted) < LAST_USED_THROTTLE);
+
+        while self.last_used_cache.len() >= LAST_USED_CACHE_MAX_ENTRIES {
+            let Some(oldest_key) = self
+                .last_used_cache
+                .iter()
+                .min_by_key(|entry| *entry.value())
+                .map(|entry| *entry.key())
+            else {
+                break;
+            };
+
+            self.last_used_cache.remove(&oldest_key);
+        }
     }
 
     /// Generate a new API key
@@ -169,6 +190,7 @@ impl KeyManager {
         // Update last used (throttled to once per 5 minutes per key)
         let key_id = key.id;
         let now = Instant::now();
+        self.prune_last_used_cache(now);
         let should_update = match self.last_used_cache.get(&key_id) {
             Some(last_persisted) => now.duration_since(*last_persisted) >= LAST_USED_THROTTLE,
             None => true,
@@ -393,6 +415,20 @@ mod manager_tests {
 
     fn create_manager() -> KeyManager {
         KeyManager::new(InMemoryKeyRepository::new())
+    }
+
+    #[test]
+    fn test_prune_last_used_cache_enforces_hard_cap() {
+        let manager = create_manager();
+        let now = Instant::now();
+
+        for _ in 0..=LAST_USED_CACHE_MAX_ENTRIES {
+            manager.last_used_cache.insert(Uuid::new_v4(), now);
+        }
+
+        manager.prune_last_used_cache(now);
+
+        assert!(manager.last_used_cache.len() < LAST_USED_CACHE_MAX_ENTRIES);
     }
 
     #[tokio::test]
