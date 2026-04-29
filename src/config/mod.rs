@@ -75,7 +75,7 @@ impl Config {
 
         let content = substitute_env_vars(&content);
 
-        let gateway: GatewayConfig = serde_norway::from_str(&content)
+        let gateway: GatewayConfig = serde_yml::from_str(&content)
             .map_err(|e| GatewayError::Config(format!("Failed to parse config: {}", e)))?;
 
         let config = Self { gateway };
@@ -157,7 +157,7 @@ impl Config {
 
     /// Convert to YAML string
     pub fn to_yaml(&self) -> Result<String> {
-        serde_norway::to_string(&self.gateway)
+        serde_yml::to_string(&self.gateway)
             .map_err(|e| GatewayError::Config(format!("Failed to serialize config to YAML: {}", e)))
     }
 }

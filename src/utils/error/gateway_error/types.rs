@@ -97,9 +97,9 @@ impl From<serde_json::Error> for GatewayError {
     }
 }
 
-// Manual From impl for serde_norway::Error (previously Yaml variant with #[from])
-impl From<serde_norway::Error> for GatewayError {
-    fn from(err: serde_norway::Error) -> Self {
+// Manual From impl for serde_yml::Error (previously Yaml variant with #[from])
+impl From<serde_yml::Error> for GatewayError {
+    fn from(err: serde_yml::Error) -> Self {
         GatewayError::Serialization(err.to_string())
     }
 }
@@ -279,14 +279,14 @@ mod tests {
     }
 
     #[test]
-    fn test_serde_norway_error_conversion() {
-        let yaml_result: std::result::Result<serde_norway::Value, _> =
-            serde_norway::from_str("key: [unclosed");
+    fn test_serde_yml_error_conversion() {
+        let yaml_result: std::result::Result<serde_yml::Value, _> =
+            serde_yml::from_str("key: [unclosed");
         let yaml_error = yaml_result.unwrap_err();
         let gateway_error: GatewayError = yaml_error.into();
         assert!(
             matches!(gateway_error, GatewayError::Serialization(_)),
-            "From<serde_norway::Error> must produce GatewayError::Serialization"
+            "From<serde_yml::Error> must produce GatewayError::Serialization"
         );
         assert!(gateway_error.to_string().contains("Serialization error"));
     }

@@ -554,8 +554,8 @@ fn test_gateway_error_vector_db_response() {
 
 #[test]
 fn test_gateway_error_yaml_response() {
-    let yaml_err: serde_norway::Error =
-        serde_norway::from_str::<serde_norway::Value>("key: [unclosed").unwrap_err();
+    let yaml_err: serde_yml::Error =
+        serde_yml::from_str::<serde_yml::Value>("key: [unclosed").unwrap_err();
     let error = GatewayError::Serialization(yaml_err.to_string());
     let response = error.error_response();
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
