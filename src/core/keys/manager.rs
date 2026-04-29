@@ -77,12 +77,21 @@ impl KeyManager {
 
     /// Bound the last-used throttle cache when the manager is process-scoped.
     fn prune_last_used_cache(&self, now: Instant) {
-        if self.last_used_cache.len() < LAST_USED_CACHE_MAX_ENTRIES {
-            return;
-        }
-
         self.last_used_cache
             .retain(|_, last_persisted| now.duration_since(*last_persisted) < LAST_USED_THROTTLE);
+
+        while self.last_used_cache.len() >= LAST_USED_CACHE_MAX_ENTRIES {
+            let Some(oldest_key) = self
+                .last_used_cache
+                .iter()
+                .min_by_key(|entry| *entry.value())
+                .map(|entry| *entry.key())
+            else {
+                break;
+            };
+
+            self.last_used_cache.remove(&oldest_key);
+        }
     }
 
     /// Generate a new API key
@@ -406,6 +415,20 @@ mod manager_tests {
 
     fn create_manager() -> KeyManager {
         KeyManager::new(InMemoryKeyRepository::new())
+    }
+
+    #[test]
+    fn test_prune_last_used_cache_enforces_hard_cap() {
+        let manager = create_manager();
+        let now = Instant::now();
+
+        for _ in 0..=LAST_USED_CACHE_MAX_ENTRIES {
+            manager.last_used_cache.insert(Uuid::new_v4(), now);
+        }
+
+        manager.prune_last_used_cache(now);
+
+        assert!(manager.last_used_cache.len() < LAST_USED_CACHE_MAX_ENTRIES);
     }
 
     #[tokio::test]
