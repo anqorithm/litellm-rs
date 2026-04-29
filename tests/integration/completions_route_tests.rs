@@ -238,11 +238,14 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 
         let body: Value = test::read_body_json(resp).await;
-        assert_eq!(body["success"], false);
-        let error_message = body["error"]
+        assert!(body.get("success").is_none());
+        let error_message = body["error"]["message"]
             .as_str()
-            .expect("validation response should contain error string");
+            .expect("validation response should contain OpenAI error message");
         assert!(error_message.contains("Model name cannot be empty"));
+        assert_eq!(body["error"]["type"], "invalid_request_error");
+        assert_eq!(body["error"]["param"], Value::Null);
+        assert_eq!(body["error"]["code"], "invalid_request");
 
         let requests = mock_server.requests();
         assert!(requests.is_empty());
@@ -271,11 +274,14 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::TOO_MANY_REQUESTS);
 
         let body: Value = test::read_body_json(resp).await;
-        assert_eq!(body["error"]["code"], "PROVIDER_RATE_LIMIT");
-        assert_eq!(body["error"]["retryable"], true);
+        assert!(body.get("success").is_none());
+        assert_eq!(body["error"]["type"], "rate_limit_error");
+        assert_eq!(body["error"]["param"], Value::Null);
+        assert_eq!(body["error"]["code"], "rate_limit_exceeded");
+        assert!(body["error"].get("retryable").is_none());
         let message = body["error"]["message"]
             .as_str()
-            .expect("provider error body should have message");
+            .expect("provider error body should have OpenAI error message");
         assert!(message.to_lowercase().contains("rate limit"));
 
         let requests = mock_server.requests();

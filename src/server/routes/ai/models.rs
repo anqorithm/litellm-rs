@@ -4,8 +4,10 @@ use crate::core::models::openai::{Model, ModelListResponse};
 use crate::core::router::UnifiedRouter;
 use crate::server::state::AppState;
 use crate::utils::error::gateway_error::GatewayError;
-use actix_web::{HttpResponse, ResponseError, Result as ActixResult, web};
+use actix_web::{HttpResponse, Result as ActixResult, web};
 use tracing::{debug, error};
+
+use super::openai_errors;
 
 /// List available models
 ///
@@ -25,7 +27,7 @@ pub async fn list_models(state: web::Data<AppState>) -> ActixResult<HttpResponse
         }
         Err(e) => {
             error!("Failed to list models: {}", e);
-            Ok(e.error_response())
+            Ok(openai_errors::gateway_error_response(&e))
         }
     }
 }
@@ -43,12 +45,12 @@ pub async fn get_model(
 
     match get_model_from_router(unified_router, &model_id).await {
         Ok(Some(model)) => Ok(HttpResponse::Ok().json(model)),
-        Ok(None) => {
-            Ok(GatewayError::not_found(format!("Model not found: {}", model_id)).error_response())
-        }
+        Ok(None) => Ok(openai_errors::gateway_error_response(
+            &GatewayError::not_found(format!("Model not found: {}", model_id)),
+        )),
         Err(e) => {
             error!("Failed to get model {}: {}", model_id, e);
-            Ok(e.error_response())
+            Ok(openai_errors::gateway_error_response(&e))
         }
     }
 }

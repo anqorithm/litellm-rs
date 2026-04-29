@@ -3,13 +3,13 @@
 use crate::core::audio::AudioService;
 use crate::core::audio::types::SpeechRequest;
 use crate::core::types::model::ProviderCapability;
-use crate::server::routes::ApiResponse;
 use crate::server::state::AppState;
-use actix_web::{HttpRequest, HttpResponse, ResponseError, Result as ActixResult, web};
+use actix_web::{HttpRequest, HttpResponse, Result as ActixResult, web};
 use serde::Deserialize;
 use tracing::{error, info};
 
 use crate::server::routes::ai::context::get_request_context;
+use crate::server::routes::ai::openai_errors;
 use crate::server::routes::ai::provider_selection::select_provider_for_model;
 
 /// Audio speech generation request
@@ -51,8 +51,7 @@ pub async fn audio_speech(
     let _context = match get_request_context(&req) {
         Ok(ctx) => ctx,
         Err(_) => {
-            return Ok(HttpResponse::Unauthorized()
-                .json(ApiResponse::<()>::error("Unauthorized".to_string())));
+            return Ok(openai_errors::unauthorized_error("Unauthorized"));
         }
     };
 
@@ -64,7 +63,7 @@ pub async fn audio_speech(
         ProviderCapability::TextToSpeech,
     ) {
         Ok(selection) => selection,
-        Err(e) => return Ok(e.error_response()),
+        Err(e) => return Ok(openai_errors::gateway_error_response(&e)),
     };
 
     let speech_request = SpeechRequest {
@@ -83,7 +82,7 @@ pub async fn audio_speech(
             .body(response.audio)),
         Err(e) => {
             error!("Speech generation error: {}", e);
-            Ok(e.error_response())
+            Ok(openai_errors::gateway_error_response(&e))
         }
     }
 }

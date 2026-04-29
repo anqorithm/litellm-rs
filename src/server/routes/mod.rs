@@ -287,6 +287,21 @@ mod tests {
         assert_eq!(response.error, Some("test error".to_string()));
     }
 
+    #[actix_web::test]
+    async fn test_gateway_error_helpers_keep_api_response_envelope() {
+        let response = errors::validation_error("test validation error");
+
+        assert_eq!(response.status(), actix_web::http::StatusCode::BAD_REQUEST);
+        let body = actix_web::body::to_bytes(response.into_body())
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(json["success"], false);
+        assert_eq!(json["error"], "test validation error");
+        assert!(json["data"].is_null());
+    }
+
     #[test]
     fn test_pagination_meta() {
         let meta = PaginationMeta::new(2, 10, 25);
