@@ -6,10 +6,13 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileStorageConfig {
     /// Storage type (local, s3, etc.)
+    #[serde(default = "default_file_storage_type")]
     pub storage_type: String,
     /// Local storage path
+    #[serde(default)]
     pub local_path: Option<String>,
     /// S3 configuration
+    #[serde(default)]
     pub s3: Option<S3Config>,
 }
 
@@ -20,6 +23,29 @@ impl Default for FileStorageConfig {
             local_path: None,
             s3: None,
         }
+    }
+}
+
+fn default_file_storage_type() -> String {
+    "local".to_string()
+}
+
+impl FileStorageConfig {
+    /// Merge file storage configurations.
+    pub fn merge(mut self, other: Self) -> Self {
+        let default = Self::default();
+
+        if !other.storage_type.is_empty() && other.storage_type != default.storage_type {
+            self.storage_type = other.storage_type;
+        }
+        if other.local_path.is_some() {
+            self.local_path = other.local_path;
+        }
+        if other.s3.is_some() {
+            self.s3 = other.s3;
+        }
+
+        self
     }
 }
 
@@ -194,10 +220,35 @@ mod tests {
     }
 
     #[test]
+    fn test_file_storage_config_deserializes_partial_local_config() {
+        let json = r#"{"local_path": "/configured/files"}"#;
+        let config: FileStorageConfig = serde_json::from_str(json).unwrap();
+
+        assert_eq!(config.storage_type, "local");
+        assert_eq!(config.local_path, Some("/configured/files".to_string()));
+        assert!(config.s3.is_none());
+    }
+
+    #[test]
     fn test_file_storage_config_clone() {
         let config = FileStorageConfig::default();
         let cloned = config.clone();
         assert_eq!(config.storage_type, cloned.storage_type);
+    }
+
+    #[test]
+    fn test_file_storage_config_merge_local_path() {
+        let base = FileStorageConfig::default();
+        let other = FileStorageConfig {
+            storage_type: "local".to_string(),
+            local_path: Some("/configured/files".to_string()),
+            s3: None,
+        };
+
+        let merged = base.merge(other);
+
+        assert_eq!(merged.storage_type, "local");
+        assert_eq!(merged.local_path, Some("/configured/files".to_string()));
     }
 
     // ==================== S3Config Tests ====================
