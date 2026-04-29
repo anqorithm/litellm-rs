@@ -18,7 +18,7 @@ use crate::server::routes::ai::responses::{
 };
 use crate::server::state::AppState;
 use actix_web::http::header::{CACHE_CONTROL, CONTENT_TYPE};
-use actix_web::{HttpResponse, ResponseError, Result as ActixResult};
+use actix_web::{HttpResponse, Result as ActixResult};
 use bytes::Bytes;
 use futures::StreamExt;
 use serde_json::json;
@@ -26,6 +26,8 @@ use std::collections::HashMap;
 use std::time::Duration;
 use tokio::sync::mpsc;
 use tracing::{error, info, warn};
+
+use super::openai_errors;
 
 /// Accumulated state for one in-progress tool call during streaming.
 struct ToolCallAccum {
@@ -55,7 +57,7 @@ pub(crate) async fn handle_streaming_response(
         &chat_request.model,
         ProviderCapability::ChatCompletionStream,
     ) {
-        return Ok(e.error_response());
+        return Ok(openai_errors::gateway_error_response(&e));
     }
 
     chat_request.stream = Some(true);
@@ -66,8 +68,7 @@ pub(crate) async fn handle_streaming_response(
     let core_request = match build_core_chat_request(chat_request, model_name.clone(), true) {
         Ok(r) => r,
         Err(e) => {
-            use actix_web::ResponseError;
-            return Ok(e.error_response());
+            return Ok(openai_errors::gateway_error_response(&e));
         }
     };
 
@@ -472,7 +473,7 @@ pub(crate) async fn handle_streaming_response(
         }
         Err(e) => {
             error!("Failed to start Responses API stream: {e}");
-            Ok(e.error_response())
+            Ok(openai_errors::gateway_error_response(&e))
         }
     }
 }

@@ -3,14 +3,14 @@
 use crate::core::audio::AudioService;
 use crate::core::audio::types::TranscriptionRequest;
 use crate::core::types::model::ProviderCapability;
-use crate::server::routes::ApiResponse;
 use crate::server::state::AppState;
 use actix_multipart::Multipart;
-use actix_web::{HttpRequest, HttpResponse, ResponseError, Result as ActixResult, web};
+use actix_web::{HttpRequest, HttpResponse, Result as ActixResult, web};
 use futures::StreamExt;
 use tracing::{error, info};
 
 use crate::server::routes::ai::context::get_request_context;
+use crate::server::routes::ai::openai_errors;
 use crate::server::routes::ai::provider_selection::select_provider_for_model;
 
 /// Audio transcriptions endpoint
@@ -28,8 +28,7 @@ pub async fn audio_transcriptions(
     let _context = match get_request_context(&req) {
         Ok(ctx) => ctx,
         Err(_) => {
-            return Ok(HttpResponse::Unauthorized()
-                .json(ApiResponse::<()>::error("Unauthorized".to_string())));
+            return Ok(openai_errors::unauthorized_error("Unauthorized"));
         }
     };
 
@@ -47,12 +46,10 @@ pub async fn audio_transcriptions(
             Ok(f) => f,
             Err(e) => {
                 error!("Error reading multipart field: {}", e);
-                return Ok(
-                    HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!(
-                        "Invalid multipart data: {}",
-                        e
-                    ))),
-                );
+                return Ok(openai_errors::validation_error(format!(
+                    "Invalid multipart data: {}",
+                    e
+                )));
             }
         };
 
@@ -77,8 +74,7 @@ pub async fn audio_transcriptions(
                         Ok(bytes) => data.extend_from_slice(&bytes),
                         Err(e) => {
                             error!("Error reading file chunk: {}", e);
-                            return Ok(HttpResponse::BadRequest()
-                                .json(ApiResponse::<()>::error("Error reading file".to_string())));
+                            return Ok(openai_errors::validation_error("Error reading file"));
                         }
                     }
                 }
@@ -122,9 +118,7 @@ pub async fn audio_transcriptions(
     let file = match file_data {
         Some(data) if !data.is_empty() => data,
         _ => {
-            return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
-                "No audio file provided".to_string(),
-            )));
+            return Ok(openai_errors::validation_error("No audio file provided"));
         }
     };
 
@@ -136,7 +130,7 @@ pub async fn audio_transcriptions(
         ProviderCapability::AudioTranscription,
     ) {
         Ok(selection) => selection,
-        Err(e) => return Ok(e.error_response()),
+        Err(e) => return Ok(openai_errors::gateway_error_response(&e)),
     };
 
     // Create transcription request
@@ -158,7 +152,7 @@ pub async fn audio_transcriptions(
         Ok(response) => Ok(HttpResponse::Ok().json(response)),
         Err(e) => {
             error!("Transcription error: {}", e);
-            Ok(e.error_response())
+            Ok(openai_errors::gateway_error_response(&e))
         }
     }
 }

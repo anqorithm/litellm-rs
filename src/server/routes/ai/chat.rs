@@ -11,12 +11,11 @@ use crate::core::streaming::types::{
 use crate::core::types::{
     self, chat::ChatRequest as CoreChatRequest, context::RequestContext, model::ProviderCapability,
 };
-use crate::server::routes::errors;
 use crate::server::state::AppState;
 use crate::utils::data::validation::RequestValidator;
 use crate::utils::error::gateway_error::GatewayError;
 use actix_web::http::header::{CACHE_CONTROL, CONTENT_TYPE};
-use actix_web::{HttpRequest, HttpResponse, ResponseError, Result as ActixResult, web};
+use actix_web::{HttpRequest, HttpResponse, Result as ActixResult, web};
 use bytes::Bytes;
 use futures::StreamExt;
 use serde_json::json;
@@ -26,6 +25,7 @@ use tracing::{error, info, warn};
 
 use super::context::get_request_context;
 use super::execution::execute_with_selected_deployment;
+use super::openai_errors;
 use super::provider_selection::select_provider_for_model;
 
 /// Chat completions endpoint
@@ -49,7 +49,7 @@ pub async fn chat_completions(
         request.temperature,
     ) {
         warn!("Invalid chat completion request: {}", e);
-        return Ok(errors::validation_error(&e.to_string()));
+        return Ok(openai_errors::validation_error(e.to_string()));
     }
 
     // Check if streaming is requested
@@ -64,7 +64,7 @@ pub async fn chat_completions(
             Ok(response) => Ok(HttpResponse::Ok().json(response)),
             Err(e) => {
                 error!("Chat completion error: {}", e);
-                Ok(e.error_response())
+                Ok(openai_errors::gateway_error_response(&e))
             }
         }
     }
@@ -89,13 +89,13 @@ async fn handle_streaming_chat_completion(
         &request.model,
         ProviderCapability::ChatCompletionStream,
     ) {
-        return Ok(e.error_response());
+        return Ok(openai_errors::gateway_error_response(&e));
     }
 
     let requested_model = request.model.clone();
     let core_request = match build_core_chat_request(request, requested_model, true) {
         Ok(req) => req,
-        Err(e) => return Ok(e.error_response()),
+        Err(e) => return Ok(openai_errors::gateway_error_response(&e)),
     };
 
     let requested_model = core_request.model.clone();
@@ -227,7 +227,7 @@ async fn handle_streaming_chat_completion(
         }
         Err(e) => {
             error!("Failed to create streaming response: {}", e);
-            Ok(e.error_response())
+            Ok(openai_errors::gateway_error_response(&e))
         }
     }
 }

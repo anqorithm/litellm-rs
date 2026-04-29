@@ -11,6 +11,7 @@ mod embeddings;
 mod execution;
 mod images;
 mod models;
+mod openai_errors;
 mod provider_selection;
 mod responses;
 mod responses_stream;

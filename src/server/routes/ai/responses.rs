@@ -14,10 +14,11 @@ use crate::core::models::openai::responses_api::{
 };
 use crate::core::types::responses::FinishReason;
 use crate::server::routes::ai::chat::handle_chat_completion_with_state;
-use crate::server::routes::errors;
 use crate::server::state::AppState;
-use actix_web::{HttpRequest, HttpResponse, ResponseError, Result as ActixResult, web};
+use actix_web::{HttpRequest, HttpResponse, Result as ActixResult, web};
 use tracing::{error, info};
+
+use super::openai_errors;
 
 /// POST /v1/responses handler
 pub async fn create_response(
@@ -31,27 +32,31 @@ pub async fn create_response(
     let request = body.into_inner();
 
     if request.model.trim().is_empty() {
-        return Ok(errors::validation_error("model must not be empty"));
+        return Ok(openai_errors::validation_error("model must not be empty"));
     }
 
     match &request.input {
         ResponseInput::Text(t) if t.trim().is_empty() => {
-            return Ok(errors::validation_error("input text must not be empty"));
+            return Ok(openai_errors::validation_error(
+                "input text must not be empty",
+            ));
         }
         ResponseInput::Items(items) if items.is_empty() => {
-            return Ok(errors::validation_error("input array must not be empty"));
+            return Ok(openai_errors::validation_error(
+                "input array must not be empty",
+            ));
         }
         _ => {}
     }
 
     if request.background.unwrap_or(false) {
-        return Ok(errors::validation_error(
+        return Ok(openai_errors::validation_error(
             "background (async) execution is not supported; omit background or set it to false",
         ));
     }
 
     if request.previous_response_id.is_some() {
-        return Ok(errors::validation_error(
+        return Ok(openai_errors::validation_error(
             "previous_response_id (stateful chaining) is not supported; \
              omit previous_response_id to make a fresh request",
         ));
@@ -59,7 +64,7 @@ pub async fn create_response(
 
     let chat_request = match build_chat_request(&request) {
         Ok(r) => r,
-        Err(e) => return Ok(errors::validation_error(&e)),
+        Err(e) => return Ok(openai_errors::validation_error(e)),
     };
 
     if request.stream.unwrap_or(false) {
@@ -90,7 +95,7 @@ async fn handle_sync_response(
         }
         Err(e) => {
             error!("Responses API error: {}", e);
-            Ok(e.error_response())
+            Ok(openai_errors::gateway_error_response(&e))
         }
     }
 }

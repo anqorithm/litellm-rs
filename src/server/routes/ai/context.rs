@@ -4,7 +4,7 @@ use crate::core::models::ApiKey;
 use crate::core::models::user::types::User;
 use crate::core::types::context::RequestContext;
 use crate::utils::error::gateway_error::GatewayError;
-use actix_web::{HttpMessage, HttpRequest, HttpResponse, ResponseError, Result as ActixResult};
+use actix_web::{HttpMessage, HttpRequest, HttpResponse, Result as ActixResult};
 use serde::Serialize;
 use std::future::Future;
 use tracing::{debug, error};
@@ -123,7 +123,7 @@ pub async fn log_api_usage(context: &RequestContext, model: &str, tokens_used: u
 /// let context = get_request_context(&req)?;
 /// match handler(request.into_inner(), context).await {
 ///     Ok(r) => Ok(HttpResponse::Ok().json(r)),
-///     Err(e) => { error!("..."); Ok(e.error_response()) }
+///     Err(e) => { error!("..."); Ok(openai_errors::gateway_error_response(&e)) }
 /// }
 /// ```
 pub async fn handle_ai_request<Req, Resp, F, Fut>(
@@ -142,7 +142,7 @@ where
         Ok(response) => Ok(HttpResponse::Ok().json(response)),
         Err(e) => {
             error!("{} error: {}", error_label, e);
-            Ok(e.error_response())
+            Ok(super::openai_errors::gateway_error_response(&e))
         }
     }
 }
