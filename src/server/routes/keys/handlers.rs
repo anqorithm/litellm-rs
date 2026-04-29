@@ -17,6 +17,31 @@ use actix_web::{HttpRequest, HttpResponse, Result as ActixResult, web};
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
+const MANAGEMENT_PERMISSIONS: &[&str] = &[
+    "*",
+    "system.admin",
+    "keys.list_all",
+    "users.manage",
+    "config.manage",
+    "teams.manage",
+    "analytics.admin",
+];
+
+fn permissions_grant_management_access(permissions: &crate::core::keys::KeyPermissions) -> bool {
+    permissions.is_admin
+        || permissions
+            .custom_permissions
+            .iter()
+            .any(|permission| MANAGEMENT_PERMISSIONS.contains(&permission.as_str()))
+}
+
+fn auth_can_grant_management_access(auth: &AuthResult) -> bool {
+    auth.user
+        .as_ref()
+        .map(|user| user.has_role(&UserRole::Admin))
+        .unwrap_or(false)
+}
+
 /// Check whether `requesting_user` is allowed to access the key.
 ///
 /// Admins and super-admins bypass the ownership check.
@@ -121,10 +146,10 @@ fn resolve_create_key_scope(
 ) -> std::result::Result<(Option<Uuid>, Option<Uuid>), &'static str> {
     let requested_user_id = request.user_id;
     let requested_team_id = request.team_id;
-    let requests_admin_key = request
+    let requests_management_key = request
         .permissions
         .as_ref()
-        .map(|p| p.is_admin)
+        .map(permissions_grant_management_access)
         .unwrap_or(false);
 
     if let Some(ref user) = auth.user {
@@ -133,8 +158,8 @@ fn resolve_create_key_scope(
             return Ok((requested_user_id, requested_team_id));
         }
 
-        if requests_admin_key {
-            return Err("Only admin can create admin API keys");
+        if requests_management_key {
+            return Err("Only admin can create API keys with management permissions");
         }
 
         match (requested_user_id, requested_team_id) {
@@ -149,8 +174,8 @@ fn resolve_create_key_scope(
         }
     } else {
         // Team-only API key caller.
-        if requests_admin_key {
-            return Err("Team-scoped API keys cannot create admin API keys");
+        if requests_management_key {
+            return Err("Team-scoped API keys cannot create API keys with management permissions");
         }
 
         let caller_team_id = auth.context.team_id();
@@ -162,6 +187,25 @@ fn resolve_create_key_scope(
             _ => Err("Not authorized to create API key for this scope"),
         }
     }
+}
+
+fn validate_update_key_permissions(
+    auth: Option<&AuthResult>,
+    request: &UpdateKeyRequest,
+) -> std::result::Result<(), &'static str> {
+    let Some(permissions) = request.permissions.as_ref() else {
+        return Ok(());
+    };
+
+    if !permissions_grant_management_access(permissions) {
+        return Ok(());
+    }
+
+    if auth.map(auth_can_grant_management_access).unwrap_or(true) {
+        return Ok(());
+    }
+
+    Err("Only admin can update API keys with management permissions")
 }
 
 /// POST /v1/keys - Create a new API key
@@ -480,6 +524,15 @@ pub async fn update_key(
             key_id, existing_key.user_id, existing_key.team_id
         );
         let error_response = KeyErrorResponse::forbidden("Not authorized to access this key");
+        return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(error_response.error)));
+    }
+
+    if let Err(message) = validate_update_key_permissions(auth_opt.as_ref(), &request) {
+        warn!(
+            "Caller attempted to grant management permissions to key {} without admin privileges",
+            key_id
+        );
+        let error_response = KeyErrorResponse::forbidden(message);
         return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(error_response.error)));
     }
 
@@ -810,6 +863,7 @@ fn get_key_manager(state: &web::Data<AppState>) -> KeyManager {
 #[cfg(test)]
 mod handler_tests {
     use super::*;
+    use crate::core::keys::KeyPermissions;
 
     #[test]
     fn test_create_key_config_from_request() {
@@ -886,6 +940,32 @@ mod handler_tests {
             session: None,
             error: None,
             context,
+        }
+    }
+
+    fn create_request_with_permissions(permissions: Option<KeyPermissions>) -> CreateKeyRequest {
+        CreateKeyRequest {
+            name: "scoped".to_string(),
+            description: None,
+            user_id: None,
+            team_id: None,
+            budget_id: None,
+            permissions,
+            rate_limits: None,
+            expires_at: None,
+            metadata: None,
+        }
+    }
+
+    fn update_request_with_permissions(permissions: Option<KeyPermissions>) -> UpdateKeyRequest {
+        UpdateKeyRequest {
+            name: None,
+            description: None,
+            permissions,
+            rate_limits: None,
+            budget_id: None,
+            expires_at: None,
+            metadata: None,
         }
     }
 
@@ -986,6 +1066,59 @@ mod handler_tests {
     }
 
     #[test]
+    fn test_resolve_create_key_scope_user_cannot_create_admin_key() {
+        let user = make_user(UserRole::User, vec![]);
+        let auth = make_user_auth(user);
+        let request = create_request_with_permissions(Some(KeyPermissions::admin()));
+
+        assert_eq!(
+            resolve_create_key_scope(&auth, &request),
+            Err("Only admin can create API keys with management permissions")
+        );
+    }
+
+    #[test]
+    fn test_resolve_create_key_scope_user_cannot_create_system_admin_custom_permission() {
+        let user = make_user(UserRole::User, vec![]);
+        let auth = make_user_auth(user);
+        let permissions = KeyPermissions {
+            custom_permissions: vec!["system.admin".to_string()],
+            ..Default::default()
+        };
+        let request = create_request_with_permissions(Some(permissions));
+
+        assert_eq!(
+            resolve_create_key_scope(&auth, &request),
+            Err("Only admin can create API keys with management permissions")
+        );
+    }
+
+    #[test]
+    fn test_resolve_create_key_scope_team_api_key_cannot_create_management_permission() {
+        let team_id = Uuid::new_v4();
+        let auth = make_team_auth(team_id);
+        let permissions = KeyPermissions {
+            custom_permissions: vec!["users.manage".to_string()],
+            ..Default::default()
+        };
+        let request = create_request_with_permissions(Some(permissions));
+
+        assert_eq!(
+            resolve_create_key_scope(&auth, &request),
+            Err("Team-scoped API keys cannot create API keys with management permissions")
+        );
+    }
+
+    #[test]
+    fn test_resolve_create_key_scope_admin_can_create_management_key() {
+        let admin = make_user(UserRole::Admin, vec![]);
+        let auth = make_user_auth(admin);
+        let request = create_request_with_permissions(Some(KeyPermissions::admin()));
+
+        assert!(resolve_create_key_scope(&auth, &request).is_ok());
+    }
+
+    #[test]
     fn test_resolve_create_key_scope_manager_can_target_own_team() {
         let team_id = Uuid::new_v4();
         let manager = make_user(UserRole::Manager, vec![team_id]);
@@ -1024,5 +1157,71 @@ mod handler_tests {
 
         let resolved = resolve_create_key_scope(&auth, &request).unwrap();
         assert_eq!(resolved, (None, Some(team_id)));
+    }
+
+    #[test]
+    fn test_validate_update_key_permissions_user_cannot_promote_to_admin() {
+        let user = make_user(UserRole::User, vec![]);
+        let auth = make_user_auth(user);
+        let request = update_request_with_permissions(Some(KeyPermissions::admin()));
+
+        assert_eq!(
+            validate_update_key_permissions(Some(&auth), &request),
+            Err("Only admin can update API keys with management permissions")
+        );
+    }
+
+    #[test]
+    fn test_validate_update_key_permissions_manager_cannot_grant_system_admin() {
+        let team_id = Uuid::new_v4();
+        let manager = make_user(UserRole::Manager, vec![team_id]);
+        let auth = make_user_auth(manager);
+        let permissions = KeyPermissions {
+            custom_permissions: vec!["system.admin".to_string()],
+            ..Default::default()
+        };
+        let request = update_request_with_permissions(Some(permissions));
+
+        assert_eq!(
+            validate_update_key_permissions(Some(&auth), &request),
+            Err("Only admin can update API keys with management permissions")
+        );
+    }
+
+    #[test]
+    fn test_validate_update_key_permissions_team_api_key_cannot_grant_wildcard() {
+        let auth = make_team_auth(Uuid::new_v4());
+        let permissions = KeyPermissions {
+            custom_permissions: vec!["*".to_string()],
+            ..Default::default()
+        };
+        let request = update_request_with_permissions(Some(permissions));
+
+        assert_eq!(
+            validate_update_key_permissions(Some(&auth), &request),
+            Err("Only admin can update API keys with management permissions")
+        );
+    }
+
+    #[test]
+    fn test_validate_update_key_permissions_admin_can_grant_management_access() {
+        let admin = make_user(UserRole::Admin, vec![]);
+        let auth = make_user_auth(admin);
+        let request = update_request_with_permissions(Some(KeyPermissions::admin()));
+
+        assert!(validate_update_key_permissions(Some(&auth), &request).is_ok());
+    }
+
+    #[test]
+    fn test_validate_update_key_permissions_allows_non_management_permissions() {
+        let user = make_user(UserRole::User, vec![]);
+        let auth = make_user_auth(user);
+        let permissions = KeyPermissions {
+            custom_permissions: vec!["api.chat".to_string()],
+            ..Default::default()
+        };
+        let request = update_request_with_permissions(Some(permissions));
+
+        assert!(validate_update_key_permissions(Some(&auth), &request).is_ok());
     }
 }
