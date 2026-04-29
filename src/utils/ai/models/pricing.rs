@@ -44,7 +44,7 @@ impl ModelUtils {
             m if m.starts_with("gemini-2.5-pro") => Some((0.00125, 0.010)),
             m if m.starts_with("gemini-2.5-flash-lite") => Some((0.0001, 0.0004)),
             m if m.starts_with("gemini-2.5-flash") => Some((0.0003, 0.0025)),
-            m if m.starts_with("gemini-2.0-flash-thinking-exp") => Some((0.0, 0.0)),
+            m if m.starts_with("gemini-2.0-flash-thinking-exp") => Some((0.00001, 0.00004)),
             m if m.starts_with("gemini-2.0-flash-lite") => Some((0.000075, 0.0003)),
             m if m.starts_with("gemini-2.0-flash") => Some((0.0001, 0.0004)),
             m if m.starts_with("gemini-1.5-flash") => Some((0.000075, 0.0003)),
@@ -254,6 +254,33 @@ mod tests {
     fn test_get_model_pricing_gemini_20_flash() {
         let pricing = ModelUtils::get_model_pricing("gemini-2.0-flash");
         assert_eq!(pricing, Some((0.0001, 0.0004)));
+    }
+
+    #[test]
+    fn test_get_model_pricing_gemini_20_flash_thinking() {
+        let pricing = ModelUtils::get_model_pricing("gemini-2.0-flash-thinking-exp");
+        assert_eq!(pricing, Some((0.00001, 0.00004)));
+    }
+
+    #[cfg(feature = "providers-extended")]
+    #[test]
+    fn test_get_model_pricing_gemini_20_flash_thinking_matches_registry() {
+        let model_id = "gemini-2.0-flash-thinking-exp";
+        let utility_pricing = ModelUtils::get_model_pricing(model_id);
+        let registry = crate::core::providers::gemini::get_gemini_registry();
+        let registry_pricing = registry.get_model_spec(model_id).map(|spec| {
+            (
+                spec.model_info
+                    .input_cost_per_1k_tokens
+                    .expect("Gemini thinking model should define input pricing"),
+                spec.model_info
+                    .output_cost_per_1k_tokens
+                    .expect("Gemini thinking model should define output pricing"),
+            )
+        });
+
+        assert_eq!(utility_pricing, registry_pricing);
+        assert_eq!(utility_pricing, Some((0.00001, 0.00004)));
     }
 
     #[test]
