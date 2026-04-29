@@ -176,7 +176,11 @@ impl SeaOrmDatabase {
                 .await?
                 .ok_or_else(|| GatewayError::NotFound("Virtual key not found".to_string()))?;
 
-            updated.last_used_at = key.last_used_at.or_else(|| Some(Utc::now()));
+            let incoming_last_used_at = key.last_used_at.unwrap_or_else(Utc::now);
+            updated.last_used_at = Some(match updated.last_used_at {
+                Some(current_last_used_at) => current_last_used_at.max(incoming_last_used_at),
+                None => incoming_last_used_at,
+            });
             updated.usage_count = updated.usage_count.saturating_add(1);
 
             if self
@@ -348,13 +352,24 @@ mod tests {
         stale_used_key.last_used_at = Some(Utc::now());
         stale_used_key.usage_count = 1;
         db.update_virtual_key_usage(&stale_used_key).await.unwrap();
+        let newer_last_used_at =
+            stale_used_key.last_used_at.unwrap() + chrono::Duration::seconds(5);
+        let older_last_used_at =
+            stale_used_key.last_used_at.unwrap() - chrono::Duration::seconds(5);
+        let mut newer_used_key = stale_used_key.clone();
+        newer_used_key.last_used_at = Some(newer_last_used_at);
+        db.update_virtual_key_usage(&newer_used_key).await.unwrap();
+        let mut older_used_key = stale_used_key.clone();
+        older_used_key.last_used_at = Some(older_last_used_at);
+        db.update_virtual_key_usage(&older_used_key).await.unwrap();
         let usage_updated = db
             .get_virtual_key_by_id(&key.key_id)
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(usage_updated.usage_count, 1);
+        assert_eq!(usage_updated.usage_count, 3);
         assert_eq!(usage_updated.spend, 12.5);
+        assert_eq!(usage_updated.last_used_at, Some(newer_last_used_at));
 
         let expired = db.get_keys_with_expired_budgets().await.unwrap();
         assert_eq!(expired.len(), 1);
