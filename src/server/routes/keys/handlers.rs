@@ -7,7 +7,7 @@ use super::types::{
 };
 use crate::auth::{AuthMethod, AuthResult};
 use crate::core::keys::KeyManager;
-use crate::core::keys::{CreateKeyConfig, KeyStatus, UpdateKeyConfig};
+use crate::core::keys::{CreateKeyConfig, KeyInfo, KeyStatus, UpdateKeyConfig};
 use crate::core::models::user::types::{User, UserRole};
 use crate::core::types::context::RequestContext;
 use crate::server::middleware::extract_auth_method_with_api_key_header;
@@ -208,6 +208,21 @@ fn validate_update_key_permissions(
     Err("Only admin can update API keys with management permissions")
 }
 
+fn filter_and_paginate_keys(
+    keys: Vec<KeyInfo>,
+    status: Option<KeyStatus>,
+    limit: usize,
+    offset: usize,
+) -> (Vec<KeyInfo>, u64) {
+    let filtered: Vec<KeyInfo> = keys
+        .into_iter()
+        .filter(|key| status.map(|s| key.status == s).unwrap_or(true))
+        .collect();
+    let total = filtered.len() as u64;
+    let page = filtered.into_iter().skip(offset).take(limit).collect();
+    (page, total)
+}
+
 /// POST /v1/keys - Create a new API key
 pub async fn create_key(
     req: HttpRequest,
@@ -375,22 +390,32 @@ pub async fn list_keys(
     let offset = ((query.page.saturating_sub(1)) * query.limit) as usize;
     let limit = query.limit as usize;
 
-    // Get keys based on filters
-    let keys = if let Some(user_id) = query.user_id {
-        key_manager.list_user_keys(user_id).await
-    } else if let Some(team_id) = query.team_id {
-        key_manager.list_team_keys(team_id).await
-    } else {
+    // Get keys based on filters.
+    let keys_with_total = if let Some(user_id) = query.user_id {
         key_manager
+            .list_user_keys(user_id)
+            .await
+            .map(|keys| filter_and_paginate_keys(keys, query.status, limit, offset))
+    } else if let Some(team_id) = query.team_id {
+        key_manager
+            .list_team_keys(team_id)
+            .await
+            .map(|keys| filter_and_paginate_keys(keys, query.status, limit, offset))
+    } else {
+        match key_manager
             .list_keys(query.status, Some(limit), Some(offset))
             .await
+        {
+            Ok(keys) => key_manager
+                .count_keys(query.status)
+                .await
+                .map(|total| (keys, total)),
+            Err(e) => Err(e),
+        }
     };
 
-    match keys {
-        Ok(keys) => {
-            // Get total count for pagination
-            let total = key_manager.count_keys(query.status).await.unwrap_or(0);
-
+    match keys_with_total {
+        Ok((keys, total)) => {
             let response = ListKeysResponse {
                 keys,
                 pagination: PaginationInfo::new(total, query.page, query.limit),
@@ -863,7 +888,8 @@ fn get_key_manager(state: &web::Data<AppState>) -> KeyManager {
 #[cfg(test)]
 mod handler_tests {
     use super::*;
-    use crate::core::keys::KeyPermissions;
+    use crate::core::keys::{KeyPermissions, KeyRateLimits, KeyUsageStats};
+    use chrono::Utc;
 
     #[test]
     fn test_create_key_config_from_request() {
@@ -966,6 +992,24 @@ mod handler_tests {
             budget_id: None,
             expires_at: None,
             metadata: None,
+        }
+    }
+
+    fn make_key_info(id: Uuid, status: KeyStatus) -> KeyInfo {
+        KeyInfo {
+            id,
+            key_prefix: "gw-test".to_string(),
+            name: format!("key-{id}"),
+            description: None,
+            user_id: None,
+            team_id: None,
+            status,
+            permissions: KeyPermissions::default(),
+            rate_limits: KeyRateLimits::default(),
+            expires_at: None,
+            created_at: Utc::now(),
+            last_used_at: None,
+            usage_stats: KeyUsageStats::default(),
         }
     }
 
@@ -1223,5 +1267,43 @@ mod handler_tests {
         let request = update_request_with_permissions(Some(permissions));
 
         assert!(validate_update_key_permissions(Some(&auth), &request).is_ok());
+    }
+
+    #[test]
+    fn test_filter_and_paginate_keys_reports_filtered_total() {
+        let first_active = Uuid::new_v4();
+        let revoked = Uuid::new_v4();
+        let second_active = Uuid::new_v4();
+        let keys = vec![
+            make_key_info(first_active, KeyStatus::Active),
+            make_key_info(revoked, KeyStatus::Revoked),
+            make_key_info(second_active, KeyStatus::Active),
+        ];
+
+        let (page, total) = filter_and_paginate_keys(keys, Some(KeyStatus::Active), 1, 1);
+
+        assert_eq!(total, 2);
+        assert_eq!(page.len(), 1);
+        assert_eq!(page[0].id, second_active);
+    }
+
+    #[test]
+    fn test_filter_and_paginate_keys_applies_limit_without_status_filter() {
+        let first = Uuid::new_v4();
+        let second = Uuid::new_v4();
+        let third = Uuid::new_v4();
+        let keys = vec![
+            make_key_info(first, KeyStatus::Active),
+            make_key_info(second, KeyStatus::Revoked),
+            make_key_info(third, KeyStatus::Active),
+        ];
+
+        let (page, total) = filter_and_paginate_keys(keys, None, 2, 1);
+
+        assert_eq!(total, 3);
+        assert_eq!(
+            page.iter().map(|key| key.id).collect::<Vec<_>>(),
+            vec![second, third]
+        );
     }
 }
