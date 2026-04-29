@@ -24,7 +24,7 @@ use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 
 use super::context::get_request_context;
-use super::execution::execute_with_selected_deployment;
+use super::execution::{execute_stream_with_selected_deployment, execute_with_selected_deployment};
 use super::openai_errors;
 use super::provider_selection::select_provider_for_model;
 
@@ -100,8 +100,8 @@ async fn handle_streaming_chat_completion(
 
     let requested_model = core_request.model.clone();
     let context_for_execution = context.clone();
-    match execute_with_selected_deployment(
-        unified_router,
+    match execute_stream_with_selected_deployment(
+        state.unified_router.clone(),
         &requested_model,
         move |provider, selected_model| {
             let core_request = core_request.clone();
@@ -109,16 +109,15 @@ async fn handle_streaming_chat_completion(
             async move {
                 let mut request_for_provider = core_request.clone();
                 request_for_provider.model = selected_model;
-                let stream = provider
+                provider
                     .chat_completion_stream(request_for_provider, context)
-                    .await?;
-                Ok((stream, 0))
+                    .await
             }
         },
     )
     .await
     {
-        Ok(mut stream) => {
+        Ok((mut stream, lease)) => {
             // Use a channel so that when the client disconnects and actix-web
             // drops the response stream, the receiver is dropped, which causes
             // the sender to fail. This breaks the upstream read loop and drops
@@ -128,6 +127,9 @@ async fn handle_streaming_chat_completion(
             let idle_timeout_secs = state.config.load().gateway.server.stream_idle_timeout;
 
             tokio::spawn(async move {
+                let mut lease = Some(lease);
+                let mut tokens_used = 0_u64;
+
                 loop {
                     let chunk_result = if idle_timeout_secs == 0 {
                         stream.next().await
@@ -151,7 +153,14 @@ async fn handle_streaming_chat_completion(
                                 if tx.send(error_bytes).await.is_err() {
                                     info!("Client disconnected before timeout error could be sent");
                                 }
-                                break;
+                                if let Some(lease) = lease.take() {
+                                    let error = ProviderError::timeout(
+                                        "router",
+                                        format!("stream idle timeout after {}s", idle_timeout_secs),
+                                    );
+                                    lease.finish_failure(&error);
+                                }
+                                return;
                             }
                         }
                     };
@@ -162,6 +171,9 @@ async fn handle_streaming_chat_completion(
 
                     let bytes = match chunk_result {
                         Ok(chunk) => {
+                            if let Some(usage) = &chunk.usage {
+                                tokens_used = u64::from(usage.total_tokens);
+                            }
                             let chat_chunk = convert_core_chunk_to_streaming(chunk);
                             match serde_json::to_string(&chat_chunk) {
                                 Ok(json) => {
@@ -181,7 +193,14 @@ async fn handle_streaming_chat_completion(
                                             "Client disconnected before error event could be sent"
                                         );
                                     }
-                                    break;
+                                    if let Some(lease) = lease.take() {
+                                        let error = ProviderError::serialization(
+                                            "router",
+                                            format!("Serialization error: {}", e),
+                                        );
+                                        lease.finish_failure(&error);
+                                    }
+                                    return;
                                 }
                             }
                         }
@@ -193,7 +212,10 @@ async fn handle_streaming_chat_completion(
                             if tx.send(error_bytes).await.is_err() {
                                 info!("Client disconnected before error event could be sent");
                             }
-                            break;
+                            if let Some(lease) = lease.take() {
+                                lease.finish_failure(&e);
+                            }
+                            return;
                         }
                     };
 
@@ -202,7 +224,7 @@ async fn handle_streaming_chat_completion(
                     // stream to cancel the upstream request.
                     if tx.send(bytes).await.is_err() {
                         info!("Client disconnected during streaming, cancelling upstream");
-                        break;
+                        return;
                     }
                 }
 
@@ -210,6 +232,9 @@ async fn handle_streaming_chat_completion(
                 let done_event = Event::default().data("[DONE]");
                 if tx.send(done_event.to_bytes()).await.is_err() {
                     info!("Client disconnected before [DONE] event could be sent");
+                }
+                if let Some(lease) = lease.take() {
+                    lease.finish_success(tokens_used);
                 }
                 // `stream` (the provider stream) is dropped here, cancelling
                 // any remaining upstream work.
