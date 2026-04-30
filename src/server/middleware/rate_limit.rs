@@ -1,15 +1,14 @@
 //! Rate limiting middleware
 
 use crate::core::rate_limiter::get_global_rate_limiter;
+use crate::core::types::context::RequestContext;
 use crate::server::state::AppState;
 use actix_web::dev::{Service, ServiceRequest, ServiceResponse, Transform, forward_ready};
 use actix_web::http::StatusCode;
-use actix_web::http::header::HeaderName;
 use actix_web::web;
-use actix_web::{HttpResponse, ResponseError};
+use actix_web::{HttpMessage, HttpResponse, ResponseError};
 use dashmap::DashMap;
 use futures::future::{Ready, ready};
-use sha2::{Digest, Sha256};
 use std::fmt;
 use std::future::Future;
 use std::net::SocketAddr;
@@ -148,24 +147,34 @@ fn parse_peer_ip(peer: &str) -> String {
 /// Extract a client identifier from the request.
 ///
 /// Priority:
-/// 1. Configured API key header value
-/// 2. `Authorization` header value (API key / Bearer token)
-/// 3. `X-Forwarded-For` first address — only when peer IP is in `trusted_proxies`
-/// 4. Direct peer address from connection info
-fn extract_client_key(
-    req: &ServiceRequest,
-    trusted_proxies: &[String],
-    api_key_header: &str,
-) -> String {
-    let auth_token = header_value(req.headers(), api_key_header)
-        .or_else(|| header_value(req.headers(), "Authorization"));
-
-    if let Some(token) = auth_token {
-        // Hash the token so raw secrets never reside in memory as map keys
-        let hash = Sha256::digest(token.as_bytes());
-        return format!("auth:{:x}", hash);
+/// 1. Authenticated API key ID / user ID from `RequestContext`, when present
+/// 2. `X-Forwarded-For` first address — only when peer IP is in `trusted_proxies`
+/// 3. Direct peer address from connection info
+fn extract_client_key(req: &ServiceRequest, trusted_proxies: &[String]) -> String {
+    if let Some(identity) = authenticated_client_key(req) {
+        return identity;
     }
 
+    network_client_key(req, trusted_proxies)
+}
+
+fn authenticated_client_key(req: &ServiceRequest) -> Option<String> {
+    let extensions = req.extensions();
+    let context = extensions.get::<RequestContext>()?;
+
+    if let Some(api_key_id) = context.api_key_id() {
+        return Some(format!("api_key:{}", api_key_id));
+    }
+
+    context
+        .user_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|user_id| !user_id.is_empty())
+        .map(|user_id| format!("user:{}", user_id))
+}
+
+fn network_client_key(req: &ServiceRequest, trusted_proxies: &[String]) -> String {
     let conn = req.connection_info();
     let peer = conn.peer_addr().unwrap_or("unknown");
     let peer_ip = parse_peer_ip(peer);
@@ -176,18 +185,10 @@ fn extract_client_key(
         && let first = val.split(',').next().unwrap_or("").trim()
         && !first.is_empty()
     {
-        return first.to_string();
+        return format!("ip:{}", first);
     }
 
-    peer_ip
-}
-
-fn header_value(headers: &actix_web::http::header::HeaderMap, header_name: &str) -> Option<String> {
-    let header_name = HeaderName::try_from(header_name.trim()).ok()?;
-    headers
-        .get(&header_name)
-        .and_then(|value| value.to_str().ok())
-        .map(str::to_string)
+    format!("ip:{}", peer_ip)
 }
 
 impl<S, B> Service<ServiceRequest> for RateLimitMiddlewareService<S>
@@ -204,22 +205,19 @@ where
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
         let app_state = req.app_data::<web::Data<AppState>>().cloned();
-        let (trusted_proxies, api_key_header): (Vec<String>, String) = match app_state.as_ref() {
+        let trusted_proxies: Vec<String> = match app_state.as_ref() {
             Some(state) => {
                 let cfg = state.config.load();
-                (
-                    cfg.server().trusted_proxies.clone(),
-                    cfg.auth().api_key_header.clone(),
-                )
+                cfg.server().trusted_proxies.clone()
             }
-            None => (Vec::new(), "x-api-key".to_string()),
+            None => Vec::new(),
         };
         let requests_per_minute = self.requests_per_minute;
         let start_time = Instant::now();
         let path = req.path().to_string();
         let method = req.method().to_string();
 
-        let client_key = extract_client_key(&req, &trusted_proxies, &api_key_header);
+        let client_key = extract_client_key(&req, &trusted_proxies);
 
         // --- Try global rate limiter first ---
         if let Some(global_limiter) = get_global_rate_limiter() {
@@ -315,6 +313,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use actix_web::test::TestRequest;
+    use uuid::Uuid;
 
     #[test]
     fn test_parse_peer_ip_ipv4_with_port() {
@@ -352,5 +352,80 @@ mod tests {
     fn test_trusted_proxy_empty_list() {
         let proxies: Vec<String> = vec![];
         assert!(!proxies.iter().any(|p| p == "127.0.0.1"));
+    }
+
+    #[test]
+    fn test_extract_client_key_ignores_rotating_authorization_headers() {
+        let req_a = TestRequest::default()
+            .peer_addr("203.0.113.10:1000".parse().unwrap())
+            .insert_header(("Authorization", "Bearer bogus-a"))
+            .to_srv_request();
+        let req_b = TestRequest::default()
+            .peer_addr("203.0.113.10:1000".parse().unwrap())
+            .insert_header(("Authorization", "Bearer bogus-b"))
+            .to_srv_request();
+
+        let key_a = extract_client_key(&req_a, &[]);
+        let key_b = extract_client_key(&req_b, &[]);
+
+        assert_eq!(key_a, "ip:203.0.113.10");
+        assert_eq!(key_a, key_b);
+    }
+
+    #[test]
+    fn test_extract_client_key_ignores_rotating_api_key_headers() {
+        let req_a = TestRequest::default()
+            .peer_addr("203.0.113.20:1000".parse().unwrap())
+            .insert_header(("x-api-key", "bogus-a"))
+            .to_srv_request();
+        let req_b = TestRequest::default()
+            .peer_addr("203.0.113.20:1000".parse().unwrap())
+            .insert_header(("x-api-key", "bogus-b"))
+            .to_srv_request();
+
+        let key_a = extract_client_key(&req_a, &[]);
+        let key_b = extract_client_key(&req_b, &[]);
+
+        assert_eq!(key_a, "ip:203.0.113.20");
+        assert_eq!(key_a, key_b);
+    }
+
+    #[test]
+    fn test_extract_client_key_uses_trusted_forwarded_ip() {
+        let req = TestRequest::default()
+            .peer_addr("10.0.0.1:1000".parse().unwrap())
+            .insert_header(("X-Forwarded-For", "198.51.100.7, 10.0.0.2"))
+            .to_srv_request();
+
+        let key = extract_client_key(&req, &["10.0.0.1".to_string()]);
+
+        assert_eq!(key, "ip:198.51.100.7");
+    }
+
+    #[test]
+    fn test_extract_client_key_prefers_authenticated_api_key_id() {
+        let api_key_id = Uuid::new_v4();
+        let req = TestRequest::default()
+            .peer_addr("203.0.113.30:1000".parse().unwrap())
+            .to_srv_request();
+        req.extensions_mut()
+            .insert(RequestContext::new().with_api_key(api_key_id));
+
+        let key = extract_client_key(&req, &[]);
+
+        assert_eq!(key, format!("api_key:{}", api_key_id));
+    }
+
+    #[test]
+    fn test_extract_client_key_uses_authenticated_user_id_without_api_key() {
+        let req = TestRequest::default()
+            .peer_addr("203.0.113.40:1000".parse().unwrap())
+            .to_srv_request();
+        req.extensions_mut()
+            .insert(RequestContext::new().with_user_id("user-123"));
+
+        let key = extract_client_key(&req, &[]);
+
+        assert_eq!(key, "user:user-123");
     }
 }
