@@ -113,8 +113,19 @@ impl crate::core::traits::provider::ProviderConfig for VertexAIProviderConfig {
 }
 
 /// Supported Vertex AI models
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VertexAIModel {
+    // Gemini 3.1 models (2026 - latest previews)
+    Gemini31ProPreview, // gemini-3.1-pro-preview
+    Gemini31Flash,      // gemini-3.1-flash
+    Gemini31FlashLite,  // gemini-3.1-flash-lite-preview
+
+    // Gemini 3.0 models (2025-2026)
+    Gemini3Pro,          // gemini-3-pro
+    Gemini3ProDeepThink, // gemini-3-pro-deep-think
+    Gemini3FlashPreview, // gemini-3-flash-preview
+    Gemini3ProImage,     // gemini-3-pro-image-preview
+
     // Gemini 2.5 models (2025 - Latest)
     Gemini25Pro,       // gemini-2.5-pro
     Gemini25Flash,     // gemini-2.5-flash
@@ -175,6 +186,17 @@ impl VertexAIModel {
     /// Get the model ID string for API calls
     pub fn model_id(&self) -> String {
         match self {
+            // Gemini 3.1 models
+            Self::Gemini31ProPreview => "gemini-3.1-pro-preview".to_string(),
+            Self::Gemini31Flash => "gemini-3.1-flash".to_string(),
+            Self::Gemini31FlashLite => "gemini-3.1-flash-lite-preview".to_string(),
+
+            // Gemini 3.0 models
+            Self::Gemini3Pro => "gemini-3-pro".to_string(),
+            Self::Gemini3ProDeepThink => "gemini-3-pro-deep-think".to_string(),
+            Self::Gemini3FlashPreview => "gemini-3-flash-preview".to_string(),
+            Self::Gemini3ProImage => "gemini-3-pro-image-preview".to_string(),
+
             // Gemini 2.5 models
             Self::Gemini25Pro => "gemini-2.5-pro".to_string(),
             Self::Gemini25Flash => "gemini-2.5-flash".to_string(),
@@ -235,7 +257,14 @@ impl VertexAIModel {
     pub fn is_gemini(&self) -> bool {
         matches!(
             self,
-            Self::Gemini25Pro
+            Self::Gemini31ProPreview
+                | Self::Gemini31Flash
+                | Self::Gemini31FlashLite
+                | Self::Gemini3Pro
+                | Self::Gemini3ProDeepThink
+                | Self::Gemini3FlashPreview
+                | Self::Gemini3ProImage
+                | Self::Gemini25Pro
                 | Self::Gemini25Flash
                 | Self::Gemini25FlashLite
                 | Self::Gemini20Flash
@@ -285,7 +314,14 @@ impl VertexAIModel {
     pub fn supports_vision(&self) -> bool {
         matches!(
             self,
-            Self::Gemini25Pro
+            Self::Gemini31ProPreview
+                | Self::Gemini31Flash
+                | Self::Gemini31FlashLite
+                | Self::Gemini3Pro
+                | Self::Gemini3ProDeepThink
+                | Self::Gemini3FlashPreview
+                | Self::Gemini3ProImage
+                | Self::Gemini25Pro
                 | Self::Gemini25Flash
                 | Self::Gemini25FlashLite
                 | Self::Gemini20Flash
@@ -347,13 +383,23 @@ impl VertexAIModel {
     pub fn supports_thinking_mode(&self) -> bool {
         matches!(
             self,
-            Self::Gemini25Pro | Self::Gemini25Flash | Self::Gemini20FlashThinking
+            Self::Gemini3ProDeepThink
+                | Self::Gemini25Pro
+                | Self::Gemini25Flash
+                | Self::Gemini20FlashThinking
         )
     }
 
     /// Get maximum context window
     pub fn max_context_tokens(&self) -> usize {
         match self {
+            // Gemini 3.1 models
+            Self::Gemini31ProPreview | Self::Gemini31Flash | Self::Gemini31FlashLite => 1_048_576,
+
+            // Gemini 3.0 models
+            Self::Gemini3Pro | Self::Gemini3ProDeepThink | Self::Gemini3FlashPreview => 1_000_000,
+            Self::Gemini3ProImage => 65_536,
+
             // Gemini 2.5 models - 1M+ context
             Self::Gemini25Pro => 1_048_576,       // 1M tokens
             Self::Gemini25Flash => 1_048_576,     // 1M tokens
@@ -414,6 +460,31 @@ impl VertexAIModel {
 /// Parse model string to VertexAIModel enum
 pub fn parse_vertex_model(model: &str) -> VertexAIModel {
     let model_lower = model.to_lowercase();
+
+    // Gemini 3.1 models (check before Gemini 3.0 as more specific)
+    if model_lower.contains("gemini-3.1-flash-lite") {
+        return VertexAIModel::Gemini31FlashLite;
+    }
+    if model_lower.contains("gemini-3.1-flash") {
+        return VertexAIModel::Gemini31Flash;
+    }
+    if model_lower.contains("gemini-3.1-pro") {
+        return VertexAIModel::Gemini31ProPreview;
+    }
+
+    // Gemini 3.0 models
+    if model_lower.contains("gemini-3") && model_lower.contains("deep-think") {
+        return VertexAIModel::Gemini3ProDeepThink;
+    }
+    if model_lower.contains("gemini-3") && model_lower.contains("image") {
+        return VertexAIModel::Gemini3ProImage;
+    }
+    if model_lower.contains("gemini-3-flash") || model_lower.contains("gemini-3.0-flash") {
+        return VertexAIModel::Gemini3FlashPreview;
+    }
+    if model_lower.contains("gemini-3-pro") || model_lower.contains("gemini-3.0-pro") {
+        return VertexAIModel::Gemini3Pro;
+    }
 
     // Gemini 2.5 models (newest first)
     if model_lower.contains("gemini-2.5-pro") {
@@ -638,6 +709,19 @@ mod tests {
 
     #[test]
     fn test_vertex_ai_model_gemini_ids() {
+        assert_eq!(
+            VertexAIModel::Gemini31ProPreview.model_id(),
+            "gemini-3.1-pro-preview"
+        );
+        assert_eq!(VertexAIModel::Gemini31Flash.model_id(), "gemini-3.1-flash");
+        assert_eq!(
+            VertexAIModel::Gemini31FlashLite.model_id(),
+            "gemini-3.1-flash-lite-preview"
+        );
+        assert_eq!(
+            VertexAIModel::Gemini3FlashPreview.model_id(),
+            "gemini-3-flash-preview"
+        );
         assert_eq!(VertexAIModel::Gemini25Pro.model_id(), "gemini-2.5-pro");
         assert_eq!(VertexAIModel::Gemini25Flash.model_id(), "gemini-2.5-flash");
         assert_eq!(VertexAIModel::Gemini20Flash.model_id(), "gemini-2.0-flash");
@@ -717,6 +801,8 @@ mod tests {
 
     #[test]
     fn test_vertex_ai_model_is_gemini() {
+        assert!(VertexAIModel::Gemini31ProPreview.is_gemini());
+        assert!(VertexAIModel::Gemini3FlashPreview.is_gemini());
         assert!(VertexAIModel::Gemini25Pro.is_gemini());
         assert!(VertexAIModel::Gemini20Flash.is_gemini());
         assert!(VertexAIModel::GeminiPro.is_gemini());
@@ -748,6 +834,8 @@ mod tests {
 
     #[test]
     fn test_vertex_ai_model_supports_vision() {
+        assert!(VertexAIModel::Gemini31ProPreview.supports_vision());
+        assert!(VertexAIModel::Gemini3FlashPreview.supports_vision());
         assert!(VertexAIModel::Gemini25Pro.supports_vision());
         assert!(VertexAIModel::Gemini20Flash.supports_vision());
         assert!(VertexAIModel::GeminiPro.supports_vision());
@@ -792,6 +880,7 @@ mod tests {
 
     #[test]
     fn test_vertex_ai_model_supports_thinking_mode() {
+        assert!(VertexAIModel::Gemini3ProDeepThink.supports_thinking_mode());
         assert!(VertexAIModel::Gemini25Pro.supports_thinking_mode());
         assert!(VertexAIModel::Gemini25Flash.supports_thinking_mode());
         assert!(VertexAIModel::Gemini20FlashThinking.supports_thinking_mode());
@@ -802,6 +891,17 @@ mod tests {
 
     #[test]
     fn test_vertex_ai_model_max_context_tokens() {
+        // Gemini 3
+        assert_eq!(
+            VertexAIModel::Gemini31ProPreview.max_context_tokens(),
+            1_048_576
+        );
+        assert_eq!(
+            VertexAIModel::Gemini3FlashPreview.max_context_tokens(),
+            1_000_000
+        );
+        assert_eq!(VertexAIModel::Gemini3ProImage.max_context_tokens(), 65_536);
+
         // Gemini 2.5
         assert_eq!(VertexAIModel::Gemini25Pro.max_context_tokens(), 1_048_576);
 
@@ -829,6 +929,35 @@ mod tests {
     }
 
     // ==================== parse_vertex_model Tests ====================
+
+    #[test]
+    fn test_parse_vertex_model_gemini_3() {
+        assert!(matches!(
+            parse_vertex_model("gemini-3.1-pro-preview"),
+            VertexAIModel::Gemini31ProPreview
+        ));
+        assert!(matches!(
+            parse_vertex_model("gemini-3.1-flash"),
+            VertexAIModel::Gemini31Flash
+        ));
+        assert!(matches!(
+            parse_vertex_model("gemini-3.1-flash-lite-preview"),
+            VertexAIModel::Gemini31FlashLite
+        ));
+        assert!(matches!(
+            parse_vertex_model("gemini-3-flash-preview"),
+            VertexAIModel::Gemini3FlashPreview
+        ));
+        assert!(matches!(
+            parse_vertex_model("gemini-3-pro-deep-think"),
+            VertexAIModel::Gemini3ProDeepThink
+        ));
+        assert!(matches!(
+            parse_vertex_model("gemini-3-pro-image-preview"),
+            VertexAIModel::Gemini3ProImage
+        ));
+        assert!(parse_vertex_model("gemini-3.1-pro-preview").is_gemini());
+    }
 
     #[test]
     fn test_parse_vertex_model_gemini_25() {
