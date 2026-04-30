@@ -39,6 +39,19 @@ async fn parse_json_response<T: DeserializeOwned>(response: reqwest::Response) -
 }
 
 impl LLMClient {
+    fn resolve_chat_request_model<'a>(
+        &self,
+        request: &'a SdkChatRequest,
+        provider: &'a crate::sdk::config::SdkProviderConfig,
+        fallback: &'a str,
+    ) -> &'a str {
+        if request.model.is_empty() {
+            self.provider_default_model(provider, fallback)
+        } else {
+            request.model.as_str()
+        }
+    }
+
     /// Send chat message (using load balancing)
     pub async fn chat(&self, messages: Vec<Message>) -> Result<ChatResponse> {
         let request = SdkChatRequest {
@@ -405,7 +418,7 @@ impl LLMClient {
         provider: &crate::sdk::config::SdkProviderConfig,
         request: SdkChatRequest,
     ) -> Result<ChatResponse> {
-        let model = self.provider_default_model(provider, "claude-sonnet-4-6");
+        let model = self.resolve_chat_request_model(&request, provider, "claude-sonnet-4-6");
         let body = build_anthropic_request_body(&request, model)?;
         let url = self.anthropic_messages_endpoint(provider);
 
@@ -436,7 +449,7 @@ impl LLMClient {
         provider: &crate::sdk::config::SdkProviderConfig,
         request: SdkChatRequest,
     ) -> Result<ChatResponse> {
-        let model = self.provider_default_model(provider, "gpt-5.4");
+        let model = self.resolve_chat_request_model(&request, provider, "gpt-5.4");
         let body = build_openai_request_body(&request, model);
         let url = self.provider_endpoint(provider, "https://api.openai.com", "v1/chat/completions");
 
@@ -639,5 +652,86 @@ pub(crate) fn parse_anthropic_sse_record(
             }
         }
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::sdk::config::{ClientConfig, ProviderType, SdkProviderConfig};
+    use std::collections::HashMap;
+
+    fn provider(provider_type: ProviderType, models: &[&str]) -> SdkProviderConfig {
+        SdkProviderConfig {
+            id: "test-provider".to_string(),
+            provider_type,
+            name: "Test Provider".to_string(),
+            api_key: "test-key".to_string(),
+            base_url: None,
+            models: models.iter().map(|model| model.to_string()).collect(),
+            enabled: true,
+            weight: 1.0,
+            rate_limit_rpm: None,
+            rate_limit_tpm: None,
+            settings: HashMap::new(),
+        }
+    }
+
+    fn chat_request(model: &str) -> SdkChatRequest {
+        SdkChatRequest {
+            model: model.to_string(),
+            messages: vec![Message {
+                role: Role::User,
+                content: Some(Content::Text("hello".to_string())),
+                name: None,
+                tool_calls: None,
+            }],
+            options: ChatOptions::default(),
+        }
+    }
+
+    fn client(provider: SdkProviderConfig) -> LLMClient {
+        LLMClient::new(ClientConfig {
+            providers: vec![provider],
+            ..Default::default()
+        })
+        .unwrap()
+    }
+
+    #[test]
+    fn test_openai_request_body_preserves_explicit_model() {
+        let provider = provider(ProviderType::OpenAI, &["gpt-5.4", "gpt-5.4-mini"]);
+        let client = client(provider.clone());
+        let request = chat_request("gpt-5.4-mini");
+        let model = client.resolve_chat_request_model(&request, &provider, "gpt-5.4");
+        let body = build_openai_request_body(&request, model);
+
+        assert_eq!(body["model"], "gpt-5.4-mini");
+    }
+
+    #[test]
+    fn test_anthropic_request_body_preserves_explicit_model() {
+        let provider = provider(
+            ProviderType::Anthropic,
+            &["claude-opus-4-7", "claude-sonnet-4-6"],
+        );
+        let client = client(provider.clone());
+        let request = chat_request("claude-sonnet-4-6");
+        let model = client.resolve_chat_request_model(&request, &provider, "claude-sonnet-4-6");
+        let body = build_anthropic_request_body(&request, model).unwrap();
+
+        assert_eq!(body["model"], "claude-sonnet-4-6");
+    }
+
+    #[test]
+    fn test_chat_request_model_falls_back_to_provider_default() {
+        let provider = provider(ProviderType::OpenAI, &["gpt-5.4", "gpt-5.4-mini"]);
+        let client = client(provider.clone());
+        let request = chat_request("");
+
+        assert_eq!(
+            client.resolve_chat_request_model(&request, &provider, "gpt-5.4"),
+            "gpt-5.4"
+        );
     }
 }
