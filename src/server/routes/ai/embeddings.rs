@@ -14,6 +14,40 @@ use super::context::handle_ai_request;
 use super::execution::execute_with_selected_deployment;
 use super::provider_selection::select_provider_for_model;
 
+fn parse_embedding_input(input: &serde_json::Value) -> Result<EmbeddingInput, GatewayError> {
+    match input {
+        serde_json::Value::String(s) => Ok(EmbeddingInput::Text(s.clone())),
+        serde_json::Value::Array(arr) => {
+            let mut texts = Vec::with_capacity(arr.len());
+            for (index, value) in arr.iter().enumerate() {
+                let Some(text) = value.as_str() else {
+                    return Err(GatewayError::validation(format!(
+                        "Invalid input: array element at index {} must be a string, got {}",
+                        index,
+                        json_value_type(value)
+                    )));
+                };
+                texts.push(text.to_string());
+            }
+            Ok(EmbeddingInput::Array(texts))
+        }
+        _ => Err(GatewayError::validation(
+            "Invalid input: expected string or array of strings",
+        )),
+    }
+}
+
+fn json_value_type(value: &serde_json::Value) -> &'static str {
+    match value {
+        serde_json::Value::Null => "null",
+        serde_json::Value::Bool(_) => "boolean",
+        serde_json::Value::Number(_) => "number",
+        serde_json::Value::String(_) => "string",
+        serde_json::Value::Array(_) => "array",
+        serde_json::Value::Object(_) => "object",
+    }
+}
+
 /// Embeddings endpoint
 ///
 /// OpenAI-compatible embeddings API for generating text embeddings.
@@ -48,22 +82,8 @@ async fn handle_embedding_internal(
     request: EmbeddingRequest,
     context: RequestContext,
 ) -> Result<EmbeddingResponse, GatewayError> {
-    // Convert OpenAI format request to core format
-    let input = match &request.input {
-        serde_json::Value::String(s) => EmbeddingInput::Text(s.clone()),
-        serde_json::Value::Array(arr) => {
-            let texts: Vec<String> = arr
-                .iter()
-                .filter_map(|v| v.as_str().map(String::from))
-                .collect();
-            EmbeddingInput::Array(texts)
-        }
-        _ => {
-            return Err(GatewayError::validation(
-                "Invalid input: expected string or array of strings",
-            ));
-        }
-    };
+    // Convert OpenAI format request to core format.
+    let input = parse_embedding_input(&request.input)?;
 
     // Keep provider selection for capability validation before execution.
     select_provider_for_model(
@@ -135,4 +155,57 @@ async fn handle_embedding_internal(
     };
 
     Ok(response)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_embedding_input_accepts_string() {
+        let input = parse_embedding_input(&serde_json::json!("hello")).unwrap();
+
+        match input {
+            EmbeddingInput::Text(text) => assert_eq!(text, "hello"),
+            EmbeddingInput::Array(_) => panic!("expected text embedding input"),
+        }
+    }
+
+    #[test]
+    fn parse_embedding_input_preserves_string_array() {
+        let input = parse_embedding_input(&serde_json::json!(["a", "b"])).unwrap();
+
+        match input {
+            EmbeddingInput::Array(texts) => assert_eq!(texts, vec!["a", "b"]),
+            EmbeddingInput::Text(_) => panic!("expected array embedding input"),
+        }
+    }
+
+    #[test]
+    fn parse_embedding_input_rejects_non_string_array_item() {
+        let error = parse_embedding_input(&serde_json::json!(["a", 123])).unwrap_err();
+
+        match error {
+            GatewayError::Validation(message) => {
+                assert!(message.contains("index 1"));
+                assert!(message.contains("number"));
+            }
+            other => panic!("expected validation error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_embedding_input_rejects_object() {
+        let error = parse_embedding_input(&serde_json::json!({ "text": "hello" })).unwrap_err();
+
+        match error {
+            GatewayError::Validation(message) => {
+                assert_eq!(
+                    message,
+                    "Invalid input: expected string or array of strings"
+                );
+            }
+            other => panic!("expected validation error, got {other:?}"),
+        }
+    }
 }
