@@ -3,7 +3,7 @@
 //! This module provides the HttpServer struct and its core methods.
 
 use crate::config::Config;
-use crate::config::models::server::ServerConfig;
+use crate::config::models::server::{CorsConfig, ServerConfig};
 use crate::core::rate_limiter::{get_global_rate_limiter, init_global_rate_limiter};
 use crate::server::middleware::{
     AuthMiddleware, RateLimitMiddleware, RequestIdMiddleware, SecurityHeadersMiddleware,
@@ -33,6 +33,8 @@ impl HttpServer {
     /// Create a new HTTP server
     pub async fn new(config: &Config) -> Result<Self> {
         info!("Creating HTTP server");
+
+        Self::validate_cors_config(&config.gateway.server.cors)?;
 
         let storage = crate::storage::StorageLayer::new(&config.gateway.storage).await?;
         let auth =
@@ -107,44 +109,8 @@ impl HttpServer {
         let cors_config = &cfg.gateway.server.cors;
         let rate_limit_enabled = cfg.gateway.rate_limit.enabled;
         let rate_limit_rpm = cfg.gateway.rate_limit.default_rpm;
-        let mut cors = Cors::default();
-
-        if cors_config.enabled {
-            if cors_config.allows_all_origins() {
-                cors = cors.allow_any_origin();
-                cors_config.validate().unwrap_or_else(|e| {
-                    warn!(error = %e, "CORS Configuration Warning");
-                });
-            } else {
-                for origin in &cors_config.allowed_origins {
-                    cors = cors.allowed_origin(origin);
-                }
-            }
-
-            let methods: Vec<actix_web::http::Method> = cors_config
-                .allowed_methods
-                .iter()
-                .filter_map(|m| m.parse().ok())
-                .collect();
-            if !methods.is_empty() {
-                cors = cors.allowed_methods(methods);
-            }
-
-            let headers: Vec<actix_web::http::header::HeaderName> = cors_config
-                .allowed_headers
-                .iter()
-                .filter_map(|h| h.parse().ok())
-                .collect();
-            if !headers.is_empty() {
-                cors = cors.allowed_headers(headers);
-            }
-
-            cors = cors.max_age(cors_config.max_age as usize);
-
-            if cors_config.allow_credentials {
-                cors = cors.supports_credentials();
-            }
-        }
+        let cors =
+            Self::build_cors(cors_config).expect("invalid CORS configuration reached app factory");
 
         let budget_limits = web::Data::new(Arc::clone(&state.budget_limits));
 
@@ -168,6 +134,55 @@ impl HttpServer {
             .configure(routes::budget::configure_budget_routes)
             .configure(routes::ai::configure_routes)
             .configure(routes::pricing::configure_pricing_routes)
+    }
+
+    fn validate_cors_config(cors_config: &CorsConfig) -> Result<()> {
+        cors_config
+            .validate()
+            .map_err(|e| GatewayError::Config(format!("Invalid CORS configuration: {}", e)))
+    }
+
+    fn build_cors(cors_config: &CorsConfig) -> Result<Cors> {
+        Self::validate_cors_config(cors_config)?;
+
+        let mut cors = Cors::default();
+        if !cors_config.enabled {
+            return Ok(cors);
+        }
+
+        if cors_config.allows_all_origins() {
+            cors = cors.allow_any_origin();
+        } else {
+            for origin in &cors_config.allowed_origins {
+                cors = cors.allowed_origin(origin);
+            }
+        }
+
+        let methods: Vec<actix_web::http::Method> = cors_config
+            .allowed_methods
+            .iter()
+            .filter_map(|m| m.parse().ok())
+            .collect();
+        if !methods.is_empty() {
+            cors = cors.allowed_methods(methods);
+        }
+
+        let headers: Vec<actix_web::http::header::HeaderName> = cors_config
+            .allowed_headers
+            .iter()
+            .filter_map(|h| h.parse().ok())
+            .collect();
+        if !headers.is_empty() {
+            cors = cors.allowed_headers(headers);
+        }
+
+        cors = cors.max_age(cors_config.max_age as usize);
+
+        if cors_config.allow_credentials {
+            cors = cors.supports_credentials();
+        }
+
+        Ok(cors)
     }
 
     /// Start the HTTP server
@@ -202,5 +217,53 @@ impl HttpServer {
     /// Get application state
     pub fn state(&self) -> &AppState {
         &self.state
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Config;
+
+    #[test]
+    fn build_cors_rejects_wildcard_with_credentials() {
+        let cors_config = CorsConfig {
+            allowed_origins: vec!["*".to_string()],
+            allow_credentials: true,
+            ..Default::default()
+        };
+
+        let error = match HttpServer::build_cors(&cors_config) {
+            Ok(_) => panic!("invalid CORS configuration should be rejected"),
+            Err(error) => error,
+        };
+
+        match error {
+            GatewayError::Config(message) => {
+                assert!(message.contains("Invalid CORS configuration"));
+                assert!(message.contains("credentials"));
+            }
+            other => panic!("expected config error, got: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn new_rejects_invalid_cors_config_before_startup() {
+        let mut config = Config::default();
+        config.gateway.server.cors.allowed_origins = vec!["*".to_string()];
+        config.gateway.server.cors.allow_credentials = true;
+
+        let error = match HttpServer::new(&config).await {
+            Ok(_) => panic!("server startup should reject invalid CORS configuration"),
+            Err(error) => error,
+        };
+
+        match error {
+            GatewayError::Config(message) => {
+                assert!(message.contains("Invalid CORS configuration"));
+                assert!(message.contains("credentials"));
+            }
+            other => panic!("expected config error, got: {other:?}"),
+        }
     }
 }
