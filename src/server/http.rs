@@ -121,11 +121,14 @@ impl HttpServer {
             .wrap(Logger::default())
             .wrap(DefaultHeaders::new().add(("Server", "LiteLLM-RS")))
             .wrap(SecurityHeadersMiddleware)
-            .wrap(AuthMiddleware)
+            // Actix executes wraps in reverse registration order. Register the
+            // limiter before auth so successful auth context is available when
+            // rate-limit keys are chosen.
             .wrap(Condition::new(
                 rate_limit_enabled,
                 RateLimitMiddleware::new(rate_limit_rpm),
             ))
+            .wrap(AuthMiddleware)
             .wrap(RequestIdMiddleware)
             .configure(routes::health::configure_routes)
             .configure(routes::auth::configure_routes)
