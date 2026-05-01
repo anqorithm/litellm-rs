@@ -6,10 +6,11 @@
 use super::config::RoutingStrategy;
 use super::deployment::{Deployment, DeploymentId};
 use super::error::RouterError;
-use super::strategy_impl;
+use super::strategy_impl::{self, RoutingContext};
 use super::unified::Router;
 use crate::core::types::model::ProviderCapability;
-use std::sync::atomic::Ordering::Relaxed;
+use dashmap::DashMap;
+use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
 
 impl Router {
     /// Select the best deployment for a given model (core routing method)
@@ -42,6 +43,41 @@ impl Router {
                 .iter()
                 .any(|cap| cap == capability)
         })
+    }
+
+    /// Select a deployment ID from pre-built routing contexts.
+    ///
+    /// This is the shared routing-policy entry point used by the full
+    /// `UnifiedRouter` and lightweight adapters such as the SDK client.
+    pub fn select_from_routing_contexts<'id>(
+        strategy: RoutingStrategy,
+        model_name: &str,
+        routing_contexts: &[RoutingContext<'id>],
+        round_robin_counters: &DashMap<String, AtomicUsize>,
+    ) -> Option<&'id DeploymentId> {
+        match strategy {
+            RoutingStrategy::SimpleShuffle => {
+                strategy_impl::weighted_random_from_context(routing_contexts)
+            }
+            RoutingStrategy::LeastBusy => strategy_impl::least_busy_from_context(routing_contexts),
+            RoutingStrategy::UsageBased => {
+                strategy_impl::lowest_usage_from_context(routing_contexts)
+            }
+            RoutingStrategy::LatencyBased => {
+                strategy_impl::lowest_latency_from_context(routing_contexts)
+            }
+            RoutingStrategy::PriorityBased => {
+                strategy_impl::lowest_priority_from_context(routing_contexts)
+            }
+            RoutingStrategy::RateLimitAware => {
+                strategy_impl::rate_limit_aware_from_context(routing_contexts)
+            }
+            RoutingStrategy::RoundRobin => strategy_impl::round_robin_from_context(
+                model_name,
+                routing_contexts,
+                round_robin_counters,
+            ),
+        }
     }
 
     fn select_deployment_matching<F>(
@@ -174,29 +210,12 @@ impl Router {
         }
 
         // 4. Select based on the immutable routing contexts.
-        let selected_id = match self.config.routing_strategy {
-            RoutingStrategy::SimpleShuffle => {
-                strategy_impl::weighted_random_from_context(&routing_contexts)
-            }
-            RoutingStrategy::LeastBusy => strategy_impl::least_busy_from_context(&routing_contexts),
-            RoutingStrategy::UsageBased => {
-                strategy_impl::lowest_usage_from_context(&routing_contexts)
-            }
-            RoutingStrategy::LatencyBased => {
-                strategy_impl::lowest_latency_from_context(&routing_contexts)
-            }
-            RoutingStrategy::PriorityBased => {
-                strategy_impl::lowest_priority_from_context(&routing_contexts)
-            }
-            RoutingStrategy::RateLimitAware => {
-                strategy_impl::rate_limit_aware_from_context(&routing_contexts)
-            }
-            RoutingStrategy::RoundRobin => strategy_impl::round_robin_from_context(
-                resolved_name,
-                &routing_contexts,
-                &self.round_robin_counters,
-            ),
-        }
+        let selected_id = Self::select_from_routing_contexts(
+            self.config.routing_strategy,
+            resolved_name,
+            &routing_contexts,
+            &self.round_robin_counters,
+        )
         .ok_or_else(|| RouterError::NoAvailableDeployment(model_name.to_string()))?
         .clone();
 

@@ -111,15 +111,6 @@ impl LLMClient {
             .filter(|provider| provider.enabled)
     }
 
-    /// Return the first enabled provider in config order.
-    pub(crate) fn first_enabled_provider(&self) -> Result<&SdkProviderConfig> {
-        self.config
-            .providers
-            .iter()
-            .find(|provider| provider.enabled)
-            .ok_or(SDKError::NoDefaultProvider)
-    }
-
     /// Find the first enabled provider that explicitly supports `model`.
     pub(crate) fn provider_for_model(&self, model: &str) -> Result<&SdkProviderConfig> {
         self.config

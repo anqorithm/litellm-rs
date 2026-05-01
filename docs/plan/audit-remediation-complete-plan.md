@@ -640,7 +640,7 @@ Goal: remove parallel systems after correctness/security work is stable.
 
 ### Step E4 C15 team/user convergence
 
-- status: `in_progress`
+- status: `completed`
 - Expected changes:
   - `src/storage/database/migration/m20240301_000001_create_user_management_tables.rs`
   - `src/storage/database/migration/m20240301_000002_create_teams_table.rs`
@@ -659,7 +659,7 @@ Goal: remove parallel systems after correctness/security work is stable.
 - Completion judgment:
   - A team/user created by any API is visible through the canonical repository.
 - Owner decision:
-  - Confirm no deployment depends on raw SQL against `um_*` names before drop migration.
+  - Drop migration remains intentionally deferred until the owner confirms no deployment depends on raw SQL against `um_*` names.
 
 ### Step E5 C16 AuthConfig default consistency
 
@@ -715,7 +715,7 @@ Goal: remove parallel systems after correctness/security work is stable.
 
 ### Step E8 H14 SDK delegates to UnifiedRouter
 
-- status: `pending`
+- status: `completed`
 - Expected changes:
   - `src/sdk/client/routing.rs`
   - SDK client tests
@@ -924,6 +924,29 @@ No parallel agents are launched by this plan. If the owner chooses to paralleliz
 ## 9. Execution Log
 
 - 2026-05-02
+  - Step E8 SDK router convergence: `completed`
+    - Modified files:
+      - `src/core/router/selection.rs`
+      - `src/sdk/client/llm_client.rs`
+      - `src/sdk/client/routing.rs`
+      - `src/sdk/client/types.rs`
+      - `src/sdk/client/tests.rs`
+    - Main changes:
+      - Exposed `UnifiedRouter::select_from_routing_contexts` as the shared core router selection entry point for pre-built routing snapshots.
+      - Replaced the SDK-specific load-balancing implementation with an adapter that converts SDK provider candidates into core router `RoutingContext` snapshots.
+      - Mapped SDK `WeightedRandom`, `LeastLatency`, `HealthBased`, and `RoundRobin` strategies onto core router strategy functions.
+      - Routed explicit SDK model selection through the same core selection path across all enabled matching providers instead of returning the first matching provider.
+      - Routed stream fallback selection through the shared load-balancer path when no default provider is configured.
+      - Filtered SDK load-balanced candidates by chat/stream capability before core router selection to avoid routing to unsupported providers.
+      - Removed the now-dead first-enabled-provider helper.
+    - Execute tests:
+      - `cargo fmt --all -- --check` -> pass
+      - `cargo test sdk` -> pass (`233` tests)
+      - `cargo test router` -> pass (`365` lib-filtered tests, `6` integration-filtered tests)
+      - `cargo test --all-features sdk` -> pass (`233` tests)
+      - `cargo check --all-features` -> pass
+      - `git diff --check` -> pass
+      - `cargo clippy --lib --tests --bins --all-features -- -D warnings --force-warn clippy::collapsible-if` -> pass (`collapsible_if` remains warning by command design)
   - Step E4 user bridge: `in_progress`
     - Modified files:
       - `src/storage/database/seaorm_db/mod.rs`
