@@ -73,7 +73,9 @@ fn test_model_family() {
 fn test_model_pricing() {
     let pricing = ModelUtils::get_model_pricing("gpt-4");
     assert!(pricing.is_some());
-    assert_eq!(pricing.unwrap(), (0.03, 0.06));
+    let (input, output) = pricing.unwrap();
+    assert!((input - 0.03).abs() < 1e-12);
+    assert!((output - 0.06).abs() < 1e-12);
 
     assert!(ModelUtils::get_model_pricing("unknown-model").is_none());
 }

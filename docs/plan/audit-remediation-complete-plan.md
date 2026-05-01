@@ -927,15 +927,19 @@ No parallel agents are launched by this plan. If the owner chooses to paralleliz
   - Step E3 utility convergence: `in_progress`
     - Modified files:
       - `src/utils/ai/models/pricing.rs`
+      - `src/utils/ai/models/tests.rs`
       - `src/core/cost/calculator.rs`
     - Main changes:
       - Routed `ModelUtils::get_model_pricing` through `core::cost::calculator::get_model_pricing` before using its legacy fallback table.
       - Added provider inference for OpenAI, Anthropic, Gemini/Vertex AI, DeepSeek, Moonshot, MiniMax, and Zhipu/GLM model IDs.
       - Added a regression test proving `gpt-4o-mini` now uses the canonical cost source instead of falling through to the broad `gpt-4` legacy branch.
+      - Updated the higher-level model utility pricing test to use approximate float comparison for shared-source converted rates.
       - Applied `cargo fmt` to fix the PR lint failure from the previous pushed commit.
     - Execute tests:
       - `cargo fmt --all -- --check` -> pass
+      - `cargo test utils::ai::models::tests::test_model_pricing` -> pass (`1` test)
       - `cargo test utils::ai::models::pricing` -> pass (`41` tests)
+      - `cargo test utils::ai::models` -> pass (`112` tests)
       - `cargo clippy --lib --tests --bins --features "postgres sqlite redis s3 metrics tracing websockets analytics" -- -D warnings --force-warn clippy::collapsible-if` -> pass
   - Step E3 continuation: `in_progress`
     - Modified files:
