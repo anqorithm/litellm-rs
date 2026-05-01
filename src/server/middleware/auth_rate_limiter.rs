@@ -149,6 +149,10 @@ impl AuthRateLimiter {
         self.attempts.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.attempts.is_empty()
+    }
+
     pub fn max_entries(&self) -> usize {
         self.max_entries
     }
@@ -263,6 +267,7 @@ mod tests {
         let result = limiter.check_allowed("new_client");
         assert!(result.is_ok());
         assert_eq!(limiter.len(), 0);
+        assert!(limiter.is_empty());
     }
 
     #[test]
