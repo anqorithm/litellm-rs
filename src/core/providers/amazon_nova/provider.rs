@@ -124,7 +124,7 @@ crate::define_pooled_http_provider_with_hooks!(
                 ProviderError::authentication(PROVIDER_NAME, "API key is required")
             })?;
 
-            let client = reqwest::Client::new();
+            let client = crate::core::http::outbound::default_outbound_client().clone();
             let response = client
                 .post(&url)
                 .header("Authorization", format!("Bearer {}", api_key))

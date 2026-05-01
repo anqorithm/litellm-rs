@@ -435,7 +435,7 @@ impl LLMProvider for DatabricksProvider {
                 ProviderError::authentication("databricks", "API key is required")
             })?;
 
-        let client = reqwest::Client::new();
+        let client = crate::core::http::outbound::default_outbound_client().clone();
         let response = client
             .post(&url)
             .header("Authorization", format!("Bearer {}", api_key))
@@ -478,7 +478,7 @@ impl LLMProvider for DatabricksProvider {
                 ProviderError::authentication("databricks", "API key is required")
             })?;
 
-        let client = reqwest::Client::new();
+        let client = crate::core::http::outbound::default_outbound_client().clone();
         let response = client
             .post(&url)
             .header("Authorization", format!("Bearer {}", api_key))

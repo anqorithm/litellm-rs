@@ -22,7 +22,7 @@ impl CohereRerankProvider {
         Self {
             api_key: api_key.into(),
             base_url: "https://api.cohere.ai/v1".to_string(),
-            client: reqwest::Client::new(),
+            client: crate::core::http::outbound::default_outbound_client().clone(),
         }
     }
 

@@ -298,7 +298,7 @@ impl LLMProvider for StabilityProvider {
             .as_ref()
             .ok_or_else(|| ProviderError::authentication("stability", "API key is required"))?;
 
-        let client = reqwest::Client::new();
+        let client = crate::core::http::outbound::default_outbound_client().clone();
         let mut form = reqwest::multipart::Form::new()
             .text("prompt", stability_request.prompt.clone())
             .text(

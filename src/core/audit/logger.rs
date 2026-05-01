@@ -10,7 +10,7 @@ use tracing::{debug, error, info, warn};
 
 use super::config::AuditConfig;
 use super::events::AuditEvent;
-use super::outputs::{BoxedAuditOutput, FileOutput, MemoryOutput, NullOutput};
+use super::outputs::{AuditOutput, BoxedAuditOutput, FileOutput, MemoryOutput, NullOutput};
 use super::types::{AuditResult, LogLevel};
 
 /// The main audit logger
@@ -126,10 +126,31 @@ impl AuditLogger {
             }
         }
 
-        // Final flush on shutdown
+        Self::flush_and_close_outputs(&outputs).await;
+    }
+
+    async fn flush_and_close_outputs(outputs: &[BoxedAuditOutput]) {
         for output in outputs.iter() {
-            let _ = output.flush().await;
-            let _ = output.close().await;
+            Self::log_output_result(
+                output.as_ref(),
+                "flush audit output during shutdown",
+                output.flush().await,
+            );
+            Self::log_output_result(
+                output.as_ref(),
+                "close audit output during shutdown",
+                output.close().await,
+            );
+        }
+    }
+
+    fn log_output_result(
+        output: &dyn AuditOutput,
+        operation: &'static str,
+        result: AuditResult<()>,
+    ) {
+        if let Err(e) = result {
+            error!("Failed to {} '{}': {}", operation, output.name(), e);
         }
     }
 
@@ -165,7 +186,9 @@ impl AuditLogger {
 
         let sender = self.sender.clone();
         tokio::spawn(async move {
-            let _ = sender.send(event).await;
+            if let Err(e) = sender.send(event).await {
+                error!("Failed to send audit event from sync logger: {}", e);
+            }
         });
     }
 
@@ -282,6 +305,8 @@ impl Default for AuditLoggerBuilder {
 mod tests {
     use super::*;
     use crate::core::audit::events::EventType;
+    use crate::core::audit::types::AuditError;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     #[tokio::test]
     async fn test_logger_creation() {
@@ -339,6 +364,79 @@ mod tests {
 
         assert!(redacted.contains("[REDACTED]"));
         assert!(!redacted.contains("sk-abcdefghijklmnopqrstuvwxyz"));
+    }
+
+    #[test]
+    fn test_default_redact_patterns_cover_common_secret_shapes() {
+        let config = AuditConfig::new().enable();
+        let disabled = AuditLogger::disabled();
+        let patterns = config
+            .redact_patterns
+            .iter()
+            .map(|pattern| Regex::new(pattern).unwrap())
+            .collect();
+
+        let logger = AuditLogger {
+            config,
+            sender: disabled.sender,
+            outputs: disabled.outputs,
+            redact_patterns: patterns,
+        };
+
+        let input = concat!(
+            "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.signature ",
+            "aws=AKIAIOSFODNN7EXAMPLE ",
+            "anthropic=sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789 ",
+            "gateway=gw-abcdefghijklmnopqrstuvwxyz0123456789"
+        );
+        let redacted = logger.redact_string(input);
+
+        assert!(!redacted.contains("Bearer eyJ"));
+        assert!(!redacted.contains("AKIAIOSFODNN7EXAMPLE"));
+        assert!(!redacted.contains("sk-ant-api03"));
+        assert!(!redacted.contains("gw-abcdefghijklmnopqrstuvwxyz"));
+        assert!(redacted.matches("[REDACTED]").count() >= 4);
+    }
+
+    struct FailingShutdownOutput {
+        flush_count: Arc<AtomicUsize>,
+        close_count: Arc<AtomicUsize>,
+    }
+
+    #[async_trait::async_trait]
+    impl AuditOutput for FailingShutdownOutput {
+        fn name(&self) -> &str {
+            "failing_shutdown"
+        }
+
+        async fn write(&self, _event: &AuditEvent) -> AuditResult<()> {
+            Ok(())
+        }
+
+        async fn flush(&self) -> AuditResult<()> {
+            self.flush_count.fetch_add(1, Ordering::SeqCst);
+            Err(AuditError::Output("flush failed".to_string()))
+        }
+
+        async fn close(&self) -> AuditResult<()> {
+            self.close_count.fetch_add(1, Ordering::SeqCst);
+            Err(AuditError::Output("close failed".to_string()))
+        }
+    }
+
+    #[tokio::test]
+    async fn test_shutdown_flush_and_close_failures_are_observed() {
+        let flush_count = Arc::new(AtomicUsize::new(0));
+        let close_count = Arc::new(AtomicUsize::new(0));
+        let outputs: Vec<BoxedAuditOutput> = vec![Box::new(FailingShutdownOutput {
+            flush_count: Arc::clone(&flush_count),
+            close_count: Arc::clone(&close_count),
+        })];
+
+        AuditLogger::flush_and_close_outputs(&outputs).await;
+
+        assert_eq!(flush_count.load(Ordering::SeqCst), 1);
+        assert_eq!(close_count.load(Ordering::SeqCst), 1);
     }
 
     #[tokio::test]

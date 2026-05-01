@@ -1,6 +1,7 @@
 //! Qdrant vector store implementation
 
 use crate::config::models::file_storage::VectorDbConfig;
+use crate::core::http::outbound::default_outbound_client;
 use crate::utils::error::gateway_error::{GatewayError, Result};
 use tracing::{debug, info};
 
@@ -18,7 +19,7 @@ pub struct QdrantStore {
 impl QdrantStore {
     /// Create a new Qdrant store
     pub async fn new(config: &VectorDbConfig) -> Result<Self> {
-        let client = reqwest::Client::new();
+        let client = default_outbound_client().clone();
 
         let store = Self {
             url: config.url.clone(),

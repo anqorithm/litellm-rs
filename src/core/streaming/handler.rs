@@ -142,6 +142,7 @@ impl StreamingHandler {
                     },
                     content: Some(content),
                     tool_calls: None,
+                    ..Default::default()
                 },
                 finish_reason: None,
                 logprobs: None,
@@ -215,6 +216,7 @@ impl StreamingHandler {
             total_tokens,
             prompt_tokens_details: None,
             completion_tokens_details: None,
+            thinking_usage: None,
         };
 
         let final_chunk = ChatCompletionChunk {
@@ -229,6 +231,7 @@ impl StreamingHandler {
                     role: None,
                     content: None,
                     tool_calls: None,
+                    ..Default::default()
                 },
                 finish_reason: Some("stop".to_string()),
                 logprobs: None,

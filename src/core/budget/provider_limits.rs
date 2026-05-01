@@ -10,6 +10,7 @@ use super::types::{
 use dashmap::DashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use tokio::sync::mpsc::UnboundedSender;
 use tracing::{debug, info, warn};
 
 /// Configuration for setting a provider budget limit
@@ -82,6 +83,55 @@ impl ModelLimitConfig {
     }
 }
 
+/// Persisted budget scope kind.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum BudgetLimitKind {
+    /// Provider budget snapshot.
+    Provider,
+    /// Model budget snapshot.
+    Model,
+}
+
+impl BudgetLimitKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Provider => "provider",
+            Self::Model => "model",
+        }
+    }
+}
+
+/// Durable snapshot of a provider/model budget limit and current usage.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct BudgetLimitSnapshot {
+    pub kind: BudgetLimitKind,
+    pub name: String,
+    pub max_budget: f64,
+    pub current_spend: f64,
+    pub soft_limit: f64,
+    pub reset_period: ResetPeriod,
+    pub currency: Currency,
+    pub enabled: bool,
+    pub last_reset_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub request_count: u64,
+}
+
+impl BudgetLimitSnapshot {
+    pub fn scope_key(&self) -> String {
+        format!("{}:{}", self.kind.as_str(), self.name)
+    }
+}
+
+/// Persistence events emitted after in-memory budget mutations.
+#[derive(Debug, Clone)]
+pub enum BudgetPersistenceEvent {
+    Upsert(BudgetLimitSnapshot),
+    Delete { kind: BudgetLimitKind, name: String },
+}
+
+pub type BudgetPersistenceSender = UnboundedSender<BudgetPersistenceEvent>;
+
 /// Internal state for tracking request counts
 struct RequestCounter {
     count: AtomicU64,
@@ -107,6 +157,8 @@ pub struct ProviderBudgetManager {
     request_counts: Arc<DashMap<String, RequestCounter>>,
     /// Whether the manager is enabled
     enabled: Arc<std::sync::atomic::AtomicBool>,
+    /// Optional async persistence sink
+    persistence_tx: Option<BudgetPersistenceSender>,
 }
 
 impl Default for ProviderBudgetManager {
@@ -122,6 +174,7 @@ impl ProviderBudgetManager {
             budgets: Arc::new(DashMap::new()),
             request_counts: Arc::new(DashMap::new()),
             enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
+            persistence_tx: None,
         }
     }
 
@@ -131,7 +184,66 @@ impl ProviderBudgetManager {
             budgets: Arc::new(DashMap::with_capacity(capacity)),
             request_counts: Arc::new(DashMap::with_capacity(capacity)),
             enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
+            persistence_tx: None,
         }
+    }
+
+    /// Attach an async persistence sink.
+    pub fn with_persistence(mut self, persistence_tx: BudgetPersistenceSender) -> Self {
+        self.persistence_tx = Some(persistence_tx);
+        self
+    }
+
+    fn send_persistence_event(&self, event: BudgetPersistenceEvent) {
+        if let Some(tx) = &self.persistence_tx
+            && tx.send(event).is_err()
+        {
+            warn!("Provider budget persistence worker is unavailable");
+        }
+    }
+
+    fn snapshot_for(&self, budget: &ProviderBudget) -> BudgetLimitSnapshot {
+        let request_count = self
+            .request_counts
+            .get(&budget.provider_name)
+            .map(|c| c.count.load(Ordering::Relaxed))
+            .unwrap_or(0);
+
+        BudgetLimitSnapshot {
+            kind: BudgetLimitKind::Provider,
+            name: budget.provider_name.clone(),
+            max_budget: budget.max_budget,
+            current_spend: budget.current_spend,
+            soft_limit: budget.soft_limit,
+            reset_period: budget.reset_period,
+            currency: budget.currency,
+            enabled: budget.enabled,
+            last_reset_at: budget.last_reset_at,
+            request_count,
+        }
+    }
+
+    /// Restore a provider budget from durable state without re-emitting persistence events.
+    pub fn restore_snapshot(&self, snapshot: &BudgetLimitSnapshot) {
+        if snapshot.kind != BudgetLimitKind::Provider {
+            return;
+        }
+
+        let mut budget = ProviderBudget::new(&snapshot.name, snapshot.max_budget);
+        budget.current_spend = snapshot.current_spend;
+        budget.soft_limit = snapshot.soft_limit;
+        budget.reset_period = snapshot.reset_period;
+        budget.currency = snapshot.currency;
+        budget.enabled = snapshot.enabled;
+        budget.last_reset_at = snapshot.last_reset_at;
+
+        self.budgets.insert(snapshot.name.clone(), budget);
+        self.request_counts.insert(
+            snapshot.name.clone(),
+            RequestCounter {
+                count: AtomicU64::new(snapshot.request_count),
+            },
+        );
     }
 
     /// Check if the manager is enabled
@@ -157,8 +269,10 @@ impl ProviderBudgetManager {
             provider, config.max_budget, config.reset_period
         );
 
+        let snapshot = self.snapshot_for(&budget);
         self.budgets.insert(provider.to_string(), budget);
         self.request_counts.entry(provider.to_string()).or_default();
+        self.send_persistence_event(BudgetPersistenceEvent::Upsert(snapshot));
     }
 
     /// Remove a provider budget limit
@@ -168,6 +282,10 @@ impl ProviderBudgetManager {
 
         if removed {
             info!("Removed provider budget limit for '{}'", provider);
+            self.send_persistence_event(BudgetPersistenceEvent::Delete {
+                kind: BudgetLimitKind::Provider,
+                name: provider.to_string(),
+            });
         }
 
         removed
@@ -257,6 +375,10 @@ impl ProviderBudgetManager {
                     BudgetStatus::Ok => {}
                 }
             }
+
+            let snapshot = self.snapshot_for(&budget);
+            drop(budget);
+            self.send_persistence_event(BudgetPersistenceEvent::Upsert(snapshot));
 
             new_status
         })
@@ -359,6 +481,9 @@ impl ProviderBudgetManager {
                 counter.count.store(0, Ordering::Relaxed);
             }
 
+            let snapshot = self.snapshot_for(&budget);
+            drop(budget);
+            self.send_persistence_event(BudgetPersistenceEvent::Upsert(snapshot));
             true
         } else {
             false
@@ -384,6 +509,8 @@ impl ProviderBudgetManager {
                     counter.count.store(0, Ordering::Relaxed);
                 }
 
+                let snapshot = self.snapshot_for(entry.value());
+                self.send_persistence_event(BudgetPersistenceEvent::Upsert(snapshot));
                 reset_providers.push(provider);
             }
         }
@@ -406,6 +533,8 @@ pub struct ModelBudgetManager {
     request_counts: Arc<DashMap<String, RequestCounter>>,
     /// Whether the manager is enabled
     enabled: Arc<std::sync::atomic::AtomicBool>,
+    /// Optional async persistence sink
+    persistence_tx: Option<BudgetPersistenceSender>,
 }
 
 impl Default for ModelBudgetManager {
@@ -421,7 +550,66 @@ impl ModelBudgetManager {
             budgets: Arc::new(DashMap::new()),
             request_counts: Arc::new(DashMap::new()),
             enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
+            persistence_tx: None,
         }
+    }
+
+    /// Attach an async persistence sink.
+    pub fn with_persistence(mut self, persistence_tx: BudgetPersistenceSender) -> Self {
+        self.persistence_tx = Some(persistence_tx);
+        self
+    }
+
+    fn send_persistence_event(&self, event: BudgetPersistenceEvent) {
+        if let Some(tx) = &self.persistence_tx
+            && tx.send(event).is_err()
+        {
+            warn!("Model budget persistence worker is unavailable");
+        }
+    }
+
+    fn snapshot_for(&self, budget: &ModelBudget) -> BudgetLimitSnapshot {
+        let request_count = self
+            .request_counts
+            .get(&budget.model_name)
+            .map(|c| c.count.load(Ordering::Relaxed))
+            .unwrap_or(0);
+
+        BudgetLimitSnapshot {
+            kind: BudgetLimitKind::Model,
+            name: budget.model_name.clone(),
+            max_budget: budget.max_budget,
+            current_spend: budget.current_spend,
+            soft_limit: budget.soft_limit,
+            reset_period: budget.reset_period,
+            currency: budget.currency,
+            enabled: budget.enabled,
+            last_reset_at: budget.last_reset_at,
+            request_count,
+        }
+    }
+
+    /// Restore a model budget from durable state without re-emitting persistence events.
+    pub fn restore_snapshot(&self, snapshot: &BudgetLimitSnapshot) {
+        if snapshot.kind != BudgetLimitKind::Model {
+            return;
+        }
+
+        let mut budget = ModelBudget::new(&snapshot.name, snapshot.max_budget);
+        budget.current_spend = snapshot.current_spend;
+        budget.soft_limit = snapshot.soft_limit;
+        budget.reset_period = snapshot.reset_period;
+        budget.currency = snapshot.currency;
+        budget.enabled = snapshot.enabled;
+        budget.last_reset_at = snapshot.last_reset_at;
+
+        self.budgets.insert(snapshot.name.clone(), budget);
+        self.request_counts.insert(
+            snapshot.name.clone(),
+            RequestCounter {
+                count: AtomicU64::new(snapshot.request_count),
+            },
+        );
     }
 
     /// Check if the manager is enabled
@@ -447,8 +635,10 @@ impl ModelBudgetManager {
             model, config.max_budget, config.reset_period
         );
 
+        let snapshot = self.snapshot_for(&budget);
         self.budgets.insert(model.to_string(), budget);
         self.request_counts.entry(model.to_string()).or_default();
+        self.send_persistence_event(BudgetPersistenceEvent::Upsert(snapshot));
     }
 
     /// Remove a model budget limit
@@ -458,6 +648,10 @@ impl ModelBudgetManager {
 
         if removed {
             info!("Removed model budget limit for '{}'", model);
+            self.send_persistence_event(BudgetPersistenceEvent::Delete {
+                kind: BudgetLimitKind::Model,
+                name: model.to_string(),
+            });
         }
 
         removed
@@ -525,6 +719,10 @@ impl ModelBudgetManager {
                     model, budget.current_spend, budget.max_budget
                 );
             }
+
+            let snapshot = self.snapshot_for(&budget);
+            drop(budget);
+            self.send_persistence_event(BudgetPersistenceEvent::Upsert(snapshot));
 
             new_status
         })
@@ -598,6 +796,9 @@ impl ModelBudgetManager {
                 counter.count.store(0, Ordering::Relaxed);
             }
 
+            let snapshot = self.snapshot_for(&budget);
+            drop(budget);
+            self.send_persistence_event(BudgetPersistenceEvent::Upsert(snapshot));
             true
         } else {
             false
@@ -622,6 +823,8 @@ impl ModelBudgetManager {
                     counter.count.store(0, Ordering::Relaxed);
                 }
 
+                let snapshot = self.snapshot_for(entry.value());
+                self.send_persistence_event(BudgetPersistenceEvent::Upsert(snapshot));
                 reset_models.push(model);
             }
         }
@@ -657,6 +860,29 @@ impl UnifiedBudgetLimits {
             providers: ProviderBudgetManager::new(),
             models: ModelBudgetManager::new(),
         }
+    }
+
+    /// Create a unified budget limits manager with persistence enabled.
+    pub fn with_persistence(persistence_tx: BudgetPersistenceSender) -> Self {
+        Self {
+            providers: ProviderBudgetManager::new().with_persistence(persistence_tx.clone()),
+            models: ModelBudgetManager::new().with_persistence(persistence_tx),
+        }
+    }
+
+    /// Restore persisted provider/model snapshots and attach a persistence sink.
+    pub fn from_snapshots_with_persistence(
+        snapshots: impl IntoIterator<Item = BudgetLimitSnapshot>,
+        persistence_tx: BudgetPersistenceSender,
+    ) -> Self {
+        let limits = Self::with_persistence(persistence_tx);
+        for snapshot in snapshots {
+            match snapshot.kind {
+                BudgetLimitKind::Provider => limits.providers.restore_snapshot(&snapshot),
+                BudgetLimitKind::Model => limits.models.restore_snapshot(&snapshot),
+            }
+        }
+        limits
     }
 
     /// Check if both provider and model can spend
@@ -947,6 +1173,79 @@ mod tests {
 
         assert_eq!(provider_usage.current_spend, 100.0);
         assert_eq!(model_usage.current_spend, 100.0);
+    }
+
+    #[test]
+    fn test_unified_budget_limits_restore_snapshots() {
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let limits = UnifiedBudgetLimits::from_snapshots_with_persistence(
+            vec![
+                BudgetLimitSnapshot {
+                    kind: BudgetLimitKind::Provider,
+                    name: "openai".to_string(),
+                    max_budget: 100.0,
+                    current_spend: 25.0,
+                    soft_limit: 80.0,
+                    reset_period: ResetPeriod::Monthly,
+                    currency: Currency::USD,
+                    enabled: true,
+                    last_reset_at: None,
+                    request_count: 3,
+                },
+                BudgetLimitSnapshot {
+                    kind: BudgetLimitKind::Model,
+                    name: "gpt-4".to_string(),
+                    max_budget: 50.0,
+                    current_spend: 10.0,
+                    soft_limit: 40.0,
+                    reset_period: ResetPeriod::Daily,
+                    currency: Currency::USD,
+                    enabled: true,
+                    last_reset_at: None,
+                    request_count: 2,
+                },
+            ],
+            tx,
+        );
+
+        let provider_usage = limits.providers.get_provider_usage("openai").unwrap();
+        assert_eq!(provider_usage.current_spend, 25.0);
+        assert_eq!(provider_usage.request_count, 3);
+
+        let model_usage = limits.models.get_model_usage("gpt-4").unwrap();
+        assert_eq!(model_usage.current_spend, 10.0);
+        assert_eq!(model_usage.request_count, 2);
+    }
+
+    #[test]
+    fn test_provider_budget_manager_emits_persistence_events() {
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let manager = ProviderBudgetManager::new().with_persistence(tx);
+
+        manager.set_provider_limit(
+            "openai",
+            ProviderLimitConfig::new(100.0, ResetPeriod::Monthly),
+        );
+        manager.record_provider_spend("openai", 12.5);
+
+        let first = rx.try_recv().expect("set should emit an upsert");
+        assert!(matches!(
+            first,
+            BudgetPersistenceEvent::Upsert(BudgetLimitSnapshot {
+                kind: BudgetLimitKind::Provider,
+                ..
+            })
+        ));
+
+        let second = rx.try_recv().expect("spend should emit an upsert");
+        match second {
+            BudgetPersistenceEvent::Upsert(snapshot) => {
+                assert_eq!(snapshot.name, "openai");
+                assert_eq!(snapshot.current_spend, 12.5);
+                assert_eq!(snapshot.request_count, 1);
+            }
+            BudgetPersistenceEvent::Delete { .. } => panic!("expected upsert"),
+        }
     }
 
     #[test]

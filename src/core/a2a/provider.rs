@@ -299,7 +299,7 @@ mod tests {
 
     #[test]
     fn test_generic_provider_with_custom_client() {
-        let client = reqwest::Client::new();
+        let client = crate::core::http::outbound::default_outbound_client().clone();
         let provider = GenericA2AProvider::with_client(client);
         assert_eq!(provider.provider_type(), AgentProvider::A2A);
     }

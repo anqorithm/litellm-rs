@@ -404,7 +404,7 @@ impl LLMProvider for GitHubCopilotProvider {
         let url = format!("{}/chat/completions", api_base.trim_end_matches('/'));
 
         // Execute request
-        let client = reqwest::Client::new();
+        let client = crate::core::http::outbound::default_outbound_client().clone();
         let response = client
             .post(&url)
             .headers(headers)
@@ -471,7 +471,7 @@ impl LLMProvider for GitHubCopilotProvider {
         let url = format!("{}/chat/completions", api_base.trim_end_matches('/'));
 
         // Execute request
-        let client = reqwest::Client::new();
+        let client = crate::core::http::outbound::default_outbound_client().clone();
         let response = client
             .post(&url)
             .headers(headers)
@@ -532,7 +532,7 @@ impl LLMProvider for GitHubCopilotProvider {
         let url = format!("{}/embeddings", api_base.trim_end_matches('/'));
 
         // Execute request
-        let client = reqwest::Client::new();
+        let client = crate::core::http::outbound::default_outbound_client().clone();
         let response = client
             .post(&url)
             .headers(headers)

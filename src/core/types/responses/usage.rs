@@ -72,6 +72,14 @@ pub struct PromptTokensDetails {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cached_tokens: Option<u32>,
 
+    /// Tokens written into provider-side prompt cache
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_creation_tokens: Option<u32>,
+
+    /// Tokens read from provider-side prompt cache
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_read_tokens: Option<u32>,
+
     /// Audio token count
     #[serde(skip_serializing_if = "Option::is_none")]
     pub audio_tokens: Option<u32>,
@@ -199,10 +207,14 @@ mod tests {
     fn test_prompt_tokens_details() {
         let details = PromptTokensDetails {
             cached_tokens: Some(50),
+            cache_creation_tokens: Some(5),
+            cache_read_tokens: Some(45),
             audio_tokens: Some(10),
         };
 
         assert_eq!(details.cached_tokens, Some(50));
+        assert_eq!(details.cache_creation_tokens, Some(5));
+        assert_eq!(details.cache_read_tokens, Some(45));
         assert_eq!(details.audio_tokens, Some(10));
     }
 
@@ -225,6 +237,8 @@ mod tests {
             total_tokens: 300,
             prompt_tokens_details: Some(PromptTokensDetails {
                 cached_tokens: Some(30),
+                cache_creation_tokens: Some(7),
+                cache_read_tokens: Some(23),
                 audio_tokens: None,
             }),
             completion_tokens_details: Some(CompletionTokensDetails {
@@ -237,6 +251,22 @@ mod tests {
         assert_eq!(
             usage.prompt_tokens_details.as_ref().unwrap().cached_tokens,
             Some(30)
+        );
+        assert_eq!(
+            usage
+                .prompt_tokens_details
+                .as_ref()
+                .unwrap()
+                .cache_creation_tokens,
+            Some(7)
+        );
+        assert_eq!(
+            usage
+                .prompt_tokens_details
+                .as_ref()
+                .unwrap()
+                .cache_read_tokens,
+            Some(23)
         );
         assert_eq!(
             usage

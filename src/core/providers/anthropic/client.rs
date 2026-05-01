@@ -18,7 +18,8 @@ use crate::core::types::{
     chat::ChatRequest,
     content::ContentPart,
     message::MessageRole,
-    responses::{ChatChoice, ChatResponse, Usage},
+    responses::{ChatChoice, ChatResponse, FinishReason, PromptTokensDetails, Usage},
+    thinking::ThinkingContent,
 };
 
 use super::config::AnthropicConfig;
@@ -393,11 +394,25 @@ impl AnthropicClient {
         let mut anthropic_messages = Vec::new();
 
         for message in messages {
+            if matches!(&message.role, MessageRole::Tool | MessageRole::Function) {
+                let tool_use_id = message.tool_call_id.clone().ok_or_else(|| {
+                    anthropic_parse_error("Tool/function message missing tool_call_id")
+                })?;
+                anthropic_messages.push(json!({
+                    "role": "user",
+                    "content": [{
+                        "type": "tool_result",
+                        "tool_use_id": tool_use_id,
+                        "content": Self::tool_result_content(message.content.clone())
+                    }]
+                }));
+                continue;
+            }
+
             let role = match message.role {
                 MessageRole::User => "user",
                 MessageRole::Assistant => "assistant",
-                MessageRole::Tool => "user",     // Response
-                MessageRole::Function => "user", // Response
+                MessageRole::Tool | MessageRole::Function => unreachable!(),
                 MessageRole::System | MessageRole::Developer => continue, // Already handled
             };
 
@@ -484,9 +499,10 @@ impl AnthropicClient {
 
             // Add tool_call
             if let Some(tool_calls) = &message.tool_calls {
-                let mut anthropic_tool_calls = Vec::new();
+                let mut anthropic_content =
+                    Self::content_value_to_blocks(&anthropic_message["content"]);
                 for tool_call in tool_calls {
-                    anthropic_tool_calls.push(json!({
+                    anthropic_content.push(json!({
                         "type": "tool_use",
                         "id": tool_call.id,
                         "name": tool_call.function.name,
@@ -494,13 +510,46 @@ impl AnthropicClient {
                             .unwrap_or(json!({}))
                     }));
                 }
-                anthropic_message["content"] = json!(anthropic_tool_calls);
+                anthropic_message["content"] = json!(anthropic_content);
             }
 
             anthropic_messages.push(anthropic_message);
         }
 
         Ok(anthropic_messages)
+    }
+
+    fn content_value_to_blocks(content: &Value) -> Vec<Value> {
+        if let Some(text) = content.as_str() {
+            if text.is_empty() {
+                Vec::new()
+            } else {
+                vec![json!({
+                    "type": "text",
+                    "text": text,
+                })]
+            }
+        } else {
+            content.as_array().cloned().unwrap_or_default()
+        }
+    }
+
+    fn tool_result_content(content: Option<crate::core::types::message::MessageContent>) -> Value {
+        match content {
+            Some(crate::core::types::message::MessageContent::Text(text)) => json!(text),
+            Some(crate::core::types::message::MessageContent::Parts(parts)) => {
+                let text = parts
+                    .into_iter()
+                    .filter_map(|part| match part {
+                        ContentPart::Text { text } => Some(text),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                json!(text)
+            }
+            None => json!(""),
+        }
     }
 
     /// Transform tool definitions
@@ -519,6 +568,18 @@ impl AnthropicClient {
         }
 
         Ok(anthropic_tools)
+    }
+
+    fn parse_anthropic_stop_reason(reason: &str) -> FinishReason {
+        match reason {
+            "end_turn" => FinishReason::Stop,
+            "max_tokens" => FinishReason::Length,
+            "tool_use" => FinishReason::ToolCalls,
+            "stop_sequence" => FinishReason::StopSequence,
+            "refusal" => FinishReason::Refusal,
+            "pause_turn" => FinishReason::PauseTurn,
+            _ => FinishReason::Stop,
+        }
     }
 
     /// Transform tool choice
@@ -573,6 +634,9 @@ impl AnthropicClient {
             .ok_or_else(|| anthropic_parse_error("Missing or invalid content array"))?;
 
         let mut message_content = String::new();
+        let mut thinking_parts = Vec::new();
+        let mut thinking_signature = None;
+        let mut has_redacted_thinking = false;
         let mut tool_calls = Vec::new();
 
         for item in content {
@@ -598,9 +662,36 @@ impl AnthropicClient {
                         });
                     }
                 }
+                Some("thinking") => {
+                    if let Some(thinking) = item.get("thinking").and_then(|t| t.as_str()) {
+                        thinking_parts.push(thinking.to_string());
+                    }
+                    if let Some(signature) = item.get("signature").and_then(|s| s.as_str()) {
+                        thinking_signature = Some(signature.to_string());
+                    }
+                }
+                Some("redacted_thinking") => {
+                    has_redacted_thinking = true;
+                }
+                Some("refusal") => {
+                    if let Some(refusal) = item.get("refusal").and_then(|r| r.as_str()) {
+                        message_content.push_str(refusal);
+                    }
+                }
                 _ => {}
             }
         }
+
+        let thinking = if !thinking_parts.is_empty() {
+            Some(ThinkingContent::Text {
+                text: thinking_parts.join(""),
+                signature: thinking_signature,
+            })
+        } else if has_redacted_thinking {
+            Some(ThinkingContent::Redacted { token_count: None })
+        } else {
+            None
+        };
 
         // Build message
         let message = ChatMessage {
@@ -612,7 +703,7 @@ impl AnthropicClient {
                     message_content,
                 ))
             },
-            thinking: None,
+            thinking,
             name: None,
             tool_calls: if tool_calls.is_empty() {
                 None
@@ -630,36 +721,48 @@ impl AnthropicClient {
             finish_reason: response
                 .get("stop_reason")
                 .and_then(|r| r.as_str())
-                .map(|reason| match reason {
-                    "end_turn" => crate::core::types::responses::FinishReason::Stop,
-                    "max_tokens" => crate::core::types::responses::FinishReason::Length,
-                    "tool_use" => crate::core::types::responses::FinishReason::ToolCalls,
-                    _ => crate::core::types::responses::FinishReason::Stop,
-                }),
+                .map(Self::parse_anthropic_stop_reason),
             logprobs: None,
         };
 
         // Build usage
-        let usage = response.get("usage").map(|usage_data| Usage {
-            prompt_tokens: usage_data
+        let usage = response.get("usage").map(|usage_data| {
+            let input_tokens = usage_data
                 .get("input_tokens")
                 .and_then(|v| v.as_u64())
-                .unwrap_or(0) as u32,
-            completion_tokens: usage_data
+                .unwrap_or(0) as u32;
+            let output_tokens = usage_data
                 .get("output_tokens")
                 .and_then(|v| v.as_u64())
-                .unwrap_or(0) as u32,
-            total_tokens: (usage_data
-                .get("input_tokens")
+                .unwrap_or(0) as u32;
+            let cache_creation_tokens = usage_data
+                .get("cache_creation_input_tokens")
                 .and_then(|v| v.as_u64())
-                .unwrap_or(0)
-                + usage_data
-                    .get("output_tokens")
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(0)) as u32,
-            completion_tokens_details: None,
-            prompt_tokens_details: None,
-            thinking_usage: None,
+                .map(|tokens| tokens as u32);
+            let cache_read_tokens = usage_data
+                .get("cache_read_input_tokens")
+                .and_then(|v| v.as_u64())
+                .map(|tokens| tokens as u32);
+
+            Usage {
+                prompt_tokens: input_tokens,
+                completion_tokens: output_tokens,
+                total_tokens: input_tokens + output_tokens,
+                completion_tokens_details: None,
+                prompt_tokens_details: if cache_creation_tokens.is_some()
+                    || cache_read_tokens.is_some()
+                {
+                    Some(PromptTokensDetails {
+                        cached_tokens: cache_read_tokens,
+                        cache_creation_tokens,
+                        cache_read_tokens,
+                        audio_tokens: None,
+                    })
+                } else {
+                    None
+                },
+                thinking_usage: None,
+            }
         });
 
         Ok(ChatResponse {
@@ -950,6 +1053,68 @@ mod tests {
         assert_eq!(system, Some("Rule 1\nRule 2".to_string()));
     }
 
+    #[test]
+    fn test_anthropic_transform_messages_preserves_assistant_text_with_tool_use() {
+        let config = AnthropicConfig::new_test("test-key");
+        let client = AnthropicClient::new(config).unwrap();
+        let model_spec = get_anthropic_registry()
+            .get_model_spec("claude-3-opus-20240229")
+            .unwrap();
+
+        let messages = vec![ChatMessage {
+            role: MessageRole::Assistant,
+            content: Some(MessageContent::Text("I'll check the weather.".to_string())),
+            name: None,
+            tool_calls: Some(vec![crate::core::types::tools::ToolCall {
+                id: "toolu_123".to_string(),
+                tool_type: "function".to_string(),
+                function: crate::core::types::tools::FunctionCall {
+                    name: "get_weather".to_string(),
+                    arguments: r#"{"location":"San Francisco"}"#.to_string(),
+                },
+            }]),
+            tool_call_id: None,
+            function_call: None,
+            thinking: None,
+        }];
+
+        let transformed = client.transform_messages(messages, model_spec).unwrap();
+        assert_eq!(transformed[0]["role"], "assistant");
+        let content = transformed[0]["content"].as_array().unwrap();
+        assert_eq!(content[0]["type"], "text");
+        assert_eq!(content[0]["text"], "I'll check the weather.");
+        assert_eq!(content[1]["type"], "tool_use");
+        assert_eq!(content[1]["id"], "toolu_123");
+        assert_eq!(content[1]["name"], "get_weather");
+        assert_eq!(content[1]["input"]["location"], "San Francisco");
+    }
+
+    #[test]
+    fn test_anthropic_transform_messages_tool_role_to_tool_result() {
+        let config = AnthropicConfig::new_test("test-key");
+        let client = AnthropicClient::new(config).unwrap();
+        let model_spec = get_anthropic_registry()
+            .get_model_spec("claude-3-opus-20240229")
+            .unwrap();
+
+        let messages = vec![ChatMessage {
+            role: MessageRole::Tool,
+            content: Some(MessageContent::Text(r#"{"temperature":"68F"}"#.to_string())),
+            name: None,
+            tool_calls: None,
+            tool_call_id: Some("toolu_123".to_string()),
+            function_call: None,
+            thinking: None,
+        }];
+
+        let transformed = client.transform_messages(messages, model_spec).unwrap();
+        assert_eq!(transformed[0]["role"], "user");
+        let content = transformed[0]["content"].as_array().unwrap();
+        assert_eq!(content[0]["type"], "tool_result");
+        assert_eq!(content[0]["tool_use_id"], "toolu_123");
+        assert_eq!(content[0]["content"], r#"{"temperature":"68F"}"#);
+    }
+
     // ==================== Tool Choice Transformation Tests ====================
 
     #[test]
@@ -1072,6 +1237,78 @@ mod tests {
     }
 
     #[test]
+    fn test_anthropic_usage_cache_details() {
+        let config = AnthropicConfig::new_test("test-key");
+        let client = AnthropicClient::new(config).unwrap();
+
+        let response = json!({
+            "id": "msg_123",
+            "model": "claude-3-opus-20240229",
+            "content": [{"type": "text", "text": "Hi"}],
+            "usage": {
+                "input_tokens": 100,
+                "cache_creation_input_tokens": 12,
+                "cache_read_input_tokens": 34,
+                "output_tokens": 50
+            }
+        });
+
+        let result = client.transform_chat_response(response).unwrap();
+        let details = result
+            .usage
+            .as_ref()
+            .and_then(|usage| usage.prompt_tokens_details.as_ref())
+            .unwrap();
+        assert_eq!(details.cached_tokens, Some(34));
+        assert_eq!(details.cache_creation_tokens, Some(12));
+        assert_eq!(details.cache_read_tokens, Some(34));
+    }
+
+    #[test]
+    fn test_anthropic_client_preserves_thinking_blocks() {
+        let config = AnthropicConfig::new_test("test-key");
+        let client = AnthropicClient::new(config).unwrap();
+
+        let response = json!({
+            "id": "msg_123",
+            "model": "claude-3-opus-20240229",
+            "content": [
+                {
+                    "type": "thinking",
+                    "thinking": "First thought. ",
+                    "signature": "sig_123"
+                },
+                {
+                    "type": "thinking",
+                    "thinking": "Second thought."
+                },
+                {"type": "text", "text": "Answer."}
+            ],
+            "stop_reason": "end_turn"
+        });
+
+        let result = client.transform_chat_response(response).unwrap();
+        assert_eq!(
+            result
+                .choices
+                .first()
+                .unwrap()
+                .message
+                .thinking
+                .as_ref()
+                .and_then(|thinking| thinking.as_text()),
+            Some("First thought. Second thought.")
+        );
+        assert_eq!(
+            result.choices.first().unwrap().message.thinking.as_ref(),
+            Some(&ThinkingContent::Text {
+                text: "First thought. Second thought.".to_string(),
+                signature: Some("sig_123".to_string()),
+            })
+        );
+    }
+
+    #[test]
     fn test_transform_chat_response_tool_use() {
         let config = AnthropicConfig::new_test("test-key");
         let client = AnthropicClient::new(config).unwrap();
@@ -1146,6 +1383,45 @@ mod tests {
         assert!(matches!(
             result.choices.first().unwrap().finish_reason,
             Some(crate::core::types::responses::FinishReason::ToolCalls)
+        ));
+
+        // stop_sequence -> StopSequence
+        let response = json!({
+            "id": "msg_123",
+            "model": "claude-3-opus-20240229",
+            "content": [{"type": "text", "text": "Hi"}],
+            "stop_reason": "stop_sequence"
+        });
+        let result = client.transform_chat_response(response).unwrap();
+        assert!(matches!(
+            result.choices.first().unwrap().finish_reason,
+            Some(crate::core::types::responses::FinishReason::StopSequence)
+        ));
+
+        // refusal -> Refusal
+        let response = json!({
+            "id": "msg_123",
+            "model": "claude-3-opus-20240229",
+            "content": [{"type": "refusal", "refusal": "I cannot help with that."}],
+            "stop_reason": "refusal"
+        });
+        let result = client.transform_chat_response(response).unwrap();
+        assert!(matches!(
+            result.choices.first().unwrap().finish_reason,
+            Some(crate::core::types::responses::FinishReason::Refusal)
+        ));
+
+        // pause_turn -> PauseTurn
+        let response = json!({
+            "id": "msg_123",
+            "model": "claude-3-opus-20240229",
+            "content": [{"type": "text", "text": "Hi"}],
+            "stop_reason": "pause_turn"
+        });
+        let result = client.transform_chat_response(response).unwrap();
+        assert!(matches!(
+            result.choices.first().unwrap().finish_reason,
+            Some(crate::core::types::responses::FinishReason::PauseTurn)
         ));
     }
 }

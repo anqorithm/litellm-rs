@@ -5,6 +5,11 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
+/// Default maximum number of client trackers retained by one limiter.
+pub const DEFAULT_MAX_ENTRIES: usize = 10_000;
+
+const CLEANUP_INTERVAL_SECS: u64 = 60;
+
 /// Brute force protection for authentication endpoints
 pub struct AuthRateLimiter {
     /// Map of client identifier -> tracker
@@ -15,6 +20,8 @@ pub struct AuthRateLimiter {
     window_secs: u64,
     /// Lockout duration (seconds) - uses exponential backoff
     base_lockout_secs: u64,
+    /// Maximum retained client trackers
+    max_entries: usize,
     /// Total blocked attempts counter for monitoring
     blocked_count: AtomicU64,
 }
@@ -35,11 +42,26 @@ impl Default for AuthRateLimiter {
 
 impl AuthRateLimiter {
     pub fn new(max_attempts: u32, window_secs: u64, base_lockout_secs: u64) -> Self {
+        Self::with_max_entries(
+            max_attempts,
+            window_secs,
+            base_lockout_secs,
+            DEFAULT_MAX_ENTRIES,
+        )
+    }
+
+    pub fn with_max_entries(
+        max_attempts: u32,
+        window_secs: u64,
+        base_lockout_secs: u64,
+        max_entries: usize,
+    ) -> Self {
         Self {
             attempts: DashMap::new(),
             max_attempts,
             window_secs,
             base_lockout_secs,
+            max_entries: max_entries.max(1),
             blocked_count: AtomicU64::new(0),
         }
     }
@@ -47,16 +69,9 @@ impl AuthRateLimiter {
     pub fn check_allowed(&self, client_id: &str) -> Result<(), u64> {
         let now = Instant::now();
 
-        let mut entry = self
-            .attempts
-            .entry(client_id.to_string())
-            .or_insert_with(|| AuthAttemptTracker {
-                failure_count: 0,
-                window_start: now,
-                lockout_until: None,
-                lockout_count: 0,
-            });
-
+        let Some(mut entry) = self.attempts.get_mut(client_id) else {
+            return Ok(());
+        };
         let tracker = entry.value_mut();
 
         if let Some(lockout_until) = tracker.lockout_until {
@@ -79,6 +94,7 @@ impl AuthRateLimiter {
 
     pub fn record_failure(&self, client_id: &str) -> Option<u64> {
         let now = Instant::now();
+        self.cleanup_old_entries_at(now);
 
         let mut entry = self
             .attempts
@@ -109,9 +125,13 @@ impl AuthRateLimiter {
                 tracker.lockout_count
             );
 
+            drop(entry);
+            self.enforce_capacity(now);
             return Some(lockout_secs);
         }
 
+        drop(entry);
+        self.enforce_capacity(now);
         None
     }
 
@@ -125,25 +145,81 @@ impl AuthRateLimiter {
         self.blocked_count.load(Ordering::Relaxed)
     }
 
+    pub fn len(&self) -> usize {
+        self.attempts.len()
+    }
+
+    pub fn max_entries(&self) -> usize {
+        self.max_entries
+    }
+
     pub fn cleanup_old_entries(&self) {
         let now = Instant::now();
-        let max_age = Duration::from_secs(self.window_secs * 2);
+        self.cleanup_old_entries_at(now);
+        self.enforce_capacity(now);
+    }
 
+    fn cleanup_old_entries_at(&self, now: Instant) {
+        let max_age = Duration::from_secs(self.window_secs.saturating_mul(2));
         self.attempts.retain(|_, tracker| {
             now.duration_since(tracker.window_start) < max_age
                 || tracker.lockout_until.is_some_and(|until| until > now)
         });
     }
+
+    fn enforce_capacity(&self, now: Instant) {
+        let overflow = self.attempts.len().saturating_sub(self.max_entries);
+        if overflow == 0 {
+            return;
+        }
+
+        let mut candidates: Vec<_> = self
+            .attempts
+            .iter()
+            .map(|entry| {
+                let tracker = entry.value();
+                let locked = tracker.lockout_until.is_some_and(|until| until > now);
+                (locked, tracker.window_start, entry.key().clone())
+            })
+            .collect();
+        candidates.sort_by_key(|(locked, window_start, _)| (*locked, *window_start));
+
+        for (_, _, client_id) in candidates.into_iter().take(overflow) {
+            self.attempts.remove(&client_id);
+        }
+    }
 }
 
 /// Global auth rate limiter
 static AUTH_RATE_LIMITER: std::sync::OnceLock<Arc<AuthRateLimiter>> = std::sync::OnceLock::new();
+static AUTH_RATE_LIMITER_CLEANUP: std::sync::OnceLock<()> = std::sync::OnceLock::new();
 
 /// Get or initialize the global auth rate limiter
 pub fn get_auth_rate_limiter() -> Arc<AuthRateLimiter> {
     AUTH_RATE_LIMITER
         .get_or_init(|| Arc::new(AuthRateLimiter::default()))
         .clone()
+}
+
+/// Start the global limiter cleanup loop once per process.
+pub fn start_auth_rate_limiter_cleanup_task() {
+    let Ok(handle) = tokio::runtime::Handle::try_current() else {
+        tracing::warn!("Auth rate limiter cleanup task was not started: no Tokio runtime");
+        return;
+    };
+
+    if AUTH_RATE_LIMITER_CLEANUP.set(()).is_err() {
+        return;
+    }
+
+    let limiter = get_auth_rate_limiter();
+    handle.spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(CLEANUP_INTERVAL_SECS));
+        loop {
+            interval.tick().await;
+            limiter.cleanup_old_entries();
+        }
+    });
 }
 
 #[cfg(test)]
@@ -160,6 +236,7 @@ mod tests {
         assert_eq!(limiter.max_attempts, 10);
         assert_eq!(limiter.window_secs, 600);
         assert_eq!(limiter.base_lockout_secs, 120);
+        assert_eq!(limiter.max_entries, DEFAULT_MAX_ENTRIES);
         assert_eq!(limiter.blocked_count.load(Ordering::Relaxed), 0);
     }
 
@@ -169,6 +246,13 @@ mod tests {
         assert_eq!(limiter.max_attempts, 5);
         assert_eq!(limiter.window_secs, 300);
         assert_eq!(limiter.base_lockout_secs, 60);
+        assert_eq!(limiter.max_entries(), DEFAULT_MAX_ENTRIES);
+    }
+
+    #[test]
+    fn test_auth_rate_limiter_with_max_entries() {
+        let limiter = AuthRateLimiter::with_max_entries(5, 300, 60, 7);
+        assert_eq!(limiter.max_entries(), 7);
     }
 
     // ==================== check_allowed Tests ====================
@@ -178,6 +262,7 @@ mod tests {
         let limiter = AuthRateLimiter::new(5, 300, 60);
         let result = limiter.check_allowed("new_client");
         assert!(result.is_ok());
+        assert_eq!(limiter.len(), 0);
     }
 
     #[test]
@@ -352,6 +437,44 @@ mod tests {
 
         // Entry should still exist
         assert!(limiter.attempts.contains_key(client));
+    }
+
+    #[test]
+    fn test_cleanup_removes_expired_entries() {
+        let limiter = AuthRateLimiter::new(5, 1, 60);
+        let client = "expired_client";
+
+        limiter.record_failure(client);
+        if let Some(mut entry) = limiter.attempts.get_mut(client) {
+            entry.window_start = Instant::now() - Duration::from_secs(3);
+        }
+
+        limiter.cleanup_old_entries();
+        assert!(!limiter.attempts.contains_key(client));
+    }
+
+    #[test]
+    fn test_max_entries_cap_enforced() {
+        let limiter = AuthRateLimiter::with_max_entries(5, 300, 60, 3);
+
+        for i in 0..10 {
+            limiter.record_failure(&format!("client_{i}"));
+        }
+
+        assert!(limiter.len() <= 3);
+    }
+
+    #[test]
+    fn test_capacity_prefers_retaining_active_lockouts() {
+        let limiter = AuthRateLimiter::with_max_entries(2, 300, 60, 2);
+
+        limiter.record_failure("old_1");
+        limiter.record_failure("old_2");
+        limiter.record_failure("locked_client");
+        limiter.record_failure("locked_client");
+
+        assert!(limiter.len() <= 2);
+        assert!(limiter.attempts.contains_key("locked_client"));
     }
 
     // ==================== Window Reset Tests ====================

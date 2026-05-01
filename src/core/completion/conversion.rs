@@ -25,10 +25,10 @@ pub fn convert_to_chat_completion_request(
         stop: options.stop,
         stream: options.stream,
         stream_options: None,
-        tools: None,
-        tool_choice: None,
+        tools: options.tools,
+        tool_choice: options.tool_choice,
         parallel_tool_calls: None,
-        response_format: None,
+        response_format: options.response_format,
         user: options.user,
         seed: options.seed,
         n: options.n,
@@ -37,10 +37,10 @@ pub fn convert_to_chat_completion_request(
         function_call: None,
         logprobs: options.logprobs,
         top_logprobs: options.top_logprobs,
-        thinking: None,
-        reasoning_effort: None,
+        thinking: options.thinking,
+        reasoning_effort: options.reasoning_effort,
         store: None,
-        metadata: None,
+        metadata: options.metadata,
         service_tier: None,
         extra_params: options.extra_params,
     })
@@ -277,6 +277,59 @@ mod tests {
 
         assert_eq!(result.logprobs, Some(true));
         assert_eq!(result.top_logprobs, Some(5));
+    }
+
+    #[test]
+    fn test_convert_to_chat_completion_request_forwards_litellm_params() {
+        let messages = vec![create_test_message(MessageRole::User, "Test")];
+        let mut metadata = HashMap::new();
+        metadata.insert("trace_id".to_string(), "trace-123".to_string());
+        let options = CompletionOptions {
+            tools: Some(vec![crate::core::types::tools::Tool {
+                tool_type: crate::core::types::tools::ToolType::Function,
+                function: crate::core::types::tools::FunctionDefinition {
+                    name: "get_weather".to_string(),
+                    description: Some("Get weather".to_string()),
+                    parameters: Some(serde_json::json!({
+                        "type": "object",
+                        "properties": {
+                            "city": {"type": "string"}
+                        }
+                    })),
+                },
+            }]),
+            tool_choice: Some(crate::core::types::tools::ToolChoice::String(
+                "auto".to_string(),
+            )),
+            response_format: Some(crate::core::types::tools::ResponseFormat {
+                format_type: "json_object".to_string(),
+                json_schema: None,
+                response_type: None,
+            }),
+            thinking: Some(crate::core::types::thinking::ThinkingConfig::high_effort()),
+            reasoning_effort: Some("high".to_string()),
+            metadata: Some(metadata),
+            ..Default::default()
+        };
+
+        let result = convert_to_chat_completion_request("gpt-5", messages, options).unwrap();
+
+        assert_eq!(result.tools.as_ref().unwrap().len(), 1);
+        assert!(result.tool_choice.is_some());
+        assert_eq!(
+            result.response_format.as_ref().unwrap().format_type,
+            "json_object"
+        );
+        assert!(result.thinking.as_ref().unwrap().enabled);
+        assert_eq!(result.reasoning_effort.as_deref(), Some("high"));
+        assert_eq!(
+            result
+                .metadata
+                .as_ref()
+                .and_then(|metadata| metadata.get("trace_id"))
+                .map(String::as_str),
+            Some("trace-123")
+        );
     }
 
     #[test]

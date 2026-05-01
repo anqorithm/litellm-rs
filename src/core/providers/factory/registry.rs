@@ -65,37 +65,6 @@ impl Provider {
                     })?;
                 Ok(Provider::OpenAILike(provider))
             }
-            // Catalog-covered provider types: delegate to the Tier 1 registry
-            ref pt if provider_registry::get_definition(&pt.to_string()).is_some() => {
-                let name = pt.to_string();
-                // Safety: guard guarantees the definition exists
-                let def = match provider_registry::get_definition(&name) {
-                    Some(d) => d,
-                    None => {
-                        return Err(ProviderError::not_implemented(
-                            "unknown",
-                            format!("Catalog definition for '{}' disappeared unexpectedly", name),
-                        ));
-                    }
-                };
-                let api_key = config_str(&config, "api_key")
-                    .map(|s| s.to_string())
-                    .or_else(|| def.resolve_api_key(None));
-                let base_url_override =
-                    config_str(&config, "base_url").or_else(|| config_str(&config, "api_base"));
-                let mut oai_config =
-                    def.to_openai_like_config(api_key.as_deref(), base_url_override);
-                if let Some(timeout) = config_u64(&config, "timeout") {
-                    oai_config.base.timeout = timeout;
-                }
-                if let Some(max_retries) = config_u32(&config, "max_retries") {
-                    oai_config.base.max_retries = max_retries;
-                }
-                let provider = openai_like::OpenAILikeProvider::new(oai_config)
-                    .await
-                    .map_err(|e| ProviderError::initialization(def.name, e.to_string()))?;
-                Ok(Provider::OpenAILike(provider))
-            }
             ProviderType::MetaLlama => {
                 let oai_config = build_meta_llama_config_from_factory(&config)?;
                 let provider = openai_like::OpenAILikeProvider::new(oai_config)
@@ -171,6 +140,38 @@ impl Provider {
                 let provider = openai_like::OpenAILikeProvider::new(oai_config)
                     .await
                     .map_err(|e| ProviderError::initialization("github_copilot", e.to_string()))?;
+                Ok(Provider::OpenAILike(provider))
+            }
+            // Catalog-covered provider types: delegate to the Tier 1 registry after
+            // all explicit branches, so catalog metadata cannot shadow provider-specific builders.
+            ref pt if provider_registry::get_definition(&pt.to_string()).is_some() => {
+                let name = pt.to_string();
+                // Safety: guard guarantees the definition exists
+                let def = match provider_registry::get_definition(&name) {
+                    Some(d) => d,
+                    None => {
+                        return Err(ProviderError::not_implemented(
+                            "unknown",
+                            format!("Catalog definition for '{}' disappeared unexpectedly", name),
+                        ));
+                    }
+                };
+                let api_key = config_str(&config, "api_key")
+                    .map(|s| s.to_string())
+                    .or_else(|| def.resolve_api_key(None));
+                let base_url_override =
+                    config_str(&config, "base_url").or_else(|| config_str(&config, "api_base"));
+                let mut oai_config =
+                    def.to_openai_like_config(api_key.as_deref(), base_url_override);
+                if let Some(timeout) = config_u64(&config, "timeout") {
+                    oai_config.base.timeout = timeout;
+                }
+                if let Some(max_retries) = config_u32(&config, "max_retries") {
+                    oai_config.base.max_retries = max_retries;
+                }
+                let provider = openai_like::OpenAILikeProvider::new(oai_config)
+                    .await
+                    .map_err(|e| ProviderError::initialization(def.name, e.to_string()))?;
                 Ok(Provider::OpenAILike(provider))
             }
             _ => Err(ProviderError::not_implemented(

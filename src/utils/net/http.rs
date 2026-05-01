@@ -181,7 +181,9 @@ fn create_optimized_client(timeout: Duration) -> Client {
                 "Failed to create optimized HTTP client, falling back to default: {}",
                 e
             );
-            Client::new()
+            Client::builder()
+                .build()
+                .expect("default HTTP client should build")
         })
 }
 

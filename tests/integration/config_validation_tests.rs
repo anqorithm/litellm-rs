@@ -469,7 +469,7 @@ mod tests {
         });
 
         config.storage.database.url = "postgres://localhost:5432/test".to_string();
-        config.auth.jwt_secret = "test-jwt-secret-minimum-32-chars-long".to_string();
+        config.auth.jwt_secret = "StrongTestJwtSecretMinimum32Chars123".to_string();
 
         config
     }

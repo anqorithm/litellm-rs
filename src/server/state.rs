@@ -48,6 +48,7 @@ impl AppState {
         unified_router: crate::core::router::UnifiedRouter,
         storage: crate::storage::StorageLayer,
         pricing: Arc<PricingService>,
+        budget_limits: Arc<UnifiedBudgetLimits>,
     ) -> Self {
         let storage = Arc::new(storage);
         let key_manager = KeyManager::new(DatabaseKeyRepository::new(storage.clone()))
@@ -61,7 +62,7 @@ impl AppState {
             unified_router: Arc::new(unified_router),
             storage,
             pricing,
-            budget_limits: Arc::new(UnifiedBudgetLimits::new()),
+            budget_limits,
             team_manager,
             key_manager,
         }

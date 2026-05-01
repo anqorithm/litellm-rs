@@ -24,7 +24,7 @@ pub struct AzureAIImageHandler {
 impl AzureAIImageHandler {
     /// Create a new image generation handler
     pub fn new(config: AzureAIConfig) -> Result<Self, ProviderError> {
-        let client = reqwest::Client::new();
+        let client = crate::core::http::outbound::default_outbound_client().clone();
         Ok(Self { config, client })
     }
 

@@ -180,7 +180,7 @@ impl CopilotAuthenticator {
         let access_token = self.get_access_token().await?;
         let headers = self.get_github_headers(Some(&access_token));
 
-        let client = reqwest::Client::new();
+        let client = crate::core::http::outbound::default_outbound_client().clone();
 
         for attempt in 1..=3 {
             let response = client
@@ -236,7 +236,7 @@ impl CopilotAuthenticator {
 
     /// Perform the OAuth device flow
     async fn perform_device_flow(&self) -> Result<String, GitHubCopilotError> {
-        let client = reqwest::Client::new();
+        let client = crate::core::http::outbound::default_outbound_client().clone();
         let headers = self.get_github_headers(None);
 
         // Step 1: Get device code

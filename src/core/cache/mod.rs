@@ -84,12 +84,14 @@
 //! - [`memory`] - In-memory cache implementation with DashMap
 //! - [`redis_cache`] - Redis cache layer for distributed caching
 //! - [`dual`] - DualCache combining both layers
+//! - [`key_policy`] - Stable cache key hashing and canonicalization policy
 //! - [`key_generator`] - Cache key generation utilities
 //! - [`llm_cache`] - LLM-specific caching for chat and embeddings
 
 pub mod cloud;
 pub mod dual;
 pub mod key_generator;
+pub mod key_policy;
 pub mod llm_cache;
 pub mod memory;
 pub mod redis_cache;
@@ -103,6 +105,7 @@ pub use key_generator::{
     generate_embedding_key_with_user, generate_key_from_content, generate_key_from_json,
     generate_key_from_parts,
 };
+pub use key_policy::CACHE_KEY_SCHEMA_VERSION;
 pub use llm_cache::{
     CachedChatResponse, CachedEmbeddingResponse, CombinedCacheStats, LLMCache, LLMCacheConfig,
 };
@@ -307,6 +310,7 @@ mod tests {
                 total_tokens: 15,
                 prompt_tokens_details: None,
                 completion_tokens_details: None,
+                thinking_usage: None,
             }),
             system_fingerprint: None,
         };

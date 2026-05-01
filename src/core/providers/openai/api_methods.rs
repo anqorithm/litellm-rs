@@ -296,7 +296,7 @@ impl OpenAIProvider {
         };
 
         let url = format!("{}/{}", self.config.get_api_base(), endpoint);
-        let client = reqwest::Client::new();
+        let client = crate::core::http::outbound::default_outbound_client().clone();
         let mut req = client.get(&url);
 
         if let Some(api_key) = &self.config.base.api_key {
@@ -480,7 +480,7 @@ impl OpenAIProvider {
         };
 
         let url = format!("{}/{}", self.config.get_api_base(), endpoint);
-        let client = reqwest::Client::new();
+        let client = crate::core::http::outbound::default_outbound_client().clone();
         let mut req = client.get(&url);
 
         if let Some(api_key) = &self.config.base.api_key {

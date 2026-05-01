@@ -238,6 +238,24 @@ fn transform_to_converse(request: &ChatRequest) -> Result<ConverseRequest, Provi
                     });
                 }
             }
+            MessageRole::Tool | MessageRole::Function => {
+                let tool_use_id = msg.tool_call_id.clone().ok_or_else(|| {
+                    ProviderError::invalid_request(
+                        "bedrock",
+                        "Tool/function message missing tool_call_id",
+                    )
+                })?;
+                messages.push(ConverseMessage {
+                    role: "user".to_string(),
+                    content: vec![ContentBlock::ToolResult {
+                        tool_result: ToolResultBlock {
+                            tool_use_id,
+                            content: message_content_to_tool_result_contents(msg.content.as_ref())?,
+                            status: None,
+                        },
+                    }],
+                });
+            }
             MessageRole::User | MessageRole::Assistant => {
                 // Transform to converse message
                 let role = match msg.role {
@@ -247,70 +265,37 @@ fn transform_to_converse(request: &ChatRequest) -> Result<ConverseRequest, Provi
                 }
                 .to_string();
 
-                let content = if let Some(msg_content) = &msg.content {
+                let mut content = if let Some(msg_content) = &msg.content {
                     match msg_content {
                         MessageContent::Text(text) => {
                             vec![ContentBlock::Text { text: text.clone() }]
                         }
-                        MessageContent::Parts(parts) => {
-                            parts
-                                .iter()
-                                .filter_map(|part| {
-                                    match part {
-                                        crate::core::types::content::ContentPart::Text { text } => {
-                                            Some(ContentBlock::Text { text: text.clone() })
-                                        }
-                                        crate::core::types::content::ContentPart::Image {
-                                            ..
-                                        } => {
-                                            // NOTE: image content not yet handled
-                                            None
-                                        }
-                                        crate::core::types::content::ContentPart::ImageUrl {
-                                            ..
-                                        } => {
-                                            // NOTE: image URL content not yet handled
-                                            None
-                                        }
-                                        crate::core::types::content::ContentPart::Audio {
-                                            ..
-                                        } => {
-                                            // NOTE: audio content not yet handled
-                                            None
-                                        }
-                                        crate::core::types::content::ContentPart::Document {
-                                            ..
-                                        } => {
-                                            // NOTE: document content not yet handled
-                                            None
-                                        }
-                                        crate::core::types::content::ContentPart::ToolResult {
-                                            ..
-                                        } => {
-                                            // NOTE: tool result content not yet handled
-                                            None
-                                        }
-                                        crate::core::types::content::ContentPart::ToolUse {
-                                            ..
-                                        } => {
-                                            // NOTE: tool use content not yet handled
-                                            None
-                                        }
-                                    }
-                                })
-                                .collect()
-                        }
+                        MessageContent::Parts(parts) => content_parts_to_blocks(parts)?,
                     }
                 } else {
                     vec![]
                 };
 
+                if msg.role == MessageRole::Assistant {
+                    if let Some(tool_calls) = &msg.tool_calls {
+                        for tool_call in tool_calls {
+                            content.push(ContentBlock::ToolUse {
+                                tool_use: ToolUseBlock {
+                                    tool_use_id: tool_call.id.clone(),
+                                    name: tool_call.function.name.clone(),
+                                    input: serde_json::from_str::<Value>(
+                                        &tool_call.function.arguments,
+                                    )
+                                    .unwrap_or(Value::Object(Default::default())),
+                                },
+                            });
+                        }
+                    }
+                }
+
                 messages.push(ConverseMessage { role, content });
             }
-            _ => {
-                // Skip function/tool messages for now
-                // NOTE: tool message handling not yet implemented
-            }
+            MessageRole::Developer => {}
         }
     }
 
@@ -361,6 +346,155 @@ fn transform_to_converse(request: &ChatRequest) -> Result<ConverseRequest, Provi
         guardrail_config: None, // NOTE: guardrail support not yet implemented
         additional_model_request_fields: None,
     })
+}
+
+fn content_parts_to_blocks(
+    parts: &[crate::core::types::content::ContentPart],
+) -> Result<Vec<ContentBlock>, ProviderError> {
+    parts.iter().map(content_part_to_block).collect()
+}
+
+fn content_part_to_block(
+    part: &crate::core::types::content::ContentPart,
+) -> Result<ContentBlock, ProviderError> {
+    match part {
+        crate::core::types::content::ContentPart::Text { text } => {
+            Ok(ContentBlock::Text { text: text.clone() })
+        }
+        crate::core::types::content::ContentPart::ToolUse { id, name, input } => {
+            Ok(ContentBlock::ToolUse {
+                tool_use: ToolUseBlock {
+                    tool_use_id: id.clone(),
+                    name: name.clone(),
+                    input: input.clone(),
+                },
+            })
+        }
+        crate::core::types::content::ContentPart::ToolResult {
+            tool_use_id,
+            content,
+            is_error,
+        } => Ok(ContentBlock::ToolResult {
+            tool_result: ToolResultBlock {
+                tool_use_id: tool_use_id.clone(),
+                content: tool_result_contents_from_value(content)?,
+                status: is_error.unwrap_or(false).then(|| "error".to_string()),
+            },
+        }),
+        crate::core::types::content::ContentPart::Image { .. }
+        | crate::core::types::content::ContentPart::ImageUrl { .. } => Err(
+            ProviderError::not_implemented("bedrock", "Converse image content parts"),
+        ),
+        crate::core::types::content::ContentPart::Audio { .. } => Err(
+            ProviderError::not_implemented("bedrock", "Converse audio content parts"),
+        ),
+        crate::core::types::content::ContentPart::Document { .. } => Err(
+            ProviderError::not_implemented("bedrock", "Converse document content parts"),
+        ),
+    }
+}
+
+fn message_content_to_tool_result_contents(
+    content: Option<&MessageContent>,
+) -> Result<Vec<ToolResultContent>, ProviderError> {
+    match content {
+        Some(MessageContent::Text(text)) => {
+            Ok(vec![ToolResultContent::Text { text: text.clone() }])
+        }
+        Some(MessageContent::Parts(parts)) => {
+            let mut result = Vec::new();
+            for part in parts {
+                match part {
+                    crate::core::types::content::ContentPart::Text { text } => {
+                        result.push(ToolResultContent::Text { text: text.clone() });
+                    }
+                    crate::core::types::content::ContentPart::ToolResult { content, .. } => {
+                        result.extend(tool_result_contents_from_value(content)?);
+                    }
+                    crate::core::types::content::ContentPart::Image { .. }
+                    | crate::core::types::content::ContentPart::ImageUrl { .. } => {
+                        return Err(ProviderError::not_implemented(
+                            "bedrock",
+                            "Converse tool-result image content",
+                        ));
+                    }
+                    crate::core::types::content::ContentPart::Audio { .. } => {
+                        return Err(ProviderError::not_implemented(
+                            "bedrock",
+                            "Converse tool-result audio content",
+                        ));
+                    }
+                    crate::core::types::content::ContentPart::Document { .. } => {
+                        return Err(ProviderError::not_implemented(
+                            "bedrock",
+                            "Converse tool-result document content",
+                        ));
+                    }
+                    crate::core::types::content::ContentPart::ToolUse { .. } => {
+                        return Err(ProviderError::invalid_request(
+                            "bedrock",
+                            "Tool result message cannot contain tool_use content",
+                        ));
+                    }
+                }
+            }
+            Ok(result)
+        }
+        None => Ok(vec![ToolResultContent::Text {
+            text: String::new(),
+        }]),
+    }
+}
+
+fn tool_result_contents_from_value(value: &Value) -> Result<Vec<ToolResultContent>, ProviderError> {
+    if let Some(text) = value.as_str() {
+        return Ok(vec![ToolResultContent::Text {
+            text: text.to_string(),
+        }]);
+    }
+
+    if let Some(items) = value.as_array() {
+        let mut result = Vec::new();
+        for item in items {
+            if let Some(item_type) = item.get("type").and_then(|v| v.as_str()) {
+                match item_type {
+                    "text" => {
+                        if let Some(text) = item.get("text").and_then(|v| v.as_str()) {
+                            result.push(ToolResultContent::Text {
+                                text: text.to_string(),
+                            });
+                        }
+                    }
+                    "image" | "image_url" => {
+                        return Err(ProviderError::not_implemented(
+                            "bedrock",
+                            "Converse tool-result image content",
+                        ));
+                    }
+                    "document" => {
+                        return Err(ProviderError::not_implemented(
+                            "bedrock",
+                            "Converse tool-result document content",
+                        ));
+                    }
+                    _ => {
+                        result.push(ToolResultContent::Text {
+                            text: item.to_string(),
+                        });
+                    }
+                }
+            } else {
+                result.push(ToolResultContent::Text {
+                    text: item.to_string(),
+                });
+            }
+        }
+        return Ok(result);
+    }
+
+    Ok(vec![ToolResultContent::Text {
+        text: value.to_string(),
+    }])
 }
 
 #[cfg(test)]
@@ -752,6 +886,111 @@ mod tests {
         let converse = result.unwrap();
         assert_eq!(converse.messages.len(), 1);
         assert!(converse.messages[0].content.is_empty());
+    }
+
+    #[test]
+    fn test_bedrock_tool_result_round_trip() {
+        let request = ChatRequest {
+            model: "anthropic.claude-3-sonnet".to_string(),
+            messages: vec![
+                ChatMessage {
+                    role: MessageRole::Assistant,
+                    content: Some(MessageContent::Text("I'll call a tool.".to_string())),
+                    tool_calls: Some(vec![crate::core::types::tools::ToolCall {
+                        id: "tool-123".to_string(),
+                        tool_type: "function".to_string(),
+                        function: crate::core::types::tools::FunctionCall {
+                            name: "get_weather".to_string(),
+                            arguments: r#"{"city":"Paris"}"#.to_string(),
+                        },
+                    }]),
+                    ..Default::default()
+                },
+                ChatMessage {
+                    role: MessageRole::Tool,
+                    content: Some(MessageContent::Text("Sunny".to_string())),
+                    tool_call_id: Some("tool-123".to_string()),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+
+        let converse = transform_to_converse(&request).unwrap();
+        let json = serde_json::to_value(&converse).unwrap();
+
+        assert_eq!(json["messages"][0]["role"], "assistant");
+        assert_eq!(
+            json["messages"][0]["content"][0]["text"]["text"],
+            "I'll call a tool."
+        );
+        let tool_use = &json["messages"][0]["content"][1]["toolUse"]["tool_use"];
+        assert_eq!(tool_use["toolUseId"], "tool-123");
+        assert_eq!(tool_use["name"], "get_weather");
+        assert_eq!(tool_use["input"]["city"], "Paris");
+
+        assert_eq!(json["messages"][1]["role"], "user");
+        let tool_result = &json["messages"][1]["content"][0]["toolResult"]["tool_result"];
+        assert_eq!(tool_result["toolUseId"], "tool-123");
+        assert_eq!(tool_result["content"][0]["text"]["text"], "Sunny");
+    }
+
+    #[test]
+    fn test_bedrock_converse_tool_result_content_part() {
+        let request = ChatRequest {
+            model: "anthropic.claude-3-sonnet".to_string(),
+            messages: vec![ChatMessage {
+                role: MessageRole::User,
+                content: Some(MessageContent::Parts(vec![
+                    crate::core::types::content::ContentPart::Text {
+                        text: "Tool output follows.".to_string(),
+                    },
+                    crate::core::types::content::ContentPart::ToolResult {
+                        tool_use_id: "tool-123".to_string(),
+                        content: serde_json::json!("done"),
+                        is_error: Some(true),
+                    },
+                ])),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let converse = transform_to_converse(&request).unwrap();
+        let json = serde_json::to_value(&converse).unwrap();
+        assert_eq!(
+            json["messages"][0]["content"][0]["text"]["text"],
+            "Tool output follows."
+        );
+        let tool_result = &json["messages"][0]["content"][1]["toolResult"]["tool_result"];
+        assert_eq!(tool_result["toolUseId"], "tool-123");
+        assert_eq!(tool_result["content"][0]["text"]["text"], "done");
+        assert_eq!(tool_result["status"], "error");
+    }
+
+    #[test]
+    fn test_bedrock_converse_unsupported_image_is_error() {
+        let request = ChatRequest {
+            model: "anthropic.claude-3-sonnet".to_string(),
+            messages: vec![ChatMessage {
+                role: MessageRole::User,
+                content: Some(MessageContent::Parts(vec![
+                    crate::core::types::content::ContentPart::Image {
+                        source: crate::core::types::content::ImageSource {
+                            media_type: "image/png".to_string(),
+                            data: "base64-image".to_string(),
+                        },
+                        detail: None,
+                        image_url: None,
+                    },
+                ])),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let err = transform_to_converse(&request).unwrap_err();
+        assert!(format!("{err}").contains("image"));
     }
 
     // ==================== Converse Request Full Tests ====================

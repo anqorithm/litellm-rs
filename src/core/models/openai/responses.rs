@@ -10,6 +10,7 @@ use super::audio::AudioDelta;
 use super::messages::MessageContent;
 use super::messages::{ChatMessage, MessageRole};
 use super::tools::{FunctionCallDelta, ToolCallDelta};
+use crate::core::types::thinking::ThinkingUsage;
 
 /// Chat completion response
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -97,9 +98,14 @@ pub struct Usage {
     /// Total tokens
     pub total_tokens: u32,
     /// Prompt tokens details
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt_tokens_details: Option<PromptTokensDetails>,
     /// Completion tokens details
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub completion_tokens_details: Option<CompletionTokensDetails>,
+    /// Thinking/reasoning usage statistics
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking_usage: Option<ThinkingUsage>,
 }
 
 /// Prompt tokens details
@@ -107,6 +113,12 @@ pub struct Usage {
 pub struct PromptTokensDetails {
     /// Cached tokens
     pub cached_tokens: Option<u32>,
+    /// Tokens written into provider-side prompt cache
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_creation_tokens: Option<u32>,
+    /// Tokens read from provider-side prompt cache
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_read_tokens: Option<u32>,
     /// Audio tokens
     pub audio_tokens: Option<u32>,
 }
@@ -294,6 +306,7 @@ mod tests {
             total_tokens: 150,
             prompt_tokens_details: None,
             completion_tokens_details: None,
+            thinking_usage: None,
         };
 
         assert_eq!(usage.prompt_tokens, 100);
@@ -309,12 +322,15 @@ mod tests {
             total_tokens: 150,
             prompt_tokens_details: Some(PromptTokensDetails {
                 cached_tokens: Some(20),
+                cache_creation_tokens: None,
+                cache_read_tokens: Some(20),
                 audio_tokens: None,
             }),
             completion_tokens_details: Some(CompletionTokensDetails {
                 reasoning_tokens: Some(10),
                 audio_tokens: Some(5),
             }),
+            thinking_usage: None,
         };
 
         assert!(usage.prompt_tokens_details.is_some());
@@ -340,12 +356,36 @@ mod tests {
             total_tokens: 150,
             prompt_tokens_details: None,
             completion_tokens_details: None,
+            thinking_usage: None,
         };
 
         let json = serde_json::to_string(&usage).unwrap();
         assert!(json.contains("\"prompt_tokens\":100"));
         assert!(json.contains("\"completion_tokens\":50"));
         assert!(json.contains("\"total_tokens\":150"));
+        assert!(!json.contains("prompt_tokens_details"));
+        assert!(!json.contains("completion_tokens_details"));
+        assert!(!json.contains("thinking_usage"));
+    }
+
+    #[test]
+    fn test_usage_serialize_thinking_usage() {
+        let usage = Usage {
+            prompt_tokens: 100,
+            completion_tokens: 50,
+            total_tokens: 150,
+            prompt_tokens_details: None,
+            completion_tokens_details: Some(CompletionTokensDetails {
+                reasoning_tokens: Some(25),
+                audio_tokens: None,
+            }),
+            thinking_usage: Some(ThinkingUsage::new(25).with_budget(1000)),
+        };
+
+        let json = serde_json::to_value(&usage).unwrap();
+        assert_eq!(json["thinking_usage"]["thinking_tokens"], 25);
+        assert_eq!(json["thinking_usage"]["budget_tokens"], 1000);
+        assert_eq!(json["completion_tokens_details"]["reasoning_tokens"], 25);
     }
 
     #[test]
@@ -362,10 +402,14 @@ mod tests {
     fn test_prompt_tokens_details_full() {
         let details = PromptTokensDetails {
             cached_tokens: Some(50),
+            cache_creation_tokens: Some(5),
+            cache_read_tokens: Some(45),
             audio_tokens: Some(10),
         };
 
         assert_eq!(details.cached_tokens, Some(50));
+        assert_eq!(details.cache_creation_tokens, Some(5));
+        assert_eq!(details.cache_read_tokens, Some(45));
         assert_eq!(details.audio_tokens, Some(10));
     }
 
@@ -373,6 +417,8 @@ mod tests {
     fn test_prompt_tokens_details_partial() {
         let details = PromptTokensDetails {
             cached_tokens: Some(30),
+            cache_creation_tokens: None,
+            cache_read_tokens: Some(30),
             audio_tokens: None,
         };
 
@@ -577,6 +623,7 @@ mod tests {
                 total_tokens: 30,
                 prompt_tokens_details: None,
                 completion_tokens_details: None,
+                thinking_usage: None,
             }),
         };
 

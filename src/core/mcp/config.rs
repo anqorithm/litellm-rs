@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use super::transport::Transport;
+use crate::core::net::validate_outbound_url_str;
 
 /// MCP Server configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -142,6 +143,7 @@ impl McpServerConfig {
                         self.url
                     ));
                 }
+                validate_outbound_url_str(&self.url).map_err(|error| error.to_string())?;
             }
             Transport::Stdio => {
                 // For stdio, URL is a command path - no strict validation
@@ -153,6 +155,7 @@ impl McpServerConfig {
                         self.url
                     ));
                 }
+                validate_outbound_url_str(&self.url).map_err(|error| error.to_string())?;
             }
         }
 
@@ -481,6 +484,47 @@ mod tests {
     fn test_server_config_validation_valid_http() {
         let config =
             McpServerConfig::new("test", "https://example.com").with_transport(Transport::Http);
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_server_config_validation_rejects_http_private_targets() {
+        for url in [
+            "http://127.0.0.1:8080/mcp",
+            "http://localhost:8080/mcp",
+            "http://169.254.169.254/latest/meta-data/",
+            "http://10.0.0.1/mcp",
+        ] {
+            let config = McpServerConfig::new("test", url).with_transport(Transport::Http);
+            let error = config.validate().expect_err("private target must fail");
+            assert!(
+                error.contains("private or reserved"),
+                "unexpected error for {url}: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_server_config_validation_rejects_websocket_private_targets() {
+        let config = McpServerConfig::new("test", "ws://[::1]:9000/mcp")
+            .with_transport(Transport::WebSocket);
+        let error = config
+            .validate()
+            .expect_err("private websocket target must fail");
+        assert!(error.contains("private or reserved"));
+    }
+
+    #[test]
+    fn test_server_config_validation_allows_public_websocket() {
+        let config = McpServerConfig::new("test", "wss://mcp.example.com/socket")
+            .with_transport(Transport::WebSocket);
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_server_config_validation_leaves_stdio_paths_alone() {
+        let config = McpServerConfig::new("local", "/usr/local/bin/mcp-server")
+            .with_transport(Transport::Stdio);
         assert!(config.validate().is_ok());
     }
 

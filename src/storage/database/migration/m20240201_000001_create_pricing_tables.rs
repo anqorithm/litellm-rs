@@ -21,16 +21,49 @@ impl MigrationTrait for Migration {
                             .auto_increment()
                             .primary_key(),
                     )
-                    .col(ColumnDef::new(ModelPricing::Provider).string_len(50).not_null())
-                    .col(ColumnDef::new(ModelPricing::Model).string_len(100).not_null())
-                    .col(ColumnDef::new(ModelPricing::InputCostPer1k).double().not_null())
-                    .col(ColumnDef::new(ModelPricing::OutputCostPer1k).double().not_null())
-                    .col(ColumnDef::new(ModelPricing::Currency).string_len(10).not_null())
-                    .col(ColumnDef::new(ModelPricing::IsDefault).boolean().not_null().default(false))
+                    .col(
+                        ColumnDef::new(ModelPricing::Provider)
+                            .string_len(50)
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(ModelPricing::Model)
+                            .string_len(100)
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(ModelPricing::InputCostPer1k)
+                            .double()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(ModelPricing::OutputCostPer1k)
+                            .double()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(ModelPricing::Currency)
+                            .string_len(10)
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(ModelPricing::IsDefault)
+                            .boolean()
+                            .not_null()
+                            .default(false),
+                    )
                     .col(ColumnDef::new(ModelPricing::Metadata).json())
                     .col(ColumnDef::new(ModelPricing::Source).string_len(20))
-                    .col(ColumnDef::new(ModelPricing::CreatedAt).timestamp().not_null())
-                    .col(ColumnDef::new(ModelPricing::UpdatedAt).timestamp().not_null())
+                    .col(
+                        ColumnDef::new(ModelPricing::CreatedAt)
+                            .timestamp()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(ModelPricing::UpdatedAt)
+                            .timestamp()
+                            .not_null(),
+                    )
                     .col(ColumnDef::new(ModelPricing::ExpiresAt).timestamp())
                     .to_owned(),
             )
@@ -83,16 +116,48 @@ impl MigrationTrait for Migration {
                             .auto_increment()
                             .primary_key(),
                     )
-                    .col(ColumnDef::new(PricingHistory::PricingId).integer().not_null())
-                    .col(ColumnDef::new(PricingHistory::Provider).string_len(50).not_null())
-                    .col(ColumnDef::new(PricingHistory::Model).string_len(100).not_null())
-                    .col(ColumnDef::new(PricingHistory::OldInputCostPer1k).double().not_null())
-                    .col(ColumnDef::new(PricingHistory::NewInputCostPer1k).double().not_null())
-                    .col(ColumnDef::new(PricingHistory::OldOutputCostPer1k).double().not_null())
-                    .col(ColumnDef::new(PricingHistory::NewOutputCostPer1k).double().not_null())
+                    .col(
+                        ColumnDef::new(PricingHistory::PricingId)
+                            .integer()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(PricingHistory::Provider)
+                            .string_len(50)
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(PricingHistory::Model)
+                            .string_len(100)
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(PricingHistory::OldInputCostPer1k)
+                            .double()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(PricingHistory::NewInputCostPer1k)
+                            .double()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(PricingHistory::OldOutputCostPer1k)
+                            .double()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(PricingHistory::NewOutputCostPer1k)
+                            .double()
+                            .not_null(),
+                    )
                     .col(ColumnDef::new(PricingHistory::ChangeReason).text())
                     .col(ColumnDef::new(PricingHistory::ChangedBy).string_len(50))
-                    .col(ColumnDef::new(PricingHistory::CreatedAt).timestamp().not_null())
+                    .col(
+                        ColumnDef::new(PricingHistory::CreatedAt)
+                            .timestamp()
+                            .not_null(),
+                    )
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_pricing_history_pricing_id")

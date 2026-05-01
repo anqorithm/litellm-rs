@@ -433,6 +433,8 @@ mod tests {
             total_tokens: 300,
             prompt_tokens_details: Some(PromptTokensDetails {
                 cached_tokens: Some(50),
+                cache_creation_tokens: None,
+                cache_read_tokens: Some(50),
                 audio_tokens: Some(10),
             }),
             completion_tokens_details: Some(CompletionTokensDetails {

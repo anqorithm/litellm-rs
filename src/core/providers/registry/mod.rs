@@ -8,6 +8,11 @@
 
 pub mod catalog;
 pub mod definition;
+pub mod types;
 
 pub use catalog::{PROVIDER_CATALOG, get_definition, is_tier1_provider};
 pub use definition::{AuthType, ProviderDefinition};
+pub use types::{
+    PROVIDER_TYPE_REGISTRY, ProviderDispatchKind, ProviderRegistryEntry,
+    dispatchable_provider_types, entry_for_name, entry_for_type, provider_type_registry,
+};

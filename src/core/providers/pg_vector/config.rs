@@ -315,7 +315,11 @@ impl PgVectorConfig {
 
     /// Get the fully qualified table name with PostgreSQL identifier quoting
     pub fn full_table_name(&self) -> String {
-        format!("\"{}\".\"{}\"", self.schema, self.table_name)
+        format!(
+            "{}.{}",
+            quote_pg_identifier(&self.schema),
+            quote_pg_identifier(&self.table_name)
+        )
     }
 
     /// Validate the configuration
@@ -343,16 +347,7 @@ impl PgVectorConfig {
             ));
         }
 
-        if !self
-            .table_name
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_')
-        {
-            return Err(ProviderError::configuration(
-                PROVIDER_NAME,
-                "Table name must contain only alphanumeric characters and underscores",
-            ));
-        }
+        validate_pg_identifier("Table name", &self.table_name)?;
 
         if self.schema.is_empty() {
             return Err(ProviderError::configuration(
@@ -361,16 +356,7 @@ impl PgVectorConfig {
             ));
         }
 
-        if !self
-            .schema
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_')
-        {
-            return Err(ProviderError::configuration(
-                PROVIDER_NAME,
-                "Schema name must contain only alphanumeric characters and underscores",
-            ));
-        }
+        validate_pg_identifier("Schema name", &self.schema)?;
 
         if self.dimension == 0 {
             return Err(ProviderError::configuration(
@@ -396,6 +382,43 @@ impl PgVectorConfig {
 
         Ok(())
     }
+}
+
+pub(crate) fn quote_pg_identifier(identifier: &str) -> String {
+    format!("\"{}\"", identifier.replace('"', "\"\""))
+}
+
+fn validate_pg_identifier(kind: &str, identifier: &str) -> Result<(), ProviderError> {
+    let mut chars = identifier.chars();
+    let Some(first) = chars.next() else {
+        return Err(ProviderError::configuration(
+            PROVIDER_NAME,
+            format!("{kind} cannot be empty"),
+        ));
+    };
+
+    if identifier.len() > 63 {
+        return Err(ProviderError::configuration(
+            PROVIDER_NAME,
+            format!("{kind} cannot exceed 63 bytes"),
+        ));
+    }
+
+    if !(first.is_ascii_alphabetic() || first == '_') {
+        return Err(ProviderError::configuration(
+            PROVIDER_NAME,
+            format!("{kind} must start with an ASCII letter or underscore"),
+        ));
+    }
+
+    if !chars.all(|c| c.is_ascii_alphanumeric() || c == '_') {
+        return Err(ProviderError::configuration(
+            PROVIDER_NAME,
+            format!("{kind} must contain only ASCII letters, numbers, and underscores"),
+        ));
+    }
+
+    Ok(())
 }
 
 /// Builder for PgVectorConfig
@@ -540,6 +563,20 @@ mod tests {
     fn test_validate_rejects_special_chars_in_table_name() {
         let mut config = PgVectorConfig::new("postgresql://localhost:5432/test");
         config.table_name = "bad; DROP TABLE users--".to_string();
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_validate_rejects_identifier_starting_with_digit() {
+        let mut config = PgVectorConfig::new("postgresql://localhost:5432/test");
+        config.table_name = "1bad_table".to_string();
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_validate_rejects_identifier_over_63_bytes() {
+        let mut config = PgVectorConfig::new("postgresql://localhost:5432/test");
+        config.table_name = format!("a{}", "b".repeat(63));
         assert!(config.validate().is_err());
     }
 

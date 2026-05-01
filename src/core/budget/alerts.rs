@@ -5,6 +5,8 @@
 
 use super::tracker::SpendResult;
 use super::types::{AlertSeverity, Budget, BudgetAlert, BudgetAlertType};
+use crate::core::http::outbound::default_outbound_client;
+use crate::utils::net::http::create_custom_client;
 use reqwest::Client;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -12,7 +14,6 @@ use std::time::Duration;
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
-use crate::utils::net::http::create_custom_client;
 /// Budget alert manager for handling notifications
 #[derive(Clone)]
 pub struct BudgetAlertManager {
@@ -150,7 +151,8 @@ impl BudgetAlertManager {
         Self {
             alerts: Arc::new(RwLock::new(AlertStorage::new(config.max_history_size))),
             webhooks: Arc::new(RwLock::new(Vec::new())),
-            client: create_custom_client(Duration::from_secs(30)).unwrap_or_else(|_| Client::new()),
+            client: create_custom_client(Duration::from_secs(30))
+                .unwrap_or_else(|_| default_outbound_client().clone()),
             config: Arc::new(RwLock::new(config)),
         }
     }
@@ -160,7 +162,8 @@ impl BudgetAlertManager {
         Self {
             alerts: Arc::new(RwLock::new(AlertStorage::new(config.max_history_size))),
             webhooks: Arc::new(RwLock::new(Vec::new())),
-            client: create_custom_client(Duration::from_secs(30)).unwrap_or_else(|_| Client::new()),
+            client: create_custom_client(Duration::from_secs(30))
+                .unwrap_or_else(|_| default_outbound_client().clone()),
             config: Arc::new(RwLock::new(config)),
         }
     }

@@ -1,0 +1,401 @@
+//! Canonical provider registry matrix.
+//!
+//! This module is intentionally observational for now: it records provider
+//! identity, aliases, and dispatch class without replacing factory routing yet.
+
+use crate::core::providers::provider_type::ProviderType;
+
+/// How a provider selector is currently dispatched.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProviderDispatchKind {
+    /// Backed by a concrete `Provider` enum variant.
+    Native,
+    /// Backed by an explicit factory branch that creates `OpenAILikeProvider`.
+    ExplicitOpenAiLike,
+    /// Backed by the data-driven Tier-1 catalog.
+    CatalogOpenAiLike,
+    /// Represented in `ProviderType`, but not currently instantiable.
+    UnsupportedEnum,
+}
+
+impl ProviderDispatchKind {
+    pub fn is_dispatchable(self) -> bool {
+        !matches!(self, Self::UnsupportedEnum)
+    }
+}
+
+/// Canonical metadata for one non-custom `ProviderType` variant.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProviderRegistryEntry {
+    pub provider_type: ProviderType,
+    pub canonical_name: &'static str,
+    pub aliases: &'static [&'static str],
+    pub dispatch_kind: ProviderDispatchKind,
+    /// True when the canonical selector is present in `PROVIDER_CATALOG`.
+    pub catalog_backed: bool,
+}
+
+impl ProviderRegistryEntry {
+    pub fn is_dispatchable(&self) -> bool {
+        self.dispatch_kind.is_dispatchable()
+    }
+
+    pub fn names(&self) -> impl Iterator<Item = &'static str> + '_ {
+        std::iter::once(self.canonical_name).chain(self.aliases.iter().copied())
+    }
+
+    pub fn matches_name(&self, name: &str) -> bool {
+        let normalized = name.trim().to_ascii_lowercase();
+        self.names().any(|candidate| candidate == normalized)
+    }
+}
+
+pub static PROVIDER_TYPE_REGISTRY: &[ProviderRegistryEntry] = &[
+    entry(
+        ProviderType::OpenAI,
+        "openai",
+        &[],
+        ProviderDispatchKind::Native,
+        false,
+    ),
+    entry(
+        ProviderType::Anthropic,
+        "anthropic",
+        &[],
+        ProviderDispatchKind::Native,
+        false,
+    ),
+    entry(
+        ProviderType::Bedrock,
+        "bedrock",
+        &["aws-bedrock"],
+        ProviderDispatchKind::ExplicitOpenAiLike,
+        false,
+    ),
+    entry(
+        ProviderType::OpenRouter,
+        "openrouter",
+        &[],
+        ProviderDispatchKind::CatalogOpenAiLike,
+        true,
+    ),
+    entry(
+        ProviderType::VertexAI,
+        "vertex_ai",
+        &["vertexai", "vertex-ai"],
+        ProviderDispatchKind::ExplicitOpenAiLike,
+        false,
+    ),
+    entry(
+        ProviderType::Azure,
+        "azure",
+        &["azure-openai"],
+        ProviderDispatchKind::ExplicitOpenAiLike,
+        false,
+    ),
+    entry(
+        ProviderType::AzureAI,
+        "azure_ai",
+        &["azureai", "azure-ai"],
+        ProviderDispatchKind::ExplicitOpenAiLike,
+        false,
+    ),
+    entry(
+        ProviderType::DeepSeek,
+        "deepseek",
+        &["deep-seek"],
+        ProviderDispatchKind::CatalogOpenAiLike,
+        true,
+    ),
+    entry(
+        ProviderType::DeepInfra,
+        "deepinfra",
+        &["deep-infra"],
+        ProviderDispatchKind::CatalogOpenAiLike,
+        true,
+    ),
+    entry(
+        ProviderType::V0,
+        "v0",
+        &[],
+        ProviderDispatchKind::ExplicitOpenAiLike,
+        false,
+    ),
+    entry(
+        ProviderType::MetaLlama,
+        "meta_llama",
+        &["llama", "meta-llama"],
+        ProviderDispatchKind::ExplicitOpenAiLike,
+        false,
+    ),
+    entry(
+        ProviderType::Mistral,
+        "mistral",
+        &["mistralai"],
+        ProviderDispatchKind::Native,
+        false,
+    ),
+    entry(
+        ProviderType::Moonshot,
+        "moonshot",
+        &["moonshot-ai"],
+        ProviderDispatchKind::CatalogOpenAiLike,
+        true,
+    ),
+    entry(
+        ProviderType::Minimax,
+        "minimax",
+        &["minimax-ai"],
+        ProviderDispatchKind::CatalogOpenAiLike,
+        true,
+    ),
+    entry(
+        ProviderType::Dashscope,
+        "dashscope",
+        &["alibaba", "qwen", "tongyi"],
+        ProviderDispatchKind::CatalogOpenAiLike,
+        true,
+    ),
+    entry(
+        ProviderType::Groq,
+        "groq",
+        &[],
+        ProviderDispatchKind::CatalogOpenAiLike,
+        true,
+    ),
+    entry(
+        ProviderType::XAI,
+        "xai",
+        &[],
+        ProviderDispatchKind::CatalogOpenAiLike,
+        true,
+    ),
+    entry(
+        ProviderType::Cloudflare,
+        "cloudflare",
+        &["cf", "workers-ai"],
+        ProviderDispatchKind::Native,
+        false,
+    ),
+    entry(
+        ProviderType::Perplexity,
+        "perplexity",
+        &["perplexity-ai", "pplx"],
+        ProviderDispatchKind::CatalogOpenAiLike,
+        true,
+    ),
+    entry(
+        ProviderType::Replicate,
+        "replicate",
+        &["replicate-ai"],
+        ProviderDispatchKind::ExplicitOpenAiLike,
+        false,
+    ),
+    entry(
+        ProviderType::FalAI,
+        "fal_ai",
+        &["fal-ai", "fal"],
+        ProviderDispatchKind::ExplicitOpenAiLike,
+        false,
+    ),
+    entry(
+        ProviderType::AmazonNova,
+        "amazon_nova",
+        &["amazon-nova", "nova"],
+        ProviderDispatchKind::ExplicitOpenAiLike,
+        false,
+    ),
+    entry(
+        ProviderType::GitHub,
+        "github",
+        &["github-models"],
+        ProviderDispatchKind::ExplicitOpenAiLike,
+        false,
+    ),
+    entry(
+        ProviderType::GitHubCopilot,
+        "github_copilot",
+        &["github-copilot", "copilot"],
+        ProviderDispatchKind::ExplicitOpenAiLike,
+        false,
+    ),
+    entry(
+        ProviderType::Hyperbolic,
+        "hyperbolic",
+        &["hyperbolic-ai"],
+        ProviderDispatchKind::CatalogOpenAiLike,
+        true,
+    ),
+    entry(
+        ProviderType::Infinity,
+        "infinity",
+        &["infinity-embedding"],
+        ProviderDispatchKind::CatalogOpenAiLike,
+        true,
+    ),
+    entry(
+        ProviderType::Novita,
+        "novita",
+        &["novita-ai"],
+        ProviderDispatchKind::CatalogOpenAiLike,
+        true,
+    ),
+    entry(
+        ProviderType::Volcengine,
+        "volcengine",
+        &["volc", "doubao", "bytedance"],
+        ProviderDispatchKind::CatalogOpenAiLike,
+        true,
+    ),
+    entry(
+        ProviderType::Nebius,
+        "nebius",
+        &["nebius-ai"],
+        ProviderDispatchKind::CatalogOpenAiLike,
+        true,
+    ),
+    entry(
+        ProviderType::Nscale,
+        "nscale",
+        &["nscale-ai"],
+        ProviderDispatchKind::CatalogOpenAiLike,
+        true,
+    ),
+    entry(
+        ProviderType::PydanticAI,
+        "pydantic_ai",
+        &["pydantic-ai", "pydantic"],
+        ProviderDispatchKind::UnsupportedEnum,
+        false,
+    ),
+    entry(
+        ProviderType::OpenAICompatible,
+        "openai_compatible",
+        &["openai-compatible", "openai_like", "openai-like"],
+        ProviderDispatchKind::Native,
+        false,
+    ),
+];
+
+pub fn provider_type_registry() -> &'static [ProviderRegistryEntry] {
+    PROVIDER_TYPE_REGISTRY
+}
+
+pub fn entry_for_type(provider_type: &ProviderType) -> Option<&'static ProviderRegistryEntry> {
+    PROVIDER_TYPE_REGISTRY
+        .iter()
+        .find(|entry| &entry.provider_type == provider_type)
+}
+
+pub fn entry_for_name(name: &str) -> Option<&'static ProviderRegistryEntry> {
+    PROVIDER_TYPE_REGISTRY
+        .iter()
+        .find(|entry| entry.matches_name(name))
+}
+
+pub fn dispatchable_provider_types() -> Vec<ProviderType> {
+    PROVIDER_TYPE_REGISTRY
+        .iter()
+        .filter(|entry| entry.is_dispatchable())
+        .map(|entry| entry.provider_type.clone())
+        .collect()
+}
+
+const fn entry(
+    provider_type: ProviderType,
+    canonical_name: &'static str,
+    aliases: &'static [&'static str],
+    dispatch_kind: ProviderDispatchKind,
+    catalog_backed: bool,
+) -> ProviderRegistryEntry {
+    ProviderRegistryEntry {
+        provider_type,
+        canonical_name,
+        aliases,
+        dispatch_kind,
+        catalog_backed,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::providers::{Provider, provider_type::all_non_custom_provider_types};
+    use std::collections::HashSet;
+    use std::str::FromStr;
+
+    fn sorted_type_names(values: impl IntoIterator<Item = ProviderType>) -> Vec<String> {
+        let mut values = values
+            .into_iter()
+            .map(|provider_type| provider_type.to_string())
+            .collect::<Vec<_>>();
+        values.sort();
+        values
+    }
+
+    #[test]
+    fn provider_registry_contains_all_non_custom_provider_types() {
+        assert_eq!(
+            sorted_type_names(all_non_custom_provider_types()),
+            sorted_type_names(
+                PROVIDER_TYPE_REGISTRY
+                    .iter()
+                    .map(|entry| entry.provider_type.clone())
+            )
+        );
+    }
+
+    #[test]
+    fn provider_registry_aliases_parse_to_declared_type() {
+        for entry in PROVIDER_TYPE_REGISTRY {
+            for name in entry.names() {
+                assert_eq!(
+                    ProviderType::from_str(name).unwrap(),
+                    entry.provider_type,
+                    "alias {name} should parse to {:?}",
+                    entry.provider_type
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn provider_registry_display_names_match_canonical_names() {
+        for entry in PROVIDER_TYPE_REGISTRY {
+            assert_eq!(entry.provider_type.to_string(), entry.canonical_name);
+        }
+    }
+
+    #[test]
+    fn provider_registry_dispatchability_matches_factory_supported_types() {
+        assert_eq!(
+            sorted_type_names(dispatchable_provider_types()),
+            sorted_type_names(Provider::factory_supported_provider_types().iter().cloned())
+        );
+    }
+
+    #[test]
+    fn provider_registry_catalog_flags_match_catalog() {
+        for entry in PROVIDER_TYPE_REGISTRY {
+            assert_eq!(
+                super::super::catalog::get_definition(entry.canonical_name).is_some(),
+                entry.catalog_backed,
+                "{} catalog flag drifted",
+                entry.canonical_name
+            );
+        }
+    }
+
+    #[test]
+    fn provider_registry_names_are_unique() {
+        let mut seen = HashSet::new();
+        for entry in PROVIDER_TYPE_REGISTRY {
+            for name in entry.names() {
+                assert!(
+                    seen.insert(name),
+                    "duplicate provider registry name: {name}"
+                );
+            }
+        }
+    }
+}

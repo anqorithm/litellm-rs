@@ -166,8 +166,12 @@ impl BedrockClient {
         let body_str = serde_json::to_string(body)
             .map_err(|e| ProviderError::serialization("bedrock", e.to_string()))?;
 
-        debug!("Bedrock request: {} to {}", operation, url);
-        debug!("Request body: {}", body_str);
+        debug!(
+            operation,
+            url,
+            body_bytes = body_str.len(),
+            "Bedrock request prepared"
+        );
 
         // Create signed headers
         let headers = self.create_signed_headers(&url, &body_str, "POST").await?;
@@ -189,7 +193,8 @@ impl BedrockClient {
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unknown error".to_string());
-            error!("Bedrock API error: {} - {}", status, error_body);
+            let error_body_bytes = error_body.len();
+            error!(status, body_bytes = error_body_bytes, "Bedrock API error");
             return Err(self.error_mapper.map_http_error(status, &error_body));
         }
 
@@ -229,7 +234,12 @@ impl BedrockClient {
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unknown error".to_string());
-            error!("Bedrock streaming API error: {} - {}", status, error_body);
+            let error_body_bytes = error_body.len();
+            error!(
+                status,
+                body_bytes = error_body_bytes,
+                "Bedrock streaming API error"
+            );
             return Err(self.error_mapper.map_http_error(status, &error_body));
         }
 
@@ -262,7 +272,12 @@ impl BedrockClient {
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unknown error".to_string());
-            error!("Bedrock GET API error: {} - {}", status, error_body);
+            let error_body_bytes = error_body.len();
+            error!(
+                status,
+                body_bytes = error_body_bytes,
+                "Bedrock GET API error"
+            );
             return Err(self.error_mapper.map_http_error(status, &error_body));
         }
 

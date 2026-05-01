@@ -5,6 +5,8 @@ use crate::config::models::rate_limit::{RateLimitConfig, RateLimitStrategy};
 use dashmap::DashMap;
 use std::sync::Arc;
 use std::time::Duration;
+#[cfg(feature = "gateway")]
+use tracing::warn;
 
 /// Rate limiter implementation
 pub struct RateLimiter {
@@ -14,6 +16,9 @@ pub struct RateLimiter {
     pub(super) entries: Arc<DashMap<String, RateLimitEntry>>,
     /// Window duration
     pub(super) window: Duration,
+    /// Optional distributed Redis backend
+    #[cfg(feature = "gateway")]
+    pub(super) redis: Option<Arc<crate::storage::redis::RedisPool>>,
 }
 
 impl RateLimiter {
@@ -23,6 +28,8 @@ impl RateLimiter {
             config,
             entries: Arc::new(DashMap::new()),
             window: Duration::from_secs(60), // 1 minute window
+            #[cfg(feature = "gateway")]
+            redis: None,
         }
     }
 
@@ -32,6 +39,22 @@ impl RateLimiter {
             config,
             entries: Arc::new(DashMap::new()),
             window,
+            #[cfg(feature = "gateway")]
+            redis: None,
+        }
+    }
+
+    /// Create a rate limiter backed by Redis for distributed enforcement.
+    #[cfg(feature = "gateway")]
+    pub fn with_redis(
+        config: RateLimitConfig,
+        redis: Arc<crate::storage::redis::RedisPool>,
+    ) -> Self {
+        Self {
+            config,
+            entries: Arc::new(DashMap::new()),
+            window: Duration::from_secs(60),
+            redis: if redis.is_noop() { None } else { Some(redis) },
         }
     }
 
@@ -49,6 +72,22 @@ impl RateLimiter {
                 reset_after_secs: 0,
                 retry_after_secs: None,
             };
+        }
+
+        #[cfg(feature = "gateway")]
+        if let Some(redis) = &self.redis {
+            match redis
+                .rate_limit_status(key, self.config.default_rpm, self.window.as_secs())
+                .await
+            {
+                Ok(result) => return result,
+                Err(err) => {
+                    warn!(
+                        "Redis rate-limit status failed for key {}; falling back to in-process limiter: {}",
+                        key, err
+                    );
+                }
+            }
         }
 
         match self.config.strategy {
@@ -72,6 +111,22 @@ impl RateLimiter {
                 reset_after_secs: 0,
                 retry_after_secs: None,
             };
+        }
+
+        #[cfg(feature = "gateway")]
+        if let Some(redis) = &self.redis {
+            match redis
+                .rate_limit_check_and_record(key, self.config.default_rpm, self.window.as_secs())
+                .await
+            {
+                Ok(result) => return result,
+                Err(err) => {
+                    warn!(
+                        "Redis rate-limit check failed for key {}; falling back to in-process limiter: {}",
+                        key, err
+                    );
+                }
+            }
         }
 
         match self.config.strategy {
@@ -110,6 +165,8 @@ impl Clone for RateLimiter {
             config: self.config.clone(),
             entries: self.entries.clone(),
             window: self.window,
+            #[cfg(feature = "gateway")]
+            redis: self.redis.clone(),
         }
     }
 }

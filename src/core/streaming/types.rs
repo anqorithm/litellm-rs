@@ -2,6 +2,7 @@
 
 use crate::core::models::openai::Usage;
 use crate::core::types::message::MessageRole;
+use crate::core::types::thinking::ThinkingDelta;
 use bytes::Bytes;
 
 /// Simple Event structure for SSE compatibility
@@ -57,10 +58,12 @@ pub struct ChatCompletionChunk {
     /// Model used for completion
     pub model: String,
     /// System fingerprint
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub system_fingerprint: Option<String>,
     /// Array of completion choices
     pub choices: Vec<ChatCompletionChunkChoice>,
     /// Usage statistics (only in final chunk)
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<Usage>,
 }
 
@@ -72,20 +75,40 @@ pub struct ChatCompletionChunkChoice {
     /// Delta containing the incremental content
     pub delta: ChatCompletionDelta,
     /// Reason for finishing (only in final chunk)
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub finish_reason: Option<String>,
     /// Log probabilities
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub logprobs: Option<serde_json::Value>,
 }
 
 /// Delta containing incremental content in streaming response
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct ChatCompletionDelta {
     /// Role of the message (only in first chunk)
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub role: Option<MessageRole>,
     /// Incremental content
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub content: Option<String>,
+    /// Thinking/reasoning delta
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking: Option<ThinkingDelta>,
+    /// OpenAI-compatible reasoning content alias
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_content: Option<String>,
     /// Tool calls (for function calling)
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<Vec<ToolCallDelta>>,
+    /// Tool call ID for tool-result style deltas
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
+    /// Refusal text for safety refusals
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub refusal: Option<String>,
+    /// Function call delta for older OpenAI-compatible clients
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub function_call: Option<FunctionCallDelta>,
 }
 
 /// Tool call delta for streaming function calls
@@ -94,11 +117,13 @@ pub struct ToolCallDelta {
     /// Index of the tool call
     pub index: u32,
     /// Tool call ID (only in first chunk)
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
     /// Type of tool call (only in first chunk)
-    #[serde(rename = "type")]
+    #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
     pub tool_type: Option<String>,
     /// Function call details
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub function: Option<FunctionCallDelta>,
 }
 
@@ -106,8 +131,10 @@ pub struct ToolCallDelta {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct FunctionCallDelta {
     /// Function name (only in first chunk)
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     /// Incremental function arguments
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub arguments: Option<String>,
 }
 
@@ -252,6 +279,7 @@ mod tests {
                     role: Some(MessageRole::Assistant),
                     content: Some("Hello".to_string()),
                     tool_calls: None,
+                    ..Default::default()
                 },
                 finish_reason: None,
                 logprobs: None,
@@ -271,6 +299,7 @@ mod tests {
             total_tokens: 30,
             prompt_tokens_details: None,
             completion_tokens_details: None,
+            thinking_usage: None,
         };
 
         let chunk = ChatCompletionChunk {
@@ -314,6 +343,7 @@ mod tests {
                 role: Some(MessageRole::Assistant),
                 content: Some("Test".to_string()),
                 tool_calls: None,
+                ..Default::default()
             },
             finish_reason: None,
             logprobs: None,
@@ -332,6 +362,7 @@ mod tests {
                 role: None,
                 content: None,
                 tool_calls: None,
+                ..Default::default()
             },
             finish_reason: Some("stop".to_string()),
             logprobs: None,
@@ -362,6 +393,7 @@ mod tests {
             role: None,
             content: None,
             tool_calls: None,
+            ..Default::default()
         };
 
         assert!(delta.role.is_none());
@@ -375,6 +407,7 @@ mod tests {
             role: Some(MessageRole::Assistant),
             content: None,
             tool_calls: None,
+            ..Default::default()
         };
 
         assert_eq!(delta.role, Some(MessageRole::Assistant));
@@ -386,6 +419,7 @@ mod tests {
             role: None,
             content: Some("Hello world".to_string()),
             tool_calls: None,
+            ..Default::default()
         };
 
         assert_eq!(delta.content, Some("Hello world".to_string()));
@@ -397,10 +431,45 @@ mod tests {
             role: Some(MessageRole::User),
             content: Some("test".to_string()),
             tool_calls: None,
+            ..Default::default()
         };
 
         let json = serde_json::to_string(&delta).unwrap();
         assert!(json.contains("\"content\":\"test\""));
+    }
+
+    #[test]
+    fn test_delta_serialize_omits_null_optional_fields() {
+        let delta = ChatCompletionDelta {
+            content: Some("visible".to_string()),
+            ..Default::default()
+        };
+
+        let json = serde_json::to_string(&delta).unwrap();
+        assert_eq!(json, "{\"content\":\"visible\"}");
+        assert!(!json.contains("null"));
+    }
+
+    #[test]
+    fn test_delta_serialize_reasoning_and_tool_metadata() {
+        let delta = ChatCompletionDelta {
+            thinking: Some(ThinkingDelta::new("thinking...")),
+            reasoning_content: Some("thinking...".to_string()),
+            tool_call_id: Some("call_123".to_string()),
+            refusal: Some("cannot comply".to_string()),
+            function_call: Some(FunctionCallDelta {
+                name: Some("legacy_fn".to_string()),
+                arguments: Some("{}".to_string()),
+            }),
+            ..Default::default()
+        };
+
+        let json = serde_json::to_value(&delta).unwrap();
+        assert_eq!(json["reasoning_content"], "thinking...");
+        assert_eq!(json["thinking"]["content"], "thinking...");
+        assert_eq!(json["tool_call_id"], "call_123");
+        assert_eq!(json["refusal"], "cannot comply");
+        assert_eq!(json["function_call"]["name"], "legacy_fn");
     }
 
     #[test]
@@ -566,6 +635,7 @@ mod tests {
                     role: Some(MessageRole::Assistant),
                     content: Some("Hello!".to_string()),
                     tool_calls: None,
+                    ..Default::default()
                 },
                 finish_reason: None,
                 logprobs: None,
@@ -603,6 +673,7 @@ mod tests {
                             arguments: Some("{\"city\":\"NYC\"}".to_string()),
                         }),
                     }]),
+                    ..Default::default()
                 },
                 finish_reason: None,
                 logprobs: None,

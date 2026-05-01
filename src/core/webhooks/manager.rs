@@ -6,6 +6,7 @@ use super::types::{
     WebhookConfig, WebhookData, WebhookDelivery, WebhookDeliveryStatus, WebhookEventType,
     WebhookPayload, WebhookStats,
 };
+use crate::core::http::outbound::default_outbound_client;
 use crate::core::types::context::RequestContext;
 use crate::utils::error::gateway_error::{GatewayError, Result};
 use crate::utils::net::http::create_custom_client;
@@ -47,7 +48,7 @@ impl WebhookManager {
             );
             // Create a minimal client as fallback
             Self {
-                client: Client::new(),
+                client: default_outbound_client().clone(),
                 data: Arc::new(RwLock::new(WebhookData::default())),
             }
         })

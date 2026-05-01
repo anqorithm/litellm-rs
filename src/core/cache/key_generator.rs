@@ -3,12 +3,11 @@
 //! This module provides functions for generating consistent cache keys
 //! from LLM requests, including normalization and hashing.
 
+use super::key_policy::{CACHE_KEY_SCHEMA_VERSION, stable_digest_value, versioned_key};
 use super::types::CacheKey;
 use crate::core::models::openai::{ChatCompletionRequest, EmbeddingRequest};
 use serde::Serialize;
-use std::collections::BTreeMap;
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
+use serde_json::{Value, json};
 use tracing::warn;
 
 /// Prefix for chat completion cache keys
@@ -31,62 +30,41 @@ pub fn generate_chat_key_with_user(
     request: &ChatCompletionRequest,
     user_id: Option<&str>,
 ) -> CacheKey {
-    let mut hasher = DefaultHasher::new();
+    let payload = json!({
+        "kind": "chat_completion",
+        "schema_version": CACHE_KEY_SCHEMA_VERSION,
+        "model": &request.model,
+        "messages": &request.messages,
+        "temperature": request.temperature,
+        "max_tokens": request.max_tokens,
+        "max_completion_tokens": request.max_completion_tokens,
+        "top_p": request.top_p,
+        "n": request.n,
+        "stop": &request.stop,
+        "presence_penalty": request.presence_penalty,
+        "frequency_penalty": request.frequency_penalty,
+        "logit_bias": &request.logit_bias,
+        "functions": &request.functions,
+        "function_call": &request.function_call,
+        "tools": &request.tools,
+        "tool_choice": &request.tool_choice,
+        "response_format": &request.response_format,
+        "seed": request.seed,
+        "logprobs": request.logprobs,
+        "top_logprobs": request.top_logprobs,
+        "modalities": &request.modalities,
+        "audio": &request.audio,
+        "reasoning_effort": &request.reasoning_effort,
+        "service_tier": &request.service_tier,
+        "user_id": user_id,
+    });
 
-    // Hash model name
-    request.model.hash(&mut hasher);
-
-    // Hash messages
-    for message in &request.messages {
-        message.role.hash(&mut hasher);
-        if let Some(ref content) = message.content {
-            content.hash(&mut hasher);
-        }
-        if let Some(ref name) = message.name {
-            name.hash(&mut hasher);
-        }
-    }
-
-    // Hash parameters that affect output
-    hash_optional_f32(&mut hasher, request.temperature);
-    hash_optional_u32(&mut hasher, request.max_tokens);
-    hash_optional_u32(&mut hasher, request.max_completion_tokens);
-    hash_optional_f32(&mut hasher, request.top_p);
-    hash_optional_u32(&mut hasher, request.n);
-    hash_optional_f32(&mut hasher, request.presence_penalty);
-    hash_optional_f32(&mut hasher, request.frequency_penalty);
-    hash_optional_u32(&mut hasher, request.seed);
-
-    // Hash stop sequences (sorted for consistency)
-    if let Some(ref stops) = request.stop {
-        let mut sorted_stops = stops.clone();
-        sorted_stops.sort();
-        for stop in sorted_stops {
-            stop.hash(&mut hasher);
-        }
-    }
-
-    // Hash response format
-    if let Some(ref format) = request.response_format {
-        format.format_type.hash(&mut hasher);
-    }
-
-    // Hash tools (sorted for consistency)
-    if let Some(ref tools) = request.tools {
-        for tool in tools {
-            tool.function.name.hash(&mut hasher);
-        }
-    }
-
-    // Hash user ID if provided
-    if let Some(uid) = user_id {
-        uid.hash(&mut hasher);
-    }
-
-    let hash = hasher.finish();
-    let key = format!("{}:{}:{:016x}", CHAT_KEY_PREFIX, request.model, hash);
-
-    CacheKey::new(key)
+    let digest = stable_digest_value(&payload);
+    CacheKey::new(versioned_key(
+        CHAT_KEY_PREFIX,
+        Some(&request.model),
+        &digest,
+    ))
 }
 
 /// Generate a cache key for an embedding request
@@ -99,153 +77,72 @@ pub fn generate_embedding_key_with_user(
     request: &EmbeddingRequest,
     user_id: Option<&str>,
 ) -> CacheKey {
-    let mut hasher = DefaultHasher::new();
+    let payload = json!({
+        "kind": "embedding",
+        "schema_version": CACHE_KEY_SCHEMA_VERSION,
+        "model": &request.model,
+        "input": &request.input,
+        "user_id": user_id,
+    });
 
-    // Hash model name
-    request.model.hash(&mut hasher);
-
-    // Hash input - normalize to sorted format if array
-    match &request.input {
-        serde_json::Value::String(s) => {
-            "string".hash(&mut hasher);
-            s.hash(&mut hasher);
-        }
-        serde_json::Value::Array(arr) => {
-            "array".hash(&mut hasher);
-            let mut texts: Vec<String> = arr
-                .iter()
-                .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                .collect();
-            texts.sort();
-            for text in texts {
-                text.hash(&mut hasher);
-            }
-        }
-        _ => {
-            "other".hash(&mut hasher);
-            request.input.to_string().hash(&mut hasher);
-        }
-    }
-
-    // Hash user ID if provided
-    if let Some(uid) = user_id {
-        uid.hash(&mut hasher);
-    }
-
-    let hash = hasher.finish();
-    let key = format!("{}:{}:{:016x}", EMBEDDING_KEY_PREFIX, request.model, hash);
-
-    CacheKey::new(key)
+    let digest = stable_digest_value(&payload);
+    CacheKey::new(versioned_key(
+        EMBEDDING_KEY_PREFIX,
+        Some(&request.model),
+        &digest,
+    ))
 }
 
 /// Generate a cache key from arbitrary serializable request
 pub fn generate_key_from_json<T: Serialize>(prefix: &str, request: &T) -> CacheKey {
-    let json = serde_json::to_string(request).unwrap_or_else(|e| {
+    let value = serde_json::to_value(request).unwrap_or_else(|error| {
         warn!(
             "Failed to serialize request for cache key generation: {}",
-            e
+            error
         );
-        String::new()
+        Value::Null
     });
-    let normalized = normalize_json_string(&json);
+    let digest = stable_digest_value(&value);
 
-    let mut hasher = DefaultHasher::new();
-    normalized.hash(&mut hasher);
-    let hash = hasher.finish();
-
-    CacheKey::new(format!("{}:{:016x}", prefix, hash))
+    CacheKey::new(versioned_key(prefix, None, &digest))
 }
 
 /// Generate a cache key from raw string content
 pub fn generate_key_from_content(prefix: &str, content: &str) -> CacheKey {
-    let mut hasher = DefaultHasher::new();
-    content.hash(&mut hasher);
-    let hash = hasher.finish();
+    let digest = stable_digest_value(&json!({
+        "kind": "content",
+        "content": content,
+    }));
 
-    CacheKey::new(format!("{}:{:016x}", prefix, hash))
+    CacheKey::new(versioned_key(prefix, None, &digest))
 }
 
 /// Generate a cache key from multiple parts
 pub fn generate_key_from_parts(prefix: &str, parts: &[&str]) -> CacheKey {
-    let mut hasher = DefaultHasher::new();
-    for part in parts {
-        part.hash(&mut hasher);
-    }
-    let hash = hasher.finish();
+    let digest = stable_digest_value(&json!({
+        "kind": "parts",
+        "parts": parts,
+    }));
 
-    CacheKey::new(format!("{}:{:016x}", prefix, hash))
+    CacheKey::new(versioned_key(prefix, None, &digest))
 }
 
 // ==================== Helper Functions ====================
-
-/// Hash an optional f32 value
-fn hash_optional_f32<H: Hasher>(hasher: &mut H, value: Option<f32>) {
-    if let Some(v) = value {
-        1u8.hash(hasher);
-        v.to_bits().hash(hasher);
-    } else {
-        0u8.hash(hasher);
-    }
-}
-
-/// Hash an optional u32 value
-fn hash_optional_u32<H: Hasher>(hasher: &mut H, value: Option<u32>) {
-    if let Some(v) = value {
-        1u8.hash(hasher);
-        v.hash(hasher);
-    } else {
-        0u8.hash(hasher);
-    }
-}
 
 /// Normalize a JSON string for consistent hashing
 ///
 /// - Sorts object keys
 /// - Removes whitespace
 /// - Removes timestamps and request IDs
+#[cfg(test)]
 fn normalize_json_string(json: &str) -> String {
-    if let Ok(value) = serde_json::from_str::<serde_json::Value>(json) {
-        normalize_json_value(&value)
-    } else {
-        json.to_string()
-    }
-}
-
-/// Normalize a JSON value recursively
-fn normalize_json_value(value: &serde_json::Value) -> String {
-    match value {
-        serde_json::Value::Object(map) => {
-            // Sort keys and filter out non-deterministic fields
-            let sorted: BTreeMap<_, _> = map
-                .iter()
-                .filter(|(k, _)| !is_non_deterministic_field(k))
-                .map(|(k, v)| (k.clone(), normalize_json_value(v)))
-                .collect();
-
-            serde_json::to_string(&sorted).unwrap_or_default()
-        }
-        serde_json::Value::Array(arr) => {
-            let normalized: Vec<String> = arr.iter().map(normalize_json_value).collect();
-            format!("[{}]", normalized.join(","))
-        }
-        _ => value.to_string(),
-    }
+    super::key_policy::canonical_json_str(json)
 }
 
 /// Check if a field should be excluded from cache key generation
+#[cfg(test)]
 fn is_non_deterministic_field(field: &str) -> bool {
-    matches!(
-        field,
-        "timestamp"
-            | "request_id"
-            | "trace_id"
-            | "span_id"
-            | "created_at"
-            | "updated_at"
-            | "id"
-            | "stream"
-            | "stream_options"
-    )
+    super::key_policy::is_non_deterministic_field(field)
 }
 
 /// Builder for constructing cache keys
@@ -285,13 +182,13 @@ impl CacheKeyBuilder {
 
     /// Build the cache key
     pub fn build(self) -> CacheKey {
-        let mut hasher = DefaultHasher::new();
-        for part in &self.parts {
-            part.hash(&mut hasher);
-        }
-        let hash = hasher.finish();
+        let Self { parts, prefix } = self;
+        let digest = stable_digest_value(&json!({
+            "kind": "builder",
+            "parts": parts,
+        }));
 
-        CacheKey::new(format!("{}:{:016x}", self.prefix, hash))
+        CacheKey::new(versioned_key(&prefix, None, &digest))
     }
 
     /// Build the cache key with explicit parts (no hashing)
@@ -309,6 +206,9 @@ impl CacheKeyBuilder {
 mod tests {
     use super::*;
     use crate::core::models::openai::messages::{ChatMessage, MessageContent, MessageRole};
+    use crate::core::models::openai::{
+        Function, ResponseFormat, Tool, ToolChoice, ToolChoiceFunction, ToolChoiceFunctionSpec,
+    };
 
     // Helper to create a test chat message
     fn create_user_message(content: &str) -> ChatMessage {
@@ -334,7 +234,7 @@ mod tests {
         };
 
         let key = generate_chat_key(&request);
-        assert!(key.as_str().starts_with("chat:gpt-4:"));
+        assert!(key.as_str().starts_with("chat:gpt-4:v2:"));
     }
 
     #[test]
@@ -430,6 +330,92 @@ mod tests {
         assert_ne!(key1, key2);
     }
 
+    #[test]
+    fn test_generate_chat_key_includes_response_format_schema() {
+        let base = ChatCompletionRequest {
+            model: "gpt-4".to_string(),
+            messages: vec![create_user_message("Return JSON")],
+            response_format: Some(ResponseFormat {
+                format_type: "json_schema".to_string(),
+                json_schema: Some(serde_json::json!({
+                    "name": "answer",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "answer": { "type": "string" }
+                        }
+                    }
+                })),
+                response_type: None,
+            }),
+            ..Default::default()
+        };
+
+        let mut changed_schema = base.clone();
+        changed_schema.response_format = Some(ResponseFormat {
+            format_type: "json_schema".to_string(),
+            json_schema: Some(serde_json::json!({
+                "schema": {
+                    "properties": {
+                        "answer": { "type": "number" }
+                    },
+                    "type": "object"
+                },
+                "name": "answer"
+            })),
+            response_type: None,
+        });
+
+        assert_ne!(generate_chat_key(&base), generate_chat_key(&changed_schema));
+    }
+
+    #[test]
+    fn test_generate_chat_key_includes_tool_parameters_and_choice() {
+        let base = ChatCompletionRequest {
+            model: "gpt-4".to_string(),
+            messages: vec![create_user_message("Use the tool")],
+            tools: Some(vec![Tool {
+                tool_type: "function".to_string(),
+                function: Function {
+                    name: "search".to_string(),
+                    description: Some("Search".to_string()),
+                    parameters: Some(serde_json::json!({
+                        "type": "object",
+                        "properties": {
+                            "query": { "type": "string" }
+                        }
+                    })),
+                },
+            }]),
+            tool_choice: Some(ToolChoice::Auto("auto".to_string())),
+            ..Default::default()
+        };
+
+        let mut changed_parameters = base.clone();
+        changed_parameters.tools.as_mut().unwrap()[0]
+            .function
+            .parameters = Some(serde_json::json!({
+            "type": "object",
+            "properties": {
+                "query": { "type": "number" }
+            }
+        }));
+
+        let mut changed_choice = base.clone();
+        changed_choice.tool_choice = Some(ToolChoice::Specific(ToolChoiceFunction {
+            tool_type: "function".to_string(),
+            function: ToolChoiceFunctionSpec {
+                name: "search".to_string(),
+            },
+        }));
+
+        assert_ne!(
+            generate_chat_key(&base),
+            generate_chat_key(&changed_parameters)
+        );
+        assert_ne!(generate_chat_key(&base), generate_chat_key(&changed_choice));
+    }
+
     // ==================== Embedding Key Generation Tests ====================
 
     #[test]
@@ -441,7 +427,7 @@ mod tests {
         };
 
         let key = generate_embedding_key(&request);
-        assert!(key.as_str().starts_with("embed:text-embedding-ada-002:"));
+        assert!(key.as_str().starts_with("embed:text-embedding-ada-002:v2:"));
     }
 
     #[test]
@@ -471,8 +457,7 @@ mod tests {
     }
 
     #[test]
-    fn test_generate_embedding_key_array_order_normalized() {
-        // Array order should be normalized (sorted) for consistent keys
+    fn test_generate_embedding_key_array_order_is_part_of_identity() {
         let request1 = EmbeddingRequest {
             model: "text-embedding-ada-002".to_string(),
             input: serde_json::json!(["Alpha", "Beta"]),
@@ -488,8 +473,7 @@ mod tests {
         let key1 = generate_embedding_key(&request1);
         let key2 = generate_embedding_key(&request2);
 
-        // Keys should be the same due to sorting
-        assert_eq!(key1, key2);
+        assert_ne!(key1, key2);
     }
 
     // ==================== Generic Key Generation Tests ====================

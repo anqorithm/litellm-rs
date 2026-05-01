@@ -22,7 +22,7 @@ impl AzureClient {
     pub fn new(config: AzureConfig) -> Result<Self, ProviderError> {
         AzureUtils::validate_config(&config)?;
 
-        let http_client = reqwest::Client::new();
+        let http_client = crate::core::http::outbound::default_outbound_client().clone();
 
         Ok(Self {
             config,

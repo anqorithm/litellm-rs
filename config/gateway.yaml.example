@@ -98,7 +98,9 @@ storage:
 auth:
   enable_jwt: true
   enable_api_key: true
-  jwt_secret: "ReplaceWithAtLeast32CharsMixedCaseAndSymbols123!"
+  # Required when enable_jwt is true. Export LITELLM_JWT_SECRET to a generated
+  # high-entropy secret with at least 32 bytes and mixed letter case.
+  jwt_secret: "${LITELLM_JWT_SECRET}"
   jwt_expiration: 86400
   api_key_header: "Authorization"
   rbac:

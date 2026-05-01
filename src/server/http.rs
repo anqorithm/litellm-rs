@@ -4,9 +4,11 @@
 
 use crate::config::Config;
 use crate::config::models::server::{CorsConfig, ServerConfig};
-use crate::core::rate_limiter::{get_global_rate_limiter, init_global_rate_limiter};
+use crate::core::budget::UnifiedBudgetLimits;
+use crate::core::rate_limiter::{get_global_rate_limiter, init_global_rate_limiter_with_redis};
 use crate::server::middleware::{
     AuthMiddleware, RateLimitMiddleware, RequestIdMiddleware, SecurityHeadersMiddleware,
+    start_auth_rate_limiter_cleanup_task,
 };
 use crate::server::routes;
 use crate::server::state::AppState;
@@ -35,8 +37,28 @@ impl HttpServer {
         info!("Creating HTTP server");
 
         Self::validate_cors_config(&config.gateway.server.cors)?;
+        start_auth_rate_limiter_cleanup_task();
 
         let storage = crate::storage::StorageLayer::new(&config.gateway.storage).await?;
+        let budget_limits = match storage.database.load_budget_limit_snapshots().await {
+            Ok(snapshots) => {
+                let count = snapshots.len();
+                let persistence_tx =
+                    Arc::clone(&storage.database).start_budget_limit_persistence_task();
+                info!("Loaded {} persisted budget limit snapshots", count);
+                Arc::new(UnifiedBudgetLimits::from_snapshots_with_persistence(
+                    snapshots,
+                    persistence_tx,
+                ))
+            }
+            Err(e) => {
+                warn!(
+                    "Budget limit persistence is unavailable; using in-memory budgets only: {}",
+                    e
+                );
+                Arc::new(UnifiedBudgetLimits::new())
+            }
+        };
         let auth =
             crate::auth::AuthSystem::new(&config.gateway.auth, Arc::new(storage.clone())).await?;
 
@@ -76,6 +98,7 @@ impl HttpServer {
             unified_router,
             storage,
             pricing,
+            budget_limits,
         );
 
         Ok(Self {
@@ -100,17 +123,26 @@ impl HttpServer {
 
         let cfg = state.config.load();
         if cfg.gateway.rate_limit.enabled && get_global_rate_limiter().is_none() {
-            init_global_rate_limiter(cfg.gateway.rate_limit.clone());
+            let redis_available = !state.storage.redis.is_noop();
+            init_global_rate_limiter_with_redis(
+                cfg.gateway.rate_limit.clone(),
+                Arc::clone(&state.storage.redis),
+            );
             info!(
-                "Global rate limiter initialized (strategy={:?}, rpm={})",
-                cfg.gateway.rate_limit.strategy, cfg.gateway.rate_limit.default_rpm
+                "Global rate limiter initialized (strategy={:?}, rpm={}, backend={})",
+                cfg.gateway.rate_limit.strategy,
+                cfg.gateway.rate_limit.default_rpm,
+                if redis_available {
+                    "redis"
+                } else {
+                    "in-process"
+                }
             );
         }
         let cors_config = &cfg.gateway.server.cors;
         let rate_limit_enabled = cfg.gateway.rate_limit.enabled;
         let rate_limit_rpm = cfg.gateway.rate_limit.default_rpm;
-        let cors =
-            Self::build_cors(cors_config).expect("invalid CORS configuration reached app factory");
+        let cors = Self::build_cors_for_app_factory(cors_config);
 
         let budget_limits = web::Data::new(Arc::clone(&state.budget_limits));
 
@@ -188,6 +220,19 @@ impl HttpServer {
         Ok(cors)
     }
 
+    fn build_cors_for_app_factory(cors_config: &CorsConfig) -> Cors {
+        match Self::build_cors(cors_config) {
+            Ok(cors) => cors,
+            Err(e) => {
+                tracing::error!(
+                    "Invalid CORS configuration reached app factory; using restrictive fallback: {}",
+                    e
+                );
+                Cors::default()
+            }
+        }
+    }
+
     /// Start the HTTP server
     pub async fn start(self) -> Result<()> {
         let bind_addr = format!("{}:{}", self.config.host, self.config.port);
@@ -248,6 +293,17 @@ mod tests {
             }
             other => panic!("expected config error, got: {other:?}"),
         }
+    }
+
+    #[test]
+    fn app_factory_cors_builder_falls_back_without_panicking() {
+        let cors_config = CorsConfig {
+            allowed_origins: vec!["*".to_string()],
+            allow_credentials: true,
+            ..Default::default()
+        };
+
+        let _cors = HttpServer::build_cors_for_app_factory(&cors_config);
     }
 
     #[tokio::test]

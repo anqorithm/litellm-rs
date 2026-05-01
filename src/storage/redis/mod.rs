@@ -23,6 +23,7 @@ mod collections;
 mod hash;
 mod pool;
 mod pubsub;
+mod rate_limit;
 #[cfg(test)]
 mod tests;
 

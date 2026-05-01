@@ -372,6 +372,10 @@ pub struct ThinkingDelta {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub content: Option<String>,
 
+    /// Provider signature for verifying thinking content integrity
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub signature: Option<String>,
+
     /// Whether this is the start of thinking
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_start: Option<bool>,
@@ -386,6 +390,7 @@ impl ThinkingDelta {
     pub fn new(content: impl Into<String>) -> Self {
         Self {
             content: Some(content.into()),
+            signature: None,
             is_start: None,
             is_complete: None,
         }
@@ -395,6 +400,7 @@ impl ThinkingDelta {
     pub fn start() -> Self {
         Self {
             content: None,
+            signature: None,
             is_start: Some(true),
             is_complete: None,
         }
@@ -404,6 +410,7 @@ impl ThinkingDelta {
     pub fn complete() -> Self {
         Self {
             content: None,
+            signature: None,
             is_start: None,
             is_complete: Some(true),
         }

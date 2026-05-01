@@ -466,18 +466,22 @@ impl GeminiClient {
             }
             let message_content = text_parts.join("");
 
-            // Check
-            let finish_reason = candidate
-                .get("finishReason")
-                .and_then(|r| r.as_str())
-                .map(|r| match r {
-                    "STOP" => "stop",
-                    "MAX_TOKENS" => "length",
-                    "SAFETY" => "content_filter",
-                    "RECITATION" => "content_filter",
-                    _ => "stop",
-                })
-                .unwrap_or("stop");
+            let finish_reason = if tool_calls.is_empty() {
+                candidate
+                    .get("finishReason")
+                    .and_then(|r| r.as_str())
+                    .map(|r| match r {
+                        "STOP" => crate::core::types::responses::FinishReason::Stop,
+                        "MAX_TOKENS" => crate::core::types::responses::FinishReason::Length,
+                        "SAFETY" | "RECITATION" => {
+                            crate::core::types::responses::FinishReason::ContentFilter
+                        }
+                        _ => crate::core::types::responses::FinishReason::Stop,
+                    })
+                    .unwrap_or(crate::core::types::responses::FinishReason::Stop)
+            } else {
+                crate::core::types::responses::FinishReason::ToolCalls
+            };
 
             let msg_content = if message_content.is_empty() && !tool_calls.is_empty() {
                 None
@@ -500,12 +504,7 @@ impl GeminiClient {
                     tool_call_id: None,
                     function_call: None,
                 },
-                finish_reason: Some(match finish_reason {
-                    "stop" => crate::core::types::responses::FinishReason::Stop,
-                    "length" => crate::core::types::responses::FinishReason::Length,
-                    "content_filter" => crate::core::types::responses::FinishReason::ContentFilter,
-                    _ => crate::core::types::responses::FinishReason::Stop,
-                }),
+                finish_reason: Some(finish_reason),
                 logprobs: None,
             });
         }
@@ -627,5 +626,44 @@ mod tests {
         assert_eq!(parts.len(), 2);
         assert_eq!(parts[0]["text"], "What's in this image?");
         assert!(parts[1].get("inlineData").is_some());
+    }
+
+    #[test]
+    fn test_gemini_finish_reason_tool_calls() {
+        let config = GeminiConfig::new_google_ai("test-key");
+        let client = GeminiClient::new(config).unwrap();
+        let request = ChatRequest {
+            model: "gemini-2.0-flash".to_string(),
+            ..Default::default()
+        };
+
+        let response = json!({
+            "candidates": [{
+                "content": {
+                    "parts": [{
+                        "functionCall": {
+                            "name": "get_weather",
+                            "args": {"city": "Paris"}
+                        }
+                    }]
+                },
+                "finishReason": "STOP"
+            }]
+        });
+
+        let result = client.transform_chat_response(response, &request).unwrap();
+        let choice = result.choices.first().unwrap();
+        assert_eq!(
+            choice.finish_reason,
+            Some(crate::core::types::responses::FinishReason::ToolCalls)
+        );
+        let tool_call = choice
+            .message
+            .tool_calls
+            .as_ref()
+            .and_then(|calls| calls.first())
+            .unwrap();
+        assert_eq!(tool_call.function.name, "get_weather");
+        assert_eq!(tool_call.function.arguments, r#"{"city":"Paris"}"#);
     }
 }

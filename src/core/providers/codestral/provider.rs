@@ -270,7 +270,7 @@ impl LLMProvider for CodestralProvider {
             .ok_or_else(|| ProviderError::authentication("codestral", "API key required"))?;
 
         let url = format!("{}/chat/completions", self.config.get_api_base());
-        let client = reqwest::Client::new();
+        let client = crate::core::http::outbound::default_outbound_client().clone();
 
         let response = client
             .post(&url)
