@@ -97,9 +97,7 @@ pub fn generic_cost_per_token(
 pub fn get_model_pricing(model: &str, provider: &str) -> Result<ModelPricing, CostError> {
     match provider.to_lowercase().as_str() {
         "openai" => get_pricing_with_shared_source(model, &["openai"], get_openai_pricing),
-        "anthropic" => {
-            get_pricing_with_shared_source(model, &["anthropic"], get_anthropic_pricing)
-        }
+        "anthropic" => get_pricing_with_shared_source(model, &["anthropic"], get_anthropic_pricing),
         "azure" => get_azure_pricing(model),
         "vertex_ai" | "vertexai" => {
             get_pricing_with_shared_source(model, &["vertex_ai", "google"], get_vertex_ai_pricing)
@@ -206,7 +204,10 @@ fn extra_f64(info: &crate::core::pricing::LiteLLMModelInfo, key: &str) -> Option
     info.extra.get(key).and_then(serde_json::Value::as_f64)
 }
 
-fn extra_token_cost_per_1k(info: &crate::core::pricing::LiteLLMModelInfo, key: &str) -> Option<f64> {
+fn extra_token_cost_per_1k(
+    info: &crate::core::pricing::LiteLLMModelInfo,
+    key: &str,
+) -> Option<f64> {
     extra_f64(info, key).map(|cost_per_token| cost_per_token * 1000.0)
 }
 
