@@ -924,6 +924,29 @@ No parallel agents are launched by this plan. If the owner chooses to paralleliz
 ## 9. Execution Log
 
 - 2026-05-02
+  - Step E4 canonical-to-legacy team mirror: `in_progress`
+    - Modified files:
+      - `src/storage/database/seaorm_db/team_repository.rs`
+      - `src/storage/database/seaorm_db/team_repository_tests.rs`
+    - Main changes:
+      - Mirrored canonical `TeamRepository::create` and `update` writes into `um_teams` so `/v1/teams` teams are visible to the legacy `user_management` facade.
+      - Mirrored canonical member add/update/remove operations into legacy `Team.members`.
+      - Updated legacy `um_users.data.teams` when canonical member add/remove sees a matching legacy user.
+      - Removed legacy `um_users.data.teams` references when a canonical team is deleted.
+      - Preserved legacy-only `TeamSettings` and `organization_id` fields when canonical updates mirror back into `um_teams`.
+      - Cleaned `um_users.data.teams` even when deleting a legacy-only team before read-through materializes canonical rows.
+      - Addressed PR review feedback: inactive legacy members stay out of canonical `team_members` so role-only authorization checks cannot restore revoked access.
+      - Addressed PR review feedback: canonical sync preserves an existing legacy `organization_id` when canonical metadata does not provide one.
+      - Preserved the E4 read-through conflict guards from the prior PR while adding reverse-direction parity.
+    - Execute tests:
+      - `cargo fmt --all -- --check` -> pass
+      - `cargo test team_repository` -> pass (`14` tests)
+      - `cargo test user_management` -> pass (`72` tests)
+      - `cargo test --all-features team_repository` -> pass (`14` tests)
+      - `cargo test --all-features user_management` -> pass (`72` tests)
+      - `cargo check --all-features` -> pass
+      - `git diff --check` -> pass
+      - `cargo clippy --lib --tests --bins --all-features -- -D warnings --force-warn clippy::collapsible-if` -> pass (`collapsible_if` remains warning by command design)
   - Step E4 legacy team read-through convergence: `in_progress`
     - Modified files:
       - `src/storage/database/seaorm_db/team_repository.rs`
