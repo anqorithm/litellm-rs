@@ -939,6 +939,20 @@ No parallel agents are launched by this plan. If the owner chooses to paralleliz
       - `cargo test sse` -> pass (`49` lib-filtered tests, `6` integration-filtered tests)
       - `cargo test --all-features sse` -> pass (`55` lib-filtered tests, `6` integration-filtered tests)
       - `cargo check --all-features` -> pass
+  - Step E9 Anthropic models split: `in_progress`
+    - Modified files:
+      - `src/core/providers/anthropic/models.rs`
+      - `src/core/providers/anthropic/models/catalog.rs`
+      - `src/core/providers/anthropic/models/cost.rs`
+    - Main changes:
+      - Moved the static Anthropic model catalog initialization out of the public model registry module.
+      - Moved the Anthropic model cost helper into a focused cost submodule while preserving the existing `CostCalculator` export.
+      - Reduced `src/core/providers/anthropic/models.rs` from `1209` lines to `364` lines; new submodules are `769` and `89` lines.
+    - Execute tests:
+      - `cargo test anthropic` -> pass (`191` lib-filtered tests, `1` integration-filtered test)
+      - `cargo test --all-features anthropic` -> pass (`204` lib-filtered tests, `1` integration-filtered test)
+      - `cargo check --all-features` -> pass
+      - `cargo clippy --lib --tests --bins --all-features -- -D warnings --force-warn clippy::collapsible-if` -> pass (`collapsible_if` remains warning by command design)
   - Step E10 config strictness: `completed`
     - Modified files:
       - `src/config/mod.rs`
