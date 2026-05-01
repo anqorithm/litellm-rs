@@ -731,7 +731,7 @@ Goal: remove parallel systems after correctness/security work is stable.
 
 ### Step E9 H15 god-file splits
 
-- status: `in_progress`
+- status: `completed`
 - Expected changes:
   - `src/core/cost/calculator.rs`
   - `src/core/providers/anthropic/models.rs`
@@ -924,7 +924,7 @@ No parallel agents are launched by this plan. If the owner chooses to paralleliz
 ## 9. Execution Log
 
 - 2026-05-02
-  - Step E9 base SSE split: `in_progress`
+  - Step E9 base SSE split: `completed`
     - Modified files:
       - `src/core/providers/base/sse.rs`
       - `src/core/providers/base/sse/openai.rs`
@@ -939,7 +939,7 @@ No parallel agents are launched by this plan. If the owner chooses to paralleliz
       - `cargo test sse` -> pass (`49` lib-filtered tests, `6` integration-filtered tests)
       - `cargo test --all-features sse` -> pass (`55` lib-filtered tests, `6` integration-filtered tests)
       - `cargo check --all-features` -> pass
-  - Step E9 Anthropic models split: `in_progress`
+  - Step E9 Anthropic models split: `completed`
     - Modified files:
       - `src/core/providers/anthropic/models.rs`
       - `src/core/providers/anthropic/models/catalog.rs`
@@ -953,7 +953,7 @@ No parallel agents are launched by this plan. If the owner chooses to paralleliz
       - `cargo test --all-features anthropic` -> pass (`204` lib-filtered tests, `1` integration-filtered test)
       - `cargo check --all-features` -> pass
       - `cargo clippy --lib --tests --bins --all-features -- -D warnings --force-warn clippy::collapsible-if` -> pass (`collapsible_if` remains warning by command design)
-  - Step E9 Anthropic client test split: `in_progress`
+  - Step E9 Anthropic client test split: `completed`
     - Modified files:
       - `src/core/providers/anthropic/client.rs`
       - `src/core/providers/anthropic/client/tests.rs`
@@ -965,6 +965,21 @@ No parallel agents are launched by this plan. If the owner chooses to paralleliz
       - `cargo test --all-features anthropic` -> pass (`204` lib-filtered tests, `1` integration-filtered test)
       - `cargo check --all-features` -> pass
       - `cargo clippy --lib --tests --bins --all-features -- -D warnings --force-warn clippy::collapsible-if` -> pass (`collapsible_if` remains warning by command design)
+  - Step E9 cost calculator split: `completed`
+    - Modified files:
+      - `src/core/cost/calculator.rs`
+      - `src/core/cost/calculator/pricing.rs`
+      - `src/core/cost/calculator/tests.rs`
+    - Main changes:
+      - Moved provider fallback pricing tables into a focused cost calculator pricing submodule.
+      - Moved the cost calculator unit tests into a dedicated test submodule while preserving private helper coverage.
+      - Reduced `src/core/cost/calculator.rs` from `1761` lines to `341` lines; new submodules are `679` and `745` lines.
+    - Execute tests:
+      - `cargo test cost::calculator` -> pass (`61` lib-filtered tests)
+      - `cargo test --all-features cost::calculator` -> pass (`61` lib-filtered tests)
+      - `cargo check --all-features` -> pass
+      - `cargo clippy --lib --tests --bins --all-features -- -D warnings --force-warn clippy::collapsible-if` -> pass (`collapsible_if` remains warning by command design)
+      - `wc -l src/core/cost/calculator.rs src/core/cost/calculator/*.rs src/core/providers/anthropic/models.rs src/core/providers/anthropic/models/*.rs src/core/providers/anthropic/client.rs src/core/providers/anthropic/client/tests.rs src/core/providers/base/sse.rs src/core/providers/base/sse/*.rs` -> pass (all affected files below `800` lines)
   - Step E10 config strictness: `completed`
     - Modified files:
       - `src/config/mod.rs`
