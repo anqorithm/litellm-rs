@@ -634,10 +634,21 @@ fn test_feature_support() {
 fn test_model_pricing() {
     let provider = create_test_provider();
 
-    if let Some((input_cost, output_cost)) = provider.get_model_pricing("gpt-4") {
-        assert!(input_cost > 0.0);
-        assert!(output_cost > input_cost); // Output usually costs more
-    }
+    let (input_cost, output_cost) = provider
+        .get_model_pricing("gpt-4")
+        .expect("gpt-4 should have OpenAI pricing");
+    assert!(input_cost > 0.0);
+    assert!(output_cost > input_cost); // Output usually costs more
+}
+
+#[test]
+fn test_model_pricing_prefers_shared_cost_source() {
+    let provider = create_test_provider();
+
+    assert_eq!(
+        provider.get_model_pricing("gpt-4o-mini"),
+        Some((0.00015, 0.0006))
+    );
 }
 
 #[test]

@@ -924,6 +924,19 @@ No parallel agents are launched by this plan. If the owner chooses to paralleliz
 ## 9. Execution Log
 
 - 2026-05-01
+  - Step E3 provider pricing convergence: `in_progress`
+    - Modified files:
+      - `src/core/providers/openai/client.rs`
+      - `src/core/providers/openai/client_tests.rs`
+    - Main changes:
+      - Routed `OpenAIProvider::get_model_pricing` through the shared `core::cost::calculator::get_model_pricing` source before using OpenAI's static registry as a compatibility fallback.
+      - Fixed the provider-level pricing helper that previously returned `None` because `get_model_info` intentionally emits default model metadata with no pricing fields.
+      - Added a regression test proving `gpt-4o-mini` provider pricing now uses the shared cost source.
+    - Execute tests:
+      - `cargo fmt --all -- --check` -> pass
+      - `cargo test core::providers::openai::client_tests::test_model_pricing` -> pass (`2` matching tests)
+      - `cargo test core::providers::openai::client_tests::test_model_pricing_prefers_shared_cost_source` -> pass (`1` test)
+      - `cargo test pricing` -> pass (`175` lib filtered tests, `1` integration filtered test)
   - Step E3 utility convergence: `in_progress`
     - Modified files:
       - `src/utils/ai/models/pricing.rs`
