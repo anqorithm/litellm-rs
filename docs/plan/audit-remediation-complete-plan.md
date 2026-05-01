@@ -924,6 +924,19 @@ No parallel agents are launched by this plan. If the owner chooses to paralleliz
 ## 9. Execution Log
 
 - 2026-05-01
+  - Step E3 Gemini pricing convergence: `in_progress`
+    - Modified files:
+      - `src/core/providers/gemini/models.rs`
+    - Main changes:
+      - Routed Gemini's basic `CostCalculator::calculate_cost` through shared `core::cost::calculator::generic_cost_per_token` using the `vertex_ai` pricing source.
+      - Kept the Gemini registry fallback so provider-only model aliases such as `gemini-1.0-pro` remain priced even when the shared catalog does not have an exact entry.
+    - Execute tests:
+      - `cargo test --features providers-extended core::providers::gemini::models::tests::test_cost_calculation` -> pass (`3` matching tests)
+      - `cargo test --features providers-extended core::providers::gemini::models::tests::test_cost_calculation_keeps_registry_fallback` -> pass (`covered by the same filtered run`)
+      - `cargo fmt --all -- --check` -> pass
+      - `cargo test pricing` -> pass (`175` lib filtered tests, `1` integration filtered test)
+      - `cargo check --all-features` -> pass
+      - `cargo clippy --lib --tests --bins --features "postgres sqlite redis s3 metrics tracing websockets analytics providers-extended" -- -D warnings --force-warn clippy::collapsible-if` -> pass
   - Step E3 provider pricing convergence: `in_progress`
     - Modified files:
       - `src/core/providers/openai/client.rs`

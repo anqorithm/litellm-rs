@@ -1211,6 +1211,13 @@ impl CostCalculator {
         prompt_tokens: u32,
         completion_tokens: u32,
     ) -> Option<f64> {
+        let usage = crate::core::cost::types::UsageTokens::new(prompt_tokens, completion_tokens);
+        if let Ok(breakdown) =
+            crate::core::cost::calculator::generic_cost_per_token(model_id, &usage, "vertex_ai")
+        {
+            return Some(breakdown.total_cost);
+        }
+
         let registry = get_gemini_registry();
         let pricing = registry.get_model_pricing(model_id)?;
 
@@ -1335,6 +1342,14 @@ mod tests {
         let cost_value = cost.unwrap();
         // Expected: (1000/1M * $0.075) + (500/1M * $0.30) = $0.000075 + $0.00015 = $0.000225
         assert!((cost_value - 0.000225).abs() < 0.000001);
+    }
+
+    #[test]
+    fn test_cost_calculation_keeps_registry_fallback() {
+        let cost = CostCalculator::calculate_cost("gemini-1.0-pro", 1000, 500)
+            .expect("Gemini registry fallback should price gemini-1.0-pro");
+
+        assert!((cost - 0.00125).abs() < 0.000001);
     }
 
     #[test]
