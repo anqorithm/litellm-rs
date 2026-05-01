@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 
 /// Cache configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CacheConfig {
     /// Enable caching
     #[serde(default)]

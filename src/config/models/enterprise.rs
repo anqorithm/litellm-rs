@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 /// Enterprise configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub struct EnterpriseConfig {
     /// Enable enterprise features
     #[serde(default)]
@@ -39,6 +40,7 @@ impl EnterpriseConfig {
 
 /// SSO configuration
 #[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SsoConfig {
     /// SSO provider
     pub provider: String,

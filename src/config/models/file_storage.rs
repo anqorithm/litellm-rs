@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 /// File storage configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct FileStorageConfig {
     /// Storage type (local, s3, etc.)
     #[serde(default = "default_file_storage_type")]
@@ -51,6 +52,7 @@ impl FileStorageConfig {
 
 /// S3 configuration
 #[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct S3Config {
     /// S3 bucket name
     pub bucket: String,
@@ -78,6 +80,7 @@ impl std::fmt::Debug for S3Config {
 
 /// Vector database configuration
 #[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct VectorDbConfig {
     /// Vector DB type (pinecone, weaviate, etc.)
     pub db_type: String,
@@ -113,6 +116,7 @@ impl Default for VectorDbConfig {
 
 /// Alerting configuration
 #[derive(Clone, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub struct AlertingConfig {
     /// Enable alerting
     #[serde(default)]
@@ -138,6 +142,7 @@ impl std::fmt::Debug for AlertingConfig {
 
 /// Email configuration
 #[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct EmailConfig {
     /// SMTP server
     pub smtp_server: String,

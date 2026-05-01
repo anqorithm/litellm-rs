@@ -211,6 +211,7 @@ fn load_providers_from_env() -> crate::utils::error::gateway_error::Result<Vec<P
 
 /// Pricing source configuration
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct GatewayPricingConfig {
     /// Optional pricing source path/URL used by PricingService::new
     #[serde(default = "default_pricing_source")]
@@ -233,6 +234,7 @@ fn default_pricing_source() -> Option<String> {
 
 /// Main gateway configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct GatewayConfig {
     /// Configuration schema version
     #[serde(default = "default_schema_version")]

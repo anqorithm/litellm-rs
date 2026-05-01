@@ -14,6 +14,7 @@ fn default_tpm() -> u32 {
 
 /// Rate limit configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RateLimitConfig {
     /// Enable rate limiting
     #[serde(default)]
