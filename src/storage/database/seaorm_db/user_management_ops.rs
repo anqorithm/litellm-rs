@@ -49,7 +49,7 @@ impl SeaOrmDatabase {
 
 impl SeaOrmDatabase {
     /// Retrieve a user management user by their string ID.
-    pub async fn get_user(&self, user_id: &str) -> Result<Option<User>> {
+    pub(crate) async fn get_legacy_user_by_id(&self, user_id: &str) -> Result<Option<User>> {
         debug!("um: get_user {}", user_id);
         let sql = format!("SELECT data FROM um_users WHERE user_id = {}", self.ph(1));
         let stmt = Statement::from_sql_and_values(
@@ -67,7 +67,7 @@ impl SeaOrmDatabase {
     }
 
     /// Retrieve a user management user by their email address.
-    pub async fn get_user_by_email(&self, email: &str) -> Result<Option<User>> {
+    pub(crate) async fn get_legacy_user_by_email(&self, email: &str) -> Result<Option<User>> {
         debug!("um: get_user_by_email {}", email);
         let sql = format!("SELECT data FROM um_users WHERE email = {}", self.ph(1));
         let stmt = Statement::from_sql_and_values(
@@ -82,6 +82,67 @@ impl SeaOrmDatabase {
                 Ok(Some(Self::deserialize(&data)?))
             }
         }
+    }
+
+    /// Retrieve a user management user by the canonical username preserved in
+    /// its JSON metadata.
+    pub(crate) async fn get_legacy_user_by_canonical_username(
+        &self,
+        username: &str,
+    ) -> Result<Option<User>> {
+        debug!("um: get_user_by_canonical_username {}", username);
+        let predicate = match self.backend_type {
+            DatabaseBackendType::PostgreSQL => {
+                format!(
+                    "data::jsonb -> 'metadata' ->> 'canonical_username' = {}",
+                    self.ph(1)
+                )
+            }
+            DatabaseBackendType::SQLite => {
+                format!(
+                    "json_extract(data, '$.metadata.canonical_username') = {}",
+                    self.ph(1)
+                )
+            }
+        };
+        let sql = format!("SELECT data FROM um_users WHERE {}", predicate);
+        let stmt = Statement::from_sql_and_values(
+            self.db_backend(),
+            &sql,
+            [Value::String(Some(Box::new(username.to_owned())))],
+        );
+        match self.db.query_one(stmt).await.map_err(GatewayError::from)? {
+            None => Ok(None),
+            Some(row) => {
+                let data: String = row.try_get("", "data").map_err(GatewayError::from)?;
+                Ok(Some(Self::deserialize(&data)?))
+            }
+        }
+    }
+
+    /// Retrieve a user management user by their string ID.
+    pub async fn get_user(&self, user_id: &str) -> Result<Option<User>> {
+        if let Some(user) = self.get_legacy_user_by_id(user_id).await? {
+            return Ok(Some(user));
+        }
+
+        let Ok(user_uuid) = uuid::Uuid::parse_str(user_id) else {
+            return Ok(None);
+        };
+        self.sync_legacy_user_from_canonical(user_uuid).await?;
+        self.get_legacy_user_by_id(user_id).await
+    }
+
+    /// Retrieve a user management user by their email address.
+    pub async fn get_user_by_email(&self, email: &str) -> Result<Option<User>> {
+        if let Some(user) = self.get_legacy_user_by_email(email).await? {
+            return Ok(Some(user));
+        }
+
+        if let Some(user) = self.find_canonical_user_by_email(email).await? {
+            self.sync_legacy_user_from_canonical(user.id()).await?;
+        }
+        self.get_legacy_user_by_email(email).await
     }
 
     /// Persist a new user management user to the database.
@@ -109,6 +170,7 @@ impl SeaOrmDatabase {
             ],
         );
         self.db.execute(stmt).await.map_err(GatewayError::from)?;
+        let _ = self.persist_legacy_user(user).await?;
         Ok(())
     }
 

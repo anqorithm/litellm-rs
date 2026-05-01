@@ -924,6 +924,30 @@ No parallel agents are launched by this plan. If the owner chooses to paralleliz
 ## 9. Execution Log
 
 - 2026-05-02
+  - Step E4 user bridge: `in_progress`
+    - Modified files:
+      - `src/storage/database/seaorm_db/mod.rs`
+      - `src/storage/database/seaorm_db/user_ops.rs`
+      - `src/storage/database/seaorm_db/user_management_ops.rs`
+      - `src/storage/database/seaorm_db/user_repository_tests.rs`
+    - Main changes:
+      - Mirrored canonical `create_user` writes into `um_users` without copying password hashes into legacy JSON.
+      - Added legacy `um_users` read-through for canonical `find_user_by_id`, `find_user_by_username`, and `find_user_by_email`.
+      - Added canonical user materialization when legacy `get_user` or `get_user_by_email` sees an existing canonical row.
+      - Generated an unguessable parseable password hash for materialized legacy users so auth failures stay on the normal invalid-credentials path.
+      - Looked up legacy users by `metadata.canonical_username` when canonical username rows are missing.
+      - Added conservative role/status/preference/budget field mapping while respecting the existing canonical `users` table column surface.
+      - Skipped legacy mirror writes on email conflict instead of returning a different legacy user for the canonical ID.
+    - Execute tests:
+      - `cargo fmt --all -- --check` -> pass
+      - `cargo test user_repository` -> pass (`7` tests)
+      - `cargo test user_management` -> pass (`73` tests)
+      - `cargo test team_repository` -> pass (`14` tests)
+      - `cargo test --all-features user_repository` -> pass (`7` tests)
+      - `cargo test --all-features user_management` -> pass (`73` tests)
+      - `cargo check --all-features` -> pass
+      - `git diff --check` -> pass
+      - `cargo clippy --lib --tests --bins --all-features -- -D warnings --force-warn clippy::collapsible-if` -> pass (`collapsible_if` remains warning by command design)
   - Step E4 canonical-to-legacy team mirror: `in_progress`
     - Modified files:
       - `src/storage/database/seaorm_db/team_repository.rs`
