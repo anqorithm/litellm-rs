@@ -924,6 +924,22 @@ No parallel agents are launched by this plan. If the owner chooses to paralleliz
 ## 9. Execution Log
 
 - 2026-05-01
+  - Step E3 partial: `in_progress`
+    - Modified files:
+      - `src/core/pricing.rs`
+      - `src/core/mod.rs`
+      - `src/services/pricing/types.rs`
+      - `src/core/providers/base/pricing.rs`
+    - Main changes:
+      - Introduced `core::pricing::LiteLLMModelInfo` as the shared LiteLLM pricing data model.
+      - Re-exported the shared model from `services::pricing` so existing service callers keep the same public import.
+      - Converted `core::providers::base::pricing::ModelPricing` into a compatibility alias over the shared model, removing one parallel pricing struct.
+      - Aligned provider-base pricing loading with `config/model_prices_extended.json` and added a regression test for that shared file.
+    - Execute tests:
+      - `cargo test pricing` -> pass (`176` lib filtered tests, `1` integration filtered test)
+      - `cargo clippy --lib --tests --bins --features "postgres sqlite redis s3 metrics tracing websockets analytics" -- -D warnings --force-warn clippy::collapsible-if` -> pass
+      - `cargo check --all-features` -> pass
+      - `cargo check --no-default-features --features lite` -> pass
   - Step E2: `completed`
     - Modified files:
       - `src/config/models/gateway.rs`
