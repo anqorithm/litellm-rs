@@ -11,6 +11,8 @@ mod token_ops;
 mod types;
 mod user_management_ops;
 mod user_ops;
+#[cfg(test)]
+mod user_repository_tests;
 mod virtual_key_ops;
 
 // Re-export public types
