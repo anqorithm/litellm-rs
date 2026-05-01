@@ -1,5 +1,6 @@
 //! Type definitions for the LLM client
 
+use dashmap::DashMap;
 use std::sync::atomic::AtomicUsize;
 use std::time::SystemTime;
 
@@ -19,7 +20,7 @@ pub struct ProviderStats {
 #[derive(Debug)]
 pub struct LoadBalancer {
     pub(crate) strategy: LoadBalancingStrategy,
-    pub(crate) round_robin_counter: AtomicUsize,
+    pub(crate) round_robin_counters: DashMap<String, AtomicUsize>,
 }
 
 /// Load balancing strategy
@@ -35,7 +36,7 @@ impl LoadBalancer {
     pub(crate) fn new(strategy: LoadBalancingStrategy) -> Self {
         Self {
             strategy,
-            round_robin_counter: AtomicUsize::new(0),
+            round_robin_counters: DashMap::new(),
         }
     }
 }

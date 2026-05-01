@@ -2,12 +2,15 @@
 
 #[cfg(test)]
 use super::llm_client::LLMClient;
+use super::types::{LoadBalancer, LoadBalancingStrategy, ProviderStats};
 use crate::sdk::config::{ConfigBuilder, ProviderType, SdkProviderConfig};
 use crate::sdk::errors::SDKError;
 use crate::sdk::types::{
     ChatOptions, Content, ContentPart, ImageUrl, Message, Role, SdkChatRequest,
 };
 use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 fn test_provider_config(id: &str, provider_type: ProviderType, model: &str) -> SdkProviderConfig {
     SdkProviderConfig {
@@ -106,6 +109,131 @@ async fn test_stream_provider_selection_prefers_default_provider() {
     let provider = client.select_provider_for_stream(&[]).await.unwrap();
 
     assert_eq!(provider.id, "openai");
+}
+
+#[tokio::test]
+async fn test_sdk_load_balancer_uses_core_round_robin_strategy_for_model() {
+    let providers = vec![
+        test_provider_config("openai-a", ProviderType::OpenAI, "gpt-shared"),
+        test_provider_config("openai-b", ProviderType::OpenAI, "gpt-shared"),
+    ];
+    let stats = Arc::new(RwLock::new(HashMap::<String, ProviderStats>::new()));
+    let load_balancer = LoadBalancer::new(LoadBalancingStrategy::RoundRobin);
+
+    let first = load_balancer
+        .select_chat_provider(&providers, &stats, Some("gpt-shared"))
+        .await
+        .unwrap();
+    let second = load_balancer
+        .select_chat_provider(&providers, &stats, Some("gpt-shared"))
+        .await
+        .unwrap();
+    let other_model = load_balancer
+        .select_chat_provider(&providers, &stats, Some("missing"))
+        .await
+        .unwrap_err();
+
+    assert_eq!(first.id, "openai-a");
+    assert_eq!(second.id, "openai-b");
+    assert!(matches!(other_model, SDKError::ModelNotFound(_)));
+}
+
+#[tokio::test]
+async fn test_sdk_load_balancer_maps_health_to_core_priority_strategy() {
+    let providers = vec![
+        test_provider_config("slow-errors", ProviderType::OpenAI, "gpt-shared"),
+        test_provider_config("healthy", ProviderType::OpenAI, "gpt-shared"),
+    ];
+    let stats = Arc::new(RwLock::new(HashMap::from([
+        (
+            "slow-errors".to_string(),
+            ProviderStats {
+                health_score: 0.25,
+                ..ProviderStats::default()
+            },
+        ),
+        (
+            "healthy".to_string(),
+            ProviderStats {
+                health_score: 0.98,
+                ..ProviderStats::default()
+            },
+        ),
+    ])));
+    let load_balancer = LoadBalancer::new(LoadBalancingStrategy::HealthBased);
+
+    let selected = load_balancer
+        .select_chat_provider(&providers, &stats, Some("gpt-shared"))
+        .await
+        .unwrap();
+
+    assert_eq!(selected.id, "healthy");
+}
+
+#[tokio::test]
+async fn test_sdk_load_balancer_maps_latency_to_core_latency_strategy() {
+    let providers = vec![
+        test_provider_config("slow", ProviderType::OpenAI, "gpt-shared"),
+        test_provider_config("fast", ProviderType::OpenAI, "gpt-shared"),
+    ];
+    let stats = Arc::new(RwLock::new(HashMap::from([
+        (
+            "slow".to_string(),
+            ProviderStats {
+                avg_latency_ms: 250.0,
+                ..ProviderStats::default()
+            },
+        ),
+        (
+            "fast".to_string(),
+            ProviderStats {
+                avg_latency_ms: 25.0,
+                ..ProviderStats::default()
+            },
+        ),
+    ])));
+    let load_balancer = LoadBalancer::new(LoadBalancingStrategy::LeastLatency);
+
+    let selected = load_balancer
+        .select_chat_provider(&providers, &stats, Some("gpt-shared"))
+        .await
+        .unwrap();
+
+    assert_eq!(selected.id, "fast");
+}
+
+#[tokio::test]
+async fn test_sdk_chat_routing_skips_non_chat_provider_with_matching_model() {
+    let providers = vec![
+        test_provider_config("azure", ProviderType::Azure, "gpt-shared"),
+        test_provider_config("openai", ProviderType::OpenAI, "gpt-shared"),
+    ];
+    let stats = Arc::new(RwLock::new(HashMap::<String, ProviderStats>::new()));
+    let load_balancer = LoadBalancer::new(LoadBalancingStrategy::RoundRobin);
+
+    let selected = load_balancer
+        .select_chat_provider(&providers, &stats, Some("gpt-shared"))
+        .await
+        .unwrap();
+
+    assert_eq!(selected.id, "openai");
+}
+
+#[tokio::test]
+async fn test_sdk_stream_routing_skips_non_stream_provider() {
+    let providers = vec![
+        test_provider_config("google", ProviderType::Google, "gemini-pro"),
+        test_provider_config("openai", ProviderType::OpenAI, "gpt-4o-mini"),
+    ];
+    let stats = Arc::new(RwLock::new(HashMap::<String, ProviderStats>::new()));
+    let load_balancer = LoadBalancer::new(LoadBalancingStrategy::RoundRobin);
+
+    let selected = load_balancer
+        .select_stream_provider(&providers, &stats)
+        .await
+        .unwrap();
+
+    assert_eq!(selected.id, "openai");
 }
 
 #[tokio::test]
