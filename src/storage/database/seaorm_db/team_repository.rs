@@ -10,6 +10,7 @@ use crate::core::models::{Metadata, UsageStats};
 use crate::core::teams::repository::TeamRepository;
 use crate::core::user_management::{
     Team as LegacyTeam, TeamMember as LegacyTeamMember, TeamRole as LegacyTeamRole,
+    TeamSettings as LegacyTeamSettings,
 };
 use crate::utils::error::gateway_error::{GatewayError, Result};
 use async_trait::async_trait;
@@ -71,6 +72,44 @@ impl SeaOrmTeamRepository {
         }
     }
 
+    fn core_role_to_legacy(role: &TeamRole) -> LegacyTeamRole {
+        match role {
+            TeamRole::Owner => LegacyTeamRole::Owner,
+            TeamRole::Admin | TeamRole::Manager => LegacyTeamRole::Admin,
+            TeamRole::Member => LegacyTeamRole::Member,
+            TeamRole::Viewer => LegacyTeamRole::ReadOnly,
+        }
+    }
+
+    fn string_vec_metadata(team: &Team, key: &str) -> Vec<String> {
+        team.team_metadata
+            .get(key)
+            .and_then(|value| value.as_array())
+            .map(|values| {
+                values
+                    .iter()
+                    .filter_map(|value| value.as_str().map(str::to_owned))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    fn string_metadata(team: &Team, key: &str) -> Option<String> {
+        team.team_metadata
+            .get(key)
+            .or_else(|| team.metadata.extra.get(key))
+            .and_then(|value| value.as_str())
+            .map(str::to_owned)
+    }
+
+    fn legacy_budget_reset_at(team: &Team) -> Option<chrono::DateTime<chrono::Utc>> {
+        Self::string_metadata(team, "legacy_budget_reset_at").and_then(|value| {
+            chrono::DateTime::parse_from_rfc3339(&value)
+                .ok()
+                .map(|timestamp| timestamp.with_timezone(&chrono::Utc))
+        })
+    }
+
     fn legacy_member_to_core(
         team_id: Uuid,
         member: &LegacyTeamMember,
@@ -103,6 +142,15 @@ impl SeaOrmTeamRepository {
             MemberStatus::Left
         };
         Ok(Some(core_member))
+    }
+
+    fn core_member_to_legacy(member: &TeamMember) -> LegacyTeamMember {
+        LegacyTeamMember {
+            user_id: member.user_id.to_string(),
+            role: Self::core_role_to_legacy(&member.role),
+            joined_at: member.joined_at,
+            is_active: member.is_active(),
+        }
     }
 
     fn legacy_team_to_core(legacy: &LegacyTeam) -> Result<(Team, Vec<TeamMember>)> {
@@ -184,6 +232,35 @@ impl SeaOrmTeamRepository {
             .collect();
 
         Ok((team, members))
+    }
+
+    fn core_team_to_legacy(team: &Team, members: Vec<TeamMember>) -> LegacyTeam {
+        let metadata = team
+            .team_metadata
+            .iter()
+            .filter_map(|(key, value)| value.as_str().map(|value| (key.clone(), value.to_owned())))
+            .collect();
+
+        LegacyTeam {
+            team_id: team.id().to_string(),
+            team_name: team.name.clone(),
+            description: team.description.clone(),
+            organization_id: Self::string_metadata(team, "legacy_organization_id"),
+            members: members.iter().map(Self::core_member_to_legacy).collect(),
+            permissions: Self::string_vec_metadata(team, "legacy_permissions"),
+            models: Self::string_vec_metadata(team, "legacy_models"),
+            max_budget: team
+                .team_metadata
+                .get("legacy_max_budget")
+                .and_then(|value| value.as_f64()),
+            spend: team.usage_stats.total_cost,
+            budget_duration: Self::string_metadata(team, "legacy_budget_duration"),
+            budget_reset_at: Self::legacy_budget_reset_at(team),
+            metadata,
+            is_active: team.is_active(),
+            created_at: team.metadata.created_at,
+            settings: LegacyTeamSettings::default(),
+        }
     }
 
     /// SQL predicate for filtering logically deleted teams from JSON payload.
@@ -508,12 +585,56 @@ impl SeaOrmTeamRepository {
         }
         Ok(())
     }
+
+    async fn sync_legacy_team_from_canonical(&self, team_id: Uuid) -> Result<()> {
+        let Some(team) = self.get_canonical(team_id).await? else {
+            return Ok(());
+        };
+
+        let members = self.list_canonical_members(team_id).await?;
+        let mut legacy = Self::core_team_to_legacy(&team, members);
+        if let Some(existing) = self.db.get_team(&legacy.team_id).await? {
+            if legacy.organization_id.is_none() {
+                legacy.organization_id = existing.organization_id;
+            }
+            legacy.settings = existing.settings;
+            self.db.update_team(&legacy).await
+        } else {
+            self.db.create_team(&legacy).await
+        }
+    }
+
+    async fn add_legacy_user_team(&self, user_id: Uuid, team_id: Uuid) -> Result<()> {
+        let user_id = user_id.to_string();
+        let team_id = team_id.to_string();
+        if let Some(mut user) = self.db.get_user(&user_id).await?
+            && !user.teams.contains(&team_id)
+        {
+            user.teams.push(team_id);
+            self.db.update_user(&user).await?;
+        }
+        Ok(())
+    }
+
+    async fn remove_legacy_user_team(&self, user_id: Uuid, team_id: Uuid) -> Result<()> {
+        let user_id = user_id.to_string();
+        let team_id = team_id.to_string();
+        if let Some(mut user) = self.db.get_user(&user_id).await? {
+            let original_len = user.teams.len();
+            user.teams.retain(|existing| existing != &team_id);
+            if user.teams.len() != original_len {
+                self.db.update_user(&user).await?;
+            }
+        }
+        Ok(())
+    }
 }
 
 #[async_trait]
 impl TeamRepository for SeaOrmTeamRepository {
     async fn create(&self, team: Team) -> Result<Team> {
         self.insert_canonical_team(&team).await?;
+        self.sync_legacy_team_from_canonical(team.id()).await?;
         Ok(team)
     }
 
@@ -562,10 +683,31 @@ impl TeamRepository for SeaOrmTeamRepository {
             ],
         );
         self.db.db.execute(stmt).await.map_err(GatewayError::from)?;
+        self.sync_legacy_team_from_canonical(team.id()).await?;
         Ok(team)
     }
 
     async fn delete(&self, id: Uuid) -> Result<()> {
+        let mut member_user_ids: HashSet<Uuid> = self
+            .list_canonical_members(id)
+            .await?
+            .into_iter()
+            .map(|member| member.user_id)
+            .collect();
+        if let Some(legacy) = self.get_legacy_um_team(id).await? {
+            for member in legacy.members {
+                match Uuid::parse_str(&member.user_id) {
+                    Ok(user_id) => {
+                        member_user_ids.insert(user_id);
+                    }
+                    Err(_) => warn!(
+                        legacy_user_id = %member.user_id,
+                        team_id = %id,
+                        "Skipping legacy user membership cleanup because user_id is not a UUID"
+                    ),
+                }
+            }
+        }
         let id_str = id.to_string();
         let txn = self.db.db.begin().await.map_err(GatewayError::from)?;
 
@@ -595,6 +737,11 @@ impl TeamRepository for SeaOrmTeamRepository {
         txn.execute(stmt).await.map_err(GatewayError::from)?;
 
         txn.commit().await.map_err(GatewayError::from)?;
+
+        for user_id in member_user_ids {
+            self.remove_legacy_user_team(user_id, id).await?;
+        }
+
         Ok(())
     }
 
@@ -666,6 +813,9 @@ impl TeamRepository for SeaOrmTeamRepository {
 
     async fn add_member(&self, member: TeamMember) -> Result<TeamMember> {
         self.insert_canonical_member(&member).await?;
+        self.sync_legacy_team_from_canonical(member.team_id).await?;
+        self.add_legacy_user_team(member.user_id, member.team_id)
+            .await?;
         Ok(member)
     }
 
@@ -730,24 +880,14 @@ impl TeamRepository for SeaOrmTeamRepository {
         txn.execute(stmt).await.map_err(GatewayError::from)?;
 
         txn.commit().await.map_err(GatewayError::from)?;
+        self.sync_legacy_team_from_canonical(team_id).await?;
         Ok(member)
     }
 
     async fn remove_member(&self, team_id: Uuid, user_id: Uuid) -> Result<()> {
-        let sql = format!(
-            "DELETE FROM team_members WHERE team_id = {} AND user_id = {}",
-            self.ph(1),
-            self.ph(2)
-        );
-        let stmt = Statement::from_sql_and_values(
-            self.backend(),
-            &sql,
-            [
-                Value::String(Some(Box::new(team_id.to_string()))),
-                Value::String(Some(Box::new(user_id.to_string()))),
-            ],
-        );
-        self.db.db.execute(stmt).await.map_err(GatewayError::from)?;
+        self.delete_canonical_member(team_id, user_id).await?;
+        self.sync_legacy_team_from_canonical(team_id).await?;
+        self.remove_legacy_user_team(user_id, team_id).await?;
         Ok(())
     }
 
