@@ -1,5 +1,6 @@
 //! Notification channel implementations
 
+use crate::core::http::outbound::default_outbound_client;
 use crate::monitoring::types::{Alert, AlertSeverity};
 use crate::utils::error::gateway_error::{GatewayError, Result};
 use tracing::warn;
@@ -100,7 +101,7 @@ impl NotificationChannel for SlackChannel {
             }]
         });
 
-        let client = reqwest::Client::new();
+        let client = default_outbound_client().clone();
         let response = client
             .post(&self.webhook_url)
             .json(&payload)

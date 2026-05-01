@@ -16,6 +16,12 @@ pub enum FinishReason {
     ContentFilter,
     /// Function call (backward compatibility)
     FunctionCall,
+    /// Provider stopped at an explicit stop sequence
+    StopSequence,
+    /// Provider refused the request
+    Refusal,
+    /// Provider paused the turn for a later continuation
+    PauseTurn,
 }
 
 /// Log probabilities
@@ -103,18 +109,40 @@ mod tests {
     }
 
     #[test]
+    fn test_finish_reason_provider_specific_serialization() {
+        assert_eq!(
+            serde_json::to_string(&FinishReason::StopSequence).unwrap(),
+            "\"stop_sequence\""
+        );
+        assert_eq!(
+            serde_json::to_string(&FinishReason::Refusal).unwrap(),
+            "\"refusal\""
+        );
+        assert_eq!(
+            serde_json::to_string(&FinishReason::PauseTurn).unwrap(),
+            "\"pause_turn\""
+        );
+    }
+
+    #[test]
     fn test_finish_reason_deserialization() {
         let stop: FinishReason = serde_json::from_str("\"stop\"").unwrap();
         let length: FinishReason = serde_json::from_str("\"length\"").unwrap();
         let tool_calls: FinishReason = serde_json::from_str("\"tool_calls\"").unwrap();
         let content_filter: FinishReason = serde_json::from_str("\"content_filter\"").unwrap();
         let function_call: FinishReason = serde_json::from_str("\"function_call\"").unwrap();
+        let stop_sequence: FinishReason = serde_json::from_str("\"stop_sequence\"").unwrap();
+        let refusal: FinishReason = serde_json::from_str("\"refusal\"").unwrap();
+        let pause_turn: FinishReason = serde_json::from_str("\"pause_turn\"").unwrap();
 
         assert_eq!(stop, FinishReason::Stop);
         assert_eq!(length, FinishReason::Length);
         assert_eq!(tool_calls, FinishReason::ToolCalls);
         assert_eq!(content_filter, FinishReason::ContentFilter);
         assert_eq!(function_call, FinishReason::FunctionCall);
+        assert_eq!(stop_sequence, FinishReason::StopSequence);
+        assert_eq!(refusal, FinishReason::Refusal);
+        assert_eq!(pause_turn, FinishReason::PauseTurn);
     }
 
     #[test]

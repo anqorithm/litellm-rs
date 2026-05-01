@@ -95,22 +95,120 @@ pub fn generic_cost_per_token(
 
 /// Get model pricing information
 pub fn get_model_pricing(model: &str, provider: &str) -> Result<ModelPricing, CostError> {
-    // This will be populated with actual pricing data
-    // For now, return a basic implementation
-
     match provider.to_lowercase().as_str() {
-        "openai" => get_openai_pricing(model),
-        "anthropic" => get_anthropic_pricing(model),
+        "openai" => get_pricing_with_shared_source(model, &["openai"], get_openai_pricing),
+        "anthropic" => get_pricing_with_shared_source(model, &["anthropic"], get_anthropic_pricing),
         "azure" => get_azure_pricing(model),
-        "vertex_ai" | "vertexai" => get_vertex_ai_pricing(model),
-        "deepseek" => get_deepseek_pricing(model),
-        "moonshot" => get_moonshot_pricing(model),
-        "minimax" => get_minimax_pricing(model),
-        "zhipu" | "zhipuai" | "glm" | "zai" => get_zhipu_pricing(model),
+        "vertex_ai" | "vertexai" => {
+            get_pricing_with_shared_source(model, &["vertex_ai", "google"], get_vertex_ai_pricing)
+        }
+        "deepseek" => get_pricing_with_shared_source(model, &["deepseek"], get_deepseek_pricing),
+        "moonshot" => get_pricing_with_shared_source(model, &["moonshot"], get_moonshot_pricing),
+        "minimax" => get_pricing_with_shared_source(model, &["minimax"], get_minimax_pricing),
+        "zhipu" | "zhipuai" | "glm" | "zai" => {
+            get_pricing_with_shared_source(model, &["zhipuai", "glm", "zai"], get_zhipu_pricing)
+        }
         _ => Err(CostError::ProviderNotSupported {
             provider: provider.to_string(),
         }),
     }
+}
+
+fn get_pricing_with_shared_source<F>(
+    model: &str,
+    provider_aliases: &[&str],
+    fallback: F,
+) -> Result<ModelPricing, CostError>
+where
+    F: FnOnce(&str) -> Result<ModelPricing, CostError>,
+{
+    if let Some(pricing) = get_shared_model_pricing(model, provider_aliases) {
+        return Ok(pricing);
+    }
+
+    fallback(model)
+}
+
+fn get_shared_model_pricing(model: &str, provider_aliases: &[&str]) -> Option<ModelPricing> {
+    let db = crate::core::providers::base::pricing::get_pricing_db();
+
+    if let Some(info) = db.get_model_info(model)
+        && litellm_provider_matches(&info.litellm_provider, provider_aliases)
+    {
+        return Some(litellm_to_cost_pricing(model, info));
+    }
+
+    let model_lower = model.to_lowercase();
+    for provider in provider_aliases {
+        let mut candidates = db.get_provider_models(provider);
+        candidates.sort();
+
+        for model_id in candidates {
+            let model_id_lower = model_id.to_lowercase();
+            let matches = model_id_lower == model_lower || model_id_lower.contains(&model_lower);
+            if matches
+                && let Some(info) = db.get_model_info(&model_id)
+                && litellm_provider_matches(&info.litellm_provider, provider_aliases)
+            {
+                return Some(litellm_to_cost_pricing(&model_id, info));
+            }
+        }
+    }
+
+    None
+}
+
+fn litellm_provider_matches(provider: &str, aliases: &[&str]) -> bool {
+    let provider = normalize_pricing_provider(provider);
+    aliases
+        .iter()
+        .any(|alias| normalize_pricing_provider(alias) == provider)
+}
+
+fn normalize_pricing_provider(provider: &str) -> String {
+    match provider.to_lowercase().replace('-', "_").as_str() {
+        "vertexai" | "google" => "vertex_ai".to_string(),
+        "zhipu" | "glm" | "zai" => "zhipuai".to_string(),
+        other => other.to_string(),
+    }
+}
+
+fn litellm_to_cost_pricing(
+    model: &str,
+    info: &crate::core::pricing::LiteLLMModelInfo,
+) -> ModelPricing {
+    use chrono::Utc;
+
+    ModelPricing {
+        model: model.to_string(),
+        input_cost_per_1k_tokens: info.input_cost_per_token.unwrap_or(0.0) * 1000.0,
+        output_cost_per_1k_tokens: info.output_cost_per_token.unwrap_or(0.0) * 1000.0,
+        cache_read_input_token_cost: extra_token_cost_per_1k(info, "cache_read_input_token_cost"),
+        cache_creation_input_token_cost: extra_token_cost_per_1k(
+            info,
+            "cache_creation_input_token_cost",
+        ),
+        input_cost_per_audio_token: extra_f64(info, "input_cost_per_audio_token"),
+        output_cost_per_audio_token: extra_f64(info, "output_cost_per_audio_token"),
+        image_cost_per_token: extra_f64(info, "image_cost_per_token"),
+        reasoning_cost_per_token: extra_f64(info, "output_cost_per_reasoning_token"),
+        cost_per_second: info.cost_per_second,
+        cost_per_image: None,
+        tiered_pricing: None,
+        currency: "USD".to_string(),
+        updated_at: Utc::now(),
+    }
+}
+
+fn extra_f64(info: &crate::core::pricing::LiteLLMModelInfo, key: &str) -> Option<f64> {
+    info.extra.get(key).and_then(serde_json::Value::as_f64)
+}
+
+fn extra_token_cost_per_1k(
+    info: &crate::core::pricing::LiteLLMModelInfo,
+    key: &str,
+) -> Option<f64> {
+    extra_f64(info, key).map(|cost_per_token| cost_per_token * 1000.0)
 }
 
 /// Calculate input cost
@@ -919,6 +1017,13 @@ mod tests {
         UsageTokens::new(prompt_tokens, completion_tokens)
     }
 
+    fn assert_cost_eq(actual: f64, expected: f64) {
+        assert!(
+            (actual - expected).abs() < 1e-12,
+            "expected {expected}, got {actual}"
+        );
+    }
+
     // Tests for generic_cost_per_token
     #[test]
     fn test_generic_cost_per_token_basic() {
@@ -949,7 +1054,7 @@ mod tests {
         let breakdown = result.unwrap();
 
         // Input cost should only be for non-cached tokens (2000 - 500 = 1500)
-        let expected_input = (1500.0 / 1000.0) * 0.005;
+        let expected_input = (1500.0 / 1000.0) * 0.0025;
         assert!((breakdown.input_cost - expected_input).abs() < 1e-6);
         // Note: cache_cost may be 0 if pricing data doesn't include cache_read_input_token_cost
         // The important thing is that input cost is calculated correctly excluding cached tokens
@@ -1011,8 +1116,17 @@ mod tests {
         let pricing = get_model_pricing("gpt-4o", "openai");
         assert!(pricing.is_ok());
         let pricing = pricing.unwrap();
-        assert_eq!(pricing.input_cost_per_1k_tokens, 0.005);
-        assert_eq!(pricing.output_cost_per_1k_tokens, 0.015);
+        assert_eq!(pricing.input_cost_per_1k_tokens, 0.0025);
+        assert_eq!(pricing.output_cost_per_1k_tokens, 0.01);
+    }
+
+    #[test]
+    fn test_cost_pricing_prefers_shared_litellm_source() {
+        let pricing = get_model_pricing("gpt-3.5-turbo", "openai");
+        assert!(pricing.is_ok());
+        let pricing = pricing.unwrap();
+        assert_eq!(pricing.input_cost_per_1k_tokens, 0.0015);
+        assert_eq!(pricing.output_cost_per_1k_tokens, 0.002);
     }
 
     #[test]
@@ -1021,7 +1135,7 @@ mod tests {
         assert!(pricing.is_ok());
         let pricing = pricing.unwrap();
         assert_eq!(pricing.input_cost_per_1k_tokens, 0.01);
-        assert_eq!(pricing.output_cost_per_1k_tokens, 0.03);
+        assert_cost_eq(pricing.output_cost_per_1k_tokens, 0.03);
     }
 
     #[test]
@@ -1029,8 +1143,8 @@ mod tests {
         let pricing = get_model_pricing("gpt-3.5-turbo", "openai");
         assert!(pricing.is_ok());
         let pricing = pricing.unwrap();
-        assert_eq!(pricing.input_cost_per_1k_tokens, 0.0005);
-        assert_eq!(pricing.output_cost_per_1k_tokens, 0.0015);
+        assert_eq!(pricing.input_cost_per_1k_tokens, 0.0015);
+        assert_eq!(pricing.output_cost_per_1k_tokens, 0.002);
     }
 
     #[test]
@@ -1039,7 +1153,7 @@ mod tests {
         assert!(pricing.is_ok());
         let pricing = pricing.unwrap();
         assert_eq!(pricing.input_cost_per_1k_tokens, 0.003);
-        assert_eq!(pricing.output_cost_per_1k_tokens, 0.015);
+        assert_cost_eq(pricing.output_cost_per_1k_tokens, 0.015);
     }
 
     #[test]
@@ -1092,8 +1206,8 @@ mod tests {
         let pricing = get_model_pricing("gemini-pro", "vertex_ai");
         assert!(pricing.is_ok());
         let pricing = pricing.unwrap();
-        assert_eq!(pricing.input_cost_per_1k_tokens, 0.00125);
-        assert_eq!(pricing.output_cost_per_1k_tokens, 0.00375);
+        assert_cost_eq(pricing.input_cost_per_1k_tokens, 0.00025);
+        assert_cost_eq(pricing.output_cost_per_1k_tokens, 0.0005);
     }
 
     #[test]
@@ -1110,8 +1224,8 @@ mod tests {
         let pricing = get_model_pricing("deepseek-chat", "deepseek");
         assert!(pricing.is_ok());
         let pricing = pricing.unwrap();
-        assert_eq!(pricing.input_cost_per_1k_tokens, 0.00014);
-        assert_eq!(pricing.output_cost_per_1k_tokens, 0.00028);
+        assert_cost_eq(pricing.input_cost_per_1k_tokens, 0.00014);
+        assert_cost_eq(pricing.output_cost_per_1k_tokens, 0.00028);
     }
 
     #[test]
@@ -1119,7 +1233,7 @@ mod tests {
         let pricing = get_model_pricing("moonshot-v1-8k", "moonshot");
         assert!(pricing.is_ok());
         let pricing = pricing.unwrap();
-        assert_eq!(pricing.input_cost_per_1k_tokens, 0.0002);
+        assert_cost_eq(pricing.input_cost_per_1k_tokens, 0.0002);
         assert_eq!(pricing.output_cost_per_1k_tokens, 0.002);
     }
 
@@ -1174,7 +1288,7 @@ mod tests {
         assert!(pricing.is_ok());
         let pricing = pricing.unwrap();
         assert_eq!(pricing.input_cost_per_1k_tokens, 0.001);
-        assert_eq!(pricing.output_cost_per_1k_tokens, 0.0032);
+        assert_cost_eq(pricing.output_cost_per_1k_tokens, 0.0032);
     }
 
     #[test]
@@ -1191,8 +1305,8 @@ mod tests {
         let pricing = get_model_pricing("glm-4-flash", "zhipuai");
         assert!(pricing.is_ok());
         let pricing = pricing.unwrap();
-        assert_eq!(pricing.input_cost_per_1k_tokens, 0.00005);
-        assert_eq!(pricing.output_cost_per_1k_tokens, 0.0001);
+        assert_cost_eq(pricing.input_cost_per_1k_tokens, 0.00005);
+        assert_cost_eq(pricing.output_cost_per_1k_tokens, 0.0001);
     }
 
     #[test]
@@ -1392,7 +1506,7 @@ mod tests {
         let estimate = result.unwrap();
 
         // Should use default 100 tokens
-        let expected_output = (100.0 / 1000.0) * 0.015;
+        let expected_output = (100.0 / 1000.0) * 0.01;
         assert!((estimate.estimated_output_cost - expected_output).abs() < 1e-6);
     }
 

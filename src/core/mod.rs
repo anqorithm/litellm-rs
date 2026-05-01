@@ -21,12 +21,15 @@ pub mod fine_tuning; // Fine-tuning API
 pub mod function_calling; // Function calling support for AI providers
 pub mod guardrails; // Content safety and validation system
 pub mod health; // Health monitoring system
+pub mod http; // Shared outbound HTTP client utilities
 pub mod integrations; // External integrations (Langfuse, etc.)
 pub mod ip_access; // IP-based access control
 pub mod keys; // API Key Management System
 pub mod mcp; // MCP (Model Context Protocol) Gateway
 pub mod models;
+pub mod net; // Network validation and safety utilities
 pub mod observability; // Advanced observability and monitoring
+pub mod pricing; // Shared pricing data types
 pub mod providers;
 pub mod rate_limiter; // Rate limiting system
 pub mod realtime; // Realtime WebSocket API

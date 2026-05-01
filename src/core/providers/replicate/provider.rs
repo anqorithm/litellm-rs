@@ -337,7 +337,7 @@ impl LLMProvider for ReplicateProvider {
                     ProviderError::authentication("replicate", "API token required")
                 })?;
 
-            let client = reqwest::Client::new();
+            let client = crate::core::http::outbound::default_outbound_client().clone();
             let response = client
                 .get(stream_url)
                 .header("Authorization", format!("Token {}", api_key))

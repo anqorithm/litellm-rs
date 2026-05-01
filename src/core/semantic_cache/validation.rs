@@ -81,6 +81,7 @@ mod tests {
             function_call: None,
             tools: None,
             tool_choice: None,
+            parallel_tool_calls: None,
             response_format: None,
             seed: None,
             logprobs: None,
@@ -92,6 +93,10 @@ mod tests {
             store: None,
             metadata: None,
             service_tier: None,
+            prediction: None,
+            safety_settings: None,
+            cache_control: None,
+            extra_body: Default::default(),
         }
     }
 

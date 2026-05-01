@@ -142,7 +142,7 @@ impl VertexAuth {
         Self {
             credentials,
             token_cache: Arc::new(RwLock::new(None)),
-            http_client: reqwest::Client::new(),
+            http_client: crate::core::http::outbound::default_outbound_client().clone(),
         }
     }
 

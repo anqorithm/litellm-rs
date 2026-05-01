@@ -57,6 +57,14 @@ fn create_valid_config() -> GatewayConfig {
 // ==================== GatewayConfig Default Tests ====================
 
 #[test]
+fn test_default_pricing_source_matches_example_path() {
+    let config = GatewayPricingConfig::default();
+
+    assert_eq!(config.source.as_deref(), Some(DEFAULT_PRICING_SOURCE));
+    assert!(!std::path::Path::new(config.source.as_deref().unwrap()).is_absolute());
+}
+
+#[test]
 fn test_gateway_config_default() {
     let config = GatewayConfig::default();
     assert!(config.providers.is_empty());

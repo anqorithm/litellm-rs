@@ -8,7 +8,7 @@ use std::sync::Arc;
 use tracing::{debug, info};
 
 use super::config::{DistanceMetric, IndexType, PROVIDER_NAME, PgVectorConfig};
-use super::models::{SearchOptions, SearchResult, VectorPoint};
+use super::models::{FilterValue, SearchOptions, SearchResult, VectorPoint};
 use crate::core::providers::unified_provider::ProviderError;
 
 /// PostgreSQL pgvector provider for vector storage and similarity search
@@ -30,7 +30,7 @@ impl PgVectorProvider {
         config.validate()?;
 
         // Create HTTP client for potential REST API access
-        let client = Arc::new(reqwest::Client::new());
+        let client = Arc::new(crate::core::http::outbound::default_outbound_client().clone());
 
         // Create safe URL for logging (hide password)
         let safe_url = Self::make_safe_url(&config.database_url);
@@ -178,8 +178,13 @@ ON CONFLICT (id) DO UPDATE SET
 
     /// Generate SQL for similarity search
     pub fn search_sql(&self, options: &SearchOptions) -> String {
+        self.search_sql_and_params(options).0
+    }
+
+    fn search_sql_and_params(&self, options: &SearchOptions) -> (String, Vec<StatementParam>) {
         let operator = self.config.distance_metric.operator();
         let full_table = self.config.full_table_name();
+        let mut params = Vec::new();
 
         let mut select_columns = vec!["id".to_string()];
 
@@ -210,33 +215,49 @@ ON CONFLICT (id) DO UPDATE SET
         // Add WHERE clause for threshold and metadata filter
         let mut conditions = Vec::new();
         // Parameter index starts at 2 (1 is the vector)
-        let mut _param_index = 2;
-        let mut _filter_params = Vec::new();
+        let mut param_index = 2;
 
         if let Some(threshold) = options.threshold {
+            let threshold_placeholder = format!("${}", param_index);
+            let threshold_value = match self.config.distance_metric {
+                DistanceMetric::Cosine => 1.0 - threshold,
+                DistanceMetric::L2 => threshold,
+                DistanceMetric::InnerProduct => -threshold,
+            };
             let threshold_condition = match self.config.distance_metric {
                 DistanceMetric::Cosine => {
-                    format!("(embedding {} $1::vector) <= {}", operator, 1.0 - threshold)
+                    format!(
+                        "(embedding {} $1::vector) <= {}",
+                        operator, threshold_placeholder
+                    )
                 }
                 DistanceMetric::L2 => {
-                    format!("(embedding {} $1::vector) <= {}", operator, threshold)
+                    format!(
+                        "(embedding {} $1::vector) <= {}",
+                        operator, threshold_placeholder
+                    )
                 }
                 DistanceMetric::InnerProduct => {
-                    format!("(embedding {} $1::vector) >= {}", operator, -threshold)
+                    format!(
+                        "(embedding {} $1::vector) >= {}",
+                        operator, threshold_placeholder
+                    )
                 }
             };
             conditions.push(threshold_condition);
+            params.push(StatementParam::Float(threshold_value as f64));
+            param_index += 1;
         }
 
         // Use safe parameterized filters instead of raw SQL string
         if let Some(ref filters) = options.metadata_filters
             && !filters.is_empty()
         {
-            let (filter_sql, params) = filters.to_sql_with_params(_param_index);
+            let (filter_sql, filter_params) = filters.to_sql_with_params(param_index);
             if !filter_sql.is_empty() {
                 conditions.push(filter_sql);
-                _filter_params = params;
-                _param_index += _filter_params.len();
+                param_index += filter_params.len();
+                params.extend(filter_params.into_iter().map(StatementParam::from));
             }
         }
 
@@ -249,9 +270,10 @@ ON CONFLICT (id) DO UPDATE SET
         sql.push_str(&format!(" ORDER BY embedding {} $1::vector", operator));
 
         // Limit
-        sql.push_str(&format!(" LIMIT {}", options.limit));
+        sql.push_str(&format!(" LIMIT ${}", param_index));
+        params.push(StatementParam::Int(options.limit as i64));
 
-        sql
+        (sql, params)
     }
 
     /// Generate SQL for getting a vector by ID
@@ -371,7 +393,7 @@ SELECT
             ));
         }
 
-        let sql = self.search_sql(&options);
+        let (sql, mut search_params) = self.search_sql_and_params(&options);
         let vector_str = Self::format_vector(query_vector);
 
         debug!(
@@ -379,10 +401,10 @@ SELECT
             options.limit, options.threshold
         );
 
-        Ok(PreparedStatement {
-            sql,
-            params: vec![StatementParam::Text(vector_str)],
-        })
+        let mut params = vec![StatementParam::Text(vector_str)];
+        params.append(&mut search_params);
+
+        Ok(PreparedStatement { sql, params })
     }
 
     /// Prepare a get by ID query
@@ -438,15 +460,13 @@ pub enum StatementParam {
     Float(f64),
 }
 
-impl StatementParam {
-    /// Convert to a string representation for SQL
-    pub fn to_sql_string(&self) -> String {
-        match self {
-            StatementParam::Text(s) => format!("'{}'", s.replace('\'', "''")),
-            StatementParam::Json(Some(s)) => format!("'{}'::jsonb", s.replace('\'', "''")),
-            StatementParam::Json(None) => "NULL".to_string(),
-            StatementParam::Int(i) => i.to_string(),
-            StatementParam::Float(f) => f.to_string(),
+impl From<FilterValue> for StatementParam {
+    fn from(value: FilterValue) -> Self {
+        match value {
+            FilterValue::String(value) => StatementParam::Text(value),
+            FilterValue::Int(value) => StatementParam::Int(value),
+            FilterValue::Float(value) => StatementParam::Float(value),
+            FilterValue::Bool(value) => StatementParam::Text(value.to_string()),
         }
     }
 }
@@ -613,7 +633,9 @@ mod tests {
         let options = SearchOptions::new(10).with_threshold(0.8);
         let sql = provider.search_sql(&options);
         assert!(sql.contains("<=>"));
-        assert!(sql.contains("LIMIT 10"));
+        assert!(sql.contains("LIMIT $3"));
+        assert!(sql.contains("<= $2"));
+        assert!(!sql.contains("0.8"));
         assert!(sql.contains("1 -")); // Cosine similarity conversion
     }
 
@@ -624,7 +646,7 @@ mod tests {
         let options = SearchOptions::new(5);
         let sql = provider.search_sql(&options);
         assert!(sql.contains("<->"));
-        assert!(sql.contains("LIMIT 5"));
+        assert!(sql.contains("LIMIT $2"));
     }
 
     #[test]
@@ -634,7 +656,41 @@ mod tests {
         let options = SearchOptions::new(20);
         let sql = provider.search_sql(&options);
         assert!(sql.contains("<#>"));
-        assert!(sql.contains("LIMIT 20"));
+        assert!(sql.contains("LIMIT $2"));
+    }
+
+    #[test]
+    fn test_prepare_search_parameterizes_threshold_and_limit() {
+        let config = test_config()
+            .with_dimension(3)
+            .with_distance_metric(DistanceMetric::Cosine);
+        let provider = tokio_test::block_on(PgVectorProvider::new(config)).unwrap();
+        let stmt = provider
+            .prepare_search(&[0.1, 0.2, 0.3], SearchOptions::new(7).with_threshold(0.8))
+            .unwrap();
+
+        assert!(stmt.sql.contains("<= $2"));
+        assert!(stmt.sql.contains("LIMIT $3"));
+        assert_eq!(stmt.params.len(), 3);
+        assert!(matches!(stmt.params[0], StatementParam::Text(_)));
+        assert!(
+            matches!(stmt.params[1], StatementParam::Float(value) if (value - 0.2).abs() < 0.00001)
+        );
+        assert!(matches!(stmt.params[2], StatementParam::Int(7)));
+    }
+
+    #[test]
+    fn test_prepare_search_includes_metadata_filter_params() {
+        let config = test_config().with_dimension(3);
+        let provider = tokio_test::block_on(PgVectorProvider::new(config)).unwrap();
+        let options = SearchOptions::new(5).with_filter_eq("tenant", "acme");
+        let stmt = provider.prepare_search(&[0.1, 0.2, 0.3], options).unwrap();
+
+        assert!(stmt.sql.contains("metadata->>'tenant' = $2"));
+        assert!(stmt.sql.contains("LIMIT $3"));
+        assert_eq!(stmt.params.len(), 3);
+        assert!(matches!(&stmt.params[1], StatementParam::Text(value) if value == "acme"));
+        assert!(matches!(stmt.params[2], StatementParam::Int(5)));
     }
 
     #[test]
@@ -677,26 +733,5 @@ mod tests {
         let safe = PgVectorProvider::make_safe_url(url);
         assert!(safe.contains("****"));
         assert!(!safe.contains("secretpassword"));
-    }
-
-    #[test]
-    fn test_statement_param_to_sql() {
-        assert_eq!(
-            StatementParam::Text("test".to_string()).to_sql_string(),
-            "'test'"
-        );
-        assert_eq!(
-            StatementParam::Json(Some(r#"{"key":"value"}"#.to_string())).to_sql_string(),
-            r#"'{"key":"value"}'::jsonb"#
-        );
-        assert_eq!(StatementParam::Json(None).to_sql_string(), "NULL");
-        assert_eq!(StatementParam::Int(42).to_sql_string(), "42");
-        assert_eq!(StatementParam::Float(3.15).to_sql_string(), "3.15");
-    }
-
-    #[test]
-    fn test_statement_param_escaping() {
-        let text_with_quote = StatementParam::Text("it's a test".to_string());
-        assert_eq!(text_with_quote.to_sql_string(), "'it''s a test'");
     }
 }

@@ -110,7 +110,13 @@ fn default_flush_interval() -> u64 {
 
 fn default_redact_patterns() -> Vec<String> {
     vec![
-        r#"sk-[a-zA-Z0-9]{20,}"#.to_string(),
+        r#"sk-[a-zA-Z0-9_-]{20,}"#.to_string(),
+        r#"sk-ant-[a-zA-Z0-9_-]{20,}"#.to_string(),
+        r#"gw-[a-zA-Z0-9_-]{20,}"#.to_string(),
+        r#"AKIA[0-9A-Z]{16}"#.to_string(),
+        r#"(?i)bearer\s+[a-z0-9._~+/=-]{10,}"#.to_string(),
+        r#"eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+"#.to_string(),
+        r#"(?i)authorization["']?\s*[:=]\s*["']?[^"',\s}]+"#.to_string(),
         r#"api[_-]?key["']?\s*[:=]\s*["']?[a-zA-Z0-9-_]+"#.to_string(),
     ]
 }
@@ -339,6 +345,15 @@ mod tests {
         assert!(config.is_header_excluded("authorization"));
         assert!(config.is_header_excluded("X-API-Key"));
         assert!(!config.is_header_excluded("Content-Type"));
+    }
+
+    #[test]
+    fn test_default_redact_patterns_compile() {
+        for pattern in default_redact_patterns() {
+            regex::Regex::new(&pattern).unwrap_or_else(|error| {
+                panic!("default redact pattern should compile: {pattern}: {error}")
+            });
+        }
     }
 
     #[test]

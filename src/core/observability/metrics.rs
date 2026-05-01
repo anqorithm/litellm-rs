@@ -2,6 +2,7 @@
 
 use super::histogram::BoundedHistogram;
 use super::types::TokenUsage;
+use crate::core::http::outbound::default_outbound_client;
 use crate::utils::error::gateway_error::Result;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -86,7 +87,7 @@ impl MetricsCollector {
         self.datadog_client = Some(DataDogClient {
             api_key,
             base_url: format!("https://api.{}", site),
-            client: reqwest::Client::new(),
+            client: default_outbound_client().clone(),
             default_tags: vec![
                 "service:litellm-gateway".to_string(),
                 "env:production".to_string(),
@@ -100,7 +101,7 @@ impl MetricsCollector {
         self.otel_exporter = Some(OtelExporter {
             endpoint,
             headers,
-            client: reqwest::Client::new(),
+            client: default_outbound_client().clone(),
         });
         self
     }

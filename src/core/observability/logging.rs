@@ -2,6 +2,7 @@
 
 use super::destinations::LogDestination;
 use super::types::LogEntry;
+use crate::core::http::outbound::default_outbound_client;
 use crate::utils::error::gateway_error::{GatewayError, Result};
 use std::sync::Arc;
 use std::time::Duration;
@@ -102,7 +103,7 @@ impl LogAggregator {
             }
             LogDestination::Webhook { url, headers } => {
                 // Send to webhook
-                let client = reqwest::Client::new();
+                let client = default_outbound_client().clone();
                 let mut request = client.post(url).json(entries);
 
                 for (key, value) in headers {

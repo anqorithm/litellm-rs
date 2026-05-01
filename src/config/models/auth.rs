@@ -105,14 +105,17 @@ impl AuthConfig {
                 );
             }
 
-            if self.jwt_secret == "your-secret-key" || self.jwt_secret == "change-me" {
+            if is_forbidden_jwt_placeholder(&self.jwt_secret) {
                 return Err("JWT secret must not use default values. Please generate a secure random secret.".to_string());
             }
 
+            let has_lowercase = self.jwt_secret.chars().any(|c| c.is_ascii_lowercase());
+            let has_uppercase = self.jwt_secret.chars().any(|c| c.is_ascii_uppercase());
+
             // Check for common weak patterns
-            if self.jwt_secret.chars().all(|c| c.is_ascii_lowercase()) {
+            if has_lowercase && !has_uppercase {
                 return Err(
-                    "JWT secret should contain mixed case letters, numbers, and special characters"
+                    "JWT secret should include uppercase and lowercase letters; generate a high-entropy mixed secret"
                         .to_string(),
                 );
             }
@@ -143,6 +146,18 @@ impl AuthConfig {
     pub fn is_production_ready(&self) -> bool {
         self.enable_jwt || self.enable_api_key
     }
+}
+
+fn is_forbidden_jwt_placeholder(secret: &str) -> bool {
+    let normalized = secret.trim().to_ascii_lowercase();
+    let compact = normalized.replace(['_', '-', ' '], "");
+
+    normalized == "your-secret-key"
+        || normalized == "change-me"
+        || compact.contains("yoursecretkey")
+        || compact.contains("changeme")
+        || compact.contains("replacewith")
+        || compact.contains("placeholder")
 }
 
 /// RBAC configuration
@@ -374,10 +389,34 @@ mod tests {
 
     #[test]
     fn test_auth_config_validate_default_secret() {
+        for secret in [
+            "your-secret-key",
+            "change-me",
+            "ReplaceWithAtLeast32CharsMixedCaseAndSymbols123!",
+            "${LITELLM_JWT_SECRET}",
+        ] {
+            let config = AuthConfig {
+                enable_jwt: true,
+                enable_api_key: true,
+                jwt_secret: secret.to_string(),
+                jwt_expiration: 3600,
+                api_key_header: "X-API-Key".to_string(),
+                api_key_hmac_secret: None,
+                rbac: RbacConfig::default(),
+            };
+            assert!(
+                config.validate().is_err(),
+                "placeholder secret should be rejected: {secret}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_auth_config_validate_weak_secret() {
         let config = AuthConfig {
             enable_jwt: true,
             enable_api_key: true,
-            jwt_secret: "your-secret-key".to_string(),
+            jwt_secret: "a".repeat(64), // all lowercase
             jwt_expiration: 3600,
             api_key_header: "X-API-Key".to_string(),
             api_key_hmac_secret: None,
@@ -387,11 +426,11 @@ mod tests {
     }
 
     #[test]
-    fn test_auth_config_validate_weak_secret() {
+    fn test_auth_config_validate_lowercase_with_digits_secret() {
         let config = AuthConfig {
             enable_jwt: true,
             enable_api_key: true,
-            jwt_secret: "a".repeat(64), // all lowercase
+            jwt_secret: "lowercase-secret-with-digits-1234567890".to_string(),
             jwt_expiration: 3600,
             api_key_header: "X-API-Key".to_string(),
             api_key_hmac_secret: None,

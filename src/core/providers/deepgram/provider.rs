@@ -225,7 +225,7 @@ impl DeepgramProvider {
             .unwrap_or("audio/mpeg");
 
         // Execute request - Deepgram accepts raw binary data
-        let client = reqwest::Client::new();
+        let client = crate::core::http::outbound::default_outbound_client().clone();
         let response = client
             .post(&url)
             .header("Authorization", format!("Token {}", api_key))
@@ -321,7 +321,7 @@ impl DeepgramProvider {
             None => return HealthStatus::Unhealthy,
         };
 
-        let client = reqwest::Client::new();
+        let client = crate::core::http::outbound::default_outbound_client().clone();
         match client
             .get(&url)
             .header("Authorization", format!("Token {}", api_key))

@@ -213,7 +213,7 @@ impl ElevenLabsProvider {
             .ok_or_else(|| ProviderError::authentication(PROVIDER_NAME, "API key is required"))?;
 
         // Execute request
-        let client = reqwest::Client::new();
+        let client = crate::core::http::outbound::default_outbound_client().clone();
         let response = client
             .post(&url)
             .header("xi-api-key", &api_key)
@@ -308,7 +308,7 @@ impl ElevenLabsProvider {
             .ok_or_else(|| ProviderError::authentication(PROVIDER_NAME, "API key is required"))?;
 
         // Execute request
-        let client = reqwest::Client::new();
+        let client = crate::core::http::outbound::default_outbound_client().clone();
         let response = client
             .post(&url)
             .header("xi-api-key", &api_key)
@@ -371,7 +371,7 @@ impl ElevenLabsProvider {
             None => return HealthStatus::Unhealthy,
         };
 
-        let client = reqwest::Client::new();
+        let client = crate::core::http::outbound::default_outbound_client().clone();
         match client.get(&url).header("xi-api-key", &api_key).send().await {
             Ok(response) if response.status().is_success() => HealthStatus::Healthy,
             _ => HealthStatus::Unhealthy,

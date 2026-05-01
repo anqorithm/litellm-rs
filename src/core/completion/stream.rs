@@ -364,6 +364,7 @@ mod tests {
                     role: Some(crate::core::types::message::MessageRole::Assistant),
                     content: Some("Hello".to_string()),
                     tool_calls: None,
+                    ..Default::default()
                 },
                 finish_reason: None,
                 logprobs: None,
@@ -393,6 +394,7 @@ mod tests {
                     role: None,
                     content: None,
                     tool_calls: None,
+                    ..Default::default()
                 },
                 finish_reason: Some("stop".to_string()),
                 logprobs: None,
@@ -420,6 +422,7 @@ mod tests {
                         role: None,
                         content: Some("First".to_string()),
                         tool_calls: None,
+                        ..Default::default()
                     },
                     finish_reason: None,
                     logprobs: None,
@@ -430,6 +433,7 @@ mod tests {
                         role: None,
                         content: Some("Second".to_string()),
                         tool_calls: None,
+                        ..Default::default()
                     },
                     finish_reason: None,
                     logprobs: None,
@@ -482,6 +486,7 @@ mod tests {
                         role: Some(crate::core::types::message::MessageRole::Assistant),
                         content: None,
                         tool_calls: None,
+                        ..Default::default()
                     },
                     finish_reason: None,
                     logprobs: None,
@@ -501,6 +506,7 @@ mod tests {
                         role: None,
                         content: Some("Hello".to_string()),
                         tool_calls: None,
+                        ..Default::default()
                     },
                     finish_reason: None,
                     logprobs: None,
@@ -520,6 +526,7 @@ mod tests {
                         role: None,
                         content: None,
                         tool_calls: None,
+                        ..Default::default()
                     },
                     finish_reason: Some("stop".to_string()),
                     logprobs: None,

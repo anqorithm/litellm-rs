@@ -83,6 +83,7 @@ pub use middleware::{
     BudgetRecorder, BudgetRecorderExt,
 };
 pub use provider_limits::{
+    BudgetLimitKind, BudgetLimitSnapshot, BudgetPersistenceEvent, BudgetPersistenceSender,
     ModelBudgetManager, ModelLimitConfig, ProviderBudgetManager, ProviderLimitConfig,
     UnifiedBudgetLimits,
 };

@@ -9,8 +9,11 @@ use serde_json::Value;
 use std::collections::VecDeque;
 use std::pin::Pin;
 use std::task::{Context, Poll};
+use tracing::warn;
 
-use crate::core::types::responses::{ChatChunk, ChatDelta, ChatStreamChoice, FinishReason};
+use crate::core::types::responses::{
+    ChatChunk, ChatDelta, ChatStreamChoice, FinishReason, FunctionCallDelta, ToolCallDelta,
+};
 use crate::core::{providers::unified_provider::ProviderError, types::thinking::ThinkingDelta};
 
 /// SSE Event Types
@@ -444,7 +447,43 @@ impl AnthropicTransformer {
             "end_turn" => FinishReason::Stop,
             "max_tokens" => FinishReason::Length,
             "tool_use" => FinishReason::ToolCalls,
+            "stop_sequence" => FinishReason::StopSequence,
+            "refusal" => FinishReason::Refusal,
+            "pause_turn" => FinishReason::PauseTurn,
             _ => FinishReason::Stop,
+        }
+    }
+
+    fn empty_delta() -> ChatDelta {
+        ChatDelta {
+            role: None,
+            content: None,
+            thinking: None,
+            tool_calls: None,
+            function_call: None,
+        }
+    }
+
+    fn chunk_with_choice(
+        &self,
+        created: i64,
+        delta: ChatDelta,
+        finish_reason: Option<FinishReason>,
+        usage: Option<crate::core::types::responses::Usage>,
+    ) -> ChatChunk {
+        ChatChunk {
+            id: String::new(),
+            object: "chat.completion.chunk".to_string(),
+            created,
+            model: self.model.clone(),
+            choices: vec![ChatStreamChoice {
+                index: 0,
+                delta,
+                finish_reason,
+                logprobs: None,
+            }],
+            usage,
+            system_fingerprint: None,
         }
     }
 }
@@ -496,33 +535,136 @@ impl SSETransformer for AnthropicTransformer {
                     system_fingerprint: None,
                 }))
             }
-            "content_block_delta" => {
-                let text = json
-                    .get("delta")
-                    .and_then(|d| d.get("text"))
-                    .and_then(|t| t.as_str())
+            "content_block_start" => {
+                let index = json.get("index").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                let content_block = json.get("content_block").ok_or_else(|| {
+                    ProviderError::response_parsing(
+                        "anthropic",
+                        "No content_block in content_block_start".to_string(),
+                    )
+                })?;
+                let block_type = content_block
+                    .get("type")
+                    .and_then(|v| v.as_str())
                     .unwrap_or("");
 
-                Ok(Some(ChatChunk {
-                    id: String::new(),
-                    object: "chat.completion.chunk".to_string(),
-                    created,
-                    model: self.model.clone(),
-                    choices: vec![ChatStreamChoice {
-                        index: 0,
-                        delta: ChatDelta {
-                            role: None,
-                            content: Some(text.to_string()),
-                            thinking: None,
-                            tool_calls: None,
-                            function_call: None,
-                        },
-                        finish_reason: None,
-                        logprobs: None,
-                    }],
-                    usage: None,
-                    system_fingerprint: None,
-                }))
+                match block_type {
+                    "tool_use" => {
+                        let id = content_block
+                            .get("id")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_string);
+                        let name = content_block
+                            .get("name")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_string);
+                        let arguments = content_block.get("input").and_then(|input| {
+                            if input.is_null()
+                                || input
+                                    .as_object()
+                                    .map(|object| object.is_empty())
+                                    .unwrap_or(false)
+                            {
+                                None
+                            } else {
+                                Some(input.to_string())
+                            }
+                        });
+
+                        let mut delta = Self::empty_delta();
+                        delta.tool_calls = Some(vec![ToolCallDelta {
+                            index,
+                            id,
+                            tool_type: Some("function".to_string()),
+                            function: Some(FunctionCallDelta { name, arguments }),
+                        }]);
+
+                        Ok(Some(self.chunk_with_choice(created, delta, None, None)))
+                    }
+                    "thinking" | "redacted_thinking" => {
+                        let mut delta = Self::empty_delta();
+                        delta.thinking = Some(ThinkingDelta::start());
+                        Ok(Some(self.chunk_with_choice(created, delta, None, None)))
+                    }
+                    "text" => Ok(None),
+                    _ => {
+                        warn!(
+                            provider = "anthropic",
+                            block_type, "Ignoring unknown Anthropic content block start"
+                        );
+                        Ok(None)
+                    }
+                }
+            }
+            "content_block_delta" => {
+                let index = json.get("index").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                let delta_json = json.get("delta").ok_or_else(|| {
+                    ProviderError::response_parsing(
+                        "anthropic",
+                        "No delta in content_block_delta".to_string(),
+                    )
+                })?;
+                let delta_type = delta_json
+                    .get("type")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+
+                match delta_type {
+                    "text_delta" => {
+                        let text = delta_json
+                            .get("text")
+                            .and_then(|t| t.as_str())
+                            .unwrap_or("");
+                        let mut delta = Self::empty_delta();
+                        delta.content = Some(text.to_string());
+                        Ok(Some(self.chunk_with_choice(created, delta, None, None)))
+                    }
+                    "input_json_delta" => {
+                        let partial_json = delta_json
+                            .get("partial_json")
+                            .and_then(|value| value.as_str())
+                            .unwrap_or("");
+                        let mut delta = Self::empty_delta();
+                        delta.tool_calls = Some(vec![ToolCallDelta {
+                            index,
+                            id: None,
+                            tool_type: Some("function".to_string()),
+                            function: Some(FunctionCallDelta {
+                                name: None,
+                                arguments: Some(partial_json.to_string()),
+                            }),
+                        }]);
+                        Ok(Some(self.chunk_with_choice(created, delta, None, None)))
+                    }
+                    "thinking_delta" => {
+                        let thinking = delta_json
+                            .get("thinking")
+                            .and_then(|value| value.as_str())
+                            .unwrap_or("");
+                        let mut delta = Self::empty_delta();
+                        delta.thinking = Some(ThinkingDelta::new(thinking));
+                        Ok(Some(self.chunk_with_choice(created, delta, None, None)))
+                    }
+                    "signature_delta" => {
+                        let signature = delta_json
+                            .get("signature")
+                            .and_then(|value| value.as_str())
+                            .unwrap_or("");
+                        let mut delta = Self::empty_delta();
+                        delta.thinking = Some(ThinkingDelta {
+                            signature: Some(signature.to_string()),
+                            ..Default::default()
+                        });
+                        Ok(Some(self.chunk_with_choice(created, delta, None, None)))
+                    }
+                    _ => {
+                        warn!(
+                            provider = "anthropic",
+                            delta_type, "Ignoring unknown Anthropic content block delta"
+                        );
+                        Ok(None)
+                    }
+                }
             }
             "message_delta" => {
                 let finish_reason = json
@@ -545,26 +687,12 @@ impl SSETransformer for AnthropicTransformer {
                     }
                 });
 
-                Ok(Some(ChatChunk {
-                    id: String::new(),
-                    object: "chat.completion.chunk".to_string(),
+                Ok(Some(self.chunk_with_choice(
                     created,
-                    model: self.model.clone(),
-                    choices: vec![ChatStreamChoice {
-                        index: 0,
-                        delta: ChatDelta {
-                            role: None,
-                            content: None,
-                            thinking: None,
-                            tool_calls: None,
-                            function_call: None,
-                        },
-                        finish_reason,
-                        logprobs: None,
-                    }],
+                    Self::empty_delta(),
+                    finish_reason,
                     usage,
-                    system_fingerprint: None,
-                }))
+                )))
             }
             "message_stop" => Ok(Some(ChatChunk {
                 id: String::new(),
@@ -589,8 +717,14 @@ impl SSETransformer for AnthropicTransformer {
                     msg.to_string(),
                 ))
             }
-            // content_block_start, content_block_stop, ping — skip
-            _ => Ok(None),
+            "content_block_stop" | "ping" => Ok(None),
+            _ => {
+                warn!(
+                    provider = "anthropic",
+                    event_type, "Ignoring unknown Anthropic SSE event type"
+                );
+                Ok(None)
+            }
         }
     }
 }
@@ -1177,6 +1311,145 @@ mod tests {
                 .and_then(|t| t.content.as_ref())
                 .map(String::as_str),
             Some("chain-of-thought")
+        );
+    }
+
+    #[test]
+    fn test_anthropic_stream_tool_use_deltas() {
+        let transformer = AnthropicTransformer::new("claude-test");
+
+        let start = transformer
+            .transform_chunk(
+                r#"{
+                    "type": "content_block_start",
+                    "index": 1,
+                    "content_block": {
+                        "type": "tool_use",
+                        "id": "toolu_123",
+                        "name": "get_weather",
+                        "input": {}
+                    }
+                }"#,
+            )
+            .unwrap()
+            .unwrap();
+        let start_call = start.choices[0].delta.tool_calls.as_ref().unwrap()[0].clone();
+        assert_eq!(start_call.index, 1);
+        assert_eq!(start_call.id.as_deref(), Some("toolu_123"));
+        assert_eq!(start_call.tool_type.as_deref(), Some("function"));
+        assert_eq!(
+            start_call.function.as_ref().and_then(|f| f.name.as_deref()),
+            Some("get_weather")
+        );
+        assert_eq!(
+            start_call
+                .function
+                .as_ref()
+                .and_then(|f| f.arguments.as_deref()),
+            None
+        );
+
+        let args = transformer
+            .transform_chunk(
+                r#"{
+                    "type": "content_block_delta",
+                    "index": 1,
+                    "delta": {
+                        "type": "input_json_delta",
+                        "partial_json": "{\"location\": \"San Fra"
+                    }
+                }"#,
+            )
+            .unwrap()
+            .unwrap();
+        let args_call = args.choices[0].delta.tool_calls.as_ref().unwrap()[0].clone();
+        assert_eq!(args_call.index, 1);
+        assert_eq!(
+            args_call
+                .function
+                .as_ref()
+                .and_then(|f| f.arguments.as_deref()),
+            Some("{\"location\": \"San Fra")
+        );
+
+        let stop = transformer
+            .transform_chunk(
+                r#"{
+                    "type": "message_delta",
+                    "delta": {"stop_reason": "tool_use"},
+                    "usage": {"input_tokens": 10, "output_tokens": 3}
+                }"#,
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(stop.choices[0].finish_reason, Some(FinishReason::ToolCalls));
+    }
+
+    #[test]
+    fn test_anthropic_stream_thinking_deltas() {
+        let transformer = AnthropicTransformer::new("claude-test");
+
+        let start = transformer
+            .transform_chunk(
+                r#"{
+                    "type": "content_block_start",
+                    "index": 0,
+                    "content_block": {"type": "thinking", "thinking": ""}
+                }"#,
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            start.choices[0]
+                .delta
+                .thinking
+                .as_ref()
+                .and_then(|thinking| thinking.is_start),
+            Some(true)
+        );
+
+        let thinking = transformer
+            .transform_chunk(
+                r#"{
+                    "type": "content_block_delta",
+                    "index": 0,
+                    "delta": {
+                        "type": "thinking_delta",
+                        "thinking": "Let me reason."
+                    }
+                }"#,
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            thinking.choices[0]
+                .delta
+                .thinking
+                .as_ref()
+                .and_then(|thinking| thinking.content.as_deref()),
+            Some("Let me reason.")
+        );
+
+        let signature = transformer
+            .transform_chunk(
+                r#"{
+                    "type": "content_block_delta",
+                    "index": 0,
+                    "delta": {
+                        "type": "signature_delta",
+                        "signature": "sig_123"
+                    }
+                }"#,
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            signature.choices[0]
+                .delta
+                .thinking
+                .as_ref()
+                .and_then(|thinking| thinking.signature.as_deref()),
+            Some("sig_123")
         );
     }
 

@@ -235,8 +235,11 @@ impl MilvusProvider {
     ) -> Result<serde_json::Value, MilvusError> {
         let url = self.config.get_endpoint_url(endpoint);
         let headers = self.build_headers();
+        let body_bytes = serde_json::to_string(&body)
+            .map(|body| body.len())
+            .unwrap_or(0);
 
-        debug!("Milvus request to {}: {:?}", url, body);
+        debug!(url, body_bytes, "Milvus request prepared");
 
         let response = self
             .pool_manager

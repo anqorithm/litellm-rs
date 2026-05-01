@@ -560,7 +560,9 @@ impl LLMProvider for OllamaProvider {
 
         // Use reqwest directly for streaming
         let url = self.config.get_chat_endpoint();
-        let mut req = reqwest::Client::new().post(&url);
+        let mut req = crate::core::http::outbound::default_outbound_client()
+            .clone()
+            .post(&url);
 
         // Add auth header if API key is set
         if let Some(api_key) = self.config.get_api_key() {

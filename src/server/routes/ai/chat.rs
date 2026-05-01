@@ -336,15 +336,37 @@ pub(crate) fn build_core_chat_request(
         .map(|format| types::tools::ResponseFormat {
             format_type: format.format_type,
             json_schema: format.json_schema,
-            response_type: None,
+            response_type: format.response_type,
         });
 
-    let mut extra_params = std::collections::HashMap::new();
+    let seed = request
+        .seed
+        .map(|seed| {
+            i32::try_from(seed).map_err(|_| {
+                GatewayError::validation(format!(
+                    "seed must be between {} and {}",
+                    i32::MIN,
+                    i32::MAX
+                ))
+            })
+        })
+        .transpose()?;
+
+    let mut extra_params = request.extra_body;
     if let Some(modalities) = request.modalities {
         extra_params.insert("modalities".to_string(), json!(modalities));
     }
     if let Some(audio) = request.audio {
         extra_params.insert("audio".to_string(), json!(audio));
+    }
+    if let Some(prediction) = request.prediction {
+        extra_params.insert("prediction".to_string(), prediction);
+    }
+    if let Some(safety_settings) = request.safety_settings {
+        extra_params.insert("safety_settings".to_string(), safety_settings);
+    }
+    if let Some(cache_control) = request.cache_control {
+        extra_params.insert("cache_control".to_string(), cache_control);
     }
 
     let stream_options = request
@@ -367,10 +389,10 @@ pub(crate) fn build_core_chat_request(
         stream_options,
         tools,
         tool_choice,
-        parallel_tool_calls: None,
+        parallel_tool_calls: request.parallel_tool_calls,
         response_format,
         user: request.user,
-        seed: request.seed.map(|s| s as i32),
+        seed,
         n: request.n,
         logit_bias: request.logit_bias,
         functions,
@@ -472,11 +494,32 @@ fn convert_finish_reason(reason: types::responses::FinishReason) -> String {
         types::responses::FinishReason::ToolCalls => "tool_calls",
         types::responses::FinishReason::ContentFilter => "content_filter",
         types::responses::FinishReason::FunctionCall => "function_call",
+        types::responses::FinishReason::StopSequence => "stop_sequence",
+        types::responses::FinishReason::Refusal => "refusal",
+        types::responses::FinishReason::PauseTurn => "pause_turn",
     }
     .to_string()
 }
 
 fn convert_usage(usage: types::responses::Usage) -> Usage {
+    let thinking_tokens = usage.thinking_tokens();
+    let completion_tokens_details = usage
+        .completion_tokens_details
+        .map(
+            |details| crate::core::models::openai::CompletionTokensDetails {
+                reasoning_tokens: details.reasoning_tokens.or(thinking_tokens),
+                audio_tokens: details.audio_tokens,
+            },
+        )
+        .or_else(|| {
+            thinking_tokens.map(
+                |tokens| crate::core::models::openai::CompletionTokensDetails {
+                    reasoning_tokens: Some(tokens),
+                    audio_tokens: None,
+                },
+            )
+        });
+
     Usage {
         prompt_tokens: usage.prompt_tokens,
         completion_tokens: usage.completion_tokens,
@@ -484,15 +527,13 @@ fn convert_usage(usage: types::responses::Usage) -> Usage {
         prompt_tokens_details: usage.prompt_tokens_details.map(|details| {
             crate::core::models::openai::PromptTokensDetails {
                 cached_tokens: details.cached_tokens,
+                cache_creation_tokens: details.cache_creation_tokens,
+                cache_read_tokens: details.cache_read_tokens,
                 audio_tokens: details.audio_tokens,
             }
         }),
-        completion_tokens_details: usage.completion_tokens_details.map(|details| {
-            crate::core::models::openai::CompletionTokensDetails {
-                reasoning_tokens: details.reasoning_tokens,
-                audio_tokens: details.audio_tokens,
-            }
-        }),
+        completion_tokens_details,
+        thinking_usage: usage.thinking_usage,
     }
 }
 
@@ -550,13 +591,24 @@ fn convert_core_chunk_to_streaming(chunk: types::responses::ChatChunk) -> ChatCo
             .into_iter()
             .map(|choice| ChatCompletionChunkChoice {
                 index: choice.index,
-                delta: ChatCompletionDelta {
-                    role: choice.delta.role,
-                    content: choice.delta.content,
-                    tool_calls: choice
+                delta: {
+                    let reasoning_content = choice
                         .delta
-                        .tool_calls
-                        .map(|calls| calls.into_iter().map(convert_tool_call_delta).collect()),
+                        .thinking
+                        .as_ref()
+                        .and_then(|thinking| thinking.content.clone());
+                    ChatCompletionDelta {
+                        role: choice.delta.role,
+                        content: choice.delta.content,
+                        thinking: choice.delta.thinking,
+                        reasoning_content,
+                        tool_calls: choice
+                            .delta
+                            .tool_calls
+                            .map(|calls| calls.into_iter().map(convert_tool_call_delta).collect()),
+                        function_call: choice.delta.function_call.map(convert_function_call_delta),
+                        ..Default::default()
+                    }
                 },
                 finish_reason: choice.finish_reason.map(convert_finish_reason),
                 logprobs: choice
@@ -565,6 +617,15 @@ fn convert_core_chunk_to_streaming(chunk: types::responses::ChatChunk) -> ChatCo
             })
             .collect(),
         usage: chunk.usage.map(convert_usage),
+    }
+}
+
+fn convert_function_call_delta(
+    function: types::responses::FunctionCallDelta,
+) -> crate::core::streaming::types::FunctionCallDelta {
+    crate::core::streaming::types::FunctionCallDelta {
+        name: function.name,
+        arguments: function.arguments,
     }
 }
 
@@ -588,6 +649,8 @@ fn convert_tool_call_delta(
 mod tests {
     use super::*;
     use crate::core::models::openai::{ChatMessage, MessageContent, MessageRole};
+    use crate::core::types::responses::{ChatChunk, ChatDelta, ChatStreamChoice};
+    use crate::core::types::thinking::{ThinkingDelta, ThinkingUsage};
 
     #[test]
     fn test_convert_finish_reason() {
@@ -602,6 +665,18 @@ mod tests {
         assert_eq!(
             convert_finish_reason(types::responses::FinishReason::ToolCalls),
             "tool_calls"
+        );
+        assert_eq!(
+            convert_finish_reason(types::responses::FinishReason::StopSequence),
+            "stop_sequence"
+        );
+        assert_eq!(
+            convert_finish_reason(types::responses::FinishReason::Refusal),
+            "refusal"
+        );
+        assert_eq!(
+            convert_finish_reason(types::responses::FinishReason::PauseTurn),
+            "pause_turn"
         );
     }
 
@@ -676,6 +751,95 @@ mod tests {
     }
 
     #[test]
+    fn test_convert_core_chunk_preserves_thinking_and_function_call() {
+        let chunk = ChatChunk {
+            id: "chunk-1".to_string(),
+            object: "chat.completion.chunk".to_string(),
+            created: 123,
+            model: "thinking-model".to_string(),
+            choices: vec![ChatStreamChoice {
+                index: 0,
+                delta: ChatDelta {
+                    role: Some(types::message::MessageRole::Assistant),
+                    content: None,
+                    thinking: Some(ThinkingDelta::new("reasoning")),
+                    tool_calls: None,
+                    function_call: Some(types::responses::FunctionCallDelta {
+                        name: Some("legacy_tool".to_string()),
+                        arguments: Some("{}".to_string()),
+                    }),
+                },
+                finish_reason: None,
+                logprobs: None,
+            }],
+            usage: None,
+            system_fingerprint: None,
+        };
+
+        let converted = convert_core_chunk_to_streaming(chunk);
+        let delta = &converted.choices[0].delta;
+        assert_eq!(delta.reasoning_content.as_deref(), Some("reasoning"));
+        assert_eq!(
+            delta.thinking.as_ref().and_then(|t| t.content.as_deref()),
+            Some("reasoning")
+        );
+        assert_eq!(
+            delta.function_call.as_ref().and_then(|f| f.name.as_deref()),
+            Some("legacy_tool")
+        );
+    }
+
+    #[test]
+    fn test_convert_usage_preserves_thinking_usage() {
+        let converted = convert_usage(types::responses::Usage {
+            prompt_tokens: 100,
+            completion_tokens: 50,
+            total_tokens: 150,
+            prompt_tokens_details: None,
+            completion_tokens_details: None,
+            thinking_usage: Some(
+                ThinkingUsage::new(42)
+                    .with_budget(1000)
+                    .with_provider("anthropic"),
+            ),
+        });
+
+        assert_eq!(
+            converted
+                .thinking_usage
+                .as_ref()
+                .and_then(|usage| usage.thinking_tokens),
+            Some(42)
+        );
+        assert_eq!(
+            converted
+                .completion_tokens_details
+                .as_ref()
+                .and_then(|details| details.reasoning_tokens),
+            Some(42)
+        );
+    }
+
+    #[test]
+    fn test_convert_usage_merges_thinking_tokens_into_existing_details() {
+        let converted = convert_usage(types::responses::Usage {
+            prompt_tokens: 100,
+            completion_tokens: 50,
+            total_tokens: 150,
+            prompt_tokens_details: None,
+            completion_tokens_details: Some(types::responses::CompletionTokensDetails {
+                reasoning_tokens: None,
+                audio_tokens: Some(3),
+            }),
+            thinking_usage: Some(ThinkingUsage::new(42)),
+        });
+
+        let details = converted.completion_tokens_details.unwrap();
+        assert_eq!(details.reasoning_tokens, Some(42));
+        assert_eq!(details.audio_tokens, Some(3));
+    }
+
+    #[test]
     fn test_build_core_chat_request_minimal() {
         let request = ChatCompletionRequest {
             model: "gpt-4".to_string(),
@@ -694,5 +858,80 @@ mod tests {
         let core_request = build_core_chat_request(request, "gpt-4".to_string(), false).unwrap();
         assert_eq!(core_request.model, "gpt-4");
         assert_eq!(core_request.messages.len(), 1);
+    }
+
+    #[test]
+    fn test_build_core_chat_request_preserves_boundary_fields() {
+        let mut extra_body = std::collections::HashMap::new();
+        extra_body.insert("provider_knob".to_string(), serde_json::json!("kept"));
+        let request = ChatCompletionRequest {
+            model: "gpt-4".to_string(),
+            messages: vec![ChatMessage {
+                role: MessageRole::User,
+                content: Some(MessageContent::Text("Hello".to_string())),
+                name: None,
+                function_call: None,
+                tool_calls: None,
+                tool_call_id: None,
+                audio: None,
+            }],
+            parallel_tool_calls: Some(false),
+            response_format: Some(crate::core::models::openai::ResponseFormat {
+                format_type: "json_schema".to_string(),
+                json_schema: Some(serde_json::json!({"type": "object"})),
+                response_type: Some("json_schema".to_string()),
+            }),
+            seed: Some(123),
+            prediction: Some(serde_json::json!({"type": "content", "content": "expected"})),
+            safety_settings: Some(serde_json::json!([{"category": "test"}])),
+            cache_control: Some(serde_json::json!({"type": "ephemeral"})),
+            extra_body,
+            ..Default::default()
+        };
+
+        let core_request = build_core_chat_request(request, "gpt-4".to_string(), false).unwrap();
+        assert_eq!(core_request.parallel_tool_calls, Some(false));
+        assert_eq!(core_request.seed, Some(123));
+        assert_eq!(
+            core_request
+                .response_format
+                .as_ref()
+                .and_then(|format| format.response_type.as_deref()),
+            Some("json_schema")
+        );
+        assert_eq!(core_request.extra_params["provider_knob"], "kept");
+        assert_eq!(
+            core_request.extra_params["prediction"]["content"],
+            "expected"
+        );
+        assert_eq!(
+            core_request.extra_params["safety_settings"][0]["category"],
+            "test"
+        );
+        assert_eq!(
+            core_request.extra_params["cache_control"]["type"],
+            "ephemeral"
+        );
+    }
+
+    #[test]
+    fn test_build_core_chat_request_rejects_seed_overflow() {
+        let request = ChatCompletionRequest {
+            model: "gpt-4".to_string(),
+            messages: vec![ChatMessage {
+                role: MessageRole::User,
+                content: Some(MessageContent::Text("Hello".to_string())),
+                name: None,
+                function_call: None,
+                tool_calls: None,
+                tool_call_id: None,
+                audio: None,
+            }],
+            seed: Some(i32::MAX as i64 + 1),
+            ..Default::default()
+        };
+
+        let err = build_core_chat_request(request, "gpt-4".to_string(), false).unwrap_err();
+        assert!(format!("{err}").contains("seed"));
     }
 }

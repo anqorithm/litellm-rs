@@ -480,8 +480,8 @@ mod tests {
     async fn test_get_for_routing_triggers_health_check() {
         let registry = AgentRegistry::new();
 
-        // Use an unreachable URL so the health check marks it Unhealthy
-        let config = AgentConfig::new("probe-agent", "https://192.0.2.1/health");
+        // Use a validation-safe, non-existent host so the health check marks it Unhealthy.
+        let config = AgentConfig::new("probe-agent", "https://example.invalid/health");
         registry.register(config).await.unwrap();
 
         // Starts as Unknown
@@ -498,7 +498,7 @@ mod tests {
     async fn test_get_for_routing_skips_known_state() {
         let registry = AgentRegistry::new();
 
-        let config = AgentConfig::new("known-agent", "https://192.0.2.1/health");
+        let config = AgentConfig::new("known-agent", "https://example.invalid/health");
         registry.register(config).await.unwrap();
         registry
             .update_state("known-agent", AgentState::Healthy)
@@ -513,8 +513,8 @@ mod tests {
     async fn test_check_agent_health_unreachable() {
         let registry = AgentRegistry::new();
 
-        // Use a URL that will fail to connect
-        let config = AgentConfig::new("bad-agent", "https://192.0.2.1/health");
+        // Use a validation-safe, non-existent host that will fail to connect.
+        let config = AgentConfig::new("bad-agent", "https://example.invalid/health");
         registry.register(config).await.unwrap();
 
         registry.check_agent_health("bad-agent").await;

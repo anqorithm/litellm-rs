@@ -173,7 +173,7 @@ impl V0Provider {
             tracing::error!("Failed to create V0 provider: {}, using default client", e);
             Self {
                 config,
-                client: reqwest::Client::new(),
+                client: crate::core::http::outbound::default_outbound_client().clone(),
             }
         })
     }

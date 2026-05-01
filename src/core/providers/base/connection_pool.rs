@@ -83,8 +83,7 @@ static GLOBAL_CLIENT: LazyLock<Arc<Client>> = LazyLock::new(|| {
     )
     .unwrap_or_else(|e| {
         tracing::error!("Failed to create global HTTP client: {}", e);
-        // Fallback to a basic client
-        Client::new()
+        crate::core::http::outbound::default_outbound_client().clone()
     });
     Arc::new(client)
 });
@@ -101,16 +100,15 @@ pub fn global_client() -> Arc<Client> {
 /// Get a streaming-ready HTTP client
 ///
 /// Returns the global HTTP client for streaming requests.
-/// This should be used instead of `reqwest::Client::new()` for streaming
-/// to benefit from connection pooling.
+/// This should be used instead of ad hoc client construction for streaming
+/// to benefit from the streaming connection pool.
 ///
 /// # Example
 ///
 /// ```ignore
 /// use crate::core::providers::base::connection_pool::streaming_client;
 ///
-/// // Instead of: let client = reqwest::Client::new();
-/// // Use: let client = streaming_client();
+/// // Use the shared streaming client.
 /// let response = streaming_client()
 ///     .post(&url)
 ///     .headers(headers)

@@ -1,57 +1,17 @@
 //! Unified pricing calculation system
 //!
-//! Shares model_prices_and_context_window.json data with Python version
+//! Shares LiteLLM pricing JSON data with the runtime pricing service.
 
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::sync::LazyLock;
 use tracing::warn;
 
-/// Model
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ModelPricing {
-    /// Cost per input token
-    #[serde(default)]
-    pub input_cost_per_token: f64,
+const DEFAULT_PRICING_SOURCE: &str = "config/model_prices_extended.json";
 
-    /// Cost per output token
-    #[serde(default)]
-    pub output_cost_per_token: f64,
-
-    /// Model
-    #[serde(default)]
-    pub output_cost_per_reasoning_token: f64,
-
-    /// Maximum token count (compatible with legacy field)
-    #[serde(default)]
-    pub max_tokens: Option<u32>,
-
-    /// Maximum input token count
-    #[serde(default)]
-    pub max_input_tokens: Option<u32>,
-
-    /// Maximum output token count
-    #[serde(default)]
-    pub max_output_tokens: Option<u32>,
-
-    /// Provider name
-    #[serde(default)]
-    pub litellm_provider: Option<String>,
-
-    /// Mode (chat, embedding, completion, etc.)
-    #[serde(default)]
-    pub mode: Option<String>,
-
-    /// Whether function calling is supported
-    #[serde(default)]
-    pub supports_function_calling: Option<bool>,
-
-    /// Whether vision is supported
-    #[serde(default)]
-    pub supports_vision: Option<bool>,
-}
+/// Compatibility alias for callers that still import provider-base pricing.
+pub type ModelPricing = crate::core::pricing::LiteLLMModelInfo;
 
 /// Usage information
 #[derive(Debug, Clone)]
@@ -103,15 +63,13 @@ impl PricingDatabase {
         Ok(Self { models })
     }
 
-    /// Load from Python JSON file (automatic search)
-    pub fn from_python_json() -> Result<Self, String> {
-        // Try multiple possible paths
+    /// Load from the same local pricing source used by gateway configuration.
+    pub fn from_default_source() -> Result<Self, String> {
         let possible_paths = vec![
-            "model_prices_and_context_window.json",
-            "../model_prices_and_context_window.json",
-            "../../model_prices_and_context_window.json",
-            "../../../model_prices_and_context_window.json",
-            "/Users/vibercoder/Desktop/code/Work/Common/Lib/litellm/litellm/model_prices_and_context_window.json",
+            DEFAULT_PRICING_SOURCE,
+            "../config/model_prices_extended.json",
+            "../../config/model_prices_extended.json",
+            "../../../config/model_prices_extended.json",
         ];
 
         for path in &possible_paths {
@@ -122,6 +80,13 @@ impl PricingDatabase {
 
         // Default
         Ok(Self::default())
+    }
+
+    /// Load pricing data from the default source.
+    ///
+    /// Kept as a compatibility wrapper for older call sites/tests.
+    pub fn from_python_json() -> Result<Self, String> {
+        Self::from_default_source()
     }
 
     /// Calculate cost
@@ -147,14 +112,14 @@ impl PricingDatabase {
         let mut cost = 0.0;
 
         // Input token cost
-        cost += usage.prompt_tokens as f64 * pricing.input_cost_per_token;
+        cost += usage.prompt_tokens as f64 * pricing.input_cost_per_token.unwrap_or(0.0);
 
         // Output token cost
-        cost += usage.completion_tokens as f64 * pricing.output_cost_per_token;
+        cost += usage.completion_tokens as f64 * pricing.output_cost_per_token.unwrap_or(0.0);
 
         // Reasoning token cost (if available)
         if let Some(reasoning_tokens) = usage.reasoning_tokens {
-            cost += reasoning_tokens as f64 * pricing.output_cost_per_reasoning_token;
+            cost += reasoning_tokens as f64 * extra_f64(pricing, "output_cost_per_reasoning_token");
         }
 
         cost
@@ -179,13 +144,9 @@ impl PricingDatabase {
         self.models
             .iter()
             .filter_map(|(model_id, pricing)| {
-                if let Some(ref provider_name) = pricing.litellm_provider {
-                    if provider_name.to_lowercase() == provider.to_lowercase() {
-                        Some(model_id.clone())
-                    } else {
-                        None
-                    }
-                } else if model_id.to_lowercase().contains(&provider.to_lowercase()) {
+                if pricing.litellm_provider.to_lowercase() == provider.to_lowercase()
+                    || model_id.to_lowercase().contains(&provider.to_lowercase())
+                {
                     // If no explicit provider field, infer through model name
                     Some(model_id.clone())
                 } else {
@@ -217,8 +178,8 @@ impl PricingDatabase {
             supports_streaming: true, // Most modern models support streaming
             supports_tools: pricing.supports_function_calling.unwrap_or(false),
             supports_multimodal: pricing.supports_vision.unwrap_or(false),
-            input_cost_per_1k_tokens: Some(pricing.input_cost_per_token * 1000.0),
-            output_cost_per_1k_tokens: Some(pricing.output_cost_per_token * 1000.0),
+            input_cost_per_1k_tokens: pricing.input_cost_per_token.map(|cost| cost * 1000.0),
+            output_cost_per_1k_tokens: pricing.output_cost_per_token.map(|cost| cost * 1000.0),
             currency: "USD".to_string(),
             capabilities: vec![], // Can be extended later
             created_at: None,
@@ -239,6 +200,43 @@ impl PricingDatabase {
     }
 }
 
+fn extra_f64(pricing: &ModelPricing, key: &str) -> f64 {
+    pricing
+        .extra
+        .get(key)
+        .and_then(serde_json::Value::as_f64)
+        .unwrap_or(0.0)
+}
+
+fn builtin_model(
+    provider: &str,
+    input_cost_per_token: f64,
+    output_cost_per_token: f64,
+    max_tokens: u32,
+    max_output_tokens: u32,
+    supports_function_calling: bool,
+    supports_vision: bool,
+) -> ModelPricing {
+    ModelPricing {
+        max_tokens: Some(max_tokens),
+        max_input_tokens: Some(max_tokens),
+        max_output_tokens: Some(max_output_tokens),
+        input_cost_per_token: Some(input_cost_per_token),
+        output_cost_per_token: Some(output_cost_per_token),
+        input_cost_per_character: None,
+        output_cost_per_character: None,
+        cost_per_second: None,
+        litellm_provider: provider.to_string(),
+        mode: "chat".to_string(),
+        supports_function_calling: Some(supports_function_calling),
+        supports_vision: Some(supports_vision),
+        supports_streaming: Some(true),
+        supports_parallel_function_calling: None,
+        supports_system_message: Some(true),
+        extra: HashMap::new(),
+    }
+}
+
 impl Default for PricingDatabase {
     fn default() -> Self {
         // Built-in pricing for some common models as backup
@@ -247,116 +245,43 @@ impl Default for PricingDatabase {
         // OpenAI models
         models.insert(
             "gpt-4".to_string(),
-            ModelPricing {
-                input_cost_per_token: 0.00003,
-                output_cost_per_token: 0.00006,
-                output_cost_per_reasoning_token: 0.0,
-                max_tokens: Some(8192),
-                max_input_tokens: Some(8192),
-                max_output_tokens: Some(4096),
-                litellm_provider: Some("openai".to_string()),
-                mode: Some("chat".to_string()),
-                supports_function_calling: Some(true),
-                supports_vision: Some(false),
-            },
+            builtin_model("openai", 0.00003, 0.00006, 8192, 4096, true, false),
         );
 
         models.insert(
             "gpt-4-turbo".to_string(),
-            ModelPricing {
-                input_cost_per_token: 0.00001,
-                output_cost_per_token: 0.00003,
-                output_cost_per_reasoning_token: 0.0,
-                max_tokens: Some(128000),
-                max_input_tokens: Some(128000),
-                max_output_tokens: Some(4096),
-                litellm_provider: Some("openai".to_string()),
-                mode: Some("chat".to_string()),
-                supports_function_calling: Some(true),
-                supports_vision: Some(true),
-            },
+            builtin_model("openai", 0.00001, 0.00003, 128000, 4096, true, true),
         );
 
         models.insert(
             "gpt-3.5-turbo".to_string(),
-            ModelPricing {
-                input_cost_per_token: 0.0000005,
-                output_cost_per_token: 0.0000015,
-                output_cost_per_reasoning_token: 0.0,
-                max_tokens: Some(16385),
-                max_input_tokens: Some(16385),
-                max_output_tokens: Some(4096),
-                litellm_provider: Some("openai".to_string()),
-                mode: Some("chat".to_string()),
-                supports_function_calling: Some(true),
-                supports_vision: Some(false),
-            },
+            builtin_model("openai", 0.0000005, 0.0000015, 16385, 4096, true, false),
         );
 
         // Anthropic models
         models.insert(
             "claude-3-opus".to_string(),
-            ModelPricing {
-                input_cost_per_token: 0.000015,
-                output_cost_per_token: 0.000075,
-                output_cost_per_reasoning_token: 0.0,
-                max_tokens: Some(200000),
-                max_input_tokens: Some(200000),
-                max_output_tokens: Some(4096),
-                litellm_provider: Some("anthropic".to_string()),
-                mode: Some("chat".to_string()),
-                supports_function_calling: Some(true),
-                supports_vision: Some(true),
-            },
+            builtin_model("anthropic", 0.000015, 0.000075, 200000, 4096, true, true),
         );
 
         models.insert(
             "claude-3-sonnet".to_string(),
-            ModelPricing {
-                input_cost_per_token: 0.000003,
-                output_cost_per_token: 0.000015,
-                output_cost_per_reasoning_token: 0.0,
-                max_tokens: Some(200000),
-                max_input_tokens: Some(200000),
-                max_output_tokens: Some(4096),
-                litellm_provider: Some("anthropic".to_string()),
-                mode: Some("chat".to_string()),
-                supports_function_calling: Some(true),
-                supports_vision: Some(true),
-            },
+            builtin_model("anthropic", 0.000003, 0.000015, 200000, 4096, true, true),
         );
 
         // DeepSeek models - updated pricing
         models.insert(
             "deepseek-chat".to_string(),
-            ModelPricing {
-                input_cost_per_token: 0.00000056,  // $0.56 per 1M tokens
-                output_cost_per_token: 0.00000168, // $1.68 per 1M tokens
-                output_cost_per_reasoning_token: 0.0,
-                max_tokens: Some(128000),
-                max_input_tokens: Some(128000),
-                max_output_tokens: Some(8192),
-                litellm_provider: Some("deepseek".to_string()),
-                mode: Some("chat".to_string()),
-                supports_function_calling: Some(true),
-                supports_vision: Some(false),
-            },
+            builtin_model(
+                "deepseek", 0.00000056, 0.00000168, 128000, 8192, true, false,
+            ),
         );
 
         models.insert(
             "deepseek-reasoner".to_string(),
-            ModelPricing {
-                input_cost_per_token: 0.00000056,  // $0.56 per 1M tokens
-                output_cost_per_token: 0.00000168, // $1.68 per 1M tokens
-                output_cost_per_reasoning_token: 0.0,
-                max_tokens: Some(128000),
-                max_input_tokens: Some(128000),
-                max_output_tokens: Some(8192),
-                litellm_provider: Some("deepseek".to_string()),
-                mode: Some("chat".to_string()),
-                supports_function_calling: Some(true),
-                supports_vision: Some(false),
-            },
+            builtin_model(
+                "deepseek", 0.00000056, 0.00000168, 128000, 8192, true, false,
+            ),
         );
 
         Self { models }
@@ -433,5 +358,23 @@ mod tests {
     fn test_quick_calculate() {
         let cost = calculate_cost("gpt-3.5-turbo", 1000, 500);
         assert!(cost > 0.0);
+    }
+
+    #[test]
+    fn test_default_source_loads_shared_pricing_file() {
+        let db = PricingDatabase::from_default_source().unwrap();
+
+        assert!(db.get_model_info("gpt-4o").is_some());
+        assert!(
+            db.calculate(
+                "gpt-4o",
+                &Usage {
+                    prompt_tokens: 1000,
+                    completion_tokens: 500,
+                    total_tokens: 1500,
+                    reasoning_tokens: None,
+                }
+            ) > 0.0
+        );
     }
 }

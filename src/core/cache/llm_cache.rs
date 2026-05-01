@@ -564,6 +564,7 @@ mod tests {
                 total_tokens: 18,
                 prompt_tokens_details: None,
                 completion_tokens_details: None,
+                thinking_usage: None,
             }),
             system_fingerprint: None,
         }

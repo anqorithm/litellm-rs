@@ -22,7 +22,7 @@ impl JinaRerankProvider {
         Self {
             api_key: api_key.into(),
             base_url: "https://api.jina.ai/v1".to_string(),
-            client: reqwest::Client::new(),
+            client: crate::core::http::outbound::default_outbound_client().clone(),
         }
     }
 }

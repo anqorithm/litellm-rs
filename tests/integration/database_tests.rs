@@ -9,6 +9,7 @@ mod tests {
     use litellm_rs::core::models::user::types::User;
     use litellm_rs::core::models::{ApiKey, Metadata, RateLimits, UsageStats};
     use litellm_rs::storage::database::{Database, DatabaseBackendType};
+    use sea_orm::{ConnectionTrait, DatabaseBackend, Statement, Value};
     use uuid::Uuid;
 
     /// Test basic database connection and health check
@@ -57,6 +58,39 @@ mod tests {
             .expect("Failed to create database");
         let result = db.migrate().await;
         assert!(result.is_ok(), "Migration failed: {:?}", result.err());
+    }
+
+    #[tokio::test]
+    async fn test_pricing_tables_created_by_migration() {
+        let config = DatabaseConfig {
+            url: "sqlite::memory:".to_string(),
+            max_connections: 1,
+            connection_timeout: 5,
+            ssl: false,
+            enabled: true,
+            fallback_to_sqlite: false,
+        };
+
+        let db = Database::new(&config)
+            .await
+            .expect("Failed to create database");
+        db.migrate().await.expect("Migration failed");
+
+        for table in ["model_pricing", "pricing_history"] {
+            let stmt = Statement::from_sql_and_values(
+                DatabaseBackend::Sqlite,
+                "SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name = ?",
+                [Value::String(Some(Box::new(table.to_string())))],
+            );
+            let row = db
+                .connection()
+                .query_one(stmt)
+                .await
+                .expect("schema query should succeed")
+                .expect("schema query should return a row");
+            let count: i64 = row.try_get("", "count").expect("count should decode");
+            assert_eq!(count, 1, "{table} table should be created by migration");
+        }
     }
 
     #[tokio::test]

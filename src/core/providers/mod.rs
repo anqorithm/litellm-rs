@@ -210,20 +210,9 @@ use crate::core::types::{
     chat::ChatRequest, embedding::EmbeddingRequest, image::ImageGenerationRequest,
 };
 use crate::core::types::{context::RequestContext, model::ProviderCapability};
-use chrono::{DateTime, Utc};
 pub use contextual_error::ContextualError;
 pub use provider_registry::ProviderRegistry;
 pub use unified_provider::ProviderError;
-
-/// Model pricing information
-#[derive(Debug, Clone)]
-pub struct ModelPricing {
-    pub model: String,
-    pub input_cost_per_1k: f64,
-    pub output_cost_per_1k: f64,
-    pub currency: String,
-    pub updated_at: DateTime<Utc>,
-}
 
 // ==================== Provider Dispatch Macros ====================
 //
@@ -484,14 +473,7 @@ impl Provider {
         context: RequestContext,
     ) -> Result<EmbeddingResponse, ProviderError> {
         use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
-
-        match self {
-            Provider::OpenAI(p) => LLMProvider::embeddings(p, request, context).await,
-            _ => Err(ProviderError::not_implemented(
-                "unknown",
-                format!("Embeddings not supported by {}", self.name()),
-            )),
-        }
+        dispatch_provider!(async_err, self, embeddings, request, context)
     }
 
     /// Create images
@@ -501,14 +483,7 @@ impl Provider {
         context: RequestContext,
     ) -> Result<ImageGenerationResponse, ProviderError> {
         use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
-
-        match self {
-            Provider::OpenAI(p) => LLMProvider::image_generation(p, request, context).await,
-            _ => Err(ProviderError::not_implemented(
-                "unknown",
-                format!("Image generation not supported by {}", self.name()),
-            )),
-        }
+        dispatch_provider!(async_err, self, image_generation, request, context)
     }
 
     /// Get model information by ID
@@ -534,68 +509,77 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_model_pricing_creation() {
-        let pricing = ModelPricing {
-            model: "gpt-4".to_string(),
-            input_cost_per_1k: 0.03,
-            output_cost_per_1k: 0.06,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-        };
-
-        assert_eq!(pricing.model, "gpt-4");
-        assert_eq!(pricing.input_cost_per_1k, 0.03);
-        assert_eq!(pricing.output_cost_per_1k, 0.06);
-        assert_eq!(pricing.currency, "USD");
-    }
-
-    #[test]
-    fn test_model_pricing_clone() {
-        let pricing = ModelPricing {
-            model: "claude-3-opus".to_string(),
-            input_cost_per_1k: 0.015,
-            output_cost_per_1k: 0.075,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-        };
-
-        let cloned = pricing.clone();
-        assert_eq!(cloned.model, pricing.model);
-        assert_eq!(cloned.input_cost_per_1k, pricing.input_cost_per_1k);
-        assert_eq!(cloned.output_cost_per_1k, pricing.output_cost_per_1k);
-    }
-
-    #[test]
-    fn test_model_pricing_zero_cost() {
-        let pricing = ModelPricing {
-            model: "free-model".to_string(),
-            input_cost_per_1k: 0.0,
-            output_cost_per_1k: 0.0,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-        };
-
-        assert_eq!(pricing.input_cost_per_1k, 0.0);
-        assert_eq!(pricing.output_cost_per_1k, 0.0);
-    }
-
-    #[test]
-    fn test_model_pricing_debug() {
-        let pricing = ModelPricing {
-            model: "gpt-4".to_string(),
-            input_cost_per_1k: 0.03,
-            output_cost_per_1k: 0.06,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-        };
-
-        let debug_str = format!("{:?}", pricing);
-        assert!(debug_str.contains("gpt-4"));
-        assert!(debug_str.contains("0.03"));
-    }
-
-    #[test]
     fn test_provider_enum_is_send_sync() {
         assert!(matches!(ProviderType::from("openai"), ProviderType::OpenAI));
+    }
+
+    #[tokio::test]
+    async fn test_provider_capabilities_embeddings_error_names_real_provider() {
+        let provider = Provider::Anthropic(
+            anthropic::AnthropicProvider::new(anthropic::AnthropicConfig::new_test("test-key"))
+                .unwrap(),
+        );
+
+        let err = provider
+            .create_embeddings(
+                crate::core::types::embedding::EmbeddingRequest {
+                    model: "claude-3-opus-20240229".to_string(),
+                    input: crate::core::types::embedding::EmbeddingInput::Text("hello".to_string()),
+                    user: None,
+                    encoding_format: None,
+                    dimensions: None,
+                    task_type: None,
+                },
+                crate::core::types::context::RequestContext::default(),
+            )
+            .await
+            .unwrap_err();
+
+        assert!(
+            matches!(
+                err,
+                ProviderError::NotSupported {
+                    provider: "anthropic",
+                    ..
+                }
+            ),
+            "expected provider-specific NotSupported, got {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_provider_capabilities_image_error_names_real_provider() {
+        let provider = Provider::Anthropic(
+            anthropic::AnthropicProvider::new(anthropic::AnthropicConfig::new_test("test-key"))
+                .unwrap(),
+        );
+
+        let err = provider
+            .create_images(
+                crate::core::types::image::ImageGenerationRequest {
+                    prompt: "a small test image".to_string(),
+                    model: Some("claude-3-opus-20240229".to_string()),
+                    n: None,
+                    size: None,
+                    quality: None,
+                    response_format: None,
+                    style: None,
+                    user: None,
+                },
+                crate::core::types::context::RequestContext::default(),
+            )
+            .await
+            .unwrap_err();
+
+        assert!(
+            matches!(
+                err,
+                ProviderError::NotSupported {
+                    provider: "anthropic",
+                    ..
+                }
+            ),
+            "expected provider-specific NotSupported, got {err}"
+        );
     }
 }

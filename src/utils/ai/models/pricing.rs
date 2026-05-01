@@ -4,6 +4,15 @@ impl ModelUtils {
     pub fn get_model_pricing(model: &str) -> Option<(f64, f64)> {
         let model_lower = model.to_lowercase();
 
+        if let Some(provider) = infer_pricing_provider(&model_lower)
+            && let Ok(pricing) = crate::core::cost::calculator::get_model_pricing(model, provider)
+        {
+            return Some((
+                pricing.input_cost_per_1k_tokens,
+                pricing.output_cost_per_1k_tokens,
+            ));
+        }
+
         match model_lower.as_str() {
             m if m.starts_with("gpt-5.4-pro") => Some((0.030, 0.180)),
             m if m.starts_with("gpt-5.4-mini") => Some((0.00075, 0.0045)),
@@ -167,6 +176,30 @@ impl ModelUtils {
     }
 }
 
+fn infer_pricing_provider(model_lower: &str) -> Option<&'static str> {
+    if model_lower.starts_with("gpt-")
+        || model_lower.starts_with("o3")
+        || model_lower.starts_with("o4")
+        || model_lower.starts_with("chatgpt-")
+    {
+        Some("openai")
+    } else if model_lower.starts_with("claude-") {
+        Some("anthropic")
+    } else if model_lower.starts_with("gemini-") {
+        Some("vertex_ai")
+    } else if model_lower.starts_with("deepseek-") {
+        Some("deepseek")
+    } else if model_lower.starts_with("moonshot-") || model_lower.starts_with("kimi-") {
+        Some("moonshot")
+    } else if model_lower.starts_with("minimax-") || model_lower.starts_with("m2.") {
+        Some("minimax")
+    } else if model_lower.starts_with("glm-") {
+        Some("zhipuai")
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -215,6 +248,12 @@ mod tests {
         assert!(pricing.is_some());
         let (input, _output) = pricing.unwrap();
         assert!((input - 0.0015).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_get_model_pricing_gpt4o_mini_uses_cost_source() {
+        let pricing = ModelUtils::get_model_pricing("gpt-4o-mini");
+        assert_eq!(pricing, Some((0.00015, 0.0006)));
     }
 
     #[test]

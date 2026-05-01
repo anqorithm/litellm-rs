@@ -226,18 +226,8 @@ impl Default for GatewayPricingConfig {
 }
 
 fn default_pricing_source() -> Option<String> {
-    // Try to resolve relative to the executable directory for cwd-independent deployment
-    if let Some(path) = std::env::current_exe()
-        .ok()
-        .and_then(|exe| {
-            exe.parent()
-                .map(|dir| dir.join("config/model_prices_extended.json"))
-        })
-        .and_then(|p| p.to_str().map(str::to_string))
-    {
-        return Some(path);
-    }
-    // Fallback: relative path (works when cwd is the repo root)
+    // Keep the runtime default aligned with config/gateway.yaml.example.
+    // Relative paths are resolved by the process working directory.
     Some(DEFAULT_PRICING_SOURCE.to_string())
 }
 

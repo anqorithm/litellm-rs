@@ -1,7 +1,11 @@
 //! Completion types - Python LiteLLM compatible
 
 use crate::core::types::responses::{FinishReason, Usage};
-use crate::core::types::{chat::ChatMessage, tools::Tool, tools::ToolChoice};
+use crate::core::types::{
+    chat::ChatMessage,
+    thinking::ThinkingConfig,
+    tools::{ResponseFormat, Tool, ToolChoice},
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -42,6 +46,8 @@ pub struct CompletionOptions {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_choice: Option<ToolChoice>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub response_format: Option<ResponseFormat>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub user: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub seed: Option<i32>,
@@ -51,6 +57,12 @@ pub struct CompletionOptions {
     pub logprobs: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub top_logprobs: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking: Option<ThinkingConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<HashMap<String, String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub api_key: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

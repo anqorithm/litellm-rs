@@ -153,7 +153,7 @@ fn test_provider_config_empty_name() {
 #[test]
 fn test_auth_config_validation() {
     let mut config = AuthConfig {
-        jwt_secret: "a-very-long-secret-key-for-testing-purposes".to_string(),
+        jwt_secret: "A-very-long-secret-key-for-testing-purposes123!".to_string(),
         ..Default::default()
     };
     assert!(config.validate().is_ok());

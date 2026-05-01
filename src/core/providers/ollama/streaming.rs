@@ -150,6 +150,7 @@ where
                     .as_ref()
                     .map(|t| crate::core::types::thinking::ThinkingDelta {
                         content: Some(t.clone()),
+                        signature: None,
                         is_start: None,
                         is_complete: None,
                     });

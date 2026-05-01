@@ -4,6 +4,7 @@ use super::types::{
     CostRange, CostResult, CostType, LiteLLMModelInfo, PricingData, PricingEventType,
     PricingStatistics, PricingUpdateEvent,
 };
+use crate::core::http::outbound::default_outbound_client;
 use crate::utils::error::gateway_error::{GatewayError, Result};
 use parking_lot::RwLock;
 use std::collections::HashMap;
@@ -37,7 +38,7 @@ impl PricingService {
                 models: HashMap::new(),
                 last_updated: SystemTime::UNIX_EPOCH,
             })),
-            http_client: reqwest::Client::new(),
+            http_client: default_outbound_client().clone(),
             pricing_url: pricing_url.unwrap_or_else(|| {
                 "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json".to_string()
             }),

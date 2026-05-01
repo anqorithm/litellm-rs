@@ -2,6 +2,7 @@
 mod analytics_ops;
 mod api_key_ops;
 mod batch_ops;
+mod budget_limit_ops;
 mod connection;
 mod team_repository;
 #[cfg(test)]

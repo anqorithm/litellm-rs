@@ -5,8 +5,7 @@
 
 use crate::config::models::defaults::default_true;
 use serde::{Deserialize, Serialize};
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
+use sha2::{Digest, Sha256};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -38,9 +37,10 @@ impl CacheKey {
 
     /// Compute the hash of a key
     fn compute_hash(key: &str) -> u64 {
-        let mut hasher = DefaultHasher::new();
-        key.hash(&mut hasher);
-        hasher.finish()
+        let digest = Sha256::digest(key.as_bytes());
+        let mut bytes = [0u8; 8];
+        bytes.copy_from_slice(&digest[..8]);
+        u64::from_be_bytes(bytes)
     }
 
     /// Get the key string

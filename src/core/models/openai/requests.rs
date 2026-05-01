@@ -49,10 +49,13 @@ pub struct ChatCompletionRequest {
     pub tools: Option<Vec<Tool>>,
     /// Tool choice
     pub tool_choice: Option<ToolChoice>,
+    /// Whether the model may issue tool calls in parallel
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parallel_tool_calls: Option<bool>,
     /// Response format
     pub response_format: Option<ResponseFormat>,
     /// Seed for deterministic outputs
-    pub seed: Option<u32>,
+    pub seed: Option<i64>,
     /// Logprobs
     pub logprobs: Option<bool>,
     /// Top logprobs
@@ -72,6 +75,18 @@ pub struct ChatCompletionRequest {
     /// Service tier for the request (OpenAI, e.g. "auto", "default", "flex")
     #[serde(skip_serializing_if = "Option::is_none")]
     pub service_tier: Option<String>,
+    /// Prediction hints for models that support speculative response matching
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prediction: Option<serde_json::Value>,
+    /// Provider-specific safety settings
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub safety_settings: Option<serde_json::Value>,
+    /// Provider-specific prompt cache controls
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_control: Option<serde_json::Value>,
+    /// Unknown provider-specific request fields
+    #[serde(default, flatten)]
+    pub extra_body: HashMap<String, serde_json::Value>,
 }
 
 impl Default for ChatCompletionRequest {
@@ -95,6 +110,7 @@ impl Default for ChatCompletionRequest {
             function_call: None,
             tools: None,
             tool_choice: None,
+            parallel_tool_calls: None,
             response_format: None,
             seed: None,
             logprobs: None,
@@ -105,6 +121,10 @@ impl Default for ChatCompletionRequest {
             store: None,
             metadata: None,
             service_tier: None,
+            prediction: None,
+            safety_settings: None,
+            cache_control: None,
+            extra_body: HashMap::new(),
         }
     }
 }
@@ -124,6 +144,9 @@ pub struct ResponseFormat {
     pub format_type: String,
     /// JSON schema (for structured outputs)
     pub json_schema: Option<serde_json::Value>,
+    /// Provider-specific response type discriminator
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub response_type: Option<String>,
 }
 
 /// Text completion request (legacy)
@@ -314,6 +337,7 @@ mod tests {
             response_format: Some(ResponseFormat {
                 format_type: "json_object".to_string(),
                 json_schema: None,
+                response_type: Some("json_object".to_string()),
             }),
             ..Default::default()
         };
@@ -328,11 +352,32 @@ mod tests {
     #[test]
     fn test_chat_completion_request_with_seed() {
         let req = ChatCompletionRequest {
-            seed: Some(42),
+            seed: Some(i32::MAX as i64 + 1),
             ..Default::default()
         };
 
-        assert_eq!(req.seed, Some(42));
+        assert_eq!(req.seed, Some(i32::MAX as i64 + 1));
+    }
+
+    #[test]
+    fn test_openai_requests_extra_body_boundary_fields() {
+        let json = r#"{
+            "model": "gpt-4",
+            "messages": [],
+            "parallel_tool_calls": true,
+            "prediction": {"type": "content", "content": "expected"},
+            "safety_settings": [{"category": "HARM_CATEGORY_DANGEROUS_CONTENT"}],
+            "cache_control": {"type": "ephemeral"},
+            "provider_knob": "kept"
+        }"#;
+
+        let req: ChatCompletionRequest = serde_json::from_str(json).unwrap();
+
+        assert_eq!(req.parallel_tool_calls, Some(true));
+        assert_eq!(req.prediction.unwrap()["content"], "expected");
+        assert!(req.safety_settings.is_some());
+        assert_eq!(req.cache_control.unwrap()["type"], "ephemeral");
+        assert_eq!(req.extra_body["provider_knob"], "kept");
     }
 
     #[test]
@@ -432,6 +477,7 @@ mod tests {
         let format = ResponseFormat {
             format_type: "text".to_string(),
             json_schema: None,
+            response_type: None,
         };
 
         assert_eq!(format.format_type, "text");
@@ -443,6 +489,7 @@ mod tests {
         let format = ResponseFormat {
             format_type: "json_object".to_string(),
             json_schema: None,
+            response_type: None,
         };
 
         assert_eq!(format.format_type, "json_object");
@@ -461,10 +508,12 @@ mod tests {
         let format = ResponseFormat {
             format_type: "json_schema".to_string(),
             json_schema: Some(schema.clone()),
+            response_type: Some("json_schema".to_string()),
         };
 
         assert_eq!(format.format_type, "json_schema");
         assert!(format.json_schema.is_some());
+        assert_eq!(format.response_type.as_deref(), Some("json_schema"));
     }
 
     #[test]
@@ -472,6 +521,7 @@ mod tests {
         let format = ResponseFormat {
             format_type: "json_object".to_string(),
             json_schema: None,
+            response_type: None,
         };
 
         let json = serde_json::to_string(&format).unwrap();

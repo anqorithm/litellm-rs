@@ -422,7 +422,7 @@ impl LLMProvider for OpenAIProvider {
 
     async fn health_check(&self) -> HealthStatus {
         let url = format!("{}/models?limit=1", self.config.get_api_base());
-        let client = reqwest::Client::new();
+        let client = crate::core::http::outbound::default_outbound_client().clone();
         let mut req = client.get(&url);
 
         if let Some(api_key) = &self.config.base.api_key {
