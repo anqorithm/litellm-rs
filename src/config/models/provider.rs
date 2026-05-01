@@ -6,6 +6,7 @@ use std::collections::HashMap;
 
 /// Provider configuration
 #[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ProviderConfig {
     /// Provider name
     pub name: String,
@@ -113,6 +114,7 @@ impl Default for ProviderConfig {
 
 /// Retry configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RetryConfig {
     /// Base delay in milliseconds
     #[serde(default = "default_base_delay")]
@@ -141,6 +143,7 @@ impl Default for RetryConfig {
 
 /// Health check configuration for provider-level health monitoring
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ProviderHealthCheckConfig {
     /// Health check interval in seconds
     #[serde(default = "default_health_check_interval")]

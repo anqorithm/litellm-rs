@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 /// Budget configuration for the gateway
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct BudgetConfiguration {
     /// Whether budget management is enabled
     #[serde(default = "default_enabled")]
@@ -41,6 +42,7 @@ impl Default for BudgetConfiguration {
 
 /// Global budget settings
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct GlobalBudgetSettings {
     /// Default soft limit percentage (0.0 to 1.0)
     #[serde(default = "default_soft_limit_percentage")]
@@ -88,6 +90,7 @@ fn default_reset_check_interval() -> u64 {
 
 /// Provider budget configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ProviderBudgetConfig {
     /// Provider name (e.g., "openai", "anthropic")
     pub provider: String,
@@ -114,6 +117,7 @@ pub struct ProviderBudgetConfig {
 
 /// Model budget configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ModelBudgetConfig {
     /// Model name (e.g., "gpt-4", "claude-3-opus")
     pub model: String,

@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 /// Storage configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub struct StorageConfig {
     /// Database configuration
     pub database: DatabaseConfig,
@@ -35,6 +36,7 @@ impl StorageConfig {
 
 /// Database configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct DatabaseConfig {
     /// Database URL
     pub url: String,
@@ -99,6 +101,7 @@ impl DatabaseConfig {
 
 /// Redis configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RedisConfig {
     /// Redis URL
     pub url: String,

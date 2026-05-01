@@ -6,6 +6,7 @@ use tracing::warn;
 
 /// Server configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ServerConfig {
     /// Server host
     #[serde(default = "default_host")]
@@ -149,6 +150,7 @@ impl ServerConfig {
 
 /// TLS configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct TlsConfig {
     /// Certificate file path
     pub cert_file: String,
@@ -199,6 +201,7 @@ impl TlsConfig {
 
 /// CORS configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CorsConfig {
     /// Enable CORS
     #[serde(default = "default_true")]

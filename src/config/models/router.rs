@@ -12,6 +12,7 @@ pub type RoutingStrategyConfig = crate::core::router::config::RoutingStrategy;
 /// For the runtime router config used by the actual router, see
 /// [`crate::core::router::config::RouterConfig`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct GatewayRouterConfig {
     /// Routing strategy
     #[serde(default = "default_gateway_routing_strategy")]
@@ -50,6 +51,7 @@ fn default_gateway_routing_strategy() -> RoutingStrategyConfig {
 
 /// Circuit breaker configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CircuitBreakerConfig {
     /// Failure threshold
     #[serde(default = "default_failure_threshold")]
@@ -97,6 +99,7 @@ impl CircuitBreakerConfig {
 
 /// Load balancer configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct LoadBalancerConfig {
     /// Health check enabled
     #[serde(default = "default_true")]

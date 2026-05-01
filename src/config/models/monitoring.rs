@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 /// Monitoring configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub struct MonitoringConfig {
     /// Metrics configuration
     #[serde(default)]
@@ -37,6 +38,7 @@ impl MonitoringConfig {
 
 /// Metrics configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct MetricsConfig {
     /// Enable metrics
     #[serde(default = "default_true")]
@@ -84,6 +86,7 @@ impl MetricsConfig {
 
 /// Tracing configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct TracingConfig {
     /// Enable tracing
     #[serde(default)]
@@ -137,6 +140,7 @@ impl TracingConfig {
 
 /// Jaeger configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct JaegerConfig {
     /// Agent endpoint
     pub agent_endpoint: String,
@@ -146,6 +150,7 @@ pub struct JaegerConfig {
 
 /// Health check configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct HealthConfig {
     /// Health check path
     #[serde(default = "default_health_path")]
@@ -179,6 +184,7 @@ impl HealthConfig {
 
 /// Logging configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct LoggingConfig {
     /// Log level
     #[serde(default = "default_log_level")]

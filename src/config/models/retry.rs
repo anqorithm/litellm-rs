@@ -10,6 +10,7 @@ fn default_backoff_multiplier() -> f64 {
 
 /// Retry configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RetryConfig {
     /// Maximum retries
     #[serde(default = "default_max_retries")]

@@ -751,7 +751,7 @@ Goal: remove parallel systems after correctness/security work is stable.
 
 ### Step E10 H20/H21 config strictness
 
-- status: `pending`
+- status: `completed`
 - Expected changes:
   - `src/config/mod.rs`
   - `src/config/models/*.rs`
@@ -924,6 +924,26 @@ No parallel agents are launched by this plan. If the owner chooses to paralleliz
 ## 9. Execution Log
 
 - 2026-05-02
+  - Step E10 config strictness: `completed`
+    - Modified files:
+      - `src/config/mod.rs`
+      - `src/config/models/*.rs`
+      - `config/gateway.yaml.example`
+    - Main changes:
+      - Missing explicit `${ENV_VAR}` substitutions now fail configuration loading with a deduplicated missing-variable list.
+      - Bare `$ENV_VAR` substitution remains supported for set variables, while unresolved bare `$...` tokens stay literal so dollar-containing passwords and keys remain valid config values.
+      - Env substitution skips YAML comments and runs as a single pass over config text so env-injected values are not recursively expanded.
+      - Added `#[serde(deny_unknown_fields)]` to gateway config model structs so typos fail during deserialization.
+      - Added regression coverage for missing env placeholders, unknown config fields, and parsing/validating `config/gateway.yaml.example`.
+      - Updated the example router strategy to the current string-based `latency_based` schema.
+    - Execute tests:
+      - `cargo fmt --all -- --check` -> pass
+      - `cargo test config` -> pass (`1097` lib-filtered tests, `2` main-filtered tests, `45` integration-filtered tests, `2` connection-pool-filtered tests)
+      - `cargo test gateway_yaml_example` -> pass
+      - `cargo test --all-features config` -> pass (`1551` lib-filtered tests, `2` main-filtered tests, `45` integration-filtered tests, `2` connection-pool-filtered tests)
+      - `cargo check --all-features` -> pass
+      - `git diff --check` -> pass
+      - `cargo clippy --lib --tests --bins --all-features -- -D warnings --force-warn clippy::collapsible-if` -> pass (`collapsible_if` remains warning by command design)
   - Step E8 SDK router convergence: `completed`
     - Modified files:
       - `src/core/router/selection.rs`

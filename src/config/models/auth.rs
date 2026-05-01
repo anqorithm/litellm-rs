@@ -6,6 +6,7 @@ use tracing::warn;
 
 /// Authentication configuration
 #[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AuthConfig {
     /// Enable JWT authentication
     #[serde(default = "default_auth_enable_jwt")]
@@ -167,6 +168,7 @@ fn is_forbidden_jwt_placeholder(secret: &str) -> bool {
 
 /// RBAC configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RbacConfig {
     /// Enable RBAC
     #[serde(default)]
