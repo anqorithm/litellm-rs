@@ -441,6 +441,13 @@ impl LLMProvider for OpenAIProvider {
         input_tokens: u32,
         output_tokens: u32,
     ) -> Result<f64, ProviderError> {
+        let usage = crate::core::cost::types::UsageTokens::new(input_tokens, output_tokens);
+        if let Ok(breakdown) =
+            crate::core::cost::calculator::generic_cost_per_token(model, &usage, "openai")
+        {
+            return Ok(breakdown.total_cost);
+        }
+
         let model_info = self.get_model_info(model)?;
 
         let input_cost = model_info

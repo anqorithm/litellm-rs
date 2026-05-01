@@ -413,12 +413,11 @@ async fn test_map_openai_params_passthrough() {
 async fn test_calculate_cost() {
     let provider = create_test_provider();
 
-    let cost = provider.calculate_cost("gpt-4", 1000, 500).await;
+    let cost = provider.calculate_cost("gpt-4o-mini", 1000, 500).await;
     assert!(cost.is_ok());
 
-    // Cost should be 0 for unknown pricing (default model info has None for costs)
     let cost_value = cost.unwrap();
-    assert!(cost_value >= 0.0);
+    assert!((cost_value - 0.00045).abs() < f64::EPSILON);
 }
 
 #[tokio::test]
