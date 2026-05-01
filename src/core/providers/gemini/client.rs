@@ -19,7 +19,8 @@ use crate::core::types::{
     content::ContentPart,
     message::MessageContent,
     message::MessageRole,
-    responses::{ChatChoice, ChatResponse, Usage},
+    responses::{ChatChoice, ChatResponse, CompletionTokensDetails, PromptTokensDetails, Usage},
+    thinking::ThinkingUsage,
     tools::{FunctionCall, ToolCall},
 };
 
@@ -510,22 +511,44 @@ impl GeminiClient {
         }
 
         // Extract usage_stats
-        let usage = response.get("usageMetadata").map(|usage_metadata| Usage {
-            prompt_tokens: usage_metadata
-                .get("promptTokenCount")
+        let usage = response.get("usageMetadata").map(|usage_metadata| {
+            let cached_tokens = usage_metadata
+                .get("cachedContentTokenCount")
                 .and_then(|v| v.as_u64())
-                .unwrap_or(0) as u32,
-            completion_tokens: usage_metadata
-                .get("candidatesTokenCount")
+                .map(|tokens| tokens as u32);
+            let thoughts_tokens = usage_metadata
+                .get("thoughtsTokenCount")
                 .and_then(|v| v.as_u64())
-                .unwrap_or(0) as u32,
-            total_tokens: usage_metadata
-                .get("totalTokenCount")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0) as u32,
-            prompt_tokens_details: None,
-            completion_tokens_details: None,
-            thinking_usage: None,
+                .map(|tokens| tokens as u32);
+
+            Usage {
+                prompt_tokens: usage_metadata
+                    .get("promptTokenCount")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0) as u32,
+                completion_tokens: usage_metadata
+                    .get("candidatesTokenCount")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0) as u32,
+                total_tokens: usage_metadata
+                    .get("totalTokenCount")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0) as u32,
+                prompt_tokens_details: cached_tokens.map(|cached_tokens| PromptTokensDetails {
+                    cached_tokens: Some(cached_tokens),
+                    cache_creation_tokens: None,
+                    cache_read_tokens: Some(cached_tokens),
+                    audio_tokens: None,
+                }),
+                completion_tokens_details: thoughts_tokens.map(|reasoning_tokens| {
+                    CompletionTokensDetails {
+                        reasoning_tokens: Some(reasoning_tokens),
+                        audio_tokens: None,
+                    }
+                }),
+                thinking_usage: thoughts_tokens
+                    .map(|tokens| ThinkingUsage::new(tokens).with_provider("gemini")),
+            }
         });
 
         // Use current timestamp, defaulting to 0 if system time is before UNIX_EPOCH
@@ -665,5 +688,46 @@ mod tests {
             .unwrap();
         assert_eq!(tool_call.function.name, "get_weather");
         assert_eq!(tool_call.function.arguments, r#"{"city":"Paris"}"#);
+    }
+
+    #[test]
+    fn test_gemini_usage_preserves_cache_and_thought_tokens() {
+        let config = GeminiConfig::new_google_ai("test-key");
+        let client = GeminiClient::new(config).unwrap();
+        let request = ChatRequest {
+            model: "gemini-2.0-flash".to_string(),
+            ..Default::default()
+        };
+
+        let response = json!({
+            "candidates": [{
+                "content": {
+                    "parts": [{"text": "Hello"}]
+                },
+                "finishReason": "STOP"
+            }],
+            "usageMetadata": {
+                "promptTokenCount": 100,
+                "candidatesTokenCount": 25,
+                "totalTokenCount": 140,
+                "cachedContentTokenCount": 12,
+                "thoughtsTokenCount": 15
+            }
+        });
+
+        let result = client.transform_chat_response(response, &request).unwrap();
+        let usage = result.usage.unwrap();
+        let prompt_details = usage.prompt_tokens_details.unwrap();
+        let completion_details = usage.completion_tokens_details.unwrap();
+        assert_eq!(prompt_details.cached_tokens, Some(12));
+        assert_eq!(prompt_details.cache_read_tokens, Some(12));
+        assert_eq!(completion_details.reasoning_tokens, Some(15));
+        assert_eq!(
+            usage
+                .thinking_usage
+                .as_ref()
+                .and_then(|thinking| thinking.thinking_tokens),
+            Some(15)
+        );
     }
 }

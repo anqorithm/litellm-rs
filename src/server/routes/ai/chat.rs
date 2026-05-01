@@ -163,7 +163,24 @@ async fn handle_streaming_chat_completion(
                             if let Some(usage) = &chunk.usage {
                                 tokens_used = u64::from(usage.total_tokens);
                             }
-                            let chat_chunk = convert_core_chunk_to_streaming(chunk);
+                            let chat_chunk = match convert_core_chunk_to_streaming(chunk) {
+                                Ok(chat_chunk) => chat_chunk,
+                                Err(e) => {
+                                    error!("Stream chunk conversion error: {}", e);
+                                    let (error_type, error_code) = sse_error_classification(&e);
+                                    let error_bytes =
+                                        format_sse_error(&e.to_string(), error_type, error_code);
+                                    if tx.send(error_bytes).await.is_err() {
+                                        info!(
+                                            "Client disconnected before conversion error could be sent"
+                                        );
+                                    }
+                                    if let Some(lease) = lease.take() {
+                                        lease.finish_failure(&e);
+                                    }
+                                    return;
+                                }
+                            };
                             match serde_json::to_string(&chat_chunk) {
                                 Ok(json) => {
                                     let event = Event::default().data(&json);
@@ -579,17 +596,26 @@ fn format_sse_error(message: &str, error_type: &str, code: &str) -> Bytes {
     Bytes::from(combined)
 }
 
-fn convert_core_chunk_to_streaming(chunk: types::responses::ChatChunk) -> ChatCompletionChunk {
-    ChatCompletionChunk {
-        id: chunk.id,
-        object: chunk.object,
-        created: chunk.created as u64,
-        model: chunk.model,
-        system_fingerprint: chunk.system_fingerprint,
-        choices: chunk
-            .choices
-            .into_iter()
-            .map(|choice| ChatCompletionChunkChoice {
+fn convert_core_chunk_to_streaming(
+    chunk: types::responses::ChatChunk,
+) -> Result<ChatCompletionChunk, ProviderError> {
+    let choices = chunk
+        .choices
+        .into_iter()
+        .map(|choice| {
+            let logprobs = choice
+                .logprobs
+                .map(|lp| {
+                    serde_json::to_value(convert_logprobs(lp)).map_err(|e| {
+                        ProviderError::serialization(
+                            "router",
+                            format!("Failed to serialize stream logprobs: {}", e),
+                        )
+                    })
+                })
+                .transpose()?;
+
+            Ok(ChatCompletionChunkChoice {
                 index: choice.index,
                 delta: {
                     let reasoning_content = choice
@@ -611,13 +637,20 @@ fn convert_core_chunk_to_streaming(chunk: types::responses::ChatChunk) -> ChatCo
                     }
                 },
                 finish_reason: choice.finish_reason.map(convert_finish_reason),
-                logprobs: choice
-                    .logprobs
-                    .and_then(|lp| serde_json::to_value(convert_logprobs(lp)).ok()),
+                logprobs,
             })
-            .collect(),
+        })
+        .collect::<Result<Vec<_>, ProviderError>>()?;
+
+    Ok(ChatCompletionChunk {
+        id: chunk.id,
+        object: chunk.object,
+        created: chunk.created as u64,
+        model: chunk.model,
+        system_fingerprint: chunk.system_fingerprint,
+        choices,
         usage: chunk.usage.map(convert_usage),
-    }
+    })
 }
 
 fn convert_function_call_delta(
@@ -649,7 +682,9 @@ fn convert_tool_call_delta(
 mod tests {
     use super::*;
     use crate::core::models::openai::{ChatMessage, MessageContent, MessageRole};
-    use crate::core::types::responses::{ChatChunk, ChatDelta, ChatStreamChoice};
+    use crate::core::types::responses::{
+        ChatChunk, ChatDelta, ChatStreamChoice, LogProbs, TokenLogProb,
+    };
     use crate::core::types::thinking::{ThinkingDelta, ThinkingUsage};
 
     #[test]
@@ -776,7 +811,7 @@ mod tests {
             system_fingerprint: None,
         };
 
-        let converted = convert_core_chunk_to_streaming(chunk);
+        let converted = convert_core_chunk_to_streaming(chunk).unwrap();
         let delta = &converted.choices[0].delta;
         assert_eq!(delta.reasoning_content.as_deref(), Some("reasoning"));
         assert_eq!(
@@ -787,6 +822,43 @@ mod tests {
             delta.function_call.as_ref().and_then(|f| f.name.as_deref()),
             Some("legacy_tool")
         );
+    }
+
+    #[test]
+    fn test_convert_core_chunk_preserves_stream_logprobs() {
+        let chunk = ChatChunk {
+            id: "chunk-1".to_string(),
+            object: "chat.completion.chunk".to_string(),
+            created: 123,
+            model: "logprob-model".to_string(),
+            choices: vec![ChatStreamChoice {
+                index: 0,
+                delta: ChatDelta {
+                    role: None,
+                    content: None,
+                    thinking: None,
+                    tool_calls: None,
+                    function_call: None,
+                },
+                finish_reason: None,
+                logprobs: Some(LogProbs {
+                    content: vec![TokenLogProb {
+                        token: "hello".to_string(),
+                        logprob: -0.25,
+                        bytes: None,
+                        top_logprobs: None,
+                    }],
+                    refusal: None,
+                }),
+            }],
+            usage: None,
+            system_fingerprint: None,
+        };
+
+        let converted = convert_core_chunk_to_streaming(chunk).unwrap();
+        let logprobs = converted.choices[0].logprobs.as_ref().unwrap();
+        assert_eq!(logprobs["content"][0]["token"], "hello");
+        assert_eq!(logprobs["content"][0]["logprob"], -0.25);
     }
 
     #[test]
