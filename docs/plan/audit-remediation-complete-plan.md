@@ -953,6 +953,18 @@ No parallel agents are launched by this plan. If the owner chooses to paralleliz
       - `cargo test --all-features anthropic` -> pass (`204` lib-filtered tests, `1` integration-filtered test)
       - `cargo check --all-features` -> pass
       - `cargo clippy --lib --tests --bins --all-features -- -D warnings --force-warn clippy::collapsible-if` -> pass (`collapsible_if` remains warning by command design)
+  - Step E9 Anthropic client test split: `in_progress`
+    - Modified files:
+      - `src/core/providers/anthropic/client.rs`
+      - `src/core/providers/anthropic/client/tests.rs`
+    - Main changes:
+      - Moved the Anthropic client unit-test module out of the production client module while preserving access to the same private helper coverage.
+      - Reduced `src/core/providers/anthropic/client.rs` from `1427` lines to `781` lines; the new test submodule is `645` lines.
+    - Execute tests:
+      - `cargo test anthropic` -> pass (`191` lib-filtered tests, `1` integration-filtered test)
+      - `cargo test --all-features anthropic` -> pass (`204` lib-filtered tests, `1` integration-filtered test)
+      - `cargo check --all-features` -> pass
+      - `cargo clippy --lib --tests --bins --all-features -- -D warnings --force-warn clippy::collapsible-if` -> pass (`collapsible_if` remains warning by command design)
   - Step E10 config strictness: `completed`
     - Modified files:
       - `src/config/mod.rs`
