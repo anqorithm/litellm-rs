@@ -598,7 +598,17 @@ impl OpenAIProvider {
 
     /// Get model pricing information
     pub fn get_model_pricing(&self, model_id: &str) -> Option<(f64, f64)> {
-        if let Ok(model_info) = self.get_model_info(model_id)
+        if let Ok(pricing) = crate::core::cost::calculator::get_model_pricing(model_id, "openai") {
+            return Some((
+                pricing.input_cost_per_1k_tokens,
+                pricing.output_cost_per_1k_tokens,
+            ));
+        }
+
+        if let Some(model_info) = self
+            .model_registry
+            .get_model_spec(model_id)
+            .map(|spec| &spec.model_info)
             && let (Some(input_cost), Some(output_cost)) = (
                 model_info.input_cost_per_1k_tokens,
                 model_info.output_cost_per_1k_tokens,

@@ -1129,6 +1129,13 @@ impl CostCalculator {
         prompt_tokens: u32,
         completion_tokens: u32,
     ) -> Option<f64> {
+        let usage = crate::core::cost::types::UsageTokens::new(prompt_tokens, completion_tokens);
+        if let Ok(breakdown) =
+            crate::core::cost::calculator::generic_cost_per_token(model_id, &usage, "anthropic")
+        {
+            return Some(breakdown.total_cost);
+        }
+
         let registry = get_anthropic_registry();
         let pricing = registry.get_model_pricing(model_id)?;
 

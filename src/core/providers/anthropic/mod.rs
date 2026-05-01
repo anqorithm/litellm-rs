@@ -234,8 +234,8 @@ mod tests {
     #[test]
     fn test_cost_estimation() {
         let cost = estimate_cost("claude-opus-4-7", 1000, 500);
-        assert!(cost.is_some());
-        assert!(cost.unwrap() > 0.0);
+        let cost = cost.expect("claude-opus-4-7 should have Anthropic pricing");
+        assert!((cost - 0.0175).abs() < f64::EPSILON);
     }
 
     #[test]
