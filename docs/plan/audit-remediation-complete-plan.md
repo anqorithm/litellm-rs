@@ -924,6 +924,19 @@ No parallel agents are launched by this plan. If the owner chooses to paralleliz
 ## 9. Execution Log
 
 - 2026-05-01
+  - Step E3 OpenAI cost convergence: `in_progress`
+    - Modified files:
+      - `src/core/providers/openai/client.rs`
+      - `src/core/providers/openai/client_tests.rs`
+    - Main changes:
+      - Routed `OpenAIProvider::calculate_cost` through shared `core::cost::calculator::generic_cost_per_token`.
+      - Kept the previous default-model-info fallback so unknown/custom OpenAI-compatible model names still return the compatibility cost instead of hard failing.
+      - Strengthened the provider cost test to prove `gpt-4o-mini` no longer prices as zero.
+    - Execute tests:
+      - `cargo test core::providers::openai::client_tests::test_calculate_cost` -> pass (`2` matching tests)
+      - `cargo fmt --all -- --check` -> pass
+      - `cargo test pricing` -> pass (`175` lib filtered tests, `1` integration filtered test)
+      - `cargo clippy --lib --tests --bins --features "postgres sqlite redis s3 metrics tracing websockets analytics" -- -D warnings --force-warn clippy::collapsible-if` -> pass
   - Step E3 Gemini pricing convergence: `in_progress`
     - Modified files:
       - `src/core/providers/gemini/models.rs`
