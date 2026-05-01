@@ -731,7 +731,7 @@ Goal: remove parallel systems after correctness/security work is stable.
 
 ### Step E9 H15 god-file splits
 
-- status: `pending`
+- status: `in_progress`
 - Expected changes:
   - `src/core/cost/calculator.rs`
   - `src/core/providers/anthropic/models.rs`
@@ -924,6 +924,21 @@ No parallel agents are launched by this plan. If the owner chooses to paralleliz
 ## 9. Execution Log
 
 - 2026-05-02
+  - Step E9 base SSE split: `in_progress`
+    - Modified files:
+      - `src/core/providers/base/sse.rs`
+      - `src/core/providers/base/sse/openai.rs`
+      - `src/core/providers/base/sse/anthropic.rs`
+      - `src/core/providers/base/sse/gemini.rs`
+      - `src/core/providers/base/sse/cohere.rs`
+      - `src/core/providers/base/sse/databricks.rs`
+    - Main changes:
+      - Moved provider-specific SSE transformers out of the shared parser/stream module while preserving existing public re-exports.
+      - Reduced `src/core/providers/base/sse.rs` from `1523` lines to `625` lines; new transformer modules range from `116` to `313` lines.
+    - Execute tests:
+      - `cargo test sse` -> pass (`49` lib-filtered tests, `6` integration-filtered tests)
+      - `cargo test --all-features sse` -> pass (`55` lib-filtered tests, `6` integration-filtered tests)
+      - `cargo check --all-features` -> pass
   - Step E10 config strictness: `completed`
     - Modified files:
       - `src/config/mod.rs`
