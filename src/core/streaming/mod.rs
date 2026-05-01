@@ -13,7 +13,6 @@ use futures::stream::Stream;
 
 // Module declarations
 pub mod handler;
-pub mod providers;
 pub mod types;
 pub mod utils;
 

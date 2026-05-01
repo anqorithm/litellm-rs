@@ -772,7 +772,7 @@ Goal: close remaining medium issues after the main architecture is stable.
 
 ### Step F1 Stream/provider serialization sweep
 
-- status: `pending`
+- status: `completed`
 - Covers: M1, M3, M4, M5, M6, M28
 - Expected changes:
   - `src/server/routes/ai/chat.rs`
@@ -999,6 +999,30 @@ No parallel agents are launched by this plan. If the owner chooses to paralleliz
       - `cargo test --all-features config` -> pass (`1551` lib-filtered tests, `2` main-filtered tests, `45` integration-filtered tests, `2` connection-pool-filtered tests)
       - `cargo check --all-features` -> pass
       - `git diff --check` -> pass
+      - `cargo clippy --lib --tests --bins --all-features -- -D warnings --force-warn clippy::collapsible-if` -> pass (`collapsible_if` remains warning by command design)
+  - Step F1 stream/provider serialization sweep: `completed`
+    - Modified files:
+      - `src/server/routes/ai/chat.rs`
+      - `src/core/providers/gemini/client.rs`
+      - `src/core/streaming/mod.rs`
+      - `src/core/streaming/providers.rs`
+    - Main changes:
+      - Converted streaming logprobs conversion from silent `.ok()` dropping into an explicit serialization error path that emits an SSE error and marks the lease failed.
+      - Preserved Gemini `cachedContentTokenCount` and `thoughtsTokenCount` in canonical usage details and `thinking_usage`.
+      - Deleted the unused legacy `core::streaming::providers` byte-string pipeline so provider streaming keeps a single canonical SSE path.
+      - Reconfirmed Bedrock multimodal/tool-result unsupported content returns explicit `NotImplemented` errors, Anthropic stop reasons are canonical, and LiteLLM helper parameters are already preserved by earlier provider-contract fixes.
+    - Execute tests:
+      - `cargo test routes::ai::chat` -> pass (`13` lib-filtered tests)
+      - `cargo test anthropic` -> pass (`191` lib-filtered tests, `1` integration-filtered test)
+      - `cargo test gemini` -> pass (`32` lib-filtered tests)
+      - `cargo test bedrock` -> pass (`2` lib-filtered tests)
+      - `cargo test --all-features gemini` -> pass (`132` lib-filtered tests)
+      - `cargo test --all-features anthropic` -> pass (`204` lib-filtered tests, `1` integration-filtered test)
+      - `cargo test --all-features bedrock` -> pass (`265` lib-filtered tests)
+      - `cargo check --all-features` -> pass
+      - `cargo fmt --all -- --check` -> pass
+      - `git diff --check` -> pass
+      - `rg "streaming::providers|OpenAIStreaming|AnthropicStreaming|GenericStreaming" src tests` -> pass (no references)
       - `cargo clippy --lib --tests --bins --all-features -- -D warnings --force-warn clippy::collapsible-if` -> pass (`collapsible_if` remains warning by command design)
   - Step E8 SDK router convergence: `completed`
     - Modified files:
