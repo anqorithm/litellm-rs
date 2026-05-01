@@ -221,7 +221,7 @@ storage:
     url: "redis://localhost:6379"
 
 auth:
-  jwt_secret: "test-secret-that-is-at-least-32-characters-long-for-security"
+  jwt_secret: "TestSecretThatIsAtLeast32CharsLong123!"
   api_key_header: "Authorization"
 
 monitoring:

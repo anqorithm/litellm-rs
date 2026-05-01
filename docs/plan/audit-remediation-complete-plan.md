@@ -924,6 +924,29 @@ No parallel agents are launched by this plan. If the owner chooses to paralleliz
 ## 9. Execution Log
 
 - 2026-05-01
+  - Step E3 continuation: `in_progress`
+    - Modified files:
+      - `src/core/cost/calculator.rs`
+      - `src/core/providers/mod.rs`
+      - `src/config/models/pricing.rs`
+      - `src/config/mod.rs`
+      - `src/core/a2a/registry.rs`
+    - Main changes:
+      - Removed the orphan `src/config/models/pricing.rs` model set, which was not registered in `config::models`.
+      - Removed the unused `core::providers::ModelPricing` facade struct and self-only tests.
+      - Changed `core::cost::get_model_pricing` to prefer the shared LiteLLM pricing catalog before falling back to legacy hardcoded provider tables.
+      - Updated cost tests for shared-source pricing and tolerant float comparisons after per-token to per-1K conversion.
+      - Fixed PR CI test fixtures: config test JWT secret now satisfies strengthened validation, and A2A registry tests use a validation-safe `.invalid` host instead of an SSRF-blocked reserved IP.
+    - Execute tests:
+      - `cargo test core::providers::tests` -> pass (`3` tests)
+      - `cargo test core::cost::calculator` -> pass (`61` tests)
+      - `cargo test config::tests::test_config_from_file` -> pass (`1` test)
+      - `cargo test core::a2a::registry` -> pass (`17` tests)
+      - `cargo test pricing` -> pass (`173` lib filtered tests, `1` integration filtered test)
+      - `cargo clippy --lib --tests --bins --features "postgres sqlite redis s3 metrics tracing websockets analytics" -- -D warnings --force-warn clippy::collapsible-if` -> pass
+      - `cargo check --all-features` -> pass
+      - `cargo check --no-default-features --features lite` -> pass
+      - `git diff --check` -> pass
   - Step E3 partial: `in_progress`
     - Modified files:
       - `src/core/pricing.rs`
