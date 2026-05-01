@@ -3,9 +3,16 @@ use super::types::SeaOrmDatabase;
 use crate::config::models::storage::DatabaseConfig;
 use crate::core::models::team::{Team, TeamStatus};
 use crate::core::teams::repository::TeamRepository;
+use crate::core::user_management::{
+    Team as LegacyTeam, TeamMember as LegacyTeamMember, TeamRole as LegacyTeamRole,
+    TeamSettings as LegacyTeamSettings,
+};
+use chrono::Utc;
+use std::collections::HashMap;
 use std::sync::Arc;
+use uuid::Uuid;
 
-async fn create_repository() -> SeaOrmTeamRepository {
+async fn create_repository_with_db() -> (SeaOrmTeamRepository, Arc<SeaOrmDatabase>) {
     let db = Arc::new(
         SeaOrmDatabase::new(&DatabaseConfig {
             enabled: false,
@@ -15,7 +22,37 @@ async fn create_repository() -> SeaOrmTeamRepository {
         .expect("failed to create in-memory database"),
     );
     db.migrate().await.expect("failed to run migrations");
-    SeaOrmTeamRepository::new(db)
+    (SeaOrmTeamRepository::new(Arc::clone(&db)), db)
+}
+
+async fn create_repository() -> SeaOrmTeamRepository {
+    let (repo, _) = create_repository_with_db().await;
+    repo
+}
+
+fn legacy_team(name: &str, owner_id: Uuid) -> LegacyTeam {
+    LegacyTeam {
+        team_id: Uuid::new_v4().to_string(),
+        team_name: name.to_string(),
+        description: Some(format!("legacy {}", name)),
+        organization_id: Some(Uuid::new_v4().to_string()),
+        members: vec![LegacyTeamMember {
+            user_id: owner_id.to_string(),
+            role: LegacyTeamRole::Owner,
+            joined_at: Utc::now(),
+            is_active: true,
+        }],
+        permissions: vec!["api.chat".to_string()],
+        models: vec!["gpt-4".to_string()],
+        max_budget: Some(1000.0),
+        spend: 42.0,
+        budget_duration: Some("1m".to_string()),
+        budget_reset_at: Some(Utc::now()),
+        metadata: HashMap::from([("source".to_string(), "legacy-test".to_string())]),
+        is_active: true,
+        created_at: Utc::now(),
+        settings: LegacyTeamSettings::default(),
+    }
 }
 
 #[tokio::test]
@@ -73,4 +110,117 @@ async fn test_pagination_applies_after_deleted_filtering() {
     assert_eq!(teams.len(), 2);
     assert_eq!(teams[0].name, "team-c");
     assert_eq!(teams[1].name, "team-d");
+}
+
+#[tokio::test]
+async fn test_legacy_user_management_team_is_visible_through_canonical_repository() {
+    let (repo, db) = create_repository_with_db().await;
+    let owner_id = Uuid::new_v4();
+    let legacy = legacy_team("legacy-visible", owner_id);
+    let legacy_id = Uuid::parse_str(&legacy.team_id).unwrap();
+
+    db.create_team(&legacy).await.unwrap();
+
+    let fetched = repo.get(legacy_id).await.unwrap().unwrap();
+    assert_eq!(fetched.id(), legacy_id);
+    assert_eq!(fetched.name, "legacy-visible");
+    assert_eq!(fetched.description, legacy.description);
+    assert!(fetched.metadata.extra.contains_key("legacy_um_team"));
+    assert_eq!(fetched.usage_stats.total_cost, 42.0);
+
+    let by_name = repo.get_by_name("legacy-visible").await.unwrap().unwrap();
+    assert_eq!(by_name.id(), legacy_id);
+
+    let (teams, total) = repo.list(0, 10).await.unwrap();
+    assert_eq!(total, 1);
+    assert_eq!(teams.len(), 1);
+    assert_eq!(teams[0].id(), legacy_id);
+}
+
+#[tokio::test]
+async fn test_legacy_user_management_team_members_are_copied_to_canonical_members() {
+    let (repo, db) = create_repository_with_db().await;
+    let owner_id = Uuid::new_v4();
+    let legacy = legacy_team("legacy-members", owner_id);
+    let legacy_id = Uuid::parse_str(&legacy.team_id).unwrap();
+
+    db.create_team(&legacy).await.unwrap();
+
+    let user_teams = repo.get_user_teams(owner_id).await.unwrap();
+    assert_eq!(user_teams.len(), 1);
+    assert_eq!(user_teams[0].id(), legacy_id);
+
+    let member = repo.get_member(legacy_id, owner_id).await.unwrap().unwrap();
+    assert_eq!(member.team_id, legacy_id);
+    assert_eq!(member.user_id, owner_id);
+}
+
+#[tokio::test]
+async fn test_legacy_member_removal_removes_backfilled_canonical_member() {
+    let (repo, db) = create_repository_with_db().await;
+    let owner_id = Uuid::new_v4();
+    let removed_user_id = Uuid::new_v4();
+    let mut legacy = legacy_team("legacy-member-removal", owner_id);
+    let legacy_id = Uuid::parse_str(&legacy.team_id).unwrap();
+    legacy.members.push(LegacyTeamMember {
+        user_id: removed_user_id.to_string(),
+        role: LegacyTeamRole::Member,
+        joined_at: Utc::now(),
+        is_active: true,
+    });
+
+    db.create_team(&legacy).await.unwrap();
+    assert_eq!(repo.get_user_teams(removed_user_id).await.unwrap().len(), 1);
+
+    legacy
+        .members
+        .retain(|member| member.user_id != removed_user_id.to_string());
+    db.update_team(&legacy).await.unwrap();
+
+    assert!(
+        repo.get_user_teams(removed_user_id)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        repo.get_member(legacy_id, removed_user_id)
+            .await
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[tokio::test]
+async fn test_delete_does_not_resurrect_backfilled_legacy_team() {
+    let (repo, db) = create_repository_with_db().await;
+    let owner_id = Uuid::new_v4();
+    let legacy = legacy_team("legacy-delete", owner_id);
+    let legacy_id = Uuid::parse_str(&legacy.team_id).unwrap();
+
+    db.create_team(&legacy).await.unwrap();
+    assert!(repo.get(legacy_id).await.unwrap().is_some());
+
+    repo.delete(legacy_id).await.unwrap();
+
+    assert!(repo.get(legacy_id).await.unwrap().is_none());
+    let (teams, total) = repo.list(0, 10).await.unwrap();
+    assert_eq!(total, 0);
+    assert!(teams.is_empty());
+}
+
+#[tokio::test]
+async fn test_legacy_name_conflict_does_not_return_wrong_team_for_id_lookup() {
+    let (repo, db) = create_repository_with_db().await;
+    let canonical = Team::new("shared-name".to_string(), None);
+    let canonical_id = canonical.id();
+    repo.create(canonical).await.unwrap();
+
+    let legacy = legacy_team("shared-name", Uuid::new_v4());
+    let legacy_id = Uuid::parse_str(&legacy.team_id).unwrap();
+    db.create_team(&legacy).await.unwrap();
+
+    assert!(repo.get(legacy_id).await.unwrap().is_none());
+    let by_name = repo.get_by_name("shared-name").await.unwrap().unwrap();
+    assert_eq!(by_name.id(), canonical_id);
 }

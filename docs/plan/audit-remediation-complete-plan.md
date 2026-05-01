@@ -620,7 +620,7 @@ Goal: remove parallel systems after correctness/security work is stable.
 
 ### Step E3 C11 pricing system unification
 
-- status: `in_progress`
+- status: `completed`
 - Expected changes:
   - `src/core/cost/`
   - `src/core/providers/base/pricing.rs`
@@ -640,7 +640,7 @@ Goal: remove parallel systems after correctness/security work is stable.
 
 ### Step E4 C15 team/user convergence
 
-- status: `pending`
+- status: `in_progress`
 - Expected changes:
   - `src/storage/database/migration/m20240301_000001_create_user_management_tables.rs`
   - `src/storage/database/migration/m20240301_000002_create_teams_table.rs`
@@ -924,6 +924,27 @@ No parallel agents are launched by this plan. If the owner chooses to paralleliz
 ## 9. Execution Log
 
 - 2026-05-02
+  - Step E4 legacy team read-through convergence: `in_progress`
+    - Modified files:
+      - `src/storage/database/seaorm_db/team_repository.rs`
+      - `src/storage/database/seaorm_db/team_repository_tests.rs`
+      - `docs/plan/audit-remediation-complete-plan.md`
+    - Main changes:
+      - Marked Step E3 complete after the pricing model/service consolidation PRs landed.
+      - Added a conservative `um_teams` read-through bridge in `SeaOrmTeamRepository` so legacy `user_management::Team` rows are converted into canonical `core::models::team::Team` and copied into `teams`.
+      - Copies legacy team members into `team_members` when user IDs are UUID-compatible, preserving owner/admin/member/viewer role intent.
+      - Deletes the matching `um_teams` row when canonical delete runs so a backfilled legacy team cannot be resurrected by later list/count calls.
+      - Addressed PR review feedback: legacy name conflicts now skip sync for ID lookups instead of returning a different canonical team.
+      - Addressed PR review feedback: legacy member removals now remove stale canonical `team_members`, and backfill inserts tolerate concurrent readers that win the race first.
+    - Execute tests:
+      - `cargo fmt --all -- --check` -> pass
+      - `cargo test team_repository` -> pass (`7` tests)
+      - `cargo test user_management` -> pass (`71` tests)
+      - `cargo test --all-features team_repository` -> pass (`7` tests)
+      - `cargo test --all-features user_management` -> pass (`71` tests)
+      - `cargo check --all-features` -> pass
+      - `git diff --check` -> pass
+      - `cargo clippy --lib --tests --bins --all-features -- -D warnings --force-warn clippy::collapsible-if` -> pass (`collapsible_if` remains warning by command design)
   - Step E3 core pricing service ownership: `in_progress`
     - Modified files:
       - `src/core/mod.rs`
