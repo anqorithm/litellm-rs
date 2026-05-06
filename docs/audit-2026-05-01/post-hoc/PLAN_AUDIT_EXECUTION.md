@@ -1,5 +1,7 @@
 # Audit Remediation — Execution Plan
 
+> **ARCHIVED — 2026-05-06.** This post-hoc execution plan was authored from chat-side analysis. The canonical record is [`docs/plan/audit-remediation-complete-plan.md`](../../plan/audit-remediation-complete-plan.md); closure status is in [`closeout-2026-05-02.md`](../closeout-2026-05-02.md). All 41 remediation steps closed on 2026-05-02 via PR #463–#495. This file is kept for cross-reference only and is not a live tracker.
+
 > Companion to `PLAN_AUDIT_REMEDIATION.md`. The spec describes *what* each fix is. This plan describes the *order*, *dependencies*, *parallelism*, and *daily rhythm* for landing the 72 deduplicated remediation items from the 77 raw audit findings.
 
 **Total scope**: 20 Critical + 22 High + 30 Medium = 72 deduplicated remediation items.

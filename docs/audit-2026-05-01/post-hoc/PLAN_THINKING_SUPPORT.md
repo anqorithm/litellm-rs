@@ -1,5 +1,7 @@
 # Unified Thinking/Reasoning Support Implementation Plan
 
+> **ARCHIVED — 2026-05-07.** This plan was already mostly delivered through the audit-remediation campaign (see [`closeout-2026-05-02.md`](../closeout-2026-05-02.md)) and earlier provider work. Phase 1 types (`src/core/types/thinking.rs`, `ChatMessage.thinking`, `ChatRequest.thinking`), Phase 2 OpenAI / Anthropic / Gemini transforms, and Phase 4 cost are landed. DeepSeek and OpenRouter inherit thinking via `OpenAILikeProvider` + `reasoning_content`. The unfinished `trait ThinkingTransformer` abstraction was reviewed as YAGNI and intentionally not built. Preserved for cross-reference.
+
 ## Overview
 
 This plan adds comprehensive thinking/reasoning support across all AI providers in litellm-rs. The goal is to create a unified abstraction that handles:

@@ -1,5 +1,7 @@
 # Audit Remediation Spec — litellm-rs
 
+> **ARCHIVED — 2026-05-06.** This is a post-hoc parallel spec written from chat-side analysis. The canonical execution record is [`docs/plan/audit-remediation-complete-plan.md`](../../plan/audit-remediation-complete-plan.md), and the closure summary is [`closeout-2026-05-02.md`](../closeout-2026-05-02.md). The 41 remediation steps closed via PR #463–#495 on 2026-05-02. This file is preserved only for cross-reference; do not treat it as a live tracker.
+
 **Audit date**: 2026-05-01
 **Authors**: codebase-audit (4 parallel opus agents — API/Data, Security, Architecture, Config/Persistence)
 **Target commit**: `de594c81` (branch `main`)
