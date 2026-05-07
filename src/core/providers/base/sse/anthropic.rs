@@ -5,7 +5,8 @@ use super::SSETransformer;
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::message::MessageRole;
 use crate::core::types::responses::{
-    ChatChunk, ChatDelta, ChatStreamChoice, FinishReason, FunctionCallDelta, ToolCallDelta, Usage,
+    ChatChunk, ChatDelta, ChatStreamChoice, FinishReason, FunctionCallDelta, PromptTokensDetails,
+    ToolCallDelta, Usage,
 };
 use crate::core::types::thinking::ThinkingDelta;
 
@@ -260,12 +261,31 @@ impl SSETransformer for AnthropicTransformer {
                     let input = u.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
                     let output =
                         u.get("output_tokens").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                    let cache_creation_tokens = u
+                        .get("cache_creation_input_tokens")
+                        .and_then(|v| v.as_u64())
+                        .map(|t| t as u32);
+                    let cache_read_tokens = u
+                        .get("cache_read_input_tokens")
+                        .and_then(|v| v.as_u64())
+                        .map(|t| t as u32);
+                    let prompt_tokens_details =
+                        if cache_creation_tokens.is_some() || cache_read_tokens.is_some() {
+                            Some(PromptTokensDetails {
+                                cached_tokens: cache_read_tokens,
+                                cache_creation_tokens,
+                                cache_read_tokens,
+                                audio_tokens: None,
+                            })
+                        } else {
+                            None
+                        };
                     Usage {
                         prompt_tokens: input,
                         completion_tokens: output,
                         total_tokens: input + output,
                         completion_tokens_details: None,
-                        prompt_tokens_details: None,
+                        prompt_tokens_details,
                         thinking_usage: None,
                     }
                 });
@@ -309,5 +329,49 @@ impl SSETransformer for AnthropicTransformer {
                 Ok(None)
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_message_delta_extracts_cache_tokens() {
+        let t = AnthropicTransformer::new("claude-3-5-sonnet");
+        let event = serde_json::json!({
+            "type": "message_delta",
+            "delta": {"stop_reason": "end_turn"},
+            "usage": {
+                "input_tokens": 12,
+                "output_tokens": 50,
+                "cache_creation_input_tokens": 1000,
+                "cache_read_input_tokens": 2000
+            }
+        });
+        let chunk = t.transform_chunk(&event.to_string()).unwrap().unwrap();
+        let usage = chunk.usage.as_ref().expect("usage must be present");
+        assert_eq!(usage.prompt_tokens, 12);
+        assert_eq!(usage.completion_tokens, 50);
+        let details = usage
+            .prompt_tokens_details
+            .as_ref()
+            .expect("cache token details must be present");
+        assert_eq!(details.cache_creation_tokens, Some(1000));
+        assert_eq!(details.cache_read_tokens, Some(2000));
+        assert_eq!(details.cached_tokens, Some(2000));
+    }
+
+    #[test]
+    fn test_message_delta_no_cache_tokens_yields_none_details() {
+        let t = AnthropicTransformer::new("claude-3-5-sonnet");
+        let event = serde_json::json!({
+            "type": "message_delta",
+            "delta": {"stop_reason": "end_turn"},
+            "usage": {"input_tokens": 12, "output_tokens": 50}
+        });
+        let chunk = t.transform_chunk(&event.to_string()).unwrap().unwrap();
+        let usage = chunk.usage.as_ref().unwrap();
+        assert!(usage.prompt_tokens_details.is_none());
     }
 }
