@@ -29,6 +29,16 @@ pub struct S3Storage {
 
 impl S3Storage {
     /// Create a new S3 storage instance
+    ///
+    /// Credential resolution order:
+    /// - If `access_key_id` and `secret_access_key` are both non-empty,
+    ///   use them as static credentials.
+    /// - Otherwise, fall back to the AWS default provider chain
+    ///   (env vars, shared config, IMDS, container credentials).
+    ///
+    /// `endpoint` may be set to point at S3-compatible services
+    /// (MinIO, Tigris, Cloudflare R2). When set, path-style addressing
+    /// is forced.
     pub async fn new(config: &S3Config) -> Result<Self> {
         info!(
             "S3 file storage initialized: bucket={}, region={}",
@@ -37,15 +47,42 @@ impl S3Storage {
 
         #[cfg(feature = "s3")]
         {
-            use aws_s3::config::Region;
+            use aws_s3::config::{Credentials, Region};
+
+            let use_static_creds =
+                !config.access_key_id.is_empty() && !config.secret_access_key.is_empty();
+            info!(
+                "S3 client config: endpoint={:?}, credentials={}",
+                config.endpoint,
+                if use_static_creds {
+                    "static"
+                } else {
+                    "default-chain"
+                }
+            );
 
             let region = Region::new(config.region.clone());
-            let aws_config = aws_config::defaults(aws_config::BehaviorVersion::latest())
-                .region(region)
-                .load()
-                .await;
+            let mut loader =
+                aws_config::defaults(aws_config::BehaviorVersion::latest()).region(region);
 
-            let client = aws_s3::Client::new(&aws_config);
+            if use_static_creds {
+                let creds = Credentials::new(
+                    &config.access_key_id,
+                    &config.secret_access_key,
+                    None,
+                    None,
+                    "litellm-rs-s3-config",
+                );
+                loader = loader.credentials_provider(creds);
+            }
+
+            let aws_config = loader.load().await;
+
+            let mut s3_builder = aws_s3::config::Builder::from(&aws_config);
+            if let Some(endpoint) = &config.endpoint {
+                s3_builder = s3_builder.endpoint_url(endpoint).force_path_style(true);
+            }
+            let client = aws_s3::Client::from_conf(s3_builder.build());
 
             Ok(Self {
                 bucket: config.bucket.clone(),
