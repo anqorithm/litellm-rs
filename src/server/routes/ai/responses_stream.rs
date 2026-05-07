@@ -115,7 +115,16 @@ pub(crate) async fn handle_streaming_response(
                 let mut tool_states: HashMap<u32, ToolCallAccum> = HashMap::new();
                 // Preserves insertion order for final iteration
                 let mut tool_order: Vec<u32> = Vec::new();
-                // Reasoning-summary state (o-series / extended thinking / DeepSeek R1 / Gemini)
+                // Reasoning-summary state (o-series / extended thinking / DeepSeek R1 / Gemini).
+                //
+                // Output-index ordering invariant: the OpenAI Responses API requires
+                // reasoning items to have a lower `output_index` than the text item.
+                // We rely on upstream providers to emit reasoning chunks before text
+                // chunks (OpenAI o-series, Anthropic extended thinking, DeepSeek R1,
+                // and Gemini thinking all conform to this protocol convention). The
+                // first-arrival assignment below preserves canonical order under that
+                // assumption. If a provider ever violates the convention, a `warn!`
+                // is emitted so operators can detect the inversion.
                 let mut full_reasoning = String::new();
                 let mut reasoning_output_index: u32 = 0;
                 let mut reasoning_started = false;
@@ -169,6 +178,19 @@ pub(crate) async fn handle_streaming_response(
                                     && !reasoning_text.is_empty()
                                 {
                                     if !reasoning_started {
+                                        if text_started {
+                                            // Protocol violation: reasoning arrived after
+                                            // text claimed an output_index. The Responses API
+                                            // contract (reasoning at lower output_index than
+                                            // text) is broken for this stream. Continue
+                                            // emitting in arrival order; flag for ops.
+                                            warn!(
+                                                "responses stream reasoning chunk arrived after text chunk; \
+                                                 output_index ordering will be reversed from canonical \
+                                                 (reasoning={}, text={})",
+                                                next_output_index, text_output_index
+                                            );
+                                        }
                                         reasoning_started = true;
                                         reasoning_output_index = next_output_index;
                                         next_output_index += 1;
