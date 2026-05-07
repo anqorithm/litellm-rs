@@ -107,12 +107,19 @@ pub trait SSETransformer: Send + Sync {
     fn transform_chunk(&self, data: &str) -> Result<Option<ChatChunk>, ProviderError>;
 
     /// Parse finish reason from string (provider-specific)
+    ///
+    /// Default mapping covers the OpenAI shape plus the additional terminal
+    /// states used by Anthropic and Gemini. Providers that emit unique
+    /// reasons may still override this method.
     fn parse_finish_reason(&self, reason: &str) -> Option<FinishReason> {
         match reason {
-            "stop" => Some(FinishReason::Stop),
+            "stop" | "end_turn" => Some(FinishReason::Stop),
             "length" | "max_tokens" => Some(FinishReason::Length),
-            "tool_calls" | "function_call" => Some(FinishReason::ToolCalls),
-            "content_filter" => Some(FinishReason::ContentFilter),
+            "tool_calls" | "function_call" | "tool_use" => Some(FinishReason::ToolCalls),
+            "content_filter" | "safety" | "recitation" => Some(FinishReason::ContentFilter),
+            "stop_sequence" => Some(FinishReason::StopSequence),
+            "refusal" => Some(FinishReason::Refusal),
+            "pause_turn" => Some(FinishReason::PauseTurn),
             _ => None,
         }
     }
@@ -621,5 +628,50 @@ mod tests {
             got_overflow_error,
             "Stream should have returned a buffer-overflow error"
         );
+    }
+
+    #[test]
+    fn test_default_parse_finish_reason_covers_anthropic_and_gemini() {
+        let t = OpenAICompatibleTransformer::new("test");
+        assert_eq!(t.parse_finish_reason("stop"), Some(FinishReason::Stop));
+        assert_eq!(t.parse_finish_reason("end_turn"), Some(FinishReason::Stop));
+        assert_eq!(t.parse_finish_reason("length"), Some(FinishReason::Length));
+        assert_eq!(
+            t.parse_finish_reason("max_tokens"),
+            Some(FinishReason::Length)
+        );
+        assert_eq!(
+            t.parse_finish_reason("tool_calls"),
+            Some(FinishReason::ToolCalls)
+        );
+        assert_eq!(
+            t.parse_finish_reason("tool_use"),
+            Some(FinishReason::ToolCalls)
+        );
+        assert_eq!(
+            t.parse_finish_reason("content_filter"),
+            Some(FinishReason::ContentFilter)
+        );
+        assert_eq!(
+            t.parse_finish_reason("safety"),
+            Some(FinishReason::ContentFilter)
+        );
+        assert_eq!(
+            t.parse_finish_reason("recitation"),
+            Some(FinishReason::ContentFilter)
+        );
+        assert_eq!(
+            t.parse_finish_reason("stop_sequence"),
+            Some(FinishReason::StopSequence)
+        );
+        assert_eq!(
+            t.parse_finish_reason("refusal"),
+            Some(FinishReason::Refusal)
+        );
+        assert_eq!(
+            t.parse_finish_reason("pause_turn"),
+            Some(FinishReason::PauseTurn)
+        );
+        assert_eq!(t.parse_finish_reason("not_a_real_reason"), None);
     }
 }
