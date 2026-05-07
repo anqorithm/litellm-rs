@@ -8,7 +8,6 @@ pub mod routes;
 
 // New modular server components
 pub mod builder;
-mod handlers;
 pub mod http;
 pub mod state;
 pub mod types;

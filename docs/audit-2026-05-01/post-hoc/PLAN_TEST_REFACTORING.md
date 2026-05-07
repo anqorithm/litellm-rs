@@ -1,5 +1,7 @@
 # Test Architecture Refactoring Plan
 
+> **ARCHIVED — 2026-05-07.** This plan was largely delivered alongside the audit-remediation campaign. `tests/common/{mod,fixtures,database,providers,assertions}.rs`, `tests/integration/`, and `tests/e2e/` are all in place; `Database::new_mock()` references are gone; the suite is at 10481 lib + 145 integration + 96 doc tests as of [`closeout-2026-05-02.md`](../closeout-2026-05-02.md). Remaining gap is CI-side E2E secret management, not source-tree work. Preserved for cross-reference.
+
 ## Executive Summary
 
 基于对现有测试架构的全面分析，本计划旨在重构整个测试系统，消除所有 mock 测试，建立一个基于真实实现的高质量测试架构。
