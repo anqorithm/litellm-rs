@@ -220,8 +220,8 @@ impl OAuthClient {
         }
 
         Err(GatewayError::Validation(format!(
-            "Failed to parse token response: {}",
-            body
+            "Failed to parse token response ({} bytes)",
+            body.len()
         )))
     }
 
