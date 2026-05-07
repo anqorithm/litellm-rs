@@ -11,14 +11,14 @@ use std::sync::Arc;
 use crate::core::providers::base::{
     GlobalPoolManager, HeaderPair, HttpMethod, apply_headers, header, header_owned,
 };
+use crate::core::providers::openai::{OpenAIResponseTransformer, models::OpenAIChatResponse};
 use crate::core::traits::error_mapper::trait_def::ErrorMapper;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use crate::core::types::{
     chat::ChatRequest,
     context::RequestContext,
     health::HealthStatus,
-    model::ModelInfo,
-    model::ProviderCapability,
+    model::{ModelInfo, ProviderCapability},
     responses::{ChatChunk, ChatResponse},
 };
 
@@ -309,10 +309,10 @@ impl OpenAILikeProvider {
         Ok(openai_request)
     }
 
-    /// Transform OpenAI response to standard format
     fn transform_chat_response(&self, response: Value) -> Result<ChatResponse, OpenAILikeError> {
-        // Directly deserialize to ChatResponse since it's OpenAI-compatible
-        serde_json::from_value(response)
+        let resp: OpenAIChatResponse = serde_json::from_value(response)
+            .map_err(|e| OpenAILikeError::response_parsing(PROVIDER_NAME, e.to_string()))?;
+        OpenAIResponseTransformer::transform(resp)
             .map_err(|e| OpenAILikeError::response_parsing(PROVIDER_NAME, e.to_string()))
     }
 
