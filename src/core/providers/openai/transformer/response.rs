@@ -6,8 +6,8 @@
 use crate::core::types::chat::ChatMessage;
 use crate::core::types::message::MessageRole;
 use crate::core::types::responses::{
-    ChatChoice, ChatChunk, ChatDelta, ChatResponse, ChatStreamChoice, FinishReason, LogProbs,
-    TokenLogProb, TopLogProb, Usage,
+    ChatChoice, ChatChunk, ChatDelta, ChatResponse, ChatStreamChoice, FinishReason,
+    FunctionCallDelta, LogProbs, TokenLogProb, ToolCallDelta, TopLogProb, Usage,
 };
 use crate::core::types::thinking::ThinkingContent;
 
@@ -74,6 +74,25 @@ impl OpenAIResponseTransformer {
 
     /// Transform delta
     fn transform_delta(delta: OpenAIDelta) -> Result<ChatDelta, OpenAIError> {
+        let tool_calls = delta.tool_calls.map(|calls| {
+            calls
+                .into_iter()
+                .map(|tc| ToolCallDelta {
+                    index: tc.index,
+                    id: tc.id,
+                    tool_type: tc.tool_type,
+                    function: tc.function.map(|f| FunctionCallDelta {
+                        name: f.name,
+                        arguments: f.arguments,
+                    }),
+                })
+                .collect()
+        });
+        let function_call = delta.function_call.map(|f| FunctionCallDelta {
+            name: f.name,
+            arguments: f.arguments,
+        });
+
         Ok(ChatDelta {
             role: delta.role.map(|r| match r.as_str() {
                 "system" => MessageRole::System,
@@ -85,8 +104,8 @@ impl OpenAIResponseTransformer {
             }),
             content: delta.content,
             thinking: None,
-            tool_calls: None,
-            function_call: None,
+            tool_calls,
+            function_call,
         })
     }
 
@@ -742,5 +761,38 @@ mod tests {
             let result = OpenAIResponseTransformer::transform_delta(delta);
             assert!(result.is_ok());
         }
+    }
+
+    #[test]
+    fn test_transform_delta_propagates_tool_and_function_calls() {
+        let delta = OpenAIDelta {
+            role: None,
+            content: None,
+            tool_calls: Some(vec![OpenAIToolCallDelta {
+                index: 0,
+                id: Some("call_abc".to_string()),
+                tool_type: Some("function".to_string()),
+                function: Some(OpenAIFunctionCallDelta {
+                    name: Some("get_weather".to_string()),
+                    arguments: Some(r#"{"c":1}"#.to_string()),
+                }),
+            }]),
+            function_call: Some(OpenAIFunctionCallDelta {
+                name: Some("legacy_fn".to_string()),
+                arguments: Some(r#"{"x":1}"#.to_string()),
+            }),
+        };
+        let out = OpenAIResponseTransformer::transform_delta(delta).unwrap();
+        let tc = out.tool_calls.as_ref().unwrap();
+        assert_eq!(tc.len(), 1);
+        assert_eq!(tc[0].id.as_deref(), Some("call_abc"));
+        assert_eq!(
+            tc[0].function.as_ref().unwrap().name.as_deref(),
+            Some("get_weather")
+        );
+        assert_eq!(
+            out.function_call.as_ref().unwrap().name.as_deref(),
+            Some("legacy_fn")
+        );
     }
 }
