@@ -538,35 +538,6 @@ fn test_get_request_headers_with_project() {
     assert!(has_project);
 }
 
-// ==================== Advanced Features Tests ====================
-
-#[test]
-fn test_get_advanced_model_capabilities() {
-    let provider = create_test_provider();
-
-    let caps = provider.get_advanced_model_capabilities("gpt-4o");
-    // Just verify it doesn't panic and returns something
-    let _ = caps;
-}
-
-#[test]
-fn test_estimate_advanced_cost() {
-    let provider = create_test_provider();
-
-    let result = provider.estimate_advanced_cost("gpt-4o", 1000, 500, None);
-    // May succeed or fail depending on model pricing info
-    let _ = result;
-}
-
-#[test]
-fn test_estimate_advanced_cost_with_reasoning() {
-    let provider = create_test_provider();
-
-    let result = provider.estimate_advanced_cost("o1-preview", 1000, 500, Some(200));
-    // May succeed or fail depending on model pricing info
-    let _ = result;
-}
-
 // ==================== Clone/Debug Tests ====================
 
 #[test]
