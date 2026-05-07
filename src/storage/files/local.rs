@@ -70,6 +70,7 @@ impl LocalStorage {
 
     /// Retrieve file content
     pub async fn get(&self, file_id: &str) -> Result<Vec<u8>> {
+        Self::validate_file_id(file_id)?;
         let file_path = self.get_file_path(file_id);
 
         if !file_path.exists() {
@@ -93,6 +94,7 @@ impl LocalStorage {
 
     /// Delete a file
     pub async fn delete(&self, file_id: &str) -> Result<()> {
+        Self::validate_file_id(file_id)?;
         let file_path = self.get_file_path(file_id);
         let metadata_path = self.get_metadata_path(file_id);
 
@@ -116,12 +118,14 @@ impl LocalStorage {
 
     /// Check if file exists
     pub async fn exists(&self, file_id: &str) -> Result<bool> {
+        Self::validate_file_id(file_id)?;
         let file_path = self.get_file_path(file_id);
         Ok(file_path.exists())
     }
 
     /// Get file metadata
     pub async fn metadata(&self, file_id: &str) -> Result<FileMetadata> {
+        Self::validate_file_id(file_id)?;
         let metadata_path = self.get_metadata_path(file_id);
 
         if !metadata_path.exists() {
@@ -203,6 +207,30 @@ impl LocalStorage {
 
     /// Close storage (no-op for local storage)
     pub async fn close(&self) -> Result<()> {
+        Ok(())
+    }
+
+    /// Validate a caller-supplied file_id before joining it onto base_path.
+    ///
+    /// `Path::join` does not normalize `..`, so without validation a value
+    /// like `"../../etc/passwd"` would escape `base_path`. `store()` only
+    /// ever generates `Uuid::new_v4()` ids, so we constrain accepted ids
+    /// to the UUID alphabet (lowercase hex + hyphen) plus a length bound.
+    fn validate_file_id(file_id: &str) -> Result<()> {
+        if file_id.is_empty() || file_id.len() > 64 {
+            return Err(GatewayError::Validation(format!(
+                "Invalid file_id length ({}); must be 1..=64 chars",
+                file_id.len()
+            )));
+        }
+        if !file_id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-')
+        {
+            return Err(GatewayError::Validation(format!(
+                "Invalid file_id: {file_id:?}; only alphanumeric ASCII and '-' allowed"
+            )));
+        }
         Ok(())
     }
 
@@ -478,5 +506,42 @@ mod tests {
 
         assert!(path.to_string_lossy().contains("/cd/"));
         assert!(path.to_string_lossy().ends_with("cd67890.meta"));
+    }
+
+    // ==================== validate_file_id Tests ====================
+
+    #[test]
+    fn test_validate_file_id_accepts_uuid() {
+        assert!(LocalStorage::validate_file_id("550e8400-e29b-41d4-a716-446655440000").is_ok());
+        assert!(LocalStorage::validate_file_id("abc123").is_ok());
+    }
+
+    #[test]
+    fn test_validate_file_id_rejects_traversal() {
+        for bad in [
+            "../../etc/passwd",
+            "..",
+            "../foo",
+            "foo/../bar",
+            "abc/def",
+            "abc\\def",
+            "abc\0def",
+            "",
+            "  ",
+            "abc:def",
+            "file with space",
+            ".hidden",
+        ] {
+            assert!(
+                LocalStorage::validate_file_id(bad).is_err(),
+                "should reject {bad:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_validate_file_id_rejects_overlong() {
+        let long = "a".repeat(65);
+        assert!(LocalStorage::validate_file_id(&long).is_err());
     }
 }
