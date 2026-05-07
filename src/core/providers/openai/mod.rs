@@ -18,7 +18,6 @@ pub mod transformer;
 pub mod capabilities;
 
 // New functionality modules
-pub mod advanced_chat;
 pub mod completions;
 pub mod fine_tuning;
 pub mod image_edit;

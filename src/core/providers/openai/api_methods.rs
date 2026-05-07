@@ -16,7 +16,6 @@ use crate::core::providers::base::HttpMethod;
 use crate::core::types::embedding::EmbeddingRequest;
 use crate::core::types::responses::EmbeddingResponse;
 
-use super::advanced_chat::{AdvancedChatRequest, AdvancedChatUtils};
 use super::client::OpenAIProvider;
 use super::completions::validate_completion_request;
 use super::config::OpenAIFeature;
@@ -523,75 +522,5 @@ impl OpenAIProvider {
             "status": "connected",
             "config": config
         }))
-    }
-
-    /// Advanced chat completion with structured outputs and reasoning
-    pub async fn advanced_chat_completion(
-        &self,
-        request: AdvancedChatRequest,
-    ) -> Result<super::advanced_chat::AdvancedChatResponse, OpenAIError> {
-        // Validate advanced request
-        AdvancedChatUtils::validate_request(&request).map_err(|e| OpenAIError::InvalidRequest {
-            provider: "openai",
-            message: e.to_string(),
-        })?;
-
-        // Execute request
-        let url = format!("{}/chat/completions", self.config.get_api_base());
-        let request_value =
-            serde_json::to_value(request).map_err(|e| OpenAIError::InvalidRequest {
-                provider: "openai",
-                message: e.to_string(),
-            })?;
-
-        let headers = self.get_request_headers();
-        let body = Some(request_value);
-
-        let response = self
-            .pool_manager
-            .execute_request(&url, HttpMethod::POST, headers, body)
-            .await
-            .map_err(|e| OpenAIError::Network {
-                provider: "openai",
-                message: e.to_string(),
-            })?;
-
-        let response_bytes = response.bytes().await.map_err(|e| OpenAIError::Network {
-            provider: "openai",
-            message: e.to_string(),
-        })?;
-
-        serde_json::from_slice(&response_bytes).map_err(|e| OpenAIError::ResponseParsing {
-            provider: "openai",
-            message: e.to_string(),
-        })
-    }
-
-    /// Get model capabilities for advanced features
-    pub fn get_advanced_model_capabilities(
-        &self,
-        model: &str,
-    ) -> super::advanced_chat::ModelCapabilities {
-        AdvancedChatUtils::get_model_capabilities(model)
-    }
-
-    /// Estimate cost for advanced features
-    pub fn estimate_advanced_cost(
-        &self,
-        model: &str,
-        input_tokens: u32,
-        output_tokens: u32,
-        reasoning_tokens: Option<u32>,
-    ) -> Result<f64, OpenAIError> {
-        AdvancedChatUtils::estimate_advanced_cost(
-            model,
-            input_tokens,
-            output_tokens,
-            reasoning_tokens,
-        )
-        .map_err(|e| OpenAIError::InvalidRequest {
-            provider: "openai",
-            message: e.to_string(),
-        })
     }
 }
