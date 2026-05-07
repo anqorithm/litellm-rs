@@ -163,7 +163,11 @@ impl OAuthClient {
                 error!("OAuth token exchange error: {}", oauth_error);
                 return Err(GatewayError::Auth(oauth_error.to_string()));
             }
-            error!("Token exchange failed with status {}: {}", status, body);
+            error!(
+                "Token exchange failed with status {} (response body redacted, {} bytes)",
+                status,
+                body.len()
+            );
             return Err(GatewayError::Auth(format!(
                 "Token exchange failed: {}",
                 status
@@ -260,7 +264,11 @@ impl OAuthClient {
                 error!("OAuth token refresh error: {}", oauth_error);
                 return Err(GatewayError::Auth(oauth_error.to_string()));
             }
-            error!("Token refresh failed with status {}: {}", status, body);
+            error!(
+                "Token refresh failed with status {} (response body redacted, {} bytes)",
+                status,
+                body.len()
+            );
             return Err(GatewayError::Auth(format!(
                 "Token refresh failed: {}",
                 status
@@ -299,7 +307,10 @@ impl OAuthClient {
             .map_err(|e| GatewayError::Network(format!("Failed to read response body: {}", e)))?;
 
         if !status.is_success() {
-            error!("UserInfo request failed with status {}: {}", status, body);
+            let body_bytes = body.len();
+            error!(
+                "UserInfo request failed with status {status} (body redacted, {body_bytes} bytes)"
+            );
             return Err(GatewayError::Auth(format!(
                 "UserInfo request failed: {}",
                 status
