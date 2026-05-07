@@ -62,12 +62,7 @@ impl HttpServer {
         let auth =
             crate::auth::AuthSystem::new(&config.gateway.auth, Arc::new(storage.clone())).await?;
 
-        let pricing_source = if config.gateway.cache.semantic_cache {
-            None
-        } else {
-            config.gateway.pricing.source.clone()
-        };
-        let pricing = Arc::new(PricingService::new(pricing_source));
+        let pricing = Arc::new(PricingService::new(config.gateway.pricing.source.clone()));
         if let Err(e) = pricing.initialize().await {
             warn!("Pricing service initial load failed: {}", e);
         } else {
