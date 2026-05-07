@@ -115,6 +115,19 @@ pub(crate) async fn handle_streaming_response(
                 let mut tool_states: HashMap<u32, ToolCallAccum> = HashMap::new();
                 // Preserves insertion order for final iteration
                 let mut tool_order: Vec<u32> = Vec::new();
+                // Reasoning-summary state (o-series / extended thinking / DeepSeek R1 / Gemini).
+                //
+                // Output-index ordering invariant: the OpenAI Responses API requires
+                // reasoning items to have a lower `output_index` than the text item.
+                // We rely on upstream providers to emit reasoning chunks before text
+                // chunks (OpenAI o-series, Anthropic extended thinking, DeepSeek R1,
+                // and Gemini thinking all conform to this protocol convention). The
+                // first-arrival assignment below preserves canonical order under that
+                // assumption. If a provider ever violates the convention, a `warn!`
+                // is emitted so operators can detect the inversion.
+                let mut full_reasoning = String::new();
+                let mut reasoning_output_index: u32 = 0;
+                let mut reasoning_started = false;
 
                 // ── text and tool-call deltas ─────────────────────────────────
                 loop {
@@ -157,6 +170,45 @@ pub(crate) async fn handle_streaming_response(
                             for choice in &chunk.choices {
                                 if let Some(r) = &choice.finish_reason {
                                     final_status = finish_reason_enum_to_status(Some(r));
+                                }
+
+                                // ── reasoning summary delta ───────────────────
+                                if let Some(thinking) = &choice.delta.thinking
+                                    && let Some(reasoning_text) = thinking.content.as_deref()
+                                    && !reasoning_text.is_empty()
+                                {
+                                    if !reasoning_started {
+                                        if text_started {
+                                            // Protocol violation: reasoning arrived after
+                                            // text claimed an output_index. The Responses API
+                                            // contract (reasoning at lower output_index than
+                                            // text) is broken for this stream. Continue
+                                            // emitting in arrival order; flag for ops.
+                                            warn!(
+                                                "responses stream reasoning chunk arrived after text chunk; \
+                                                 output_index ordering will be reversed from canonical \
+                                                 (reasoning={}, text={})",
+                                                next_output_index, text_output_index
+                                            );
+                                        }
+                                        reasoning_started = true;
+                                        reasoning_output_index = next_output_index;
+                                        next_output_index += 1;
+                                    }
+                                    full_reasoning.push_str(reasoning_text);
+                                    if emit(
+                                        &tx,
+                                        &ResponseStreamEvent::ResponseReasoningSummaryTextDelta {
+                                            output_index: reasoning_output_index,
+                                            summary_index: 0,
+                                            delta: reasoning_text.to_string(),
+                                        },
+                                    )
+                                    .await
+                                    .is_err()
+                                    {
+                                        return;
+                                    }
                                 }
 
                                 // ── text content ──────────────────────────────
@@ -325,6 +377,22 @@ pub(crate) async fn handle_streaming_response(
 
                 let item_status = final_status;
                 let mut all_output: Vec<(u32, ResponseOutputItem)> = Vec::new();
+
+                // ── reasoning done events ─────────────────────────────────────
+                if reasoning_started
+                    && emit(
+                        &tx,
+                        &ResponseStreamEvent::ResponseReasoningSummaryTextDone {
+                            output_index: reasoning_output_index,
+                            summary_index: 0,
+                            text: full_reasoning.clone(),
+                        },
+                    )
+                    .await
+                    .is_err()
+                {
+                    return;
+                }
 
                 // ── text done events ──────────────────────────────────────────
                 if text_started {
