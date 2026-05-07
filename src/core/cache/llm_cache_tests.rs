@@ -1,4 +1,3 @@
-
 use super::*;
 use crate::core::models::openai::messages::{ChatMessage, MessageContent, MessageRole};
 use crate::core::models::openai::{ChatChoice, Usage};
