@@ -234,6 +234,11 @@ impl HttpServer {
     }
 
     /// Start the HTTP server
+    ///
+    /// Listens for SIGINT / SIGTERM via [`Self::shutdown_signal`]. When the
+    /// signal fires, the actix server is told to stop gracefully (in-flight
+    /// requests get a chance to finish), then the storage layer is closed
+    /// so connection pools and pending writes are released cleanly.
     pub async fn start(self) -> Result<()> {
         let bind_addr = format!("{}:{}", self.config.host, self.config.port);
         let port = self.config.port;
@@ -241,6 +246,7 @@ impl HttpServer {
         info!("Starting HTTP server on {}", bind_addr);
 
         let state = web::Data::new(self.state);
+        let storage = Arc::clone(&state.storage);
 
         let server = ActixHttpServer::new(move || Self::create_app(state.clone()))
             .bind(&bind_addr)
@@ -249,9 +255,36 @@ impl HttpServer {
 
         info!("HTTP server listening on {}", bind_addr);
 
-        server
-            .await
-            .map_err(|e| GatewayError::server(format!("Server error: {}", e)))?;
+        let server_handle = server.handle();
+
+        let server_task = tokio::spawn(server);
+        let shutdown = Self::shutdown_signal();
+
+        tokio::select! {
+            result = server_task => {
+                match result {
+                    Ok(Ok(())) => info!("HTTP server exited"),
+                    Ok(Err(e)) => {
+                        return Err(GatewayError::server(format!("Server error: {}", e)));
+                    }
+                    Err(e) => {
+                        return Err(GatewayError::server(format!(
+                            "Server task panicked: {}",
+                            e
+                        )));
+                    }
+                }
+            }
+            _ = shutdown => {
+                info!("Shutdown signal received; stopping accept loop");
+                server_handle.stop(true).await;
+            }
+        }
+
+        info!("Closing storage layer");
+        if let Err(e) = storage.close().await {
+            warn!("Storage close reported an error: {}", e);
+        }
 
         info!("HTTP server stopped");
         Ok(())
