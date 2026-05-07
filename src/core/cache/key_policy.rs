@@ -8,7 +8,7 @@ use sha2::{Digest, Sha256};
 ///
 /// Bumping this value intentionally cold-starts older Redis/cache entries so
 /// responses produced under an older request identity policy are not reused.
-pub const CACHE_KEY_SCHEMA_VERSION: &str = "v2";
+pub const CACHE_KEY_SCHEMA_VERSION: &str = "v3";
 
 /// Generate a stable SHA-256 digest for any serializable value.
 pub fn stable_digest<T: Serialize>(value: &T) -> String {
@@ -113,8 +113,8 @@ mod tests {
     fn versioned_key_includes_schema_version() {
         assert_eq!(
             versioned_key("chat", Some("gpt-4"), "abc"),
-            "chat:gpt-4:v2:abc"
+            "chat:gpt-4:v3:abc"
         );
-        assert_eq!(versioned_key("raw", None, "abc"), "raw:v2:abc");
+        assert_eq!(versioned_key("raw", None, "abc"), "raw:v3:abc");
     }
 }

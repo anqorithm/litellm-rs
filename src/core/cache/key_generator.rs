@@ -48,6 +48,7 @@ pub fn generate_chat_key_with_user(
         "function_call": &request.function_call,
         "tools": &request.tools,
         "tool_choice": &request.tool_choice,
+        "parallel_tool_calls": request.parallel_tool_calls,
         "response_format": &request.response_format,
         "seed": request.seed,
         "logprobs": request.logprobs,
@@ -56,6 +57,10 @@ pub fn generate_chat_key_with_user(
         "audio": &request.audio,
         "reasoning_effort": &request.reasoning_effort,
         "service_tier": &request.service_tier,
+        "prediction": &request.prediction,
+        "safety_settings": &request.safety_settings,
+        "cache_control": &request.cache_control,
+        "extra_body": &request.extra_body,
         "user_id": user_id,
     });
 
@@ -234,7 +239,7 @@ mod tests {
         };
 
         let key = generate_chat_key(&request);
-        assert!(key.as_str().starts_with("chat:gpt-4:v2:"));
+        assert!(key.as_str().starts_with("chat:gpt-4:v3:"));
     }
 
     #[test]
@@ -328,6 +333,39 @@ mod tests {
         let key2 = generate_chat_key(&request2);
 
         assert_ne!(key1, key2);
+    }
+
+    #[test]
+    fn test_generate_chat_key_includes_output_affecting_extras() {
+        let base = ChatCompletionRequest {
+            model: "gpt-4".to_string(),
+            messages: vec![create_user_message("hi")],
+            ..Default::default()
+        };
+
+        let mut parallel = base.clone();
+        parallel.parallel_tool_calls = Some(false);
+        assert_ne!(generate_chat_key(&base), generate_chat_key(&parallel));
+
+        let mut prediction = base.clone();
+        prediction.prediction = Some(serde_json::json!({"type":"content","content":"42"}));
+        assert_ne!(generate_chat_key(&base), generate_chat_key(&prediction));
+
+        let mut safety = base.clone();
+        safety.safety_settings =
+            Some(serde_json::json!([{"category":"HARM","threshold":"BLOCK_NONE"}]));
+        assert_ne!(generate_chat_key(&base), generate_chat_key(&safety));
+
+        let mut cache_control = base.clone();
+        cache_control.cache_control = Some(serde_json::json!({"type":"ephemeral"}));
+        assert_ne!(generate_chat_key(&base), generate_chat_key(&cache_control));
+
+        let mut extra = base.clone();
+        extra.extra_body.insert(
+            "provider_specific".to_string(),
+            serde_json::json!({"k":"v"}),
+        );
+        assert_ne!(generate_chat_key(&base), generate_chat_key(&extra));
     }
 
     #[test]
@@ -427,7 +465,7 @@ mod tests {
         };
 
         let key = generate_embedding_key(&request);
-        assert!(key.as_str().starts_with("embed:text-embedding-ada-002:v2:"));
+        assert!(key.as_str().starts_with("embed:text-embedding-ada-002:v3:"));
     }
 
     #[test]
