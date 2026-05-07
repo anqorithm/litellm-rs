@@ -17,6 +17,15 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tracing::{debug, info, warn};
 
+/// Maximum number of distinct client trackers retained by the fallback store.
+///
+/// The fallback path runs only when the global rate limiter is not initialized.
+/// Without a cap, every distinct client IP creates a new entry that lives for
+/// the entire process lifetime, which is a memory-exhaustion vector when an
+/// attacker rotates source addresses. The value matches `AuthRateLimiter`'s
+/// `DEFAULT_MAX_ENTRIES`.
+const MAX_FALLBACK_ENTRIES: usize = 10_000;
+
 /// Fallback per-key tracker for sliding window when global rate limiter is unavailable
 struct KeyTracker {
     timestamps: Vec<Instant>,
@@ -52,6 +61,37 @@ impl KeyTracker {
             self.timestamps.push(now);
             (true, 0)
         }
+    }
+}
+
+/// Evict trackers when the fallback store exceeds the cap.
+///
+/// Two-pass strategy: first drop trackers whose latest timestamp is already
+/// outside the rate-limit window (they would re-allow on the next request
+/// anyway). If that does not free enough room, drop the trackers whose most
+/// recent activity is oldest until the map is back under cap.
+fn enforce_fallback_capacity(store: &DashMap<String, KeyTracker>, window: Duration) {
+    let now = Instant::now();
+    store.retain(|_, tracker| {
+        tracker
+            .timestamps
+            .last()
+            .is_some_and(|ts| now.duration_since(*ts) < window)
+    });
+
+    let overflow = store.len().saturating_sub(MAX_FALLBACK_ENTRIES);
+    if overflow == 0 {
+        return;
+    }
+
+    let mut candidates: Vec<(Option<Instant>, String)> = store
+        .iter()
+        .map(|e| (e.value().timestamps.last().copied(), e.key().clone()))
+        .collect();
+    // Smallest (oldest) first; None first.
+    candidates.sort_by_key(|(ts, _)| *ts);
+    for (_, key) in candidates.into_iter().take(overflow) {
+        store.remove(&key);
     }
 }
 
@@ -275,6 +315,9 @@ where
                     .or_insert_with(KeyTracker::new);
                 tracker.check_and_record(requests_per_minute, window)
             };
+            if fallback_store.len() > MAX_FALLBACK_ENTRIES {
+                enforce_fallback_capacity(&fallback_store, window);
+            }
 
             if !allowed {
                 warn!(
@@ -427,5 +470,47 @@ mod tests {
         let key = extract_client_key(&req, &[]);
 
         assert_eq!(key, "user:user-123");
+    }
+
+    #[test]
+    fn test_enforce_fallback_capacity_evicts_stale_first() {
+        let store: DashMap<String, KeyTracker> = DashMap::new();
+        let now = Instant::now();
+        let window = Duration::from_secs(60);
+        // 3 stale + 2 fresh trackers
+        for i in 0..3 {
+            let mut t = KeyTracker::new();
+            t.timestamps.push(now - Duration::from_secs(120));
+            store.insert(format!("stale-{i}"), t);
+        }
+        for i in 0..2 {
+            let mut t = KeyTracker::new();
+            t.timestamps.push(now);
+            store.insert(format!("fresh-{i}"), t);
+        }
+        assert_eq!(store.len(), 5);
+        enforce_fallback_capacity(&store, window);
+        // Stale entries dropped, fresh kept; cap is generous so no LRU pass.
+        assert_eq!(store.len(), 2);
+        assert!(store.contains_key("fresh-0"));
+        assert!(store.contains_key("fresh-1"));
+    }
+
+    #[test]
+    fn test_enforce_fallback_capacity_evicts_oldest_when_all_fresh() {
+        // Force the LRU branch by setting a tiny cap via a parallel helper.
+        let store: DashMap<String, KeyTracker> = DashMap::new();
+        let base = Instant::now();
+        for i in 0..MAX_FALLBACK_ENTRIES + 5 {
+            let mut t = KeyTracker::new();
+            t.timestamps.push(base + Duration::from_millis(i as u64));
+            store.insert(format!("k-{i}"), t);
+        }
+        // All within window so the stale-pass doesn't shrink the map.
+        enforce_fallback_capacity(&store, Duration::from_secs(60));
+        assert!(store.len() <= MAX_FALLBACK_ENTRIES);
+        // The 5 oldest should be evicted, the rest kept.
+        assert!(!store.contains_key("k-0"));
+        assert!(store.contains_key(&format!("k-{}", MAX_FALLBACK_ENTRIES + 4)));
     }
 }
