@@ -489,6 +489,26 @@ pub enum ResponseStreamEvent {
         call_id: String,
         arguments: String,
     },
+    /// Incremental reasoning-summary delta (o-series / Anthropic
+    /// extended thinking / DeepSeek R1 / Gemini thinking).
+    ///
+    /// Maps each upstream `delta.thinking` chunk to the OpenAI Responses
+    /// API `response.reasoning_summary_text.delta` event so consumers
+    /// receive the model's reasoning trace in real time.
+    #[serde(rename = "response.reasoning_summary_text.delta")]
+    ResponseReasoningSummaryTextDelta {
+        output_index: u32,
+        summary_index: u32,
+        delta: String,
+    },
+    /// Reasoning-summary part finished — emitted once with the full
+    /// accumulated text after the upstream stream ends.
+    #[serde(rename = "response.reasoning_summary_text.done")]
+    ResponseReasoningSummaryTextDone {
+        output_index: u32,
+        summary_index: u32,
+        text: String,
+    },
     /// Catch-all for forward-compatible events
     #[serde(other)]
     Unknown,

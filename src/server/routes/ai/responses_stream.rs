@@ -115,6 +115,10 @@ pub(crate) async fn handle_streaming_response(
                 let mut tool_states: HashMap<u32, ToolCallAccum> = HashMap::new();
                 // Preserves insertion order for final iteration
                 let mut tool_order: Vec<u32> = Vec::new();
+                // Reasoning-summary state (o-series / extended thinking / DeepSeek R1 / Gemini)
+                let mut full_reasoning = String::new();
+                let mut reasoning_output_index: u32 = 0;
+                let mut reasoning_started = false;
 
                 // ── text and tool-call deltas ─────────────────────────────────
                 loop {
@@ -157,6 +161,32 @@ pub(crate) async fn handle_streaming_response(
                             for choice in &chunk.choices {
                                 if let Some(r) = &choice.finish_reason {
                                     final_status = finish_reason_enum_to_status(Some(r));
+                                }
+
+                                // ── reasoning summary delta ───────────────────
+                                if let Some(thinking) = &choice.delta.thinking
+                                    && let Some(reasoning_text) = thinking.content.as_deref()
+                                    && !reasoning_text.is_empty()
+                                {
+                                    if !reasoning_started {
+                                        reasoning_started = true;
+                                        reasoning_output_index = next_output_index;
+                                        next_output_index += 1;
+                                    }
+                                    full_reasoning.push_str(reasoning_text);
+                                    if emit(
+                                        &tx,
+                                        &ResponseStreamEvent::ResponseReasoningSummaryTextDelta {
+                                            output_index: reasoning_output_index,
+                                            summary_index: 0,
+                                            delta: reasoning_text.to_string(),
+                                        },
+                                    )
+                                    .await
+                                    .is_err()
+                                    {
+                                        return;
+                                    }
                                 }
 
                                 // ── text content ──────────────────────────────
@@ -325,6 +355,22 @@ pub(crate) async fn handle_streaming_response(
 
                 let item_status = final_status;
                 let mut all_output: Vec<(u32, ResponseOutputItem)> = Vec::new();
+
+                // ── reasoning done events ─────────────────────────────────────
+                if reasoning_started
+                    && emit(
+                        &tx,
+                        &ResponseStreamEvent::ResponseReasoningSummaryTextDone {
+                            output_index: reasoning_output_index,
+                            summary_index: 0,
+                            text: full_reasoning.clone(),
+                        },
+                    )
+                    .await
+                    .is_err()
+                {
+                    return;
+                }
 
                 // ── text done events ──────────────────────────────────────────
                 if text_started {
