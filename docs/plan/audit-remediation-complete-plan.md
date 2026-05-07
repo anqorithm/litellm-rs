@@ -2012,9 +2012,9 @@ No parallel agents are launched by this plan. If the owner chooses to paralleliz
 
 - mode: `plan_first`
 - artifacts:
-  - `/Users/apple/Desktop/code/AI/gateway/litellm-rs/docs/plan/audit-remediation-complete-plan.md`
-  - `/Users/apple/Desktop/code/AI/gateway/litellm-rs/PLAN_AUDIT_REMEDIATION.md`
-  - `/Users/apple/Desktop/code/AI/gateway/litellm-rs/PLAN_AUDIT_EXECUTION.md`
+  - `docs/plan/audit-remediation-complete-plan.md` (canonical)
+  - `docs/audit-2026-05-01/post-hoc/PLAN_AUDIT_REMEDIATION.md` (archived 2026-05-07)
+  - `docs/audit-2026-05-01/post-hoc/PLAN_AUDIT_EXECUTION.md` (archived 2026-05-07)
 - verification_owner: local executor for each step; PR CI must repeat the relevant matrix.
 - stop_conditions:
   - no file-level evidence for a planned change

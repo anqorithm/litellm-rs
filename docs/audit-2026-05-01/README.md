@@ -18,6 +18,6 @@ The raw audit contained 77 findings from four parallel agents. During planning, 
 
 ## Linked plans
 
-- `../../PLAN_AUDIT_REMEDIATION.md`
-- `../../PLAN_AUDIT_EXECUTION.md`
-- `../plan/audit-remediation-complete-plan.md`
+- `./post-hoc/PLAN_AUDIT_REMEDIATION.md` (archived 2026-05-07; redirect note inside)
+- `./post-hoc/PLAN_AUDIT_EXECUTION.md` (archived 2026-05-07; redirect note inside)
+- `../plan/audit-remediation-complete-plan.md` (canonical execution record)
