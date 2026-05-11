@@ -1,15 +1,11 @@
-//! LLM Provider sub-traits
+//! LLM Provider sub-traits (deprecated, kept for library API compatibility)
 //!
-//! Focused capability interfaces extracted from the monolithic `LLMProvider` trait.
-//! Each sub-trait groups related methods by concern:
-//!
-//! - [`LLMChat`] -- chat completion and request/response transformation
-//! - [`LLMEmbed`] -- text embedding generation
-//! - [`LLMStream`] -- streaming chat completion
-//!
-//! Blanket implementations are provided so that any type implementing
-//! `LLMProvider` automatically satisfies these sub-traits. New code should
-//! accept sub-trait bounds instead of the full `LLMProvider` where possible.
+//! These capability traits were drafted as a proposed carve-out of the
+//! monolithic `LLMProvider` trait but were never wired into any call site.
+//! They remain visible at `litellm_rs::core::traits::provider::llm_provider::sub_traits`
+//! to avoid breaking downstream library consumers; new code should accept
+//! `LLMProvider` directly. The traits will be removed in a future major
+//! release once the architecture roadmap (#519) finishes the trait carve-out.
 
 use futures::Stream;
 use serde_json::Value;
@@ -35,6 +31,10 @@ use super::trait_definition::LLMProvider;
 /// Covers synchronous chat completion plus request/response transformation
 /// and OpenAI-parameter mapping.
 #[allow(async_fn_in_trait)]
+#[deprecated(
+    since = "0.5.1",
+    note = "sub-trait carve-out was never wired; use LLMProvider directly. Tracked under #519 architecture roadmap."
+)]
 pub trait LLMChat: Send + Sync {
     /// Execute chat completion request.
     async fn chat_completion(
@@ -70,6 +70,7 @@ pub trait LLMChat: Send + Sync {
 }
 
 /// Blanket implementation: every `LLMProvider` is automatically an `LLMChat`.
+#[allow(deprecated)]
 impl<T: LLMProvider> LLMChat for T {
     async fn chat_completion(
         &self,
@@ -117,6 +118,10 @@ impl<T: LLMProvider> LLMChat for T {
 ///
 /// Generate vector embeddings from text for semantic search, clustering, etc.
 #[allow(async_fn_in_trait)]
+#[deprecated(
+    since = "0.5.1",
+    note = "sub-trait carve-out was never wired; use LLMProvider directly. Tracked under #519 architecture roadmap."
+)]
 pub trait LLMEmbed: Send + Sync {
     /// Generate text embeddings.
     async fn embeddings(
@@ -127,6 +132,7 @@ pub trait LLMEmbed: Send + Sync {
 }
 
 /// Blanket implementation: every `LLMProvider` is automatically an `LLMEmbed`.
+#[allow(deprecated)]
 impl<T: LLMProvider> LLMEmbed for T {
     async fn embeddings(
         &self,
@@ -145,6 +151,10 @@ impl<T: LLMProvider> LLMEmbed for T {
 ///
 /// Returns response chunks as a stream for real-time processing via SSE.
 #[allow(async_fn_in_trait)]
+#[deprecated(
+    since = "0.5.1",
+    note = "sub-trait carve-out was never wired; use LLMProvider directly. Tracked under #519 architecture roadmap."
+)]
 pub trait LLMStream: Send + Sync {
     /// Execute streaming chat completion request.
     async fn chat_completion_stream(
@@ -155,6 +165,7 @@ pub trait LLMStream: Send + Sync {
 }
 
 /// Blanket implementation: every `LLMProvider` is automatically an `LLMStream`.
+#[allow(deprecated)]
 impl<T: LLMProvider> LLMStream for T {
     async fn chat_completion_stream(
         &self,
@@ -249,6 +260,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(deprecated)]
     async fn test_llm_chat_blanket_impl() {
         let provider = MockProvider;
         // LLMChat should be automatically available
@@ -259,6 +271,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(deprecated)]
     async fn test_llm_embed_blanket_impl() {
         use crate::core::types::embedding::EmbeddingInput;
 
@@ -276,6 +289,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(deprecated)]
     async fn test_llm_stream_blanket_impl() {
         let provider = MockProvider;
         let result = LLMStream::chat_completion_stream(
@@ -288,8 +302,11 @@ mod tests {
     }
 
     /// Verify sub-traits can be used as trait bounds.
+    #[allow(deprecated)]
     fn _accepts_chat<T: LLMChat>(_t: &T) {}
+    #[allow(deprecated)]
     fn _accepts_embed<T: LLMEmbed>(_t: &T) {}
+    #[allow(deprecated)]
     fn _accepts_stream<T: LLMStream>(_t: &T) {}
 
     #[test]
