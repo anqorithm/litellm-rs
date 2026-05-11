@@ -51,12 +51,52 @@ pub struct LiteLLMModelInfo {
 pub type ModelPricing = LiteLLMModelInfo;
 
 /// Usage information for simple pricing database calculations.
+///
+/// Kept as a stable public type so downstream library consumers can continue
+/// to construct `litellm_rs::core::pricing::Usage { prompt_tokens, ..., reasoning_tokens }`
+/// with struct-literal syntax. The richer
+/// [`crate::core::types::responses::Usage`] (with nested
+/// `PromptTokensDetails` / `CompletionTokensDetails` / `ThinkingUsage`) is
+/// the canonical shape used elsewhere; conversion helpers below bridge
+/// between the two when the per-request cost path needs the canonical
+/// metadata. See PR #519 architecture roadmap for the broader convergence.
 #[derive(Debug, Clone)]
 pub struct Usage {
     pub prompt_tokens: u32,
     pub completion_tokens: u32,
     pub total_tokens: u32,
     pub reasoning_tokens: Option<u32>,
+}
+
+impl Usage {
+    /// Build a Usage from prompt + completion token counts.
+    ///
+    /// Auto-computes `total_tokens = prompt + completion` and leaves
+    /// `reasoning_tokens` unset. Mirrors the canonical
+    /// [`crate::core::types::responses::Usage::new`] signature so internal
+    /// pricing call sites can use the same constructor on either type.
+    pub fn new(prompt_tokens: u32, completion_tokens: u32) -> Self {
+        Self {
+            prompt_tokens,
+            completion_tokens,
+            total_tokens: prompt_tokens + completion_tokens,
+            reasoning_tokens: None,
+        }
+    }
+}
+
+impl From<&crate::core::types::responses::Usage> for Usage {
+    fn from(usage: &crate::core::types::responses::Usage) -> Self {
+        Self {
+            prompt_tokens: usage.prompt_tokens,
+            completion_tokens: usage.completion_tokens,
+            total_tokens: usage.total_tokens,
+            reasoning_tokens: usage
+                .completion_tokens_details
+                .as_ref()
+                .and_then(|d| d.reasoning_tokens),
+        }
+    }
 }
 
 /// Pricing database backed by the shared LiteLLM model info shape.
@@ -337,13 +377,7 @@ pub fn get_pricing_db() -> &'static PricingDatabase {
 
 /// Quick cost calculation for compatibility callers.
 pub fn calculate_cost(model: &str, prompt_tokens: u32, completion_tokens: u32) -> f64 {
-    let usage = Usage {
-        prompt_tokens,
-        completion_tokens,
-        total_tokens: prompt_tokens + completion_tokens,
-        reasoning_tokens: None,
-    };
-
+    let usage = Usage::new(prompt_tokens, completion_tokens);
     GLOBAL_PRICING_DB.calculate(model, &usage)
 }
 
@@ -412,12 +446,7 @@ mod tests {
     fn test_default_pricing() {
         let db = PricingDatabase::default();
 
-        let usage = Usage {
-            prompt_tokens: 1000,
-            completion_tokens: 500,
-            total_tokens: 1500,
-            reasoning_tokens: None,
-        };
+        let usage = Usage::new(1000, 500);
 
         let cost = db.calculate("gpt-4", &usage);
         assert!(cost > 0.0);
@@ -430,12 +459,7 @@ mod tests {
     #[test]
     fn calculate_for_provider_uses_matching_provider_rates() {
         let db = PricingDatabase::default();
-        let usage = Usage {
-            prompt_tokens: 1000,
-            completion_tokens: 500,
-            total_tokens: 1500,
-            reasoning_tokens: None,
-        };
+        let usage = Usage::new(1000, 500);
 
         assert_eq!(
             db.calculate_for_provider("openai", "gpt-4", &usage),
@@ -472,17 +496,7 @@ mod tests {
         let db = PricingDatabase::from_default_source().unwrap();
 
         assert!(db.get_model_info("gpt-4o").is_some());
-        assert!(
-            db.calculate(
-                "gpt-4o",
-                &Usage {
-                    prompt_tokens: 1000,
-                    completion_tokens: 500,
-                    total_tokens: 1500,
-                    reasoning_tokens: None,
-                }
-            ) > 0.0
-        );
+        assert!(db.calculate("gpt-4o", &Usage::new(1000, 500)) > 0.0);
     }
 
     #[test]
