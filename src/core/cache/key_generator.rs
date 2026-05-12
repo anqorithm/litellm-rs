@@ -239,7 +239,7 @@ mod tests {
         };
 
         let key = generate_chat_key(&request);
-        assert!(key.as_str().starts_with("chat:gpt-4:v3:"));
+        assert!(key.as_str().starts_with("chat:gpt-4:v4:"));
     }
 
     #[test]
@@ -408,6 +408,48 @@ mod tests {
     }
 
     #[test]
+    fn test_generate_chat_key_preserves_response_format_schema_id_identity() {
+        let base = ChatCompletionRequest {
+            model: "gpt-4".to_string(),
+            messages: vec![create_user_message("Return JSON")],
+            response_format: Some(ResponseFormat {
+                format_type: "json_schema".to_string(),
+                json_schema: Some(serde_json::json!({
+                    "name": "answer",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "id": { "type": "string" }
+                        }
+                    }
+                })),
+                response_type: None,
+            }),
+            ..Default::default()
+        };
+
+        let mut changed_id_schema = base.clone();
+        changed_id_schema.response_format = Some(ResponseFormat {
+            format_type: "json_schema".to_string(),
+            json_schema: Some(serde_json::json!({
+                "name": "answer",
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "id": { "type": "integer" }
+                    }
+                }
+            })),
+            response_type: None,
+        });
+
+        assert_ne!(
+            generate_chat_key(&base),
+            generate_chat_key(&changed_id_schema)
+        );
+    }
+
+    #[test]
     fn test_generate_chat_key_includes_tool_parameters_and_choice() {
         let base = ChatCompletionRequest {
             model: "gpt-4".to_string(),
@@ -454,6 +496,43 @@ mod tests {
         assert_ne!(generate_chat_key(&base), generate_chat_key(&changed_choice));
     }
 
+    #[test]
+    fn test_generate_chat_key_preserves_tool_parameter_id_identity() {
+        let base = ChatCompletionRequest {
+            model: "gpt-4".to_string(),
+            messages: vec![create_user_message("Use the tool")],
+            tools: Some(vec![Tool {
+                tool_type: "function".to_string(),
+                function: Function {
+                    name: "lookup".to_string(),
+                    description: Some("Lookup by ID".to_string()),
+                    parameters: Some(serde_json::json!({
+                        "type": "object",
+                        "properties": {
+                            "id": { "type": "string" }
+                        }
+                    })),
+                },
+            }]),
+            ..Default::default()
+        };
+
+        let mut changed_id_schema = base.clone();
+        changed_id_schema.tools.as_mut().unwrap()[0]
+            .function
+            .parameters = Some(serde_json::json!({
+            "type": "object",
+            "properties": {
+                "id": { "type": "integer" }
+            }
+        }));
+
+        assert_ne!(
+            generate_chat_key(&base),
+            generate_chat_key(&changed_id_schema)
+        );
+    }
+
     // ==================== Embedding Key Generation Tests ====================
 
     #[test]
@@ -465,7 +544,7 @@ mod tests {
         };
 
         let key = generate_embedding_key(&request);
-        assert!(key.as_str().starts_with("embed:text-embedding-ada-002:v3:"));
+        assert!(key.as_str().starts_with("embed:text-embedding-ada-002:v4:"));
     }
 
     #[test]
