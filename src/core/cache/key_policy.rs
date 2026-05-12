@@ -8,7 +8,7 @@ use sha2::{Digest, Sha256};
 ///
 /// Bumping this value intentionally cold-starts older Redis/cache entries so
 /// responses produced under an older request identity policy are not reused.
-pub const CACHE_KEY_SCHEMA_VERSION: &str = "v3";
+pub const CACHE_KEY_SCHEMA_VERSION: &str = "v4";
 
 /// Generate a stable SHA-256 digest for any serializable value.
 pub fn stable_digest<T: Serialize>(value: &T) -> String {
@@ -26,7 +26,7 @@ pub fn stable_digest_value(value: &Value) -> String {
 /// Convert a JSON value to canonical JSON by sorting object keys and removing
 /// fields that cannot affect model output identity.
 pub fn canonical_json_string(value: &Value) -> String {
-    let canonical = canonicalize_json_value(value);
+    let canonical = canonicalize_json_value(value, 0);
     serde_json::to_string(&canonical).unwrap_or_else(|_| "null".to_string())
 }
 
@@ -62,19 +62,28 @@ pub fn versioned_key(prefix: &str, namespace: Option<&str>, digest: &str) -> Str
     }
 }
 
-fn canonicalize_json_value(value: &Value) -> Value {
+fn should_exclude_field(depth: usize, field: &str) -> bool {
+    depth == 0 && is_non_deterministic_field(field)
+}
+
+fn canonicalize_json_value(value: &Value, depth: usize) -> Value {
     match value {
         Value::Object(map) => {
             let mut sorted = Map::new();
             for (key, value) in map {
-                if is_non_deterministic_field(key) {
+                if should_exclude_field(depth, key) {
                     continue;
                 }
-                sorted.insert(key.clone(), canonicalize_json_value(value));
+                sorted.insert(key.clone(), canonicalize_json_value(value, depth + 1));
             }
             Value::Object(sorted)
         }
-        Value::Array(values) => Value::Array(values.iter().map(canonicalize_json_value).collect()),
+        Value::Array(values) => Value::Array(
+            values
+                .iter()
+                .map(|value| canonicalize_json_value(value, depth + 1))
+                .collect(),
+        ),
         _ => value.clone(),
     }
 }
@@ -102,6 +111,73 @@ mod tests {
     }
 
     #[test]
+    fn canonical_json_preserves_nested_id_fields() {
+        let canonical = canonical_json_string(&json!({
+            "request_id": "abc",
+            "response_format": {
+                "json_schema": {
+                    "schema": {
+                        "properties": {
+                            "id": { "type": "string" }
+                        }
+                    }
+                }
+            },
+            "tools": [{
+                "function": {
+                    "parameters": {
+                        "properties": {
+                            "id": { "type": "number" }
+                        }
+                    }
+                }
+            }]
+        }));
+        let value: Value = serde_json::from_str(&canonical).unwrap();
+
+        assert!(value.get("request_id").is_none());
+        assert_eq!(
+            value["response_format"]["json_schema"]["schema"]["properties"]["id"]["type"],
+            "string"
+        );
+        assert_eq!(
+            value["tools"][0]["function"]["parameters"]["properties"]["id"]["type"],
+            "number"
+        );
+    }
+
+    #[test]
+    fn canonical_json_keeps_nested_id_identity_distinct() {
+        let string_id_schema = json!({
+            "response_format": {
+                "json_schema": {
+                    "schema": {
+                        "properties": {
+                            "id": { "type": "string" }
+                        }
+                    }
+                }
+            }
+        });
+        let integer_id_schema = json!({
+            "response_format": {
+                "json_schema": {
+                    "schema": {
+                        "properties": {
+                            "id": { "type": "integer" }
+                        }
+                    }
+                }
+            }
+        });
+
+        assert_ne!(
+            canonical_json_string(&string_id_schema),
+            canonical_json_string(&integer_id_schema)
+        );
+    }
+
+    #[test]
     fn stable_digest_is_deterministic_and_sha256_sized() {
         let digest = stable_digest_value(&json!({"b": 2, "a": 1}));
 
@@ -113,8 +189,8 @@ mod tests {
     fn versioned_key_includes_schema_version() {
         assert_eq!(
             versioned_key("chat", Some("gpt-4"), "abc"),
-            "chat:gpt-4:v3:abc"
+            "chat:gpt-4:v4:abc"
         );
-        assert_eq!(versioned_key("raw", None, "abc"), "raw:v3:abc");
+        assert_eq!(versioned_key("raw", None, "abc"), "raw:v4:abc");
     }
 }
