@@ -69,7 +69,7 @@ impl SigV4Signer {
 
         // Sort headers by key (case-insensitive)
         let mut sorted_headers: Vec<_> = canonical_headers.iter().collect();
-        sorted_headers.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
+        sorted_headers.sort_by_key(|header| header.0.to_lowercase());
 
         // Build canonical headers string
         let canonical_headers_str = sorted_headers
