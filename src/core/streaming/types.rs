@@ -109,12 +109,15 @@ pub struct ChatCompletionDelta {
     /// Function call delta for older OpenAI-compatible clients
     #[serde(skip_serializing_if = "Option::is_none")]
     pub function_call: Option<FunctionCallDelta>,
+    /// Audio output delta
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audio: Option<AudioDelta>,
 }
 
 // ToolCallDelta and FunctionCallDelta are re-exported from the canonical
 // types tree (core::types::responses::*). Duplicates eliminated as part
 // of the parallel-type-tree collapse tracked in #519.
-pub use crate::core::types::responses::{FunctionCallDelta, ToolCallDelta};
+pub use crate::core::types::responses::{AudioDelta, FunctionCallDelta, ToolCallDelta};
 
 #[cfg(test)]
 mod tests {

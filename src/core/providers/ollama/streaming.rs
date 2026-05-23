@@ -131,6 +131,7 @@ where
             thinking: None,
             tool_calls: None,
             function_call: None,
+            audio: None,
         };
 
         // Extract message content

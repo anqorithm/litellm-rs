@@ -118,6 +118,7 @@ fn create_chat_chunk(text: &str) -> ChatChunk {
                 thinking: None,
                 tool_calls: None,
                 function_call: None,
+                audio: None,
             },
             logprobs: None,
             finish_reason: None,

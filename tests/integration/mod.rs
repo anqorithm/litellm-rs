@@ -9,6 +9,7 @@ pub mod config_validation_tests;
 pub mod database_tests;
 pub mod error_handling_tests;
 pub mod http_routes_tests;
+pub mod openai_streaming_audio_tests;
 pub mod provider_factory_tests;
 pub mod provider_tests;
 pub mod router_tests;

@@ -5,6 +5,22 @@ use serde::{Deserialize, Serialize};
 use super::super::message::MessageRole;
 use super::super::thinking::ThinkingDelta;
 
+/// Streaming audio delta content.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AudioDelta {
+    /// Base64 encoded audio delta.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<String>,
+
+    /// Transcript text delta paired with the audio stream, when provided.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transcript: Option<String>,
+
+    /// Audio format, when provided by the upstream stream.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub format: Option<String>,
+}
+
 /// Streaming delta content
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatDelta {
@@ -31,6 +47,10 @@ pub struct ChatDelta {
     /// Function call delta (backward compatibility)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub function_call: Option<FunctionCallDelta>,
+
+    /// Audio output delta.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audio: Option<AudioDelta>,
 }
 
 impl ChatDelta {
@@ -90,6 +110,7 @@ mod tests {
             thinking: None,
             tool_calls: None,
             function_call: None,
+            audio: None,
         };
         assert!(delta.role.is_some());
         assert_eq!(delta.content, Some("Hello".to_string()));
@@ -103,6 +124,7 @@ mod tests {
             thinking: None,
             tool_calls: None,
             function_call: None,
+            audio: None,
         };
         assert!(delta.role.is_none());
         assert!(delta.content.is_none());
@@ -116,6 +138,7 @@ mod tests {
             thinking: None,
             tool_calls: None,
             function_call: None,
+            audio: None,
         };
         assert!(!delta.has_thinking());
     }
@@ -133,6 +156,7 @@ mod tests {
             }),
             tool_calls: None,
             function_call: None,
+            audio: None,
         };
         assert!(delta.has_thinking());
     }
@@ -150,6 +174,7 @@ mod tests {
             }),
             tool_calls: None,
             function_call: None,
+            audio: None,
         };
         assert_eq!(delta.thinking_content(), Some("Let me think..."));
     }
@@ -162,6 +187,7 @@ mod tests {
             thinking: None,
             tool_calls: None,
             function_call: None,
+            audio: None,
         };
         assert_eq!(delta.thinking_content(), None);
     }
@@ -174,6 +200,7 @@ mod tests {
             thinking: None,
             tool_calls: None,
             function_call: None,
+            audio: None,
         };
         let json = serde_json::to_string(&delta).unwrap();
         assert!(json.contains("assistant"));
@@ -188,6 +215,7 @@ mod tests {
             thinking: None,
             tool_calls: None,
             function_call: None,
+            audio: None,
         };
         let json = serde_json::to_string(&delta).unwrap();
         assert_eq!(json, "{}");
@@ -332,6 +360,7 @@ mod tests {
             thinking: None,
             tool_calls: None,
             function_call: None,
+            audio: None,
         };
         let cloned = delta.clone();
         assert_eq!(cloned.content, Some("test".to_string()));
@@ -367,6 +396,7 @@ mod tests {
             thinking: None,
             tool_calls: None,
             function_call: None,
+            audio: None,
         };
         let debug = format!("{:?}", delta);
         assert!(debug.contains("ChatDelta"));
@@ -413,6 +443,7 @@ mod tests {
                 },
             ]),
             function_call: None,
+            audio: None,
         };
         assert_eq!(delta.tool_calls.as_ref().unwrap().len(), 2);
     }
@@ -428,6 +459,7 @@ mod tests {
                 name: Some("old_function".to_string()),
                 arguments: Some("{}".to_string()),
             }),
+            audio: None,
         };
         assert!(delta.function_call.is_some());
     }
@@ -466,6 +498,7 @@ mod tests {
             }),
             tool_calls: None,
             function_call: None,
+            audio: None,
         };
         assert!(delta.has_thinking());
         assert_eq!(delta.thinking_content(), None);

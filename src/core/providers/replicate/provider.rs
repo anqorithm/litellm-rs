@@ -394,6 +394,7 @@ impl LLMProvider for ReplicateProvider {
                         thinking: None,
                         tool_calls: None,
                         function_call: None,
+                        audio: None,
                     },
                     logprobs: None,
                     finish_reason: Some(crate::core::types::responses::FinishReason::Stop),
