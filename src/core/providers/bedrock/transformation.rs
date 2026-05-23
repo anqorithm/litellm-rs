@@ -5,7 +5,8 @@
 
 use serde_json::Value;
 
-use super::model_config::{BedrockModelFamily, get_model_config};
+use super::get_model_config_for_model_id;
+use super::model_config::BedrockModelFamily;
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::responses::{ChatChoice, ChatResponse, FinishReason, Usage};
 use crate::core::types::{chat::ChatMessage, message::MessageContent, message::MessageRole};
@@ -30,7 +31,7 @@ pub fn transform_chat_request(
     messages_to_prompt: impl Fn(&[ChatMessage]) -> Result<String, ProviderError>,
 ) -> Result<Value, ProviderError> {
     // Get model configuration
-    let model_config = get_model_config(model)?;
+    let model_config = get_model_config_for_model_id(model)?;
 
     // Route based on model family
     match model_config.family {
@@ -179,7 +180,7 @@ pub fn transform_chat_response(
         .map_err(|e| ProviderError::response_parsing("bedrock", e.to_string()))?;
 
     // Get model configuration
-    let model_config = get_model_config(model)?;
+    let model_config = get_model_config_for_model_id(model)?;
 
     let choices = match model_config.family {
         BedrockModelFamily::Claude => parse_claude_response(&response),

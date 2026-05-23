@@ -11,9 +11,9 @@ use tracing::debug;
 use super::client::BedrockClient;
 use super::config::BedrockConfig;
 use super::error::BedrockErrorMapper;
-use super::model_config::get_model_config;
 use super::transformation;
 use super::utils::{CostCalculator, validate_region};
+use super::{get_model_config_for_model_id, parse_bedrock_model_id};
 use crate::core::traits::provider::ProviderConfig as _;
 
 use crate::core::providers::unified_provider::ProviderError;
@@ -67,7 +67,7 @@ impl BedrockProvider {
 
         for model_id in available_models {
             if let Some(pricing) = CostCalculator::get_core_model_pricing(model_id)
-                && let Ok(model_config) = get_model_config(model_id)
+                && let Ok(model_config) = get_model_config_for_model_id(model_id)
             {
                 models.push(ModelInfo {
                     id: model_id.to_string(),
@@ -193,6 +193,10 @@ impl LLMProvider for BedrockProvider {
         &self.models
     }
 
+    fn supports_model(&self, model: &str) -> bool {
+        get_model_config_for_model_id(model).is_ok()
+    }
+
     fn get_supported_openai_params(&self, _model: &str) -> &'static [&'static str] {
         &[
             "temperature",
@@ -293,7 +297,7 @@ impl LLMProvider for BedrockProvider {
         }
 
         // Get model configuration
-        let model_config = get_model_config(&request.model)?;
+        let model_config = get_model_config_for_model_id(&request.model)?;
 
         if !model_config.supports_streaming {
             return Err(ProviderError::not_supported(
@@ -321,9 +325,10 @@ impl LLMProvider for BedrockProvider {
         };
 
         // Send streaming request
+        let execution_model_id = parse_bedrock_model_id(&request.model).execution_model_id;
         let response = self
             .client
-            .send_streaming_request(&request.model, operation, &body)
+            .send_streaming_request(&execution_model_id, operation, &body)
             .await?;
 
         // Create BedrockStream
