@@ -561,7 +561,9 @@ mod tests {
             api_key: "test-api-key-1234567890123456".to_string(),
             ..Default::default()
         };
-        let provider = LlamaProvider::new(config).unwrap();
+        let Ok(provider) = LlamaProvider::new(config) else {
+            panic!("test config should build LlamaProvider");
+        };
 
         // LLaMA 4 series (2025)
         assert!(provider.is_model_supported("llama4-scout"));
@@ -572,6 +574,29 @@ mod tests {
         assert!(provider.is_model_supported("llama3.2-11b-vision"));
         // Non-supported models
         assert!(!provider.is_model_supported("gpt-4"));
+    }
+
+    #[test]
+    fn test_llama_4_model_card_metadata() {
+        let config = LlamaProviderConfig {
+            api_key: "test-api-key-1234567890123456".to_string(),
+            ..Default::default()
+        };
+        let Ok(provider) = LlamaProvider::new(config) else {
+            panic!("test config should build LlamaProvider");
+        };
+
+        let Some(scout) = provider.models().iter().find(|m| m.id == "llama4-scout") else {
+            panic!("llama4-scout should be registered");
+        };
+        assert_eq!(scout.max_context_length, 10_000_000);
+        assert!(scout.supports_multimodal);
+
+        let Some(maverick) = provider.models().iter().find(|m| m.id == "llama4-maverick") else {
+            panic!("llama4-maverick should be registered");
+        };
+        assert_eq!(maverick.max_context_length, 1_000_000);
+        assert!(maverick.supports_multimodal);
     }
 
     #[test]

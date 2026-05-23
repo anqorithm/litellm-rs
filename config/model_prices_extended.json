@@ -546,6 +546,59 @@
     "supports_function_calling": true,
     "supports_streaming": true
   },
+  "mistral-large-2512": {
+    "max_tokens": 262144,
+    "max_input_tokens": 262144,
+    "input_cost_per_token": 5e-07,
+    "output_cost_per_token": 1.5e-06,
+    "litellm_provider": "mistral",
+    "mode": "chat",
+    "supports_function_calling": true,
+    "supports_vision": true,
+    "supports_streaming": true
+  },
+  "mistral-medium-3-5": {
+    "max_tokens": 256000,
+    "max_input_tokens": 256000,
+    "input_cost_per_token": 1.5e-06,
+    "output_cost_per_token": 7.5e-06,
+    "litellm_provider": "mistral",
+    "mode": "chat",
+    "supports_function_calling": true,
+    "supports_vision": true,
+    "supports_streaming": true
+  },
+  "mistral-small-2603": {
+    "max_tokens": 256000,
+    "max_input_tokens": 256000,
+    "input_cost_per_token": 1.5e-07,
+    "output_cost_per_token": 6e-07,
+    "litellm_provider": "mistral",
+    "mode": "chat",
+    "supports_function_calling": true,
+    "supports_vision": true,
+    "supports_streaming": true
+  },
+  "magistral-small-2509": {
+    "max_tokens": 40000,
+    "max_input_tokens": 40000,
+    "input_cost_per_token": 5e-07,
+    "output_cost_per_token": 1.5e-06,
+    "litellm_provider": "mistral",
+    "mode": "chat",
+    "supports_function_calling": false,
+    "supports_streaming": true
+  },
+  "devstral-2512": {
+    "max_tokens": 262144,
+    "max_input_tokens": 262144,
+    "input_cost_per_token": 4e-07,
+    "output_cost_per_token": 2e-06,
+    "litellm_provider": "mistral",
+    "mode": "chat",
+    "supports_function_calling": true,
+    "supports_streaming": true
+  },
   "deepseek-chat": {
     "max_tokens": 4096,
     "max_input_tokens": 32768,
