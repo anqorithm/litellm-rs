@@ -16,7 +16,7 @@ mod usage;
 pub use audio::{AudioTranscriptionResponse, SegmentInfo, WordInfo};
 pub use chat::{ChatChoice, ChatChunk, ChatResponse, ChatStreamChoice};
 pub use completion::{CompletionChoice, CompletionResponse};
-pub use delta::{ChatDelta, FunctionCallDelta, ToolCallDelta};
+pub use delta::{AudioDelta, ChatDelta, FunctionCallDelta, ToolCallDelta};
 pub use embedding::{EmbedResponse, EmbeddingData, EmbeddingResponse, EmbeddingUsage};
 pub use error::{ApiError, ErrorResponse};
 pub use image::{ImageData, ImageGenerationResponse, ImageResponse};

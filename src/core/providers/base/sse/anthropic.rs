@@ -45,6 +45,7 @@ impl AnthropicTransformer {
             thinking: None,
             tool_calls: None,
             function_call: None,
+            audio: None,
         }
     }
 
@@ -111,6 +112,7 @@ impl SSETransformer for AnthropicTransformer {
                             thinking: None,
                             tool_calls: None,
                             function_call: None,
+                            audio: None,
                         },
                         finish_reason: None,
                         logprobs: None,

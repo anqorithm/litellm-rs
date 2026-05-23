@@ -137,6 +137,7 @@ impl SSETransformer for GeminiTransformer {
                     thinking: None,
                     function_call: None,
                     tool_calls: None,
+                    audio: None,
                 },
                 finish_reason,
                 logprobs: None,
