@@ -42,6 +42,7 @@ impl ParsedBedrockModelId {
 
         let family_hint = metadata_lookup_ids
             .iter()
+            .rev()
             .find_map(|id| id.split_once('.').map(|(family, _)| family.to_string()));
 
         let kind = if execution_model_id.starts_with("arn:") {
@@ -150,6 +151,7 @@ mod tests {
             ]
         );
         assert_eq!(parsed.kind, BedrockModelIdKind::InferenceProfile);
+        assert_eq!(parsed.family_hint.as_deref(), Some("anthropic"));
     }
 
     #[test]
@@ -167,6 +169,7 @@ mod tests {
                 "anthropic.claude-sonnet-4-v1:0"
             ]
         );
+        assert_eq!(parsed.family_hint.as_deref(), Some("anthropic"));
     }
 
     #[test]
@@ -184,6 +187,7 @@ mod tests {
                 "anthropic.claude-3-haiku-20240307"
             ]
         );
+        assert_eq!(parsed.family_hint.as_deref(), Some("anthropic"));
     }
 
     #[test]
@@ -202,5 +206,6 @@ mod tests {
             ]
         );
         assert_eq!(parsed.kind, BedrockModelIdKind::Arn);
+        assert_eq!(parsed.family_hint.as_deref(), Some("anthropic"));
     }
 }
