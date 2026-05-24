@@ -48,6 +48,12 @@ fn streaming_operation_for_api_type(api_type: &BedrockApiType) -> &'static str {
     }
 }
 
+fn converse_streaming_request_body(request: &ChatRequest) -> Result<Value, ProviderError> {
+    let converse_request = super::chat::converse::transform_to_converse(request)?;
+    serde_json::to_value(converse_request)
+        .map_err(|e| ProviderError::serialization("bedrock", e.to_string()))
+}
+
 /// AWS Bedrock provider implementation
 #[derive(Debug, Clone)]
 pub struct BedrockProvider {
@@ -314,11 +320,16 @@ impl LLMProvider for BedrockProvider {
             ));
         }
 
-        // Transform request
-        let body = self.transform_request(request.clone(), context).await?;
-
         // Use streaming endpoint
         let operation = streaming_operation_for_api_type(&model_config.api_type);
+        let body = match model_config.api_type {
+            BedrockApiType::Converse | BedrockApiType::ConverseStream => {
+                converse_streaming_request_body(&request)?
+            }
+            BedrockApiType::Invoke | BedrockApiType::InvokeStream => {
+                self.transform_request(request.clone(), context).await?
+            }
+        };
 
         // Send streaming request
         let execution_model_id = parse_bedrock_model_id(&request.model).execution_model_id;
@@ -400,5 +411,23 @@ mod tests {
             streaming_operation_for_api_type(&config.api_type),
             "converse-stream"
         );
+    }
+
+    #[test]
+    fn converse_streaming_request_uses_converse_body_shape() {
+        let mut request = ChatRequest::new("anthropic.claude-opus-4-6-v1:0")
+            .add_system_message("Use concise answers.")
+            .add_user_message("hello");
+        request.max_tokens = Some(64);
+        request.temperature = Some(0.2);
+        request.stream = true;
+
+        let body = converse_streaming_request_body(&request).unwrap();
+
+        assert_eq!(body["system"][0]["text"], "Use concise answers.");
+        assert_eq!(body["messages"][0]["role"], "user");
+        assert_eq!(body["messages"][0]["content"][0]["text"]["text"], "hello");
+        assert_eq!(body["inferenceConfig"]["maxTokens"], 64);
+        assert!(body.get("max_tokens").is_none());
     }
 }

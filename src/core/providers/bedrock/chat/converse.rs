@@ -204,7 +204,9 @@ pub async fn execute_converse(
 }
 
 /// Transform OpenAI-style ChatRequest to Converse API format
-fn transform_to_converse(request: &ChatRequest) -> Result<ConverseRequest, ProviderError> {
+pub(in crate::core::providers::bedrock) fn transform_to_converse(
+    request: &ChatRequest,
+) -> Result<ConverseRequest, ProviderError> {
     let mut messages = Vec::new();
     let mut system_messages = Vec::new();
 
