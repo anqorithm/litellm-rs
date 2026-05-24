@@ -91,6 +91,13 @@ pub fn get_model_config_for_model_id(
         }
     }
 
+    if is_prompt_management_arn(&parsed.execution_model_id) {
+        return Err(crate::core::providers::ProviderError::not_implemented(
+            "bedrock",
+            "prompt-management ARN request shaping",
+        ));
+    }
+
     if parsed.runtime_config_fallback {
         return Ok(runtime_resolved_converse_config());
     }
@@ -133,13 +140,35 @@ struct ArnResourceMetadata {
     runtime_config_fallback: bool,
 }
 
-fn arn_resource_metadata(model_id: &str) -> Option<ArnResourceMetadata> {
+fn arn_resource_parts(model_id: &str) -> Option<(&str, &str)> {
     if !model_id.starts_with("arn:") {
         return None;
     }
 
     let resource = model_id.splitn(6, ':').nth(5)?;
-    let (resource_type, resource_id) = resource.split_once('/')?;
+    resource.split_once('/')
+}
+
+fn is_prompt_management_resource(resource_type: &str) -> bool {
+    matches!(
+        resource_type,
+        "prompt" | "default-prompt-router" | "prompt-router"
+    )
+}
+
+fn is_prompt_management_arn(model_id: &str) -> bool {
+    arn_resource_parts(model_id)
+        .map(|(resource_type, _resource_id)| is_prompt_management_resource(resource_type))
+        .unwrap_or(false)
+}
+
+fn arn_resource_metadata(model_id: &str) -> Option<ArnResourceMetadata> {
+    let (resource_type, resource_id) = arn_resource_parts(model_id)?;
+
+    if is_prompt_management_resource(resource_type) {
+        return Some(ArnResourceMetadata::default());
+    }
+
     if resource_id.is_empty() {
         return Some(ArnResourceMetadata {
             runtime_config_fallback: true,
@@ -166,12 +195,7 @@ fn arn_resource_metadata(model_id: &str) -> Option<ArnResourceMetadata> {
                 metadata.runtime_config_fallback = true;
             }
         }
-        "custom-model-deployment"
-        | "imported-model"
-        | "provisioned-model"
-        | "prompt"
-        | "default-prompt-router"
-        | "prompt-router" => {
+        "custom-model-deployment" | "imported-model" | "provisioned-model" => {
             metadata.runtime_config_fallback = true;
         }
         _ => {
@@ -343,6 +367,36 @@ mod tests {
             vec!["arn:aws:bedrock:us-east-1:123456789012:custom-model-deployment/123456789012"]
         );
         assert!(parsed.runtime_config_fallback);
+    }
+
+    #[test]
+    fn prompt_management_arns_do_not_use_runtime_config_fallback() {
+        for model_id in [
+            "arn:aws:bedrock:us-east-1:123456789012:prompt/ABC123:1",
+            "arn:aws:bedrock:us-east-1:123456789012:default-prompt-router/ABC123",
+            "arn:aws:bedrock:us-east-1:123456789012:prompt-router/ABC123",
+        ] {
+            let parsed = parse_bedrock_model_id(model_id);
+
+            assert_eq!(parsed.metadata_lookup_ids, vec![model_id]);
+            assert!(!parsed.runtime_config_fallback);
+        }
+    }
+
+    #[test]
+    fn prompt_management_arn_config_returns_not_implemented() {
+        let err = super::get_model_config_for_model_id(
+            "arn:aws:bedrock:us-east-1:123456789012:prompt/ABC123:1",
+        )
+        .unwrap_err();
+
+        assert!(matches!(
+            err,
+            crate::core::providers::ProviderError::NotImplemented {
+                provider: "bedrock",
+                feature
+            } if feature == "prompt-management ARN request shaping"
+        ));
     }
 
     #[test]
