@@ -85,31 +85,32 @@ impl BedrockClient {
     /// Build Bedrock API URL for a model and operation
     pub fn build_url(&self, model_id: &str, operation: &str) -> String {
         let region = &self.auth.credentials().region;
+        let encoded_model_id = encode_model_id_path_segment(model_id);
 
         // Different URL patterns for different operations
         match operation {
             "invoke" => {
                 format!(
                     "https://bedrock-runtime.{}.amazonaws.com/model/{}/invoke",
-                    region, model_id
+                    region, encoded_model_id
                 )
             }
             "invoke-with-response-stream" => {
                 format!(
                     "https://bedrock-runtime.{}.amazonaws.com/model/{}/invoke-with-response-stream",
-                    region, model_id
+                    region, encoded_model_id
                 )
             }
             "converse" => {
                 format!(
                     "https://bedrock-runtime.{}.amazonaws.com/model/{}/converse",
-                    region, model_id
+                    region, encoded_model_id
                 )
             }
             "converse-stream" => {
                 format!(
                     "https://bedrock-runtime.{}.amazonaws.com/model/{}/converse-stream",
-                    region, model_id
+                    region, encoded_model_id
                 )
             }
             "list-foundation-models" => {
@@ -118,7 +119,7 @@ impl BedrockClient {
             _ => {
                 format!(
                     "https://bedrock-runtime.{}.amazonaws.com/model/{}/{}",
-                    region, model_id, operation
+                    region, encoded_model_id, operation
                 )
             }
         }
@@ -291,6 +292,10 @@ impl BedrockClient {
             Err(_) => Ok(false),
         }
     }
+}
+
+fn encode_model_id_path_segment(model_id: &str) -> String {
+    url::form_urlencoded::byte_serialize(model_id.as_bytes()).collect()
 }
 
 #[cfg(test)]
@@ -618,10 +623,24 @@ mod tests {
 
         // Model with version suffix
         let url = client.build_url("meta.llama3-70b-instruct-v1:0", "invoke");
-        assert!(url.contains("meta.llama3-70b-instruct-v1:0"));
+        assert!(url.contains("meta.llama3-70b-instruct-v1%3A0"));
 
         // Model with dots
         let url = client.build_url("ai21.jamba-1-5-large-v1:0", "invoke");
-        assert!(url.contains("ai21.jamba-1-5-large-v1:0"));
+        assert!(url.contains("ai21.jamba-1-5-large-v1%3A0"));
+    }
+
+    #[test]
+    fn test_url_building_encodes_arn_model_ids() {
+        let client = create_test_client();
+        let arn = "arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0";
+
+        let url = client.build_url(arn, "invoke");
+
+        assert_eq!(
+            url,
+            "https://bedrock-runtime.us-east-1.amazonaws.com/model/arn%3Aaws%3Abedrock%3Aus-east-1%3A123456789012%3Ainference-profile%2Fus.anthropic.claude-3-5-sonnet-20241022-v2%3A0/invoke"
+        );
+        assert!(!url.contains("/inference-profile/"));
     }
 }

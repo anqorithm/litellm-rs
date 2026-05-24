@@ -104,7 +104,7 @@ pub fn get_model_config_for_model_id(
 static RUNTIME_RESOLVED_CONVERSE_CONFIG: super::model_config::ModelConfig =
     super::model_config::ModelConfig {
         family: super::model_config::BedrockModelFamily::Nova,
-        api_type: super::model_config::BedrockApiType::Converse,
+        api_type: super::model_config::BedrockApiType::ConverseStream,
         supports_streaming: true,
         supports_function_calling: true,
         supports_multimodal: true,
@@ -346,7 +346,7 @@ mod tests {
     }
 
     #[test]
-    fn runtime_resolved_arn_does_not_fail_config_lookup_before_request() {
+    fn runtime_resolved_arn_uses_streaming_converse_config() {
         let config = super::get_model_config_for_model_id(
             "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/my-team-profile",
         )
@@ -354,7 +354,8 @@ mod tests {
 
         assert_eq!(
             config.api_type,
-            crate::core::providers::bedrock::BedrockApiType::Converse
+            crate::core::providers::bedrock::BedrockApiType::ConverseStream
         );
+        assert!(config.supports_streaming);
     }
 }
