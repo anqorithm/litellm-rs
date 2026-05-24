@@ -18,6 +18,7 @@ pub struct ParsedBedrockModelId {
     pub metadata_lookup_ids: Vec<String>,
     pub kind: BedrockModelIdKind,
     pub family_hint: Option<String>,
+    pub runtime_config_fallback: bool,
 }
 
 impl ParsedBedrockModelId {
@@ -31,11 +32,16 @@ impl ParsedBedrockModelId {
 
         push_unique(&mut metadata_lookup_ids, execution_model_id.clone());
 
-        if let Some(resource_id) = arn_resource_model_id(&execution_model_id) {
-            push_unique(&mut metadata_lookup_ids, resource_id.to_string());
-            if let Some(canonical) = canonical_metadata_id(resource_id) {
-                push_unique(&mut metadata_lookup_ids, canonical);
+        let mut runtime_config_fallback = false;
+
+        if let Some(resource) = arn_resource_metadata(&execution_model_id) {
+            for resource_id in resource.lookup_ids {
+                push_unique(&mut metadata_lookup_ids, resource_id.clone());
+                if let Some(canonical) = canonical_metadata_id(&resource_id) {
+                    push_unique(&mut metadata_lookup_ids, canonical);
+                }
             }
+            runtime_config_fallback = resource.runtime_config_fallback;
         } else if let Some(canonical) = canonical_metadata_id(&execution_model_id) {
             push_unique(&mut metadata_lookup_ids, canonical);
         }
@@ -59,6 +65,7 @@ impl ParsedBedrockModelId {
             metadata_lookup_ids,
             kind,
             family_hint,
+            runtime_config_fallback,
         }
     }
 
@@ -84,10 +91,31 @@ pub fn get_model_config_for_model_id(
         }
     }
 
+    if parsed.runtime_config_fallback {
+        return Ok(runtime_resolved_converse_config());
+    }
+
     Err(crate::core::providers::ProviderError::model_not_found(
         "bedrock",
         format!("Model {} not supported", parsed.execution_model_id),
     ))
+}
+
+static RUNTIME_RESOLVED_CONVERSE_CONFIG: super::model_config::ModelConfig =
+    super::model_config::ModelConfig {
+        family: super::model_config::BedrockModelFamily::Nova,
+        api_type: super::model_config::BedrockApiType::Converse,
+        supports_streaming: true,
+        supports_function_calling: true,
+        supports_multimodal: true,
+        max_context_length: 0,
+        max_output_length: None,
+        input_cost_per_1k: 0.0,
+        output_cost_per_1k: 0.0,
+    };
+
+fn runtime_resolved_converse_config() -> &'static super::model_config::ModelConfig {
+    &RUNTIME_RESOLVED_CONVERSE_CONFIG
 }
 
 fn canonical_metadata_id(model_id: &str) -> Option<String> {
@@ -99,15 +127,59 @@ fn canonical_metadata_id(model_id: &str) -> Option<String> {
     }
 }
 
-fn arn_resource_model_id(model_id: &str) -> Option<&str> {
+#[derive(Debug, Default)]
+struct ArnResourceMetadata {
+    lookup_ids: Vec<String>,
+    runtime_config_fallback: bool,
+}
+
+fn arn_resource_metadata(model_id: &str) -> Option<ArnResourceMetadata> {
     if !model_id.starts_with("arn:") {
         return None;
     }
 
-    model_id
-        .rsplit_once('/')
-        .map(|(_, resource_id)| resource_id)
-        .filter(|resource_id| !resource_id.is_empty())
+    let resource = model_id.splitn(6, ':').nth(5)?;
+    let (resource_type, resource_id) = resource.split_once('/')?;
+    if resource_id.is_empty() {
+        return Some(ArnResourceMetadata {
+            runtime_config_fallback: true,
+            ..Default::default()
+        });
+    }
+
+    let mut metadata = ArnResourceMetadata::default();
+
+    match resource_type {
+        "foundation-model" | "inference-profile" => {
+            metadata.lookup_ids.push(resource_id.to_string());
+        }
+        "application-inference-profile" => {
+            metadata.lookup_ids.push(resource_id.to_string());
+            metadata.runtime_config_fallback = true;
+        }
+        "custom-model" => {
+            if let Some((source_model_id, _custom_model_id)) = resource_id.split_once('/')
+                && source_model_id != "imported"
+            {
+                metadata.lookup_ids.push(source_model_id.to_string());
+            } else {
+                metadata.runtime_config_fallback = true;
+            }
+        }
+        "custom-model-deployment"
+        | "imported-model"
+        | "provisioned-model"
+        | "prompt"
+        | "default-prompt-router"
+        | "prompt-router" => {
+            metadata.runtime_config_fallback = true;
+        }
+        _ => {
+            metadata.runtime_config_fallback = true;
+        }
+    }
+
+    Some(metadata)
 }
 
 fn is_geo_prefix(prefix: &str) -> bool {
@@ -207,5 +279,82 @@ mod tests {
         );
         assert_eq!(parsed.kind, BedrockModelIdKind::Arn);
         assert_eq!(parsed.family_hint.as_deref(), Some("anthropic"));
+        assert!(!parsed.runtime_config_fallback);
+    }
+
+    #[test]
+    fn foundation_model_arn_uses_resource_model_id_for_metadata() {
+        let parsed = parse_bedrock_model_id(
+            "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-haiku-20240307",
+        );
+
+        assert_eq!(
+            parsed.metadata_lookup_ids,
+            vec![
+                "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-haiku-20240307",
+                "anthropic.claude-3-haiku-20240307"
+            ]
+        );
+        assert_eq!(parsed.family_hint.as_deref(), Some("anthropic"));
+        assert!(!parsed.runtime_config_fallback);
+    }
+
+    #[test]
+    fn custom_model_arn_uses_source_model_for_metadata() {
+        let parsed = parse_bedrock_model_id(
+            "arn:aws:bedrock:us-east-1:123456789012:custom-model/anthropic.claude-3-5-sonnet-20241022-v2:0/123456789012",
+        );
+
+        assert_eq!(
+            parsed.metadata_lookup_ids,
+            vec![
+                "arn:aws:bedrock:us-east-1:123456789012:custom-model/anthropic.claude-3-5-sonnet-20241022-v2:0/123456789012",
+                "anthropic.claude-3-5-sonnet-20241022-v2:0"
+            ]
+        );
+        assert_eq!(parsed.family_hint.as_deref(), Some("anthropic"));
+        assert!(!parsed.runtime_config_fallback);
+    }
+
+    #[test]
+    fn application_profile_arn_allows_runtime_config_resolution() {
+        let parsed = parse_bedrock_model_id(
+            "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/my-team-profile",
+        );
+
+        assert_eq!(
+            parsed.metadata_lookup_ids,
+            vec![
+                "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/my-team-profile",
+                "my-team-profile"
+            ]
+        );
+        assert!(parsed.runtime_config_fallback);
+    }
+
+    #[test]
+    fn custom_model_deployment_arn_allows_runtime_config_resolution() {
+        let parsed = parse_bedrock_model_id(
+            "arn:aws:bedrock:us-east-1:123456789012:custom-model-deployment/123456789012",
+        );
+
+        assert_eq!(
+            parsed.metadata_lookup_ids,
+            vec!["arn:aws:bedrock:us-east-1:123456789012:custom-model-deployment/123456789012"]
+        );
+        assert!(parsed.runtime_config_fallback);
+    }
+
+    #[test]
+    fn runtime_resolved_arn_does_not_fail_config_lookup_before_request() {
+        let config = super::get_model_config_for_model_id(
+            "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/my-team-profile",
+        )
+        .unwrap();
+
+        assert_eq!(
+            config.api_type,
+            crate::core::providers::bedrock::BedrockApiType::Converse
+        );
     }
 }

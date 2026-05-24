@@ -6,7 +6,7 @@
 use serde_json::Value;
 
 use super::get_model_config_for_model_id;
-use super::model_config::BedrockModelFamily;
+use super::model_config::{BedrockApiType, BedrockModelFamily};
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::responses::{ChatChoice, ChatResponse, FinishReason, Usage};
 use crate::core::types::{chat::ChatMessage, message::MessageContent, message::MessageRole};
@@ -182,35 +182,43 @@ pub fn transform_chat_response(
     // Get model configuration
     let model_config = get_model_config_for_model_id(model)?;
 
-    let choices = match model_config.family {
-        BedrockModelFamily::Claude => parse_claude_response(&response),
-        BedrockModelFamily::TitanText => parse_titan_response(&response),
-        BedrockModelFamily::Nova | BedrockModelFamily::Llama => {
-            parse_nova_llama_response(&response)
-        }
-        BedrockModelFamily::Mistral => parse_mistral_response(&response),
-        BedrockModelFamily::AI21 => parse_ai21_response(&response),
-        BedrockModelFamily::Cohere => parse_cohere_response(&response),
-        BedrockModelFamily::DeepSeek => parse_deepseek_response(&response),
-        _ => {
-            // Unsupported model family
-            return Err(ProviderError::invalid_request(
-                "bedrock",
-                format!(
-                    "Model family {:?} is not supported for response parsing",
-                    model_config.family
-                ),
-            ));
-        }
-    };
+    let (choices, usage) = match model_config.api_type {
+        BedrockApiType::Converse | BedrockApiType::ConverseStream => (
+            parse_converse_response(&response),
+            parse_converse_usage(&response),
+        ),
+        BedrockApiType::Invoke | BedrockApiType::InvokeStream => {
+            let choices = match model_config.family {
+                BedrockModelFamily::Claude => parse_claude_response(&response),
+                BedrockModelFamily::TitanText => parse_titan_response(&response),
+                BedrockModelFamily::Nova | BedrockModelFamily::Llama => {
+                    parse_nova_llama_response(&response)
+                }
+                BedrockModelFamily::Mistral => parse_mistral_response(&response),
+                BedrockModelFamily::AI21 => parse_ai21_response(&response),
+                BedrockModelFamily::Cohere => parse_cohere_response(&response),
+                BedrockModelFamily::DeepSeek => parse_deepseek_response(&response),
+                _ => {
+                    return Err(ProviderError::invalid_request(
+                        "bedrock",
+                        format!(
+                            "Model family {:?} is not supported for response parsing",
+                            model_config.family
+                        ),
+                    ));
+                }
+            };
 
-    // Extract usage information based on model family
-    let usage = match model_config.family {
-        BedrockModelFamily::Claude | BedrockModelFamily::Nova | BedrockModelFamily::Llama => {
-            parse_claude_usage(&response)
+            let usage = match model_config.family {
+                BedrockModelFamily::Claude
+                | BedrockModelFamily::Nova
+                | BedrockModelFamily::Llama => parse_claude_usage(&response),
+                BedrockModelFamily::TitanText => parse_titan_usage(&response),
+                _ => None,
+            };
+
+            (choices, usage)
         }
-        BedrockModelFamily::TitanText => parse_titan_usage(&response),
-        _ => None,
     };
 
     let mut final_usage = usage;
@@ -335,6 +343,24 @@ fn parse_deepseek_response(response: &Value) -> Vec<ChatChoice> {
     vec![create_chat_choice(content)]
 }
 
+fn parse_converse_response(response: &Value) -> Vec<ChatChoice> {
+    let content = response
+        .get("output")
+        .and_then(|output| output.get("message"))
+        .and_then(|message| message.get("content"))
+        .and_then(Value::as_array)
+        .map(|blocks| {
+            blocks
+                .iter()
+                .filter_map(|block| block.get("text").and_then(Value::as_str))
+                .collect::<Vec<_>>()
+                .join("")
+        })
+        .unwrap_or_default();
+
+    vec![create_chat_choice(content)]
+}
+
 // ==================== Usage Parsing Helpers ====================
 
 fn parse_claude_usage(response: &Value) -> Option<Usage> {
@@ -342,6 +368,17 @@ fn parse_claude_usage(response: &Value) -> Option<Usage> {
         prompt_tokens: u.get("input_tokens").and_then(|t| t.as_u64()).unwrap_or(0) as u32,
         completion_tokens: u.get("output_tokens").and_then(|t| t.as_u64()).unwrap_or(0) as u32,
         total_tokens: 0, // Will be calculated by caller
+        prompt_tokens_details: None,
+        completion_tokens_details: None,
+        thinking_usage: None,
+    })
+}
+
+fn parse_converse_usage(response: &Value) -> Option<Usage> {
+    response.get("usage").map(|u| Usage {
+        prompt_tokens: u.get("inputTokens").and_then(|t| t.as_u64()).unwrap_or(0) as u32,
+        completion_tokens: u.get("outputTokens").and_then(|t| t.as_u64()).unwrap_or(0) as u32,
+        total_tokens: 0,
         prompt_tokens_details: None,
         completion_tokens_details: None,
         thinking_usage: None,
@@ -365,4 +402,45 @@ fn parse_titan_usage(response: &Value) -> Option<Usage> {
             })
         })
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::transform_chat_response;
+    use crate::core::types::message::MessageContent;
+
+    #[test]
+    fn parses_converse_response_for_runtime_resolved_profile_arn() {
+        let raw_response = serde_json::json!({
+            "output": {
+                "message": {
+                    "role": "assistant",
+                    "content": [
+                        { "text": "hello " },
+                        { "text": "world" }
+                    ]
+                }
+            },
+            "usage": {
+                "inputTokens": 7,
+                "outputTokens": 3,
+                "totalTokens": 10
+            },
+            "stopReason": "end_turn"
+        });
+        let raw_response = serde_json::to_vec(&raw_response).unwrap();
+
+        let response = transform_chat_response(
+            &raw_response,
+            "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/my-team-profile",
+        )
+        .unwrap();
+
+        let content = response.choices[0].message.content.as_ref().unwrap();
+        assert!(matches!(content, MessageContent::Text(text) if text == "hello world"));
+        let usage = response.usage.unwrap();
+        assert_eq!(usage.prompt_tokens, 7);
+        assert_eq!(usage.completion_tokens, 3);
+        assert_eq!(usage.total_tokens, 10);
+    }
 }
