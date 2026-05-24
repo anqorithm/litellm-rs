@@ -9,6 +9,7 @@ use super::get_model_config_for_model_id;
 use super::model_config::{BedrockApiType, BedrockModelFamily};
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::responses::{ChatChoice, ChatResponse, FinishReason, Usage};
+use crate::core::types::tools::{FunctionCall, ToolCall};
 use crate::core::types::{chat::ChatMessage, message::MessageContent, message::MessageRole};
 
 /// Safely convert an f32 to a serde_json::Number, defaulting to 0 for NaN/Inf values
@@ -344,21 +345,88 @@ fn parse_deepseek_response(response: &Value) -> Vec<ChatChoice> {
 }
 
 fn parse_converse_response(response: &Value) -> Vec<ChatChoice> {
-    let content = response
+    let (text_parts, tool_calls) = response
         .get("output")
         .and_then(|output| output.get("message"))
         .and_then(|message| message.get("content"))
         .and_then(Value::as_array)
         .map(|blocks| {
-            blocks
+            let text_parts = blocks
                 .iter()
                 .filter_map(|block| block.get("text").and_then(Value::as_str))
-                .collect::<Vec<_>>()
-                .join("")
+                .map(ToOwned::to_owned)
+                .collect::<Vec<_>>();
+            let tool_calls = blocks
+                .iter()
+                .filter_map(parse_converse_tool_call)
+                .collect::<Vec<_>>();
+            (text_parts, tool_calls)
         })
         .unwrap_or_default();
 
-    vec![create_chat_choice(content)]
+    let content = if text_parts.is_empty() {
+        None
+    } else {
+        Some(MessageContent::Text(text_parts.join("")))
+    };
+    let tool_calls = if tool_calls.is_empty() {
+        None
+    } else {
+        Some(tool_calls)
+    };
+
+    vec![ChatChoice {
+        index: 0,
+        message: ChatMessage {
+            role: MessageRole::Assistant,
+            content,
+            thinking: None,
+            audio: None,
+            name: None,
+            function_call: None,
+            tool_calls,
+            tool_call_id: None,
+        },
+        finish_reason: Some(
+            response
+                .get("stopReason")
+                .and_then(Value::as_str)
+                .map(parse_converse_finish_reason)
+                .unwrap_or(FinishReason::Stop),
+        ),
+        logprobs: None,
+    }]
+}
+
+fn parse_converse_tool_call(block: &Value) -> Option<ToolCall> {
+    let tool_use = block.get("toolUse")?;
+    let tool_use = tool_use.get("tool_use").unwrap_or(tool_use);
+    let id = tool_use.get("toolUseId").and_then(Value::as_str)?;
+    let name = tool_use.get("name").and_then(Value::as_str)?;
+    let arguments = tool_use
+        .get("input")
+        .map(Value::to_string)
+        .unwrap_or_else(|| "{}".to_string());
+
+    Some(ToolCall {
+        id: id.to_string(),
+        tool_type: "function".to_string(),
+        function: FunctionCall {
+            name: name.to_string(),
+            arguments,
+        },
+    })
+}
+
+fn parse_converse_finish_reason(reason: &str) -> FinishReason {
+    match reason {
+        "end_turn" => FinishReason::Stop,
+        "tool_use" => FinishReason::ToolCalls,
+        "max_tokens" => FinishReason::Length,
+        "stop_sequence" => FinishReason::StopSequence,
+        "content_filtered" | "guardrail_intervened" => FinishReason::ContentFilter,
+        _ => FinishReason::Stop,
+    }
 }
 
 // ==================== Usage Parsing Helpers ====================
@@ -408,6 +476,7 @@ fn parse_titan_usage(response: &Value) -> Option<Usage> {
 mod tests {
     use super::transform_chat_response;
     use crate::core::types::message::MessageContent;
+    use crate::core::types::responses::FinishReason;
 
     #[test]
     fn parses_converse_response_for_runtime_resolved_profile_arn() {
@@ -442,5 +511,53 @@ mod tests {
         assert_eq!(usage.prompt_tokens, 7);
         assert_eq!(usage.completion_tokens, 3);
         assert_eq!(usage.total_tokens, 10);
+    }
+
+    #[test]
+    fn preserves_converse_tool_use_response_blocks() {
+        let raw_response = serde_json::json!({
+            "output": {
+                "message": {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "toolUse": {
+                                "toolUseId": "tool-123",
+                                "name": "get_weather",
+                                "input": { "city": "Paris", "unit": "celsius" }
+                            }
+                        }
+                    ]
+                }
+            },
+            "usage": {
+                "inputTokens": 11,
+                "outputTokens": 4
+            },
+            "stopReason": "tool_use"
+        });
+        let raw_response = serde_json::to_vec(&raw_response).unwrap();
+
+        let response = transform_chat_response(
+            &raw_response,
+            "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/my-team-profile",
+        )
+        .unwrap();
+
+        let choice = &response.choices[0];
+        assert_eq!(choice.finish_reason, Some(FinishReason::ToolCalls));
+        assert!(choice.message.content.is_none());
+
+        let tool_calls = choice.message.tool_calls.as_ref().unwrap();
+        assert_eq!(tool_calls.len(), 1);
+        let tool_call = &tool_calls[0];
+        assert_eq!(tool_call.id, "tool-123");
+        assert_eq!(tool_call.tool_type, "function");
+        assert_eq!(tool_call.function.name, "get_weather");
+
+        let arguments: serde_json::Value =
+            serde_json::from_str(&tool_call.function.arguments).unwrap();
+        assert_eq!(arguments["city"], "Paris");
+        assert_eq!(arguments["unit"], "celsius");
     }
 }
