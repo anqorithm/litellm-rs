@@ -1,5 +1,5 @@
 use super::*;
-use crate::core::providers::bedrock::model_config::BedrockModelFamily;
+use crate::core::providers::bedrock::model_config::{BedrockApiType, BedrockModelFamily};
 
 // ==================== HeaderValue Tests ====================
 
@@ -119,7 +119,16 @@ fn test_parse_event_message_minimal() {
 
 fn create_test_stream_claude() -> BedrockStream {
     let stream = futures::stream::empty::<Result<Bytes, reqwest::Error>>();
-    BedrockStream::new(stream, BedrockModelFamily::Claude)
+    BedrockStream::new(
+        stream,
+        BedrockModelFamily::Claude,
+        BedrockApiType::InvokeStream,
+    )
+}
+
+fn create_test_stream_converse_claude() -> BedrockStream {
+    let stream = futures::stream::empty::<Result<Bytes, reqwest::Error>>();
+    BedrockStream::new(stream, BedrockModelFamily::Claude, BedrockApiType::Converse)
 }
 
 #[test]
@@ -198,7 +207,11 @@ fn test_parse_claude_empty_delta() {
 
 fn create_test_stream_nova() -> BedrockStream {
     let stream = futures::stream::empty::<Result<Bytes, reqwest::Error>>();
-    BedrockStream::new(stream, BedrockModelFamily::Nova)
+    BedrockStream::new(
+        stream,
+        BedrockModelFamily::Nova,
+        BedrockApiType::InvokeStream,
+    )
 }
 
 #[test]
@@ -239,7 +252,11 @@ fn test_parse_nova_no_content() {
 
 fn create_test_stream_titan() -> BedrockStream {
     let stream = futures::stream::empty::<Result<Bytes, reqwest::Error>>();
-    BedrockStream::new(stream, BedrockModelFamily::TitanText)
+    BedrockStream::new(
+        stream,
+        BedrockModelFamily::TitanText,
+        BedrockApiType::InvokeStream,
+    )
 }
 
 #[test]
@@ -294,7 +311,11 @@ fn test_parse_titan_no_output() {
 
 fn create_test_stream_generic() -> BedrockStream {
     let stream = futures::stream::empty::<Result<Bytes, reqwest::Error>>();
-    BedrockStream::new(stream, BedrockModelFamily::Mistral)
+    BedrockStream::new(
+        stream,
+        BedrockModelFamily::Mistral,
+        BedrockApiType::InvokeStream,
+    )
 }
 
 #[test]
@@ -376,6 +397,39 @@ fn test_parse_chunk_routes_to_claude() {
 }
 
 #[test]
+fn test_parse_chunk_routes_converse_claude_to_converse_schema() {
+    let stream = create_test_stream_converse_claude();
+    let payload = br#"{"contentBlockDelta": {"delta": {"text": "test"}}}"#;
+
+    let result = stream.parse_chunk(payload);
+    assert!(result.is_ok());
+
+    let chunk = result.unwrap();
+    assert!(chunk.is_some());
+    assert_eq!(
+        chunk.unwrap().choices[0].delta.content,
+        Some("test".to_string())
+    );
+}
+
+#[test]
+fn test_parse_converse_message_stop_maps_stop_reason() {
+    let stream = create_test_stream_converse_claude();
+    let payload = br#"{"messageStop": {"stopReason": "tool_use"}}"#;
+
+    let result = stream.parse_chunk(payload);
+    assert!(result.is_ok());
+
+    let chunk = result.unwrap();
+    assert!(chunk.is_some());
+    let chunk = chunk.unwrap();
+    assert_eq!(
+        chunk.choices[0].finish_reason.as_ref(),
+        Some(&crate::core::types::responses::FinishReason::ToolCalls)
+    );
+}
+
+#[test]
 fn test_parse_chunk_routes_to_nova() {
     let stream = create_test_stream_nova();
     let payload = br#"{"contentBlockDelta": {"delta": {"text": "test"}}}"#;
@@ -409,21 +463,41 @@ fn test_parse_chunk_invalid_json() {
 #[test]
 fn test_bedrock_stream_creation() {
     let stream = futures::stream::empty::<Result<Bytes, reqwest::Error>>();
-    let bedrock_stream = BedrockStream::new(stream, BedrockModelFamily::Claude);
+    let bedrock_stream = BedrockStream::new(
+        stream,
+        BedrockModelFamily::Claude,
+        BedrockApiType::InvokeStream,
+    );
     assert!(bedrock_stream.buffer.is_empty());
 }
 
 #[test]
 fn test_bedrock_stream_different_models() {
     let stream1 = futures::stream::empty::<Result<Bytes, reqwest::Error>>();
-    let _ = BedrockStream::new(stream1, BedrockModelFamily::Claude);
+    let _ = BedrockStream::new(
+        stream1,
+        BedrockModelFamily::Claude,
+        BedrockApiType::InvokeStream,
+    );
 
     let stream2 = futures::stream::empty::<Result<Bytes, reqwest::Error>>();
-    let _ = BedrockStream::new(stream2, BedrockModelFamily::Nova);
+    let _ = BedrockStream::new(
+        stream2,
+        BedrockModelFamily::Nova,
+        BedrockApiType::ConverseStream,
+    );
 
     let stream3 = futures::stream::empty::<Result<Bytes, reqwest::Error>>();
-    let _ = BedrockStream::new(stream3, BedrockModelFamily::TitanText);
+    let _ = BedrockStream::new(
+        stream3,
+        BedrockModelFamily::TitanText,
+        BedrockApiType::InvokeStream,
+    );
 
     let stream4 = futures::stream::empty::<Result<Bytes, reqwest::Error>>();
-    let _ = BedrockStream::new(stream4, BedrockModelFamily::Mistral);
+    let _ = BedrockStream::new(
+        stream4,
+        BedrockModelFamily::Mistral,
+        BedrockApiType::InvokeStream,
+    );
 }

@@ -2,6 +2,7 @@
 //!
 //! Handles AWS Event Stream parsing and streaming responses
 
+use crate::core::providers::bedrock::model_config::{BedrockApiType, BedrockModelFamily};
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::responses::ChatChunk;
 use bytes::Bytes;
@@ -42,14 +43,16 @@ pub enum HeaderValue {
 pub struct BedrockStream {
     inner: Pin<Box<dyn Stream<Item = Result<Bytes, ProviderError>> + Send>>,
     buffer: Vec<u8>,
-    model_family: crate::core::providers::bedrock::model_config::BedrockModelFamily,
+    model_family: BedrockModelFamily,
+    api_type: BedrockApiType,
 }
 
 impl BedrockStream {
     /// Create a new Bedrock stream
     pub fn new(
         stream: impl Stream<Item = Result<Bytes, reqwest::Error>> + Send + 'static,
-        model_family: crate::core::providers::bedrock::model_config::BedrockModelFamily,
+        model_family: BedrockModelFamily,
+        api_type: BedrockApiType,
     ) -> Self {
         let mapped_stream = stream
             .map(|result| result.map_err(|e| ProviderError::network("bedrock", e.to_string())));
@@ -58,6 +61,7 @@ impl BedrockStream {
             inner: Box::pin(mapped_stream),
             buffer: Vec::new(),
             model_family,
+            api_type,
         }
     }
 
@@ -153,22 +157,103 @@ impl BedrockStream {
         let value: Value = serde_json::from_str(&json_str)
             .map_err(|e| ProviderError::response_parsing("bedrock", e.to_string()))?;
 
-        // Parse based on model family
-        match self.model_family {
-            crate::core::providers::bedrock::model_config::BedrockModelFamily::Claude => {
-                self.parse_claude_chunk(&value)
+        match &self.api_type {
+            BedrockApiType::Converse | BedrockApiType::ConverseStream => {
+                return self.parse_converse_chunk(&value);
             }
-            crate::core::providers::bedrock::model_config::BedrockModelFamily::Nova => {
-                self.parse_nova_chunk(&value)
-            }
-            crate::core::providers::bedrock::model_config::BedrockModelFamily::TitanText => {
-                self.parse_titan_chunk(&value)
-            }
+            BedrockApiType::Invoke | BedrockApiType::InvokeStream => {}
+        }
+
+        // Parse invoke-style streams based on model family.
+        match &self.model_family {
+            BedrockModelFamily::Claude => self.parse_claude_chunk(&value),
+            BedrockModelFamily::Nova => self.parse_nova_chunk(&value),
+            BedrockModelFamily::TitanText => self.parse_titan_chunk(&value),
             _ => {
                 // Generic parsing for other models
                 self.parse_generic_chunk(&value)
             }
         }
+    }
+
+    fn parse_converse_finish_reason(
+        stop_reason: Option<&str>,
+    ) -> crate::core::types::responses::FinishReason {
+        use crate::core::types::responses::FinishReason;
+
+        match stop_reason {
+            Some("tool_use") => FinishReason::ToolCalls,
+            Some("max_tokens") => FinishReason::Length,
+            Some("stop_sequence") => FinishReason::StopSequence,
+            Some("content_filtered") | Some("guardrail_intervened") => FinishReason::ContentFilter,
+            _ => FinishReason::Stop,
+        }
+    }
+
+    /// Parse ConverseStream event chunks.
+    fn parse_converse_chunk(&self, value: &Value) -> Result<Option<ChatChunk>, ProviderError> {
+        use crate::core::types::responses::{ChatDelta, ChatStreamChoice};
+
+        if let Some(content) = value
+            .get("contentBlockDelta")
+            .and_then(|c| c.get("delta"))
+            .and_then(|d| d.get("text"))
+            .and_then(|t| t.as_str())
+        {
+            return Ok(Some(ChatChunk {
+                id: format!("bedrock-{}", uuid::Uuid::new_v4()),
+                object: "chat.completion.chunk".to_string(),
+                created: chrono::Utc::now().timestamp(),
+                model: String::new(),
+                choices: vec![ChatStreamChoice {
+                    index: 0,
+                    delta: ChatDelta {
+                        role: None,
+                        content: Some(content.to_string()),
+                        thinking: None,
+                        tool_calls: None,
+                        function_call: None,
+                        audio: None,
+                    },
+                    finish_reason: None,
+                    logprobs: None,
+                }],
+                usage: None,
+                system_fingerprint: None,
+            }));
+        }
+
+        if let Some(message_stop) = value.get("messageStop") {
+            let stop_reason = message_stop
+                .get("stopReason")
+                .or_else(|| value.get("stopReason"))
+                .and_then(|reason| reason.as_str());
+            let finish_reason = Self::parse_converse_finish_reason(stop_reason);
+
+            return Ok(Some(ChatChunk {
+                id: format!("bedrock-{}", uuid::Uuid::new_v4()),
+                object: "chat.completion.chunk".to_string(),
+                created: chrono::Utc::now().timestamp(),
+                model: String::new(),
+                choices: vec![ChatStreamChoice {
+                    index: 0,
+                    delta: ChatDelta {
+                        role: None,
+                        content: None,
+                        thinking: None,
+                        tool_calls: None,
+                        function_call: None,
+                        audio: None,
+                    },
+                    finish_reason: Some(finish_reason),
+                    logprobs: None,
+                }],
+                usage: None,
+                system_fingerprint: None,
+            }));
+        }
+
+        Ok(None)
     }
 
     /// Parse Claude streaming chunk
