@@ -11,6 +11,7 @@ use tracing::debug;
 use super::client::BedrockClient;
 use super::config::BedrockConfig;
 use super::error::BedrockErrorMapper;
+use super::model_config::BedrockApiType;
 use super::transformation;
 use super::utils::{CostCalculator, validate_region};
 use super::{get_model_config_for_model_id, parse_bedrock_model_id};
@@ -39,6 +40,13 @@ pub(super) const BEDROCK_CAPABILITIES: &[ProviderCapability] = &[
     ProviderCapability::FunctionCalling,
     ProviderCapability::Embeddings,
 ];
+
+fn streaming_operation_for_api_type(api_type: &BedrockApiType) -> &'static str {
+    match api_type {
+        BedrockApiType::Converse | BedrockApiType::ConverseStream => "converse-stream",
+        BedrockApiType::Invoke | BedrockApiType::InvokeStream => "invoke-with-response-stream",
+    }
+}
 
 /// AWS Bedrock provider implementation
 #[derive(Debug, Clone)]
@@ -310,19 +318,7 @@ impl LLMProvider for BedrockProvider {
         let body = self.transform_request(request.clone(), context).await?;
 
         // Use streaming endpoint
-        let operation = match model_config.api_type {
-            super::model_config::BedrockApiType::ConverseStream => "converse-stream",
-            super::model_config::BedrockApiType::InvokeStream => "invoke-with-response-stream",
-            _ => {
-                return Err(ProviderError::not_supported(
-                    "bedrock",
-                    format!(
-                        "Model {} does not support streaming with API type {:?}",
-                        request.model, model_config.api_type
-                    ),
-                ));
-            }
-        };
+        let operation = streaming_operation_for_api_type(&model_config.api_type);
 
         // Send streaming request
         let execution_model_id = parse_bedrock_model_id(&request.model).execution_model_id;
@@ -376,5 +372,33 @@ impl LLMProvider for BedrockProvider {
     ) -> Result<f64, ProviderError> {
         CostCalculator::calculate_cost(model, input_tokens, output_tokens)
             .ok_or_else(|| ProviderError::model_not_found("bedrock", model.to_string()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn streaming_operation_promotes_non_stream_api_types() {
+        assert_eq!(
+            streaming_operation_for_api_type(&BedrockApiType::Converse),
+            "converse-stream"
+        );
+        assert_eq!(
+            streaming_operation_for_api_type(&BedrockApiType::Invoke),
+            "invoke-with-response-stream"
+        );
+    }
+
+    #[test]
+    fn catalog_streaming_converse_model_uses_converse_stream_operation() {
+        let config = get_model_config_for_model_id("anthropic.claude-opus-4-6-v1:0").unwrap();
+        assert_eq!(config.api_type, BedrockApiType::Converse);
+        assert!(config.supports_streaming);
+        assert_eq!(
+            streaming_operation_for_api_type(&config.api_type),
+            "converse-stream"
+        );
     }
 }
