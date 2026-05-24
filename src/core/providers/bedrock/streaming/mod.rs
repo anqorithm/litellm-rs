@@ -190,9 +190,112 @@ impl BedrockStream {
         }
     }
 
+    fn converse_content_block_index(event: &Value) -> u32 {
+        event
+            .get("contentBlockIndex")
+            .and_then(Value::as_u64)
+            .and_then(|index| u32::try_from(index).ok())
+            .unwrap_or(0)
+    }
+
+    fn parse_converse_tool_start(
+        event: &Value,
+    ) -> Option<crate::core::types::responses::ToolCallDelta> {
+        use crate::core::types::responses::{FunctionCallDelta, ToolCallDelta};
+
+        let content_block_start = event.get("contentBlockStart")?;
+        let tool_use = content_block_start.get("start")?.get("toolUse")?;
+        let tool_use = tool_use.get("tool_use").unwrap_or(tool_use);
+
+        Some(ToolCallDelta {
+            index: Self::converse_content_block_index(content_block_start),
+            id: Some(tool_use.get("toolUseId")?.as_str()?.to_string()),
+            tool_type: Some("function".to_string()),
+            function: Some(FunctionCallDelta {
+                name: Some(tool_use.get("name")?.as_str()?.to_string()),
+                arguments: None,
+            }),
+        })
+    }
+
+    fn parse_converse_tool_input(
+        event: &Value,
+    ) -> Option<crate::core::types::responses::ToolCallDelta> {
+        use crate::core::types::responses::{FunctionCallDelta, ToolCallDelta};
+
+        let content_block_delta = event.get("contentBlockDelta")?;
+        let tool_use = content_block_delta.get("delta")?.get("toolUse")?;
+        let tool_use = tool_use.get("tool_use").unwrap_or(tool_use);
+        let input = tool_use.get("input")?.as_str()?;
+
+        Some(ToolCallDelta {
+            index: Self::converse_content_block_index(content_block_delta),
+            id: tool_use
+                .get("toolUseId")
+                .and_then(Value::as_str)
+                .map(str::to_string),
+            tool_type: None,
+            function: Some(FunctionCallDelta {
+                name: tool_use
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .map(str::to_string),
+                arguments: Some(input.to_string()),
+            }),
+        })
+    }
+
     /// Parse ConverseStream event chunks.
     fn parse_converse_chunk(&self, value: &Value) -> Result<Option<ChatChunk>, ProviderError> {
         use crate::core::types::responses::{ChatDelta, ChatStreamChoice};
+
+        if let Some(tool_call) = Self::parse_converse_tool_start(value) {
+            return Ok(Some(ChatChunk {
+                id: format!("bedrock-{}", uuid::Uuid::new_v4()),
+                object: "chat.completion.chunk".to_string(),
+                created: chrono::Utc::now().timestamp(),
+                model: String::new(),
+                choices: vec![ChatStreamChoice {
+                    index: 0,
+                    delta: ChatDelta {
+                        role: None,
+                        content: None,
+                        thinking: None,
+                        tool_calls: Some(vec![tool_call]),
+                        function_call: None,
+                        audio: None,
+                    },
+                    finish_reason: None,
+                    logprobs: None,
+                }],
+                usage: None,
+                system_fingerprint: None,
+            }));
+        }
+
+        if let Some(tool_call) = Self::parse_converse_tool_input(value) {
+            return Ok(Some(ChatChunk {
+                id: format!("bedrock-{}", uuid::Uuid::new_v4()),
+                object: "chat.completion.chunk".to_string(),
+                created: chrono::Utc::now().timestamp(),
+                model: String::new(),
+                choices: vec![ChatStreamChoice {
+                    index: 0,
+                    delta: ChatDelta {
+                        role: None,
+                        content: None,
+                        thinking: None,
+                        tool_calls: Some(vec![tool_call]),
+                        function_call: None,
+                        audio: None,
+                    },
+                    finish_reason: None,
+                    logprobs: None,
+                }],
+                usage: None,
+                system_fingerprint: None,
+            }));
+        }
 
         if let Some(content) = value
             .get("contentBlockDelta")

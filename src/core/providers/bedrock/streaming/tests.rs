@@ -413,6 +413,59 @@ fn test_parse_chunk_routes_converse_claude_to_converse_schema() {
 }
 
 #[test]
+fn test_parse_converse_tool_use_start_emits_tool_call_delta() {
+    let stream = create_test_stream_converse_claude();
+    let payload = br#"{"contentBlockStart":{"start":{"toolUse":{"toolUseId":"tool-123","name":"lookup_weather"}},"contentBlockIndex":1}}"#;
+
+    let result = stream.parse_chunk(payload);
+    assert!(result.is_ok());
+
+    let chunk = result.unwrap();
+    assert!(chunk.is_some());
+    let chunk = chunk.unwrap();
+    let tool_calls = chunk.choices[0].delta.tool_calls.as_ref().unwrap();
+    assert_eq!(tool_calls.len(), 1);
+
+    let tool_call = &tool_calls[0];
+    assert_eq!(tool_call.index, 1);
+    assert_eq!(tool_call.id.as_deref(), Some("tool-123"));
+    assert_eq!(tool_call.tool_type.as_deref(), Some("function"));
+
+    let function = tool_call.function.as_ref().unwrap();
+    assert_eq!(function.name.as_deref(), Some("lookup_weather"));
+    assert_eq!(function.arguments, None);
+    assert_eq!(chunk.choices[0].delta.content, None);
+}
+
+#[test]
+fn test_parse_converse_tool_use_delta_emits_arguments_delta() {
+    let stream = create_test_stream_converse_claude();
+    let payload = br#"{"contentBlockDelta":{"delta":{"toolUse":{"input":"{\"city\":\"San Francisco\"}"}},"contentBlockIndex":1}}"#;
+
+    let result = stream.parse_chunk(payload);
+    assert!(result.is_ok());
+
+    let chunk = result.unwrap();
+    assert!(chunk.is_some());
+    let chunk = chunk.unwrap();
+    let tool_calls = chunk.choices[0].delta.tool_calls.as_ref().unwrap();
+    assert_eq!(tool_calls.len(), 1);
+
+    let tool_call = &tool_calls[0];
+    assert_eq!(tool_call.index, 1);
+    assert_eq!(tool_call.id, None);
+    assert_eq!(tool_call.tool_type, None);
+
+    let function = tool_call.function.as_ref().unwrap();
+    assert_eq!(function.name, None);
+    assert_eq!(
+        function.arguments.as_deref(),
+        Some(r#"{"city":"San Francisco"}"#)
+    );
+    assert_eq!(chunk.choices[0].delta.content, None);
+}
+
+#[test]
 fn test_parse_converse_message_stop_maps_stop_reason() {
     let stream = create_test_stream_converse_claude();
     let payload = br#"{"messageStop": {"stopReason": "tool_use"}}"#;
