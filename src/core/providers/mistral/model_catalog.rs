@@ -51,6 +51,8 @@ const MODEL_SPECS: &[MistralModelSpec] = &[
         supports_streaming: true,
         supports_tools: true,
         supports_multimodal: true,
+        // Pricing source: https://docs.mistral.ai/getting-started/models/pricing/
+        // Re-verified 2026-05-25 — 4x price decrease vs prior model_catalog.rs values.
         input_cost_per_1k_tokens: 0.0005,
         output_cost_per_1k_tokens: 0.0015,
         alias_for: None,
