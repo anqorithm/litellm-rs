@@ -5,6 +5,7 @@
 //! and includes AWS SigV4 authentication.
 
 // Core modules
+pub mod catalog;
 mod client;
 mod config;
 mod error;
