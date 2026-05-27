@@ -73,7 +73,7 @@ impl BedrockVendor {
             "meta" => Self::Meta,
             "minimax" => Self::MiniMax,
             "mistral" => Self::Mistral,
-            "moonshot" => Self::Moonshot,
+            "moonshot" | "moonshotai" => Self::Moonshot,
             "nvidia" => Self::Nvidia,
             "openai" => Self::OpenAI,
             "qwen" => Self::Qwen,

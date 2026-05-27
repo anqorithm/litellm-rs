@@ -114,12 +114,6 @@ pub(super) fn seed(out: &mut Vec<BedrockCatalogEntry>) {
             BedrockVendor::Mistral,
         ),
         (
-            "moonshot.kimi-k2-thinking",
-            "Kimi K2 Thinking",
-            BedrockVendor::Moonshot,
-        ),
-        ("moonshot.kimi-k2.5", "Kimi K2.5", BedrockVendor::Moonshot),
-        (
             "nvidia.nemotron-nano-12b-v2",
             "Nemotron Nano 12B v2",
             BedrockVendor::Nvidia,
@@ -205,6 +199,42 @@ pub(super) fn seed(out: &mut Vec<BedrockCatalogEntry>) {
                 max_output_length: Some(8192),
             },
             ModelCapabilities::CHAT_MULTIMODAL,
+            Some(BedrockPricing::per_1k(0.0008, 0.0032)),
+            None,
+            SourceMetadata::AWS_BEDROCK_PRICING,
+        ));
+    }
+
+    let moonshot: &[(&str, &str, ModelCapabilities)] = &[
+        (
+            "moonshot.kimi-k2-thinking",
+            "Kimi K2 Thinking",
+            ModelCapabilities::CHAT_TOOLS_TEXT,
+        ),
+        (
+            "moonshotai.kimi-k2.5",
+            "Kimi K2.5",
+            ModelCapabilities::CHAT_MULTIMODAL,
+        ),
+    ];
+    for (id, name, capabilities) in moonshot {
+        out.push(entry(
+            id,
+            name,
+            BedrockVendor::Moonshot,
+            // Legacy `MODEL_CONFIGS` uses BedrockModelFamily::Nova as the
+            // catch-all for these generic converse models. Preserve that
+            // mapping so the projection stays bit-identical.
+            BedrockModelFamily::Nova,
+            BedrockApiType::Converse,
+            ModelLifecycle::Live,
+            EndpointSupport::CONVERSE,
+            US_GLOBAL,
+            ModelLimits {
+                max_context_length: 256_000,
+                max_output_length: Some(16_000),
+            },
+            *capabilities,
             Some(BedrockPricing::per_1k(0.0008, 0.0032)),
             None,
             SourceMetadata::AWS_BEDROCK_PRICING,

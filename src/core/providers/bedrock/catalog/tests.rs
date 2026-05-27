@@ -221,4 +221,18 @@ fn lookup_helpers_return_seeded_entry() {
         .expect("Claude 3 Opus must be in the catalog");
     assert_eq!(entry.vendor, super::BedrockVendor::Anthropic);
     assert!(entry.pricing.is_some());
+
+    let kimi = get_catalog_entry("moonshotai.kimi-k2.5")
+        .expect("Kimi K2.5 must use the Bedrock runtime model ID");
+    assert_eq!(kimi.vendor, super::BedrockVendor::Moonshot);
+    assert_eq!(kimi.limits.max_context_length, 256_000);
+    assert_eq!(kimi.limits.max_output_length, Some(16_000));
+    assert!(kimi.capabilities.multimodal);
+    assert!(get_catalog_entry("moonshot.kimi-k2.5").is_none());
+
+    let thinking = get_catalog_entry("moonshot.kimi-k2-thinking")
+        .expect("Kimi K2 Thinking must use the Bedrock runtime model ID");
+    assert_eq!(thinking.limits.max_context_length, 256_000);
+    assert_eq!(thinking.limits.max_output_length, Some(16_000));
+    assert!(!thinking.capabilities.multimodal);
 }
