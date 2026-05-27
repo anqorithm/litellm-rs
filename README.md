@@ -1,6 +1,6 @@
 # litellm-rs
 
-A high-performance Rust library and gateway for calling LLM APIs in an OpenAI-compatible format. Ships with 50+ built-in OpenAI-compatible providers plus first-class adapters for OpenAI, Anthropic, Mistral, and Cloudflare.
+A high-performance Rust library and gateway for calling LLM APIs in an OpenAI-compatible format. Ships with 50+ built-in OpenAI-compatible providers plus first-class adapters for OpenAI, Anthropic, AWS Bedrock, Mistral, and Cloudflare.
 
 [![Crates.io](https://img.shields.io/crates/v/litellm-rs.svg)](https://crates.io/crates/litellm-rs)
 [![Documentation](https://docs.rs/litellm-rs/badge.svg)](https://docs.rs/litellm-rs)
@@ -8,7 +8,7 @@ A high-performance Rust library and gateway for calling LLM APIs in an OpenAI-co
 
 ## Features
 
-- **60+ runtime-wired providers** - OpenAI, Anthropic, Mistral, Cloudflare, plus 50+ OpenAI-compatible providers via the Tier 1 catalog. See [Provider Support](#provider-support) for the full matrix.
+- **60+ runtime-wired providers** - OpenAI, Anthropic, AWS Bedrock, Mistral, Cloudflare, plus 50+ OpenAI-compatible providers via the Tier 1 catalog. See [Provider Support](#provider-support) for the full matrix.
 - **OpenAI-Compatible API** - Drop-in replacement for OpenAI SDK
 - **High Performance** - 10,000+ requests/second, <10ms routing overhead
 - **Intelligent Routing** - Load balancing, failover, cost optimization
@@ -126,7 +126,7 @@ Providers are organised into two tiers (see [CLAUDE.md → Provider Tiers](./CLA
 | Cloudflare Workers AI (`cloudflare`) | always | ✅ | ✅ | passthrough | – | – | Native client with account-id auth. |
 | Azure OpenAI (`azure`) | wired via factory (`OpenAILike`) | ✅ | ✅ | passthrough | passthrough | passthrough | Dedicated module gated on `providers-extra`. |
 | Azure AI Inference (`azure_ai`) | wired via factory (`OpenAILike`) | ✅ | ✅ | passthrough | – | – | Dedicated module gated on `providers-extra`. |
-| AWS Bedrock (`bedrock`) | wired via factory (`OpenAILike`) | ✅ | ✅ | passthrough | – | – | Routed through Bedrock's OpenAI-compatible surface. SigV4-signed dedicated module gated on `providers-extra`; not yet wired as the runtime path. |
+| AWS Bedrock (`bedrock`) | always | ✅ | ✅ | ✅ | helper API | – | Native AWS Bedrock runtime path with SigV4 signing. Use `openai_compatible` for Bedrock Access Gateway or other OpenAI-compatible proxies. |
 | Google Vertex AI (`vertex_ai`) | wired via factory (`OpenAILike`) | ✅ | ✅ | passthrough | – | – | Dedicated module gated on `providers-extra`. |
 | Meta Llama API (`meta_llama`) | wired via factory (`OpenAILike`) | ✅ | ✅ | passthrough | – | – | Dedicated module gated on `providers-extra`. |
 | Vercel v0 (`v0`) | wired via factory (`OpenAILike`) | ✅ | ✅ | passthrough | – | – | Dedicated module gated on `providers-extra`. |
