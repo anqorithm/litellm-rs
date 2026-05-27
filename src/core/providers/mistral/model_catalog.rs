@@ -115,7 +115,7 @@ const MODEL_SPECS: &[MistralModelSpec] = &[
     MistralModelSpec {
         id: "magistral-medium-2509",
         name: "Magistral Medium 1.2 2509",
-        max_context_length: 40000,
+        max_context_length: 128000,
         supports_streaming: true,
         supports_tools: false,
         supports_multimodal: false,
@@ -126,7 +126,7 @@ const MODEL_SPECS: &[MistralModelSpec] = &[
     MistralModelSpec {
         id: "magistral-medium-1-2",
         name: "Magistral Medium 1.2 (alias -> magistral-medium-2509)",
-        max_context_length: 40000,
+        max_context_length: 128000,
         supports_streaming: true,
         supports_tools: false,
         supports_multimodal: false,
@@ -137,7 +137,7 @@ const MODEL_SPECS: &[MistralModelSpec] = &[
     MistralModelSpec {
         id: "magistral-small-2509",
         name: "Magistral Small 1.2 2509",
-        max_context_length: 40000,
+        max_context_length: 128000,
         supports_streaming: true,
         supports_tools: false,
         supports_multimodal: false,
@@ -148,7 +148,7 @@ const MODEL_SPECS: &[MistralModelSpec] = &[
     MistralModelSpec {
         id: "magistral-small-1-2",
         name: "Magistral Small 1.2 (alias -> magistral-small-2509)",
-        max_context_length: 40000,
+        max_context_length: 128000,
         supports_streaming: true,
         supports_tools: false,
         supports_multimodal: false,
