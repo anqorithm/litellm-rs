@@ -3,10 +3,13 @@
 //! Contains the logic for transforming requests and responses between
 //! OpenAI-compatible format and Bedrock model-specific formats.
 
+mod openai_invoke_response;
+
 use serde_json::Value;
 
 use super::get_model_config_for_model_id;
 use super::model_config::{BedrockApiType, BedrockModelFamily};
+use super::model_id::is_runtime_resolved_invoke_model_id;
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::responses::{ChatChoice, ChatResponse, FinishReason, Usage};
 use crate::core::types::tools::{FunctionCall, ToolCall};
@@ -180,6 +183,25 @@ pub fn transform_chat_response(
     let response: Value = serde_json::from_slice(raw_response)
         .map_err(|e| ProviderError::response_parsing("bedrock", e.to_string()))?;
 
+    if is_runtime_resolved_invoke_model_id(model) {
+        let mut usage = parse_runtime_invoke_usage(&response);
+        if let Some(ref mut usage) = usage
+            && usage.total_tokens == 0
+        {
+            usage.total_tokens = usage.prompt_tokens + usage.completion_tokens;
+        }
+
+        return Ok(ChatResponse {
+            id: format!("bedrock-{}", uuid::Uuid::new_v4()),
+            object: "chat.completion".to_string(),
+            created: chrono::Utc::now().timestamp(),
+            model: model.to_string(),
+            choices: parse_runtime_invoke_response(&response),
+            usage,
+            system_fingerprint: None,
+        });
+    }
+
     // Get model configuration
     let model_config = get_model_config_for_model_id(model)?;
 
@@ -344,6 +366,44 @@ fn parse_deepseek_response(response: &Value) -> Vec<ChatChoice> {
     vec![create_chat_choice(content)]
 }
 
+fn parse_openai_compatible_response(response: &Value) -> Vec<ChatChoice> {
+    openai_invoke_response::parse_response(response)
+}
+
+fn parse_runtime_invoke_response(response: &Value) -> Vec<ChatChoice> {
+    if response.get("choices").is_some() {
+        return parse_openai_compatible_response(response);
+    }
+
+    let content = response
+        .get("completion")
+        .or_else(|| response.get("generation"))
+        .or_else(|| response.get("text"))
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .or_else(|| {
+            response
+                .get("outputs")
+                .and_then(Value::as_array)
+                .and_then(|outputs| outputs.first())
+                .and_then(|output| output.get("text"))
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .or_else(|| {
+            response
+                .get("results")
+                .and_then(Value::as_array)
+                .and_then(|results| results.first())
+                .and_then(|result| result.get("outputText"))
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .unwrap_or_default();
+
+    vec![create_chat_choice(content)]
+}
+
 fn parse_converse_response(response: &Value) -> Vec<ChatChoice> {
     let (text_parts, tool_calls) = response
         .get("output")
@@ -423,13 +483,60 @@ fn parse_converse_finish_reason(reason: &str) -> FinishReason {
         "end_turn" => FinishReason::Stop,
         "tool_use" => FinishReason::ToolCalls,
         "max_tokens" => FinishReason::Length,
+        "model_context_window_exceeded" => FinishReason::Length,
         "stop_sequence" => FinishReason::StopSequence,
         "content_filtered" | "guardrail_intervened" => FinishReason::ContentFilter,
+        "malformed_model_output" | "malformed_tool_use" => FinishReason::Refusal,
         _ => FinishReason::Stop,
     }
 }
 
 // ==================== Usage Parsing Helpers ====================
+
+fn parse_openai_compatible_usage(response: &Value) -> Option<Usage> {
+    response.get("usage").map(|u| Usage {
+        prompt_tokens: u.get("prompt_tokens").and_then(|t| t.as_u64()).unwrap_or(0) as u32,
+        completion_tokens: u
+            .get("completion_tokens")
+            .and_then(|t| t.as_u64())
+            .unwrap_or(0) as u32,
+        total_tokens: u.get("total_tokens").and_then(|t| t.as_u64()).unwrap_or(0) as u32,
+        prompt_tokens_details: None,
+        completion_tokens_details: None,
+        thinking_usage: None,
+    })
+}
+
+fn parse_runtime_invoke_usage(response: &Value) -> Option<Usage> {
+    if let Some(usage) = parse_openai_compatible_usage(response) {
+        return Some(usage);
+    }
+
+    let prompt_tokens = response
+        .get("inputTextTokenCount")
+        .and_then(Value::as_u64)
+        .unwrap_or(0) as u32;
+    let completion_tokens = response
+        .get("results")
+        .and_then(Value::as_array)
+        .and_then(|results| results.first())
+        .and_then(|result| result.get("tokenCount"))
+        .and_then(Value::as_u64)
+        .unwrap_or(0) as u32;
+
+    if prompt_tokens == 0 && completion_tokens == 0 {
+        return None;
+    }
+
+    Some(Usage {
+        prompt_tokens,
+        completion_tokens,
+        total_tokens: prompt_tokens + completion_tokens,
+        prompt_tokens_details: None,
+        completion_tokens_details: None,
+        thinking_usage: None,
+    })
+}
 
 fn parse_claude_usage(response: &Value) -> Option<Usage> {
     response.get("usage").map(|u| Usage {
@@ -559,5 +666,94 @@ mod tests {
             serde_json::from_str(&tool_call.function.arguments).unwrap();
         assert_eq!(arguments["city"], "Paris");
         assert_eq!(arguments["unit"], "celsius");
+    }
+
+    #[test]
+    fn maps_converse_context_window_stop_reason_to_length() {
+        let raw_response = serde_json::json!({
+            "output": {
+                "message": {
+                    "role": "assistant",
+                    "content": [{ "text": "partial answer" }]
+                }
+            },
+            "stopReason": "model_context_window_exceeded"
+        });
+        let raw_response = serde_json::to_vec(&raw_response)
+            .unwrap_or_else(|err| panic!("Converse response should serialize: {err}"));
+
+        let response = transform_chat_response(
+            &raw_response,
+            "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/my-team-profile",
+        )
+        .unwrap_or_else(|err| panic!("Converse response should parse: {err}"));
+
+        assert_eq!(
+            response.choices[0].finish_reason,
+            Some(FinishReason::Length)
+        );
+    }
+
+    #[test]
+    fn parses_openai_compatible_response_for_runtime_resolved_invoke_arn() {
+        let raw_response = serde_json::json!({
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "content": "hello from imported"
+                },
+                "finish_reason": "stop"
+            }],
+            "usage": {
+                "prompt_tokens": 5,
+                "completion_tokens": 3,
+                "total_tokens": 8
+            }
+        });
+        let raw_response = serde_json::to_vec(&raw_response)
+            .unwrap_or_else(|err| panic!("OpenAI-compatible response should serialize: {err}"));
+
+        let response = transform_chat_response(
+            &raw_response,
+            "arn:aws:bedrock:us-east-1:123456789012:imported-model/ABC123",
+        )
+        .unwrap_or_else(|err| panic!("OpenAI-compatible response should parse: {err}"));
+
+        let content = response.choices[0]
+            .message
+            .content
+            .as_ref()
+            .unwrap_or_else(|| panic!("response should include assistant content"));
+        assert!(matches!(content, MessageContent::Text(text) if text == "hello from imported"));
+        let usage = response
+            .usage
+            .unwrap_or_else(|| panic!("response should include usage"));
+        assert_eq!(usage.prompt_tokens, 5);
+        assert_eq!(usage.completion_tokens, 3);
+        assert_eq!(usage.total_tokens, 8);
+    }
+
+    #[test]
+    fn parses_native_response_for_runtime_resolved_invoke_arn() {
+        let raw_response = serde_json::json!({
+            "completion": "hello from native invoke"
+        });
+        let raw_response = serde_json::to_vec(&raw_response)
+            .unwrap_or_else(|err| panic!("native response should serialize: {err}"));
+
+        let response = transform_chat_response(
+            &raw_response,
+            "arn:aws:bedrock:us-east-1:123456789012:imported-model/ABC123",
+        )
+        .unwrap_or_else(|err| panic!("native response should parse: {err}"));
+
+        let content = response.choices[0]
+            .message
+            .content
+            .as_ref()
+            .unwrap_or_else(|| panic!("response should include assistant content"));
+        assert!(
+            matches!(content, MessageContent::Text(text) if text == "hello from native invoke")
+        );
     }
 }

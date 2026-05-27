@@ -21,8 +21,8 @@ proxy split, inference-profile policy) see
 
 Pick native Bedrock when **any** of the following apply:
 
-- You can give the process AWS credentials (explicit keys, IAM instance
-  profile, EKS IRSA, or a `~/.aws/credentials` profile).
+- You can give the process AWS access key credentials through config or
+  environment variables.
 - You need to invoke geo (`us.`, `eu.`, `apac.`) or global (`global.`)
   inference profile IDs and ARNs with the original execution `modelId`.
 - You want the lowest latency path (no extra proxy hop, no extra hostname).
@@ -30,15 +30,18 @@ Pick native Bedrock when **any** of the following apply:
   guardrails, and the full Bedrock feature surface.
 
 Pick the OpenAI-compatible proxy instead when you already operate a Bedrock
-Access Gateway, want to share an OpenAI-shaped REST surface, or do not have
-AWS credentials available where LiteLLM-RS runs.
+Access Gateway, want to share an OpenAI-shaped REST surface, or do not want
+AWS access keys available where LiteLLM-RS runs.
 
 ## Authentication
 
-Native Bedrock uses the AWS SigV4 credential chain. Region is the only
-mandatory field; access keys are optional.
+Native Bedrock signs requests with AWS SigV4. `aws_access_key_id` and
+`aws_secret_access_key` are required through config or environment variables.
+`aws_session_token` is optional for temporary credentials. `aws_region` is
+optional and defaults to `us-east-1` when neither `AWS_REGION` nor
+`AWS_DEFAULT_REGION` is set.
 
-### Option 1 — explicit access keys
+### Environment variables
 
 ```bash
 export AWS_ACCESS_KEY_ID="AKIA..."
@@ -47,25 +50,13 @@ export AWS_SESSION_TOKEN="..."        # optional, for short-lived credentials
 export AWS_REGION="us-east-1"         # AWS_DEFAULT_REGION also accepted
 ```
 
-### Option 2 — IAM credential chain (EC2, ECS, EKS, profile file)
-
-Leave `aws_access_key_id` and `aws_secret_access_key` empty in both env and
-config. The SigV4 client will resolve credentials at request time from the
-standard AWS chain:
-
-1. EC2 instance metadata or ECS task role.
-2. EKS IRSA (IAM Roles for Service Accounts) via the projected token.
-3. `~/.aws/credentials` profile referenced by `AWS_PROFILE`.
-
-This means a pod running with an attached IAM role only needs `AWS_REGION`
-set (or the `aws_region` setting in YAML).
-
 ## Gateway configuration
 
 The generic `ProviderConfig.api_key` field is unused by native Bedrock. Put
-AWS-specific values under `settings`, or rely on environment defaults.
+AWS-specific values under `settings`, or provide the same values through
+environment variables.
 
-### Explicit keys
+### Explicit settings
 
 ```yaml
 providers:
@@ -82,21 +73,6 @@ providers:
     models:
       - "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
       - "anthropic.claude-3-5-sonnet-20241022-v2:0"
-    enabled: true
-```
-
-### IAM chain (no keys in config)
-
-```yaml
-providers:
-  - name: "bedrock-native"
-    provider_type: "bedrock"
-    api_key: ""
-    timeout: 60
-    settings:
-      aws_region: "us-east-1"
-    models:
-      - "global.anthropic.claude-opus-4-20250514-v1:0"
     enabled: true
 ```
 

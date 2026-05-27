@@ -29,9 +29,9 @@ Pick the proxy when **any** of the following are true:
 - AWS credentials are not available where LiteLLM-RS runs (different VPC,
   different account, on-prem reverse proxy in front of Bedrock).
 
-Pick [native Bedrock](./bedrock.md) when LiteLLM-RS itself has AWS
-credentials or an instance/EKS role, or when you need inference profile IDs
-and ARNs preserved exactly as AWS execution `modelId` values.
+Pick [native Bedrock](./bedrock.md) when LiteLLM-RS itself has AWS access key
+credentials and a region, or when you need inference profile IDs and ARNs
+preserved exactly as AWS execution `modelId` values.
 
 ## About Bedrock Access Gateway
 
@@ -131,7 +131,7 @@ emits SSE chunks and LiteLLM-RS relays them unchanged.
 
 | Concern                   | Native (`bedrock`)                | Proxy (`openai_compatible`)             |
 |---------------------------|-----------------------------------|------------------------------------------|
-| AWS credentials in LiteLLM| Required (or IAM role)            | Not required                             |
+| AWS credentials in LiteLLM| Access key/secret required        | Not required                             |
 | Extra network hop         | No                                | Yes (through the gateway)                |
 | Inference-profile IDs     | Preserved verbatim                | Whatever the proxy preserves             |
 | Bedrock-specific features | Full surface                      | Whatever the proxy exposes               |
