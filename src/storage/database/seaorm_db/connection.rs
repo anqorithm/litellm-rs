@@ -13,7 +13,7 @@ impl SeaOrmDatabase {
     /// Create a new database connection with automatic SQLite fallback
     pub async fn new(config: &DatabaseConfig) -> Result<Self> {
         if !config.enabled {
-            info!("Database disabled in config. Using in-memory SQLite backend");
+            warn!("Database disabled in config; using non-persistent in-memory SQLite backend");
             return Self::in_memory_sqlite(config.connection_timeout).await;
         }
 

@@ -77,6 +77,7 @@ impl StorageLayer {
         // Initialize database
         debug!("Connecting to database");
         let database = Arc::new(database::Database::new(&config.database).await?);
+        database.migrate().await?;
 
         // Initialize Redis (fail-fast unless allow_degraded is set)
         debug!("Creating Redis connection pool");
@@ -508,6 +509,46 @@ mod tests {
             "stored file should use configured path: {}",
             expected_path.display()
         );
+    }
+
+    #[tokio::test]
+    async fn default_storage_layer_runs_in_memory_sqlite_migrations() {
+        let config = StorageConfig {
+            database: DatabaseConfig::default(),
+            redis: RedisConfig::default(),
+            files: FileStorageConfig::default(),
+            vector_db: None,
+        };
+
+        let storage = StorageLayer::new(&config)
+            .await
+            .expect("default storage layer should initialize");
+        let snapshots = storage
+            .database
+            .load_budget_limit_snapshots()
+            .await
+            .expect("default in-memory SQLite should have migrated budget tables");
+
+        assert!(snapshots.is_empty());
+    }
+
+    #[tokio::test]
+    async fn storage_layer_migrate_is_idempotent_after_startup_migration() {
+        let config = StorageConfig {
+            database: DatabaseConfig::default(),
+            redis: RedisConfig::default(),
+            files: FileStorageConfig::default(),
+            vector_db: None,
+        };
+
+        let storage = StorageLayer::new(&config)
+            .await
+            .expect("default storage layer should initialize");
+
+        storage
+            .migrate()
+            .await
+            .expect("explicit migration after startup migration should be idempotent");
     }
 
     fn unreachable_redis_config(allow_degraded: bool) -> RedisConfig {
