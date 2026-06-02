@@ -304,7 +304,7 @@ fn arn_resource_metadata(model_id: &str) -> Option<ArnResourceMetadata> {
             }
         }
         "custom-model-deployment" | "provisioned-model" => {
-            metadata.runtime_config_fallback = Some(RuntimeConfigFallback::Invoke);
+            metadata.runtime_config_fallback = Some(RuntimeConfigFallback::Converse);
         }
         "default-prompt-router" | "prompt-router" => {
             metadata.runtime_config_fallback = Some(RuntimeConfigFallback::Converse);
@@ -347,7 +347,12 @@ fn is_plain_runtime_profile_id(model_id: &str) -> bool {
 }
 
 fn looks_like_versioned_foundation_model_id(model_id: &str) -> bool {
-    if model_id.contains(':') || model_id.matches('.').count() != 1 {
+    let model_id = model_id
+        .split_once(':')
+        .map(|(id, _revision)| id)
+        .unwrap_or(model_id);
+
+    if model_id.matches('.').count() != 1 {
         return false;
     }
 
@@ -525,7 +530,7 @@ mod tests {
     }
 
     #[test]
-    fn custom_model_deployment_arn_allows_invoke_runtime_config_resolution() {
+    fn custom_model_deployment_arn_allows_converse_runtime_config_resolution() {
         let parsed = parse_bedrock_model_id(
             "arn:aws:bedrock:us-east-1:123456789012:custom-model-deployment/123456789012",
         );
@@ -536,12 +541,12 @@ mod tests {
         );
         assert_eq!(
             parsed.runtime_config_fallback,
-            Some(RuntimeConfigFallback::Invoke)
+            Some(RuntimeConfigFallback::Converse)
         );
     }
 
     #[test]
-    fn provisioned_model_arn_allows_invoke_runtime_config_resolution() {
+    fn provisioned_model_arn_allows_converse_runtime_config_resolution() {
         let parsed = parse_bedrock_model_id(
             "arn:aws:bedrock:us-east-1:123456789012:provisioned-model/ABC123",
         );
@@ -552,7 +557,7 @@ mod tests {
         );
         assert_eq!(
             parsed.runtime_config_fallback,
-            Some(RuntimeConfigFallback::Invoke)
+            Some(RuntimeConfigFallback::Converse)
         );
     }
 
@@ -661,11 +666,13 @@ mod tests {
 
     #[test]
     fn unknown_versioned_foundation_model_id_is_not_runtime_profile() {
-        let parsed = parse_bedrock_model_id("unknown.model-v1");
+        for model_id in ["unknown.model-v1", "unknown.model-v1:0"] {
+            let parsed = parse_bedrock_model_id(model_id);
 
-        assert_eq!(parsed.metadata_lookup_ids, vec!["unknown.model-v1"]);
-        assert_eq!(parsed.runtime_config_fallback, None);
-        assert!(super::get_model_config_for_model_id("unknown.model-v1").is_err());
+            assert_eq!(parsed.metadata_lookup_ids, vec![model_id]);
+            assert_eq!(parsed.runtime_config_fallback, None);
+            assert!(super::get_model_config_for_model_id(model_id).is_err());
+        }
     }
 
     #[test]
@@ -688,26 +695,26 @@ mod tests {
     }
 
     #[test]
-    fn custom_model_deployment_arn_uses_invoke_compatible_config() {
+    fn custom_model_deployment_arn_uses_streaming_converse_config() {
         let config =
             config_for("arn:aws:bedrock:us-east-1:123456789012:custom-model-deployment/ABC123");
 
         assert_eq!(
             config.api_type,
-            crate::core::providers::bedrock::BedrockApiType::InvokeStream
+            crate::core::providers::bedrock::BedrockApiType::ConverseStream
         );
-        assert!(!config.supports_function_calling);
+        assert!(config.supports_function_calling);
     }
 
     #[test]
-    fn provisioned_model_arn_uses_invoke_compatible_config() {
+    fn provisioned_model_arn_uses_streaming_converse_config() {
         let config = config_for("arn:aws:bedrock:us-east-1:123456789012:provisioned-model/ABC123");
 
         assert_eq!(
             config.api_type,
-            crate::core::providers::bedrock::BedrockApiType::InvokeStream
+            crate::core::providers::bedrock::BedrockApiType::ConverseStream
         );
-        assert!(!config.supports_function_calling);
+        assert!(config.supports_function_calling);
     }
 
     #[test]
