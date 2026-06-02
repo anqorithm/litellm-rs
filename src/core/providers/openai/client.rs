@@ -268,8 +268,29 @@ impl OpenAIProvider {
             openai_request["stream_options"] = serde_json::to_value(stream_options)?;
         }
 
-        // Add extra parameters from config
-        // Skip extra_params as BaseConfig doesn't have it
+        macro_rules! insert_optional_param {
+            ($field:ident) => {
+                if let Some(value) = request.$field {
+                    openai_request[stringify!($field)] = serde_json::to_value(value)?;
+                }
+            };
+        }
+        insert_optional_param!(frequency_penalty);
+        insert_optional_param!(presence_penalty);
+        insert_optional_param!(logit_bias);
+        insert_optional_param!(logprobs);
+        insert_optional_param!(top_logprobs);
+        insert_optional_param!(reasoning_effort);
+        insert_optional_param!(store);
+        insert_optional_param!(metadata);
+        insert_optional_param!(service_tier);
+        insert_optional_param!(parallel_tool_calls);
+
+        if let Some(obj) = openai_request.as_object_mut() {
+            for (key, value) in request.extra_params {
+                obj.entry(key).or_insert(value);
+            }
+        }
 
         Ok(openai_request)
     }
