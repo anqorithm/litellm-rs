@@ -6,6 +6,77 @@ fn bedrock_execution_model_id(model: &str) -> String {
     crate::core::providers::bedrock::parse_bedrock_model_id(model).execution_model_id
 }
 
+impl DefaultRouter {
+    fn select_static_provider<'a>(
+        providers: &'a [&'a Provider],
+        model: &str,
+        chat_request: &ChatRequest,
+    ) -> Option<(&'a Provider, ChatRequest)> {
+        Self::select_provider_by_name(providers, "openrouter", model, "openrouter/", chat_request)
+            .or_else(|| {
+                Self::select_provider_by_name(
+                    providers,
+                    "deepseek",
+                    model,
+                    "deepseek/",
+                    chat_request,
+                )
+            })
+            .or_else(|| {
+                Self::select_provider_by_name(
+                    providers,
+                    "anthropic",
+                    model,
+                    "anthropic/",
+                    chat_request,
+                )
+            })
+            .or_else(|| {
+                Self::select_provider_by_name(providers, "bedrock", model, "bedrock/", chat_request)
+                    .map(|(provider, mut request)| {
+                        request.model = bedrock_execution_model_id(&request.model);
+                        (provider, request)
+                    })
+            })
+            .or_else(|| {
+                Self::select_provider_by_name(
+                    providers,
+                    "azure_ai",
+                    model,
+                    "azure_ai/",
+                    chat_request,
+                )
+            })
+            .or_else(|| {
+                Self::select_provider_by_name(providers, "groq", model, "groq/", chat_request)
+            })
+            .or_else(|| {
+                Self::select_provider_by_name(providers, "xai", model, "xai/", chat_request)
+            })
+            .or_else(|| {
+                Self::select_provider_by_name(
+                    providers,
+                    "moonshot",
+                    model,
+                    "moonshot/",
+                    chat_request,
+                )
+            })
+            .or_else(|| {
+                Self::select_provider_by_name(providers, "minimax", model, "minimax/", chat_request)
+            })
+            .or_else(|| {
+                Self::select_provider_by_name(providers, "zhipu", model, "zhipu/", chat_request)
+            })
+            .or_else(|| {
+                Self::select_provider_by_name(providers, "zhipu", model, "glm/", chat_request)
+            })
+            .or_else(|| {
+                Self::select_provider_by_name(providers, "zhipu", model, "zai/", chat_request)
+            })
+    }
+}
+
 #[async_trait]
 impl Router for DefaultRouter {
     async fn complete(
@@ -123,53 +194,7 @@ impl Router for DefaultRouter {
         let providers = self.provider_registry.all();
 
         // Check if model explicitly specifies a provider
-        let mut selected_provider = Self::select_provider_by_name(
-            &providers,
-            "openrouter",
-            model,
-            "openrouter/",
-            &chat_request,
-        )
-        .or_else(|| {
-            Self::select_provider_by_name(&providers, "deepseek", model, "deepseek/", &chat_request)
-        })
-        .or_else(|| {
-            Self::select_provider_by_name(
-                &providers,
-                "anthropic",
-                model,
-                "anthropic/",
-                &chat_request,
-            )
-        })
-        .or_else(|| {
-            Self::select_provider_by_name(&providers, "bedrock", model, "bedrock/", &chat_request)
-                .map(|(provider, mut request)| {
-                    request.model = bedrock_execution_model_id(&request.model);
-                    (provider, request)
-                })
-        })
-        .or_else(|| {
-            Self::select_provider_by_name(&providers, "azure_ai", model, "azure_ai/", &chat_request)
-        })
-        .or_else(|| {
-            Self::select_provider_by_name(&providers, "groq", model, "groq/", &chat_request)
-        })
-        .or_else(|| {
-            Self::select_provider_by_name(&providers, "moonshot", model, "moonshot/", &chat_request)
-        })
-        .or_else(|| {
-            Self::select_provider_by_name(&providers, "minimax", model, "minimax/", &chat_request)
-        })
-        .or_else(|| {
-            Self::select_provider_by_name(&providers, "zhipu", model, "zhipu/", &chat_request)
-        })
-        .or_else(|| {
-            Self::select_provider_by_name(&providers, "zhipu", model, "glm/", &chat_request)
-        })
-        .or_else(|| {
-            Self::select_provider_by_name(&providers, "zhipu", model, "zai/", &chat_request)
-        });
+        let mut selected_provider = Self::select_static_provider(&providers, model, &chat_request);
 
         // Handle special cases
         if selected_provider.is_none() {
@@ -223,53 +248,7 @@ impl Router for DefaultRouter {
         let providers = self.provider_registry.all();
 
         // Check if model explicitly specifies a provider
-        let selected_provider = Self::select_provider_by_name(
-            &providers,
-            "openrouter",
-            model,
-            "openrouter/",
-            &chat_request,
-        )
-        .or_else(|| {
-            Self::select_provider_by_name(&providers, "deepseek", model, "deepseek/", &chat_request)
-        })
-        .or_else(|| {
-            Self::select_provider_by_name(
-                &providers,
-                "anthropic",
-                model,
-                "anthropic/",
-                &chat_request,
-            )
-        })
-        .or_else(|| {
-            Self::select_provider_by_name(&providers, "bedrock", model, "bedrock/", &chat_request)
-                .map(|(provider, mut request)| {
-                    request.model = bedrock_execution_model_id(&request.model);
-                    (provider, request)
-                })
-        })
-        .or_else(|| {
-            Self::select_provider_by_name(&providers, "azure_ai", model, "azure_ai/", &chat_request)
-        })
-        .or_else(|| {
-            Self::select_provider_by_name(&providers, "groq", model, "groq/", &chat_request)
-        })
-        .or_else(|| {
-            Self::select_provider_by_name(&providers, "moonshot", model, "moonshot/", &chat_request)
-        })
-        .or_else(|| {
-            Self::select_provider_by_name(&providers, "minimax", model, "minimax/", &chat_request)
-        })
-        .or_else(|| {
-            Self::select_provider_by_name(&providers, "zhipu", model, "zhipu/", &chat_request)
-        })
-        .or_else(|| {
-            Self::select_provider_by_name(&providers, "zhipu", model, "glm/", &chat_request)
-        })
-        .or_else(|| {
-            Self::select_provider_by_name(&providers, "zhipu", model, "zai/", &chat_request)
-        });
+        let selected_provider = Self::select_static_provider(&providers, model, &chat_request);
 
         // Get the provider and execute streaming
         if let Some((provider, request)) = selected_provider {
@@ -291,5 +270,47 @@ impl Router for DefaultRouter {
         Err(GatewayError::internal(
             "No suitable provider found for streaming",
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    async fn tier1_provider(name: &str) -> Result<Provider> {
+        let Some(def) = crate::core::providers::registry::get_definition(name) else {
+            return Err(GatewayError::internal(format!(
+                "Missing test provider definition: {name}"
+            )));
+        };
+        let config = def.to_openai_like_config(Some("test-key"), None);
+        let provider = crate::core::providers::openai_like::OpenAILikeProvider::new(config)
+            .await
+            .map_err(|error| GatewayError::internal(error.to_string()))?;
+        Ok(Provider::OpenAILike(provider))
+    }
+
+    #[tokio::test]
+    async fn select_static_provider_routes_xai_prefix_to_xai() -> Result<()> {
+        let groq = tier1_provider("groq").await?;
+        let xai = tier1_provider("xai").await?;
+        let providers = vec![&groq, &xai];
+        let chat_request = ChatRequest {
+            model: "xai/grok-4.3".to_string(),
+            ..Default::default()
+        };
+
+        let Some((provider, routed_request)) =
+            DefaultRouter::select_static_provider(&providers, "xai/grok-4.3", &chat_request)
+        else {
+            return Err(GatewayError::internal(
+                "xai-prefixed models must select xai provider",
+            ));
+        };
+
+        assert_eq!(provider.name(), "xai");
+        assert_eq!(routed_request.model, "grok-4.3");
+        assert_eq!(chat_request.model, "xai/grok-4.3");
+        Ok(())
     }
 }
