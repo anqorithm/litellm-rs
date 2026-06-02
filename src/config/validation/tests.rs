@@ -206,7 +206,7 @@ fn test_cache_validation_rejects_unwired_cache_enabled() {
         ..Default::default()
     };
 
-    let error = Validate::validate(&config).unwrap_err();
+    let error = config.validate().unwrap_err();
     assert!(error.contains("not wired into runtime"));
 }
 
@@ -217,7 +217,7 @@ fn test_cache_validation_rejects_unwired_semantic_cache() {
         ..Default::default()
     };
 
-    let error = Validate::validate(&config).unwrap_err();
+    let error = config.validate().unwrap_err();
     assert!(error.contains("not wired into runtime"));
 }
 
