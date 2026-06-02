@@ -13,6 +13,43 @@ use std::time::{Duration, SystemTime};
 use tokio::sync::broadcast;
 use tracing::{info, warn};
 
+fn require_pricing_field(
+    value: Option<f64>,
+    model: &str,
+    pricing_type: &str,
+    field: &str,
+) -> Result<f64> {
+    let value = value.ok_or_else(|| {
+        GatewayError::Config(format!(
+            "Missing {} for model {}: {}",
+            pricing_type, model, field
+        ))
+    })?;
+    if value < 0.0 || value.is_nan() {
+        return Err(GatewayError::Config(format!(
+            "Invalid {} for model {}: {} ({})",
+            pricing_type, model, field, value
+        )));
+    }
+    Ok(value)
+}
+
+fn require_total_time_seconds(model: &str, total_time_seconds: Option<f64>) -> Result<f64> {
+    let total_time_seconds = total_time_seconds.ok_or_else(|| {
+        GatewayError::validation(format!(
+            "Missing total_time_seconds for time-based pricing model {}",
+            model
+        ))
+    })?;
+    if total_time_seconds < 0.0 || total_time_seconds.is_nan() {
+        return Err(GatewayError::validation(format!(
+            "Invalid total_time_seconds ({}) for model {}",
+            total_time_seconds, model
+        )));
+    }
+    Ok(total_time_seconds)
+}
+
 /// Pricing service using LiteLLM data format
 #[derive(Debug, Clone)]
 pub struct PricingService {
@@ -77,10 +114,12 @@ impl PricingService {
             .get_model_info(model)
             .ok_or_else(|| GatewayError::not_found(format!("Model not found: {}", model)))?;
 
-        let provider = model_info.litellm_provider.clone();
+        if model_info.cost_per_second.is_some() {
+            let total_time_seconds = require_total_time_seconds(model, total_time_seconds)?;
+            return self.calculate_time_based_cost(model, &model_info, total_time_seconds);
+        }
 
-        // Provider-specific cost calculation
-        match provider.as_str() {
+        match model_info.litellm_provider.as_str() {
             "openai" | "azure" => {
                 self.calculate_token_based_cost(model, &model_info, input_tokens, output_tokens)
             }
@@ -94,11 +133,6 @@ impl PricingService {
                 output_tokens,
                 prompt,
                 completion,
-            ),
-            "replicate" | "together_ai" | "baseten" => self.calculate_time_based_cost(
-                model,
-                &model_info,
-                total_time_seconds.unwrap_or(0.0),
             ),
             "zhipuai" | "glm" => {
                 self.calculate_token_based_cost(model, &model_info, input_tokens, output_tokens)
@@ -118,8 +152,18 @@ impl PricingService {
         input_tokens: u32,
         output_tokens: u32,
     ) -> Result<CostResult> {
-        let input_cost_per_token = model_info.input_cost_per_token.unwrap_or(0.0);
-        let output_cost_per_token = model_info.output_cost_per_token.unwrap_or(0.0);
+        let input_cost_per_token = require_pricing_field(
+            model_info.input_cost_per_token,
+            model,
+            "token pricing",
+            "input_cost_per_token",
+        )?;
+        let output_cost_per_token = require_pricing_field(
+            model_info.output_cost_per_token,
+            model,
+            "token pricing",
+            "output_cost_per_token",
+        )?;
 
         let input_cost = (input_tokens as f64) * input_cost_per_token;
         let output_cost = (output_tokens as f64) * output_cost_per_token;
@@ -151,8 +195,18 @@ impl PricingService {
         if model_info.input_cost_per_character.is_some()
             || model_info.output_cost_per_character.is_some()
         {
-            let input_cost_per_char = model_info.input_cost_per_character.unwrap_or(0.0);
-            let output_cost_per_char = model_info.output_cost_per_character.unwrap_or(0.0);
+            let input_cost_per_char = require_pricing_field(
+                model_info.input_cost_per_character,
+                model,
+                "character pricing",
+                "input_cost_per_character",
+            )?;
+            let output_cost_per_char = require_pricing_field(
+                model_info.output_cost_per_character,
+                model,
+                "character pricing",
+                "output_cost_per_character",
+            )?;
 
             let input_chars = prompt.map(|p| p.len()).unwrap_or(0) as f64;
             let output_chars = completion.map(|c| c.len()).unwrap_or(0) as f64;
@@ -183,7 +237,12 @@ impl PricingService {
         model_info: &LiteLLMModelInfo,
         total_time_seconds: f64,
     ) -> Result<CostResult> {
-        let cost_per_second = model_info.cost_per_second.unwrap_or(0.0);
+        let cost_per_second = require_pricing_field(
+            model_info.cost_per_second,
+            model,
+            "time pricing",
+            "cost_per_second",
+        )?;
         let total_cost = total_time_seconds * cost_per_second;
 
         Ok(CostResult {
@@ -202,8 +261,8 @@ impl PricingService {
     pub fn get_cost_per_token(&self, model: &str) -> Option<(f64, f64)> {
         let model_info = self.get_model_info(model)?;
         Some((
-            model_info.input_cost_per_token.unwrap_or(0.0),
-            model_info.output_cost_per_token.unwrap_or(0.0),
+            model_info.input_cost_per_token?,
+            model_info.output_cost_per_token?,
         ))
     }
 
@@ -481,12 +540,13 @@ mod tests {
             extra: HashMap::new(),
         };
 
-        let result = service
-            .calculate_token_based_cost("custom-model", &model_info, 1000, 500)
-            .unwrap();
+        let result = service.calculate_token_based_cost("custom-model", &model_info, 1000, 500);
 
-        // Should default to 0 cost when no pricing is set
-        assert_eq!(result.total_cost, 0.0);
+        assert!(matches!(
+            result,
+            Err(GatewayError::Config(message))
+                if message.contains("custom-model") && message.contains("token pricing")
+        ));
     }
 
     #[test]
@@ -545,6 +605,21 @@ mod tests {
             .unwrap();
 
         assert_eq!(result.total_cost, 0.5 * 0.001);
+    }
+
+    #[test]
+    fn test_calculate_time_based_cost_no_pricing() {
+        let service = PricingService::new(None);
+        let mut model_info = create_time_based_model_info();
+        model_info.cost_per_second = None;
+
+        let result = service.calculate_time_based_cost("replicate/llama", &model_info, 10.0);
+
+        assert!(matches!(
+            result,
+            Err(GatewayError::Config(message))
+                if message.contains("replicate/llama") && message.contains("time pricing")
+        ));
     }
 
     // ==================== Feature Support Tests ====================
@@ -682,224 +757,10 @@ mod tests {
         service.add_custom_model("free-model".to_string(), model_info);
 
         let result = service.get_cost_per_token("free-model");
-        assert!(result.is_some());
-        let (input, output) = result.unwrap();
-        assert_eq!(input, 0.0);
-        assert_eq!(output, 0.0);
-    }
-
-    // ==================== Provider and Model Listing Tests ====================
-
-    #[test]
-    fn test_get_models_by_provider_empty() {
-        let service = PricingService::new(None);
-        let models = service.get_models_by_provider("openai");
-        assert!(models.is_empty());
-    }
-
-    #[test]
-    fn test_get_models_by_provider_with_models() {
-        let service = PricingService::new(None);
-        service.add_custom_model("gpt-4".to_string(), create_test_model_info("openai"));
-        service.add_custom_model("gpt-3.5".to_string(), create_test_model_info("openai"));
-        service.add_custom_model("claude-3".to_string(), create_test_model_info("anthropic"));
-
-        let openai_models = service.get_models_by_provider("openai");
-        assert_eq!(openai_models.len(), 2);
-        assert!(openai_models.contains(&"gpt-4".to_string()));
-        assert!(openai_models.contains(&"gpt-3.5".to_string()));
-
-        let anthropic_models = service.get_models_by_provider("anthropic");
-        assert_eq!(anthropic_models.len(), 1);
-        assert!(anthropic_models.contains(&"claude-3".to_string()));
-    }
-
-    #[test]
-    fn test_get_providers_empty() {
-        let service = PricingService::new(None);
-        let providers = service.get_providers();
-        assert!(providers.is_empty());
-    }
-
-    #[test]
-    fn test_get_providers_with_models() {
-        let service = PricingService::new(None);
-        service.add_custom_model("gpt-4".to_string(), create_test_model_info("openai"));
-        service.add_custom_model("claude-3".to_string(), create_test_model_info("anthropic"));
-        service.add_custom_model("gemini-pro".to_string(), create_test_model_info("google"));
-
-        let providers = service.get_providers();
-        assert_eq!(providers.len(), 3);
-        // Sorted alphabetically
-        assert_eq!(providers[0], "anthropic");
-        assert_eq!(providers[1], "google");
-        assert_eq!(providers[2], "openai");
-    }
-
-    #[test]
-    fn test_get_providers_deduplication() {
-        let service = PricingService::new(None);
-        service.add_custom_model("gpt-4".to_string(), create_test_model_info("openai"));
-        service.add_custom_model("gpt-3.5".to_string(), create_test_model_info("openai"));
-        service.add_custom_model("gpt-4-turbo".to_string(), create_test_model_info("openai"));
-
-        let providers = service.get_providers();
-        assert_eq!(providers.len(), 1);
-        assert_eq!(providers[0], "openai");
-    }
-
-    // ==================== Add Custom Model Tests ====================
-
-    #[test]
-    fn test_add_custom_model() {
-        let service = PricingService::new(None);
-        let model_info = create_test_model_info("custom");
-
-        service.add_custom_model("my-custom-model".to_string(), model_info.clone());
-
-        let result = service.get_model_info("my-custom-model");
-        assert!(result.is_some());
-        assert_eq!(result.unwrap().litellm_provider, "custom");
-    }
-
-    #[test]
-    fn test_add_custom_model_overwrites() {
-        let service = PricingService::new(None);
-        let model_info1 = create_test_model_info("provider1");
-        let model_info2 = create_test_model_info("provider2");
-
-        service.add_custom_model("model".to_string(), model_info1);
-        service.add_custom_model("model".to_string(), model_info2);
-
-        let result = service.get_model_info("model");
-        assert!(result.is_some());
-        assert_eq!(result.unwrap().litellm_provider, "provider2");
-    }
-
-    // ==================== Statistics Tests ====================
-
-    #[test]
-    fn test_get_statistics_empty() {
-        let service = PricingService::new(None);
-        let stats = service.get_statistics();
-
-        assert_eq!(stats.total_models, 0);
-        assert!(stats.provider_stats.is_empty());
-        assert!(stats.cost_ranges.is_empty());
-    }
-
-    #[test]
-    fn test_get_statistics_with_models() {
-        let service = PricingService::new(None);
-        service.add_custom_model("gpt-4".to_string(), create_test_model_info("openai"));
-        service.add_custom_model("gpt-3.5".to_string(), create_test_model_info("openai"));
-        service.add_custom_model("claude-3".to_string(), create_test_model_info("anthropic"));
-
-        let stats = service.get_statistics();
-
-        assert_eq!(stats.total_models, 3);
-        assert_eq!(*stats.provider_stats.get("openai").unwrap(), 2);
-        assert_eq!(*stats.provider_stats.get("anthropic").unwrap(), 1);
-    }
-
-    #[test]
-    fn test_get_statistics_cost_ranges() {
-        let service = PricingService::new(None);
-
-        let mut cheap_model = create_test_model_info("openai");
-        cheap_model.input_cost_per_token = Some(0.000001);
-        cheap_model.output_cost_per_token = Some(0.000002);
-
-        let mut expensive_model = create_test_model_info("openai");
-        expensive_model.input_cost_per_token = Some(0.00006);
-        expensive_model.output_cost_per_token = Some(0.00012);
-
-        service.add_custom_model("gpt-3.5".to_string(), cheap_model);
-        service.add_custom_model("gpt-4".to_string(), expensive_model);
-
-        let stats = service.get_statistics();
-
-        let range = stats.cost_ranges.get("openai").unwrap();
-        assert_eq!(range.input_min, 0.000001);
-        assert_eq!(range.input_max, 0.00006);
-        assert_eq!(range.output_min, 0.000002);
-        assert_eq!(range.output_max, 0.00012);
-    }
-
-    // ==================== Google/Character-Based Cost Tests ====================
-
-    #[test]
-    fn test_calculate_google_cost_character_based() {
-        let service = PricingService::new(None);
-        let model_info = create_character_based_model_info();
-
-        let prompt = "Hello, world!"; // 13 chars
-        let completion = "Hi there!"; // 9 chars
-
-        let result = service
-            .calculate_google_cost(
-                "gemini-pro",
-                &model_info,
-                10,
-                5,
-                Some(prompt),
-                Some(completion),
-            )
-            .unwrap();
-
-        assert_eq!(result.cost_type, CostType::CharacterBased);
-        assert_eq!(result.input_cost, 13.0 * 0.000001);
-        assert_eq!(result.output_cost, 9.0 * 0.000002);
-    }
-
-    #[test]
-    fn test_calculate_google_cost_fallback_to_token() {
-        let service = PricingService::new(None);
-        let model_info = create_test_model_info("google");
-
-        let result = service
-            .calculate_google_cost(
-                "gemini-pro",
-                &model_info,
-                1000,
-                500,
-                Some("prompt"),
-                Some("completion"),
-            )
-            .unwrap();
-
-        // Should fall back to token-based
-        assert_eq!(result.cost_type, CostType::TokenBased);
-    }
-
-    #[test]
-    fn test_calculate_google_cost_no_text() {
-        let service = PricingService::new(None);
-        let model_info = create_character_based_model_info();
-
-        let result = service
-            .calculate_google_cost("gemini-pro", &model_info, 10, 5, None, None)
-            .unwrap();
-
-        // Should still calculate based on 0 characters
-        assert_eq!(result.input_cost, 0.0);
-        assert_eq!(result.output_cost, 0.0);
-    }
-
-    // ==================== Clone Tests ====================
-
-    #[test]
-    fn test_pricing_service_clone() {
-        let service = PricingService::new(None);
-        service.add_custom_model("gpt-4".to_string(), create_test_model_info("openai"));
-
-        let cloned = service.clone();
-
-        // Both should see the same data
-        assert!(cloned.get_model_info("gpt-4").is_some());
-
-        // Adding to original should be visible in clone (same Arc)
-        service.add_custom_model("gpt-3.5".to_string(), create_test_model_info("openai"));
-        assert!(cloned.get_model_info("gpt-3.5").is_some());
+        assert!(result.is_none());
     }
 }
+
+#[cfg(test)]
+#[path = "service_tests.rs"]
+mod service_tests;

@@ -9,14 +9,14 @@ All examples use the Python-style `completion()` function that works with any pr
 ```rust
 use litellm_rs::completion;
 
-let response = completion("gpt-5.4", messages).await?;
+let response = completion("gpt-5.5", messages).await?;
 ```
 
 ## Provider Examples
 
 | Provider | Example File | Models | API Key Required |
 |----------|-------------|---------|------------------|
-| **OpenAI** | `openai_completion.rs` | GPT-5.4, GPT-5.4 mini, GPT-4.1 | `OPENAI_API_KEY` |
+| **OpenAI** | `openai_completion.rs` | GPT-5.5, GPT-5.5 Pro, GPT-5.4 mini | `OPENAI_API_KEY` |
 | **Anthropic** | `anthropic_completion.rs` | Claude Opus 4.7, Sonnet 4.6, Haiku 4.5 | `ANTHROPIC_API_KEY` |
 | **Azure OpenAI** | `azure_completion.rs` | GPT models via Azure | `AZURE_API_KEY`, `AZURE_API_BASE` |
 | **AWS Bedrock** | Native provider docs | Claude, Nova, Titan, Llama, Mistral via Bedrock Runtime | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION` |
@@ -69,7 +69,7 @@ cargo run --example openrouter_completion
 
 ### Direct Provider Access
 ```rust
-completion("gpt-5.4", messages)                // OpenAI
+completion("gpt-5.5", messages)                // OpenAI
 completion("claude-opus-4-7", messages)        // Anthropic
 completion("mistral-large-latest", messages)     // Mistral
 completion("moonshot/kimi-k2.6", messages)       // Moonshot/Kimi
@@ -80,7 +80,7 @@ completion("bedrock/us.anthropic.claude-3-5-sonnet-20241022-v2:0", messages)
 
 ### Via OpenRouter
 ```rust
-completion("openrouter/openai/gpt-5.4", messages)
+completion("openrouter/openai/gpt-5.5", messages)
 completion("openrouter/anthropic/claude-opus-4-7", messages)
 completion("openrouter/meta-llama/llama-3-70b", messages)
 ```

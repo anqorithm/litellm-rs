@@ -5,10 +5,10 @@ LiteLLM-RS supports 100+ AI providers through a unified interface. This section 
 ## 🎯 Supported Providers
 
 ### **Tier 1 Providers** (Full Feature Support)
-- [**OpenAI**](./openai.md) - GPT-5.4, GPT-5.4 mini, GPT-4.1, Embeddings, GPT Image 1.5
+- [**OpenAI**](./openai.md) - GPT-5.5, GPT-5.5 Pro, GPT-5.4 mini, Embeddings, GPT Image 1.5
 - [**Anthropic**](./anthropic.md) - Claude Opus 4.7, Sonnet 4.6, Haiku 4.5
 - [**AWS Bedrock**](./bedrock.md) - Native SigV4 Bedrock Runtime provider
-- [**DeepSeek**](./deepseek.md) - DeepSeek V3.1 Chat & Reasoner
+- [**DeepSeek**](./deepseek.md) - DeepSeek V4 Flash & Pro
 - [**Google**](./google.md) - Gemini Pro, PaLM, Vertex AI
 - [**Azure OpenAI**](./azure-openai.md) - Enterprise OpenAI deployment
 - **xAI** - OpenAI-compatible Grok routing with pass-through model IDs
@@ -49,14 +49,14 @@ LiteLLM-RS supports 100+ AI providers through a unified interface. This section 
 ### OpenAI Compatible
 ```rust
 // Works with OpenAI, Azure OpenAI, OpenRouter, etc.
-let response = completion("gpt-5.4", messages, None).await?;
+let response = completion("gpt-5.5", messages, None).await?;
 ```
 
 ### Provider-Specific Models
 ```rust
-// DeepSeek V3.1
-let response = completion("deepseek-chat", messages, None).await?;
-let reasoning = completion("deepseek-reasoner", messages, None).await?;
+// DeepSeek V4
+let response = completion("deepseek-v4-flash", messages, None).await?;
+let reasoning = completion("deepseek-v4-pro", messages, None).await?;
 
 // Anthropic Claude
 let response = completion("claude-opus-4-7", messages, None).await?;
@@ -71,9 +71,9 @@ let response = completion("xai/grok-4.3", messages, None).await?;
 ### Provider Prefixes
 ```rust
 // Explicit provider specification
-let openai_response = completion("openai/gpt-5.4", messages, None).await?;
+let openai_response = completion("openai/gpt-5.5", messages, None).await?;
 let anthropic_response = completion("anthropic/claude-opus-4-7", messages, None).await?;
-let deepseek_response = completion("deepseek/deepseek-chat", messages, None).await?;
+let deepseek_response = completion("deepseek/deepseek-v4-flash", messages, None).await?;
 let xai_response = completion("xai/grok-4.3", messages, None).await?;
 ```
 
@@ -152,7 +152,7 @@ let router = Router::new()
     .add_provider("deepseek", deepseek_provider)
     .with_strategy(RoutingStrategy::LeastLatency);
 
-let response = router.completion("gpt-5.4", messages).await?;
+let response = router.completion("gpt-5.5", messages).await?;
 ```
 
 ### Fallback Chains
@@ -179,7 +179,7 @@ let router = Router::new()
 - **Google**: ~1500ms (Complex models)
 
 ### Cost Comparison (per 1M tokens)
-- **DeepSeek Chat**: $0.56 input, $1.68 output
+- **DeepSeek V4 Flash**: $0.14 cache-miss input, $0.0028 cache-hit input, $0.28 output
 - **GPT-3.5-Turbo**: $0.50 input, $1.50 output  
 - **GPT-4**: $30.00 input, $60.00 output
 - **Claude Sonnet**: $3.00 input, $15.00 output

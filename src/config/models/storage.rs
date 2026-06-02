@@ -52,6 +52,13 @@ pub struct DatabaseConfig {
     /// Enable database (if false, use in-memory storage)
     #[serde(default)]
     pub enabled: bool,
+    /// Run database migrations automatically during storage startup.
+    ///
+    /// Disabled by default for configured databases so production runtime
+    /// users do not need DDL privileges. The storage layer still migrates the
+    /// non-persistent in-memory SQLite fallback used when `enabled=false`.
+    #[serde(default)]
+    pub auto_migrate: bool,
     /// Allow PostgreSQL connection failures to fall back to local SQLite.
     ///
     /// Disabled by default to avoid silently writing production data to a
@@ -77,6 +84,7 @@ impl Default for DatabaseConfig {
             connection_timeout: default_connection_timeout(),
             ssl: false,
             enabled: false,
+            auto_migrate: false,
             fallback_to_sqlite: false,
             allow_degraded: false,
         }
@@ -102,6 +110,7 @@ impl DatabaseConfig {
         if other.enabled {
             self.enabled = true;
         }
+        self.auto_migrate = other.auto_migrate;
         if other.fallback_to_sqlite {
             self.fallback_to_sqlite = true;
         }
@@ -198,6 +207,7 @@ mod tests {
         assert_eq!(config.connection_timeout, 5);
         assert!(!config.ssl);
         assert!(!config.enabled);
+        assert!(!config.auto_migrate);
         assert!(!config.fallback_to_sqlite);
     }
 
@@ -209,11 +219,13 @@ mod tests {
             connection_timeout: 60,
             ssl: true,
             enabled: true,
+            auto_migrate: true,
             fallback_to_sqlite: false,
             allow_degraded: false,
         };
         assert!(config.ssl);
         assert!(config.enabled);
+        assert!(config.auto_migrate);
         assert_eq!(config.max_connections, 20);
     }
 
@@ -225,6 +237,7 @@ mod tests {
             connection_timeout: 45,
             ssl: true,
             enabled: true,
+            auto_migrate: true,
             fallback_to_sqlite: false,
             allow_degraded: false,
         };
@@ -232,6 +245,7 @@ mod tests {
         assert_eq!(json["url"], "postgresql://test");
         assert_eq!(json["max_connections"], 15);
         assert_eq!(json["ssl"], true);
+        assert_eq!(json["auto_migrate"], true);
     }
 
     #[test]
@@ -240,6 +254,7 @@ mod tests {
         let config: DatabaseConfig = serde_json::from_str(json).unwrap();
         assert_eq!(config.url, "postgresql://prod/app");
         assert!(config.ssl);
+        assert!(!config.auto_migrate);
     }
 
     #[test]
@@ -275,6 +290,27 @@ mod tests {
         };
         let merged = base.merge(other);
         assert!(merged.enabled);
+    }
+
+    #[test]
+    fn test_database_config_merge_auto_migrate_true() {
+        let base = DatabaseConfig::default();
+        let other = DatabaseConfig {
+            auto_migrate: true,
+            ..DatabaseConfig::default()
+        };
+        let merged = base.merge(other);
+        assert!(merged.auto_migrate);
+    }
+
+    #[test]
+    fn test_database_config_merge_auto_migrate_false_overrides_base() {
+        let base = DatabaseConfig {
+            auto_migrate: true,
+            ..DatabaseConfig::default()
+        };
+        let merged = base.merge(DatabaseConfig::default());
+        assert!(!merged.auto_migrate);
     }
 
     #[test]
@@ -581,6 +617,15 @@ mod tests {
         assert!(
             !config.allow_degraded,
             "allow_degraded must default to false so explicit failures are surfaced"
+        );
+    }
+
+    #[test]
+    fn test_database_config_auto_migrate_default_false() {
+        let config = DatabaseConfig::default();
+        assert!(
+            !config.auto_migrate,
+            "auto_migrate must default to false for configured databases"
         );
     }
 

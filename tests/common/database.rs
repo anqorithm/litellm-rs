@@ -25,6 +25,7 @@ impl TestDatabase {
             connection_timeout: 5,
             ssl: false,
             enabled: true,
+            auto_migrate: false,
             fallback_to_sqlite: false,
             allow_degraded: false,
         };
@@ -76,6 +77,7 @@ pub fn test_db_config() -> DatabaseConfig {
         connection_timeout: 5,
         ssl: false,
         enabled: true,
+        auto_migrate: false,
         fallback_to_sqlite: false,
         allow_degraded: false,
     }

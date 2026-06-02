@@ -274,7 +274,7 @@ pub static PROVIDER_TYPE_REGISTRY: &[ProviderRegistryEntry] = &[
         ProviderType::OpenAICompatible,
         "openai_compatible",
         &["openai-compatible", "openai_like", "openai-like"],
-        ProviderDispatchKind::Native,
+        ProviderDispatchKind::ExplicitOpenAiLike,
         false,
     ),
 ];
@@ -343,6 +343,13 @@ mod tests {
         values
     }
 
+    fn dispatch_kind_for(provider_type: &ProviderType) -> ProviderDispatchKind {
+        match entry_for_type(provider_type) {
+            Some(entry) => entry.dispatch_kind,
+            None => panic!("missing provider registry entry for {:?}", provider_type),
+        }
+    }
+
     #[test]
     fn provider_registry_contains_all_non_custom_provider_types() {
         assert_eq!(
@@ -374,6 +381,54 @@ mod tests {
         for entry in PROVIDER_TYPE_REGISTRY {
             assert_eq!(entry.provider_type.to_string(), entry.canonical_name);
         }
+    }
+
+    #[test]
+    fn provider_registry_native_entries_match_provider_enum_variants() {
+        let native_types = PROVIDER_TYPE_REGISTRY
+            .iter()
+            .filter(|entry| entry.dispatch_kind == ProviderDispatchKind::Native)
+            .map(|entry| entry.provider_type.clone())
+            .collect::<HashSet<_>>();
+        let expected = [
+            ProviderType::OpenAI,
+            ProviderType::Anthropic,
+            ProviderType::Bedrock,
+            ProviderType::Mistral,
+            ProviderType::Cloudflare,
+        ]
+        .into_iter()
+        .collect::<HashSet<_>>();
+
+        assert_eq!(native_types, expected);
+    }
+
+    #[test]
+    fn provider_registry_phase0_key_provider_classifications() {
+        assert_eq!(
+            dispatch_kind_for(&ProviderType::Bedrock),
+            ProviderDispatchKind::Native
+        );
+        assert_eq!(
+            dispatch_kind_for(&ProviderType::VertexAI),
+            ProviderDispatchKind::ExplicitOpenAiLike
+        );
+        assert_eq!(
+            dispatch_kind_for(&ProviderType::Azure),
+            ProviderDispatchKind::ExplicitOpenAiLike
+        );
+        assert_eq!(
+            dispatch_kind_for(&ProviderType::AzureAI),
+            ProviderDispatchKind::ExplicitOpenAiLike
+        );
+        assert_eq!(
+            dispatch_kind_for(&ProviderType::OpenAICompatible),
+            ProviderDispatchKind::ExplicitOpenAiLike
+        );
+        assert_eq!(
+            dispatch_kind_for(&ProviderType::PydanticAI),
+            ProviderDispatchKind::UnsupportedEnum
+        );
     }
 
     #[test]

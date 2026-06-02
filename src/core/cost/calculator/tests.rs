@@ -208,12 +208,43 @@ fn test_get_vertex_ai_pricing_gemini_flash() {
 }
 
 #[test]
+fn test_get_vertex_ai_pricing_gemini_35_flash() {
+    let pricing = get_model_pricing("gemini-3.5-flash", "vertex_ai");
+    let Ok(pricing) = pricing else {
+        panic!("gemini-3.5-flash pricing should load from shared pricing data");
+    };
+    assert_eq!(pricing.input_cost_per_1k_tokens, 0.0015);
+    assert_cost_eq(pricing.output_cost_per_1k_tokens, 0.009);
+    assert_eq!(pricing.cache_read_input_token_cost, Some(0.00015));
+}
+
+#[test]
 fn test_get_deepseek_pricing() {
-    let pricing = get_model_pricing("deepseek-chat", "deepseek");
-    assert!(pricing.is_ok());
-    let pricing = pricing.unwrap();
-    assert_cost_eq(pricing.input_cost_per_1k_tokens, 0.00014);
-    assert_cost_eq(pricing.output_cost_per_1k_tokens, 0.00028);
+    let Ok(flash) = get_model_pricing("deepseek-v4-flash", "deepseek") else {
+        panic!("deepseek-v4-flash pricing should be available");
+    };
+    assert_cost_eq(flash.input_cost_per_1k_tokens, 0.00014);
+    assert_cost_eq(flash.output_cost_per_1k_tokens, 0.00028);
+    assert_eq!(flash.cache_read_input_token_cost, Some(0.0000028));
+
+    let Ok(pro) = get_model_pricing("deepseek-v4-pro", "deepseek") else {
+        panic!("deepseek-v4-pro pricing should be available");
+    };
+    assert_cost_eq(pro.input_cost_per_1k_tokens, 0.000435);
+    assert_cost_eq(pro.output_cost_per_1k_tokens, 0.00087);
+    assert_eq!(pro.cache_read_input_token_cost, Some(0.000003625));
+
+    let Ok(chat_alias) = get_model_pricing("deepseek-chat", "deepseek") else {
+        panic!("deepseek-chat alias pricing should be available");
+    };
+    assert_cost_eq(chat_alias.input_cost_per_1k_tokens, 0.00014);
+    assert_cost_eq(chat_alias.output_cost_per_1k_tokens, 0.00028);
+
+    let Ok(reasoner_alias) = get_model_pricing("deepseek-reasoner", "deepseek") else {
+        panic!("deepseek-reasoner alias pricing should be available");
+    };
+    assert_cost_eq(reasoner_alias.input_cost_per_1k_tokens, 0.00014);
+    assert_cost_eq(reasoner_alias.output_cost_per_1k_tokens, 0.00028);
 }
 
 #[test]
@@ -639,6 +670,18 @@ fn test_case_insensitive_provider_names() {
 
 #[test]
 fn test_new_openai_models_have_cost_pricing() {
+    let Ok(gpt55) = get_model_pricing("gpt-5.5", "openai") else {
+        panic!("gpt-5.5 should have OpenAI pricing");
+    };
+    assert_eq!(gpt55.input_cost_per_1k_tokens, 0.005);
+    assert_eq!(gpt55.output_cost_per_1k_tokens, 0.030);
+
+    let Ok(gpt55_pro) = get_model_pricing("gpt-5.5-pro", "openai") else {
+        panic!("gpt-5.5-pro should have OpenAI pricing");
+    };
+    assert_eq!(gpt55_pro.input_cost_per_1k_tokens, 0.030);
+    assert_eq!(gpt55_pro.output_cost_per_1k_tokens, 0.180);
+
     let gpt54_pro = get_model_pricing("gpt-5.4-pro", "openai").unwrap();
     assert_eq!(gpt54_pro.input_cost_per_1k_tokens, 0.030);
     assert_eq!(gpt54_pro.output_cost_per_1k_tokens, 0.180);

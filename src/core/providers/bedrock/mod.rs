@@ -5,11 +5,13 @@
 //! and includes AWS SigV4 authentication.
 
 // Core modules
+pub mod catalog;
 mod client;
 mod config;
 mod error;
 mod model_config;
 mod model_id;
+mod parameter_policy;
 mod provider;
 mod sigv4;
 mod transformation;

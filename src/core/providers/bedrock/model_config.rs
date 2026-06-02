@@ -852,8 +852,6 @@ static MODEL_CONFIGS: LazyLock<HashMap<&'static str, ModelConfig>> = LazyLock::n
         "mistral.pixtral-large-2502-v1:0",
         "mistral.voxtral-mini-3b-2507",
         "mistral.voxtral-small-24b-2507",
-        "moonshot.kimi-k2-thinking",
-        "moonshot.kimi-k2.5",
         "nvidia.nemotron-nano-12b-v2",
         "nvidia.nemotron-nano-9b-v2",
         "openai.gpt-oss-120b-1:0",
@@ -880,6 +878,27 @@ static MODEL_CONFIGS: LazyLock<HashMap<&'static str, ModelConfig>> = LazyLock::n
                 supports_multimodal: true,
                 max_context_length: 300000,
                 max_output_length: Some(8192),
+                input_cost_per_1k: 0.0008,
+                output_cost_per_1k: 0.0032,
+            },
+        );
+    }
+
+    let moonshot_converse_models = [
+        ("moonshot.kimi-k2-thinking", false),
+        ("moonshotai.kimi-k2.5", true),
+    ];
+    for (model_id, supports_multimodal) in moonshot_converse_models {
+        configs.insert(
+            model_id,
+            ModelConfig {
+                family: BedrockModelFamily::Nova,
+                api_type: BedrockApiType::Converse,
+                supports_streaming: true,
+                supports_function_calling: true,
+                supports_multimodal,
+                max_context_length: 256000,
+                max_output_length: Some(16000),
                 input_cost_per_1k: 0.0008,
                 output_cost_per_1k: 0.0032,
             },
