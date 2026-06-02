@@ -15,7 +15,33 @@ mod tests {
     use sea_orm::{ConnectionTrait, DatabaseBackend, Statement, Value};
     use sea_orm_migration::MigratorTrait;
     use tempfile::TempDir;
+    use tokio::sync::Mutex;
     use uuid::Uuid;
+
+    static ENV_LOCK: Mutex<()> = Mutex::const_new(());
+
+    struct EnvRestore {
+        sqlite_path: Option<String>,
+    }
+
+    impl EnvRestore {
+        fn capture() -> Self {
+            Self {
+                sqlite_path: std::env::var("LITELLM_SQLITE_PATH").ok(),
+            }
+        }
+    }
+
+    impl Drop for EnvRestore {
+        fn drop(&mut self) {
+            unsafe {
+                match &self.sqlite_path {
+                    Some(value) => std::env::set_var("LITELLM_SQLITE_PATH", value),
+                    None => std::env::remove_var("LITELLM_SQLITE_PATH"),
+                }
+            }
+        }
+    }
 
     fn sqlite_file_db_config(temp_dir: &TempDir, auto_migrate: bool) -> DatabaseConfig {
         DatabaseConfig {
@@ -199,6 +225,54 @@ mod tests {
             err.to_string().contains("pending migrations"),
             "error should identify pending migrations, got: {}",
             err
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_storage_layer_sqlite_fallback_runs_startup_migrations() {
+        let _guard = ENV_LOCK.lock().await;
+        let _restore = EnvRestore::capture();
+        let temp_dir = match TempDir::new() {
+            Ok(temp_dir) => temp_dir,
+            Err(err) => panic!("temp dir should be created: {}", err),
+        };
+        let sqlite_path = temp_dir.path().join("fallback.db");
+        unsafe {
+            std::env::set_var("LITELLM_SQLITE_PATH", &sqlite_path);
+        }
+
+        let config = storage_config(DatabaseConfig {
+            url: "postgresql://127.0.0.1:1/unreachable".to_string(),
+            max_connections: 1,
+            connection_timeout: 1,
+            ssl: false,
+            enabled: true,
+            auto_migrate: false,
+            fallback_to_sqlite: true,
+            allow_degraded: false,
+        });
+
+        let storage = match StorageLayer::new(&config).await {
+            Ok(storage) => storage,
+            Err(err) => panic!(
+                "SQLite fallback should start and migrate even when auto_migrate=false: {}",
+                err
+            ),
+        };
+        let snapshots = match storage.database.load_budget_limit_snapshots().await {
+            Ok(snapshots) => snapshots,
+            Err(err) => panic!(
+                "SQLite fallback should have migrated budget tables: {}",
+                err
+            ),
+        };
+
+        assert!(storage.database.is_sqlite_fallback());
+        assert_eq!(storage.database.backend_type(), DatabaseBackendType::SQLite);
+        assert!(snapshots.is_empty());
+        assert!(
+            sqlite_path.exists(),
+            "SQLite fallback should use configured test path"
         );
     }
 

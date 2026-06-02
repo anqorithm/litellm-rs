@@ -175,7 +175,7 @@ impl StorageLayer {
         database: &database::Database,
         config: &DatabaseConfig,
     ) -> Result<()> {
-        if Self::should_run_startup_migrations(config) {
+        if Self::should_run_startup_migrations(database, config) {
             info!("Running database migrations during storage startup");
             database.migrate().await?;
             return Ok(());
@@ -200,8 +200,11 @@ impl StorageLayer {
         Ok(())
     }
 
-    fn should_run_startup_migrations(config: &DatabaseConfig) -> bool {
-        !config.enabled || config.auto_migrate
+    fn should_run_startup_migrations(
+        database: &database::Database,
+        config: &DatabaseConfig,
+    ) -> bool {
+        !config.enabled || config.auto_migrate || database.is_sqlite_fallback()
     }
 
     /// Run database migrations

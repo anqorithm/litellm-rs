@@ -27,7 +27,11 @@ impl SeaOrmDatabase {
                     DatabaseBackendType::PostgreSQL
                 };
                 info!("Database connection established ({:?})", backend_type);
-                Ok(Self { db, backend_type })
+                Ok(Self {
+                    db,
+                    backend_type,
+                    sqlite_fallback: false,
+                })
             }
             Err(e) => {
                 if config.fallback_to_sqlite
@@ -60,6 +64,7 @@ impl SeaOrmDatabase {
         Ok(Self {
             db,
             backend_type: DatabaseBackendType::SQLite,
+            sqlite_fallback: false,
         })
     }
 
@@ -106,6 +111,7 @@ impl SeaOrmDatabase {
         Ok(Self {
             db,
             backend_type: DatabaseBackendType::SQLite,
+            sqlite_fallback: true,
         })
     }
 
@@ -116,7 +122,7 @@ impl SeaOrmDatabase {
 
     /// Check if using SQLite fallback
     pub fn is_sqlite_fallback(&self) -> bool {
-        self.backend_type == DatabaseBackendType::SQLite
+        self.sqlite_fallback
     }
 
     /// Run database migrations
