@@ -281,6 +281,45 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_valid_auth_releases_gateway_auth_attempt_reservation() {
+        let state = build_test_state_with_rate_limit(true, true, Some(1)).await;
+        let principal = seed_valid_principal(&state).await;
+        let hit_counter = Arc::new(AtomicUsize::new(0));
+
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(state))
+                .app_data(web::Data::new(hit_counter.clone()))
+                .wrap(RateLimitMiddleware::new(1))
+                .wrap(AuthMiddleware)
+                .route(AUTH_PROBE_PATH, web::get().to(auth_probe)),
+        )
+        .await;
+
+        let valid = test::TestRequest::get()
+            .uri(AUTH_PROBE_PATH)
+            .peer_addr("203.0.113.103:1000".parse().unwrap())
+            .insert_header(("x-api-key", principal.raw_api_key.clone()))
+            .to_request();
+        let response = test::call_service(&app, valid).await;
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let invalid = test::TestRequest::get()
+            .uri(AUTH_PROBE_PATH)
+            .peer_addr("203.0.113.103:1001".parse().unwrap())
+            .insert_header(("x-api-key", "gw-invalid-after-valid-auth"))
+            .to_request();
+        let invalid_error = test::try_call_service(&app, invalid)
+            .await
+            .expect_err("first invalid auth after valid auth should not inherit the reservation");
+        assert_eq!(
+            invalid_error.as_response_error().status_code(),
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(hit_counter.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
     async fn test_auth_middleware_accepts_valid_auth_and_propagates_principal_context() {
         let state = build_test_state(true, true).await;
         let principal = seed_valid_principal(&state).await;

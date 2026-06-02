@@ -136,6 +136,43 @@ impl RateLimiter {
         }
     }
 
+    /// Release one request previously reserved by `check_and_record`.
+    pub async fn release(&self, key: &str) {
+        if !self.config.enabled {
+            return;
+        }
+
+        #[cfg(feature = "gateway")]
+        if let Some(redis) = &self.redis {
+            if let Err(err) = redis.rate_limit_release(key).await {
+                warn!("Redis rate-limit release failed for key {}: {}", key, err);
+            }
+            return;
+        }
+
+        let limit = self.config.default_rpm as f64;
+        let should_remove = {
+            let Some(mut entry) = self.entries.get_mut(key) else {
+                return;
+            };
+
+            match self.config.strategy {
+                RateLimitStrategy::SlidingWindow | RateLimitStrategy::FixedWindow => {
+                    entry.timestamps.pop();
+                }
+                RateLimitStrategy::TokenBucket => {
+                    entry.tokens = (entry.tokens + 1.0).min(limit);
+                }
+            }
+
+            entry.timestamps.is_empty() && entry.tokens >= limit
+        };
+
+        if should_remove {
+            self.entries.remove(key);
+        }
+    }
+
     /// Record a request (increments counter)
     ///
     /// WARNING: This is a separate operation from check() and has a race condition.

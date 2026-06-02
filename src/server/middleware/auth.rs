@@ -8,7 +8,8 @@ use crate::server::middleware::helpers::{
     extract_auth_method_with_api_key_header, is_public_route,
 };
 use crate::server::middleware::rate_limit::{
-    enforce_rate_limit_for_rejected_auth, reject_if_rate_limited_for_auth_attempt,
+    AuthRateLimitReservation, enforce_rate_limit_for_rejected_auth,
+    reserve_rate_limit_for_auth_attempt,
 };
 use crate::server::state::AppState;
 use actix_web::dev::{Service, ServiceRequest, ServiceResponse, Transform, forward_ready};
@@ -159,18 +160,25 @@ where
                 ));
             }
 
-            if requires_auth_verification(&auth_method) {
-                reject_if_gateway_rate_limited_before_auth(
-                    &req,
-                    rate_limit_enabled,
-                    rate_limit_rpm,
-                    &trusted_proxies,
+            let mut auth_rate_limit_reservation = if requires_auth_verification(&auth_method) {
+                Some(
+                    reserve_gateway_rate_limit_before_auth(
+                        &req,
+                        rate_limit_enabled,
+                        rate_limit_rpm,
+                        &trusted_proxies,
+                    )
+                    .await?,
                 )
-                .await?;
-            }
+            } else {
+                None
+            };
 
             match app_state.auth.authenticate(auth_method, context).await {
                 Ok(result) if result.success => {
+                    if let Some(reservation) = auth_rate_limit_reservation.take() {
+                        reservation.release().await;
+                    }
                     rate_limiter.record_success(&client_id);
                     debug!("Authentication succeeded");
 
@@ -193,18 +201,23 @@ where
                             .clone()
                             .unwrap_or_else(|| "unauthorized".to_string())
                     );
-                    enforce_gateway_rate_limit_for_auth_rejection(
-                        &req,
-                        rate_limit_enabled,
-                        rate_limit_rpm,
-                        &trusted_proxies,
-                    )
-                    .await?;
+                    if auth_rate_limit_reservation.is_none() {
+                        enforce_gateway_rate_limit_for_auth_rejection(
+                            &req,
+                            rate_limit_enabled,
+                            rate_limit_rpm,
+                            &trusted_proxies,
+                        )
+                        .await?;
+                    }
                     Err(actix_web::error::ErrorUnauthorized(
                         result.error.unwrap_or_else(|| "Unauthorized".to_string()),
                     ))
                 }
                 Err(err) => {
+                    if let Some(reservation) = auth_rate_limit_reservation.take() {
+                        reservation.release().await;
+                    }
                     rate_limiter.record_failure(&client_id);
                     Err(actix_web::error::ErrorInternalServerError(format!(
                         "Authentication error: {}",
@@ -229,17 +242,17 @@ async fn enforce_gateway_rate_limit_for_auth_rejection(
     enforce_rate_limit_for_rejected_auth(req, requests_per_minute, trusted_proxies).await
 }
 
-async fn reject_if_gateway_rate_limited_before_auth(
+async fn reserve_gateway_rate_limit_before_auth(
     req: &ServiceRequest,
     enabled: bool,
     requests_per_minute: u32,
     trusted_proxies: &[String],
-) -> Result<(), actix_web::Error> {
+) -> Result<AuthRateLimitReservation, actix_web::Error> {
     if !enabled {
-        return Ok(());
+        return Ok(AuthRateLimitReservation::noop());
     }
 
-    reject_if_rate_limited_for_auth_attempt(req, requests_per_minute, trusted_proxies).await
+    reserve_rate_limit_for_auth_attempt(req, requests_per_minute, trusted_proxies).await
 }
 
 fn requires_auth_verification(auth_method: &AuthMethod) -> bool {

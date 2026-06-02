@@ -27,7 +27,7 @@ use tracing::{debug, info, warn};
 /// `DEFAULT_MAX_ENTRIES`.
 const MAX_FALLBACK_ENTRIES: usize = 10_000;
 
-static AUTH_REJECTION_FALLBACK_STORE: OnceLock<Arc<DashMap<String, KeyTracker>>> = OnceLock::new();
+static GATEWAY_FALLBACK_STORE: OnceLock<Arc<DashMap<String, KeyTracker>>> = OnceLock::new();
 
 const GLOBAL_LIMITER_SOURCE: &str = "global";
 const FALLBACK_LIMITER_SOURCE: &str = "fallback";
@@ -44,7 +44,12 @@ impl KeyTracker {
         }
     }
 
-    fn check(&mut self, limit: u32, window: Duration) -> (bool, u64) {
+    fn release(&mut self) {
+        self.timestamps.pop();
+    }
+
+    /// Check-and-record atomically: returns (allowed, retry_after_secs)
+    fn check_and_record(&mut self, limit: u32, window: Duration) -> (bool, u64) {
         let now = Instant::now();
         self.timestamps
             .retain(|&ts| now.duration_since(ts) < window);
@@ -62,17 +67,8 @@ impl KeyTracker {
             return (false, retry_after);
         }
 
+        self.timestamps.push(now);
         (true, 0)
-    }
-
-    /// Check-and-record atomically: returns (allowed, retry_after_secs)
-    fn check_and_record(&mut self, limit: u32, window: Duration) -> (bool, u64) {
-        let (allowed, retry_after) = self.check(limit, window);
-        if allowed {
-            self.timestamps.push(Instant::now());
-        }
-
-        (allowed, retry_after)
     }
 }
 
@@ -86,6 +82,42 @@ struct RateLimitRejection {
     source: &'static str,
     retry_after: u64,
     limit: u32,
+}
+
+enum RateLimitReservationSource {
+    Global,
+    Fallback(Arc<DashMap<String, KeyTracker>>),
+    Noop,
+}
+
+pub(super) struct AuthRateLimitReservation {
+    key: String,
+    source: RateLimitReservationSource,
+}
+
+impl AuthRateLimitReservation {
+    pub(super) fn noop() -> Self {
+        Self {
+            key: String::new(),
+            source: RateLimitReservationSource::Noop,
+        }
+    }
+
+    pub(super) async fn release(self) {
+        match self.source {
+            RateLimitReservationSource::Global => {
+                if let Some(global_limiter) = get_global_rate_limiter() {
+                    global_limiter.release(&self.key).await;
+                }
+            }
+            RateLimitReservationSource::Fallback(store) => {
+                if let Some(mut tracker) = store.get_mut(&self.key) {
+                    tracker.release();
+                }
+            }
+            RateLimitReservationSource::Noop => {}
+        }
+    }
 }
 
 /// Evict trackers when the fallback store exceeds the cap.
@@ -174,79 +206,35 @@ async fn check_rate_limit_key(
     })
 }
 
-async fn check_rate_limit_key_status(
-    key: &str,
-    requests_per_minute: u32,
-    fallback_store: &DashMap<String, KeyTracker>,
-) -> Result<RateLimitPass, RateLimitRejection> {
-    if let Some(global_limiter) = get_global_rate_limiter() {
-        let limit = global_limiter.limit();
-        let result = global_limiter.check(key).await;
-
-        if !result.allowed {
-            return Err(RateLimitRejection {
-                source: GLOBAL_LIMITER_SOURCE,
-                retry_after: result.retry_after_secs.unwrap_or(60),
-                limit,
-            });
-        }
-
-        return Ok(RateLimitPass {
-            source: GLOBAL_LIMITER_SOURCE,
-            limit,
-            remaining: result.remaining,
-        });
-    }
-
-    let window = Duration::from_secs(60);
-    let Some(mut tracker) = fallback_store.get_mut(key) else {
-        return Ok(RateLimitPass {
-            source: FALLBACK_LIMITER_SOURCE,
-            limit: requests_per_minute,
-            remaining: requests_per_minute,
-        });
-    };
-
-    let (allowed, retry_after) = tracker.check(requests_per_minute, window);
-    if !allowed {
-        return Err(RateLimitRejection {
-            source: FALLBACK_LIMITER_SOURCE,
-            retry_after,
-            limit: requests_per_minute,
-        });
-    }
-
-    Ok(RateLimitPass {
-        source: FALLBACK_LIMITER_SOURCE,
-        limit: requests_per_minute,
-        remaining: requests_per_minute.saturating_sub(tracker.timestamps.len() as u32),
-    })
-}
-
-fn auth_rejection_fallback_store() -> Arc<DashMap<String, KeyTracker>> {
-    AUTH_REJECTION_FALLBACK_STORE
+fn gateway_fallback_store() -> Arc<DashMap<String, KeyTracker>> {
+    GATEWAY_FALLBACK_STORE
         .get_or_init(|| Arc::new(DashMap::new()))
         .clone()
 }
 
-pub(super) async fn reject_if_rate_limited_for_auth_attempt(
+pub(super) async fn reserve_rate_limit_for_auth_attempt(
     req: &ServiceRequest,
     requests_per_minute: u32,
     trusted_proxies: &[String],
-) -> Result<(), actix_web::Error> {
+) -> Result<AuthRateLimitReservation, actix_web::Error> {
     let key = extract_client_key(req, trusted_proxies);
-    let fallback_store = auth_rejection_fallback_store();
+    let fallback_store = gateway_fallback_store();
 
-    match check_rate_limit_key_status(&key, requests_per_minute, &fallback_store).await {
+    match check_rate_limit_key(&key, requests_per_minute, &fallback_store).await {
         Ok(pass) => {
             debug!(
                 client = %key,
                 limit = pass.limit,
                 remaining = pass.remaining,
-                "Rate limit pre-check passed for auth attempt ({} limiter)",
+                "Rate limit reservation passed for auth attempt ({} limiter)",
                 pass.source
             );
-            Ok(())
+            let source = if pass.source == GLOBAL_LIMITER_SOURCE {
+                RateLimitReservationSource::Global
+            } else {
+                RateLimitReservationSource::Fallback(fallback_store)
+            };
+            Ok(AuthRateLimitReservation { key, source })
         }
         Err(rejection) => {
             warn!(
@@ -269,7 +257,7 @@ pub(super) async fn enforce_rate_limit_for_rejected_auth(
     trusted_proxies: &[String],
 ) -> Result<(), actix_web::Error> {
     let key = extract_client_key(req, trusted_proxies);
-    let fallback_store = auth_rejection_fallback_store();
+    let fallback_store = gateway_fallback_store();
 
     match check_rate_limit_key(&key, requests_per_minute, &fallback_store).await {
         Ok(pass) => {
@@ -364,7 +352,7 @@ where
         ready(Ok(RateLimitMiddlewareService {
             service,
             requests_per_minute: self.requests_per_minute,
-            fallback_store: Arc::new(DashMap::new()),
+            fallback_store: gateway_fallback_store(),
         }))
     }
 }
@@ -630,30 +618,34 @@ mod tests {
     }
 
     #[test]
-    fn test_key_tracker_status_check_does_not_record() {
+    fn test_key_tracker_release_removes_recorded_slot() {
         let mut tracker = KeyTracker::new();
         let window = Duration::from_secs(60);
 
-        let (allowed, retry_after) = tracker.check(1, window);
-
+        let (allowed, _) = tracker.check_and_record(1, window);
         assert!(allowed);
-        assert_eq!(retry_after, 0);
+        assert_eq!(tracker.timestamps.len(), 1);
+
+        tracker.release();
+
         assert!(tracker.timestamps.is_empty());
     }
 
     #[test]
-    fn test_key_tracker_status_check_rejects_full_bucket_without_recording() {
+    fn test_key_tracker_release_allows_new_reservation() {
         let mut tracker = KeyTracker::new();
         let window = Duration::from_secs(60);
         let (allowed, _) = tracker.check_and_record(1, window);
         assert!(allowed);
-        let recorded = tracker.timestamps.len();
-
-        let (allowed, retry_after) = tracker.check(1, window);
-
+        let (allowed, retry_after) = tracker.check_and_record(1, window);
         assert!(!allowed);
         assert!(retry_after > 0);
-        assert_eq!(tracker.timestamps.len(), recorded);
+
+        tracker.release();
+        let (allowed, retry_after) = tracker.check_and_record(1, window);
+
+        assert!(allowed);
+        assert_eq!(retry_after, 0);
     }
 
     #[test]

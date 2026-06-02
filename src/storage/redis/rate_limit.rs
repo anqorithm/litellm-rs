@@ -49,6 +49,21 @@ if remaining < 0 then remaining = 0 end
 return {allowed, current, limit, remaining, ttl}
 "#;
 
+const RELEASE_SCRIPT: &str = r#"
+local current = tonumber(redis.call("GET", KEYS[1]) or "0")
+if current <= 0 then
+  return 0
+end
+
+current = redis.call("DECR", KEYS[1])
+if current <= 0 then
+  redis.call("DEL", KEYS[1])
+  return 0
+end
+
+return current
+"#;
+
 fn redis_rate_limit_key(key: &str) -> String {
     format!("litellm-rs:rate_limit:v1:{}", key)
 }
@@ -162,6 +177,25 @@ impl RedisPool {
                 retry_after_secs: None,
             })
         }
+    }
+
+    /// Release one previously-recorded request from a distributed fixed window.
+    pub async fn rate_limit_release(&self, key: &str) -> Result<()> {
+        if self.noop_mode {
+            return Ok(());
+        }
+
+        let redis_key = redis_rate_limit_key(key);
+        let mut conn = self.get_connection().await?;
+        if let Some(ref mut c) = conn.conn {
+            let _: i64 = redis::Script::new(RELEASE_SCRIPT)
+                .key(redis_key)
+                .invoke_async(c)
+                .await
+                .map_err(GatewayError::from)?;
+        }
+
+        Ok(())
     }
 }
 
