@@ -219,7 +219,13 @@ pub mod deepseek_thinking {
     use super::*;
 
     /// DeepSeek thinking models
-    const DEEPSEEK_THINKING_MODELS: &[&str] = &["deepseek-r1", "deepseek-reasoner", "r1"];
+    const DEEPSEEK_THINKING_MODELS: &[&str] = &[
+        "deepseek-v4-flash",
+        "deepseek-v4-pro",
+        "deepseek-r1",
+        "deepseek-reasoner",
+        "r1",
+    ];
 
     /// Check if a DeepSeek model supports thinking
     pub fn supports_thinking(model: &str) -> bool {
@@ -231,6 +237,8 @@ pub mod deepseek_thinking {
 
     /// Get thinking capabilities for DeepSeek models
     pub fn capabilities(model: &str) -> ThinkingCapabilities {
+        let model_lower = model.to_lowercase();
+
         if supports_thinking(model) {
             ThinkingCapabilities {
                 supports_thinking: true,
@@ -246,7 +254,13 @@ pub mod deepseek_thinking {
                     .map(|s| s.to_string())
                     .collect(),
                 can_return_thinking: true,
-                thinking_always_on: true, // DeepSeek R1 always thinks
+                // Always-on thinking applies to the dedicated reasoning models
+                // (`deepseek-reasoner`, `deepseek-r1`, bare `r1`) — DeepSeek's
+                // docs state thinking cannot be disabled on these aliases.
+                // The canonical V4 IDs (`deepseek-v4-flash`, `deepseek-v4-pro`)
+                // default to thinking enabled but support an optional
+                // non-thinking mode, so they are not always-on.
+                thinking_always_on: !model_lower.contains("deepseek-v4"),
             }
         } else {
             ThinkingCapabilities::unsupported()
@@ -407,7 +421,10 @@ pub mod openrouter_thinking {
         }
 
         // Check for DeepSeek reasoning models
-        if model_lower.contains("deepseek-r1") || model_lower.contains("reasoner") {
+        if model_lower.contains("deepseek-v4")
+            || model_lower.contains("deepseek-r1")
+            || model_lower.contains("reasoner")
+        {
             return true;
         }
 
@@ -543,5 +560,41 @@ pub mod openrouter_thinking {
         }
 
         None
+    }
+}
+
+#[cfg(test)]
+mod deepseek_v4_tests {
+    use super::deepseek_thinking;
+
+    #[test]
+    fn supports_deepseek_v4_thinking_models() {
+        assert!(deepseek_thinking::supports_thinking("deepseek-v4-flash"));
+        assert!(deepseek_thinking::supports_thinking("deepseek-v4-pro"));
+
+        let caps = deepseek_thinking::capabilities("deepseek-v4-flash");
+        assert!(caps.supports_thinking);
+        assert!(caps.supports_streaming_thinking);
+        assert!(!caps.thinking_always_on);
+    }
+
+    #[test]
+    fn always_on_thinking_matches_deepseek_docs() {
+        // `deepseek-reasoner` is the always-on reasoning alias per
+        // https://api-docs.deepseek.com/ — thinking cannot be disabled.
+        let reasoner = deepseek_thinking::capabilities("deepseek-reasoner");
+        assert!(reasoner.supports_thinking);
+        assert!(reasoner.thinking_always_on);
+
+        // `deepseek-v4-flash` and `deepseek-v4-pro` support optional
+        // thinking (enabled by default but can be turned off), so they
+        // must not be marked as always-on.
+        let flash = deepseek_thinking::capabilities("deepseek-v4-flash");
+        assert!(flash.supports_thinking);
+        assert!(!flash.thinking_always_on);
+
+        let pro = deepseek_thinking::capabilities("deepseek-v4-pro");
+        assert!(pro.supports_thinking);
+        assert!(!pro.thinking_always_on);
     }
 }
