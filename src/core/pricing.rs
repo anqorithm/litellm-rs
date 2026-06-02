@@ -473,6 +473,49 @@ mod tests {
     }
 
     #[test]
+    fn extended_pricing_uses_exact_mistral_alias_rates() {
+        let Ok(db) = PricingDatabase::from_default_source() else {
+            panic!("extended pricing source should load");
+        };
+        let usage = Usage::new(1000, 500);
+
+        let large = db.calculate_for_provider("mistral", "mistral-large", &usage);
+        let small = db.calculate_for_provider("mistral", "mistral-small", &usage);
+        let small_4 = db.calculate_for_provider("mistral", "mistral-small-4", &usage);
+
+        assert!((large - 0.00125).abs() < 1e-12);
+        assert!((small - 0.00045).abs() < 1e-12);
+        assert!((small_4 - 0.00045).abs() < 1e-12);
+    }
+
+    #[test]
+    fn extended_pricing_has_nova_2_lite_rates_and_magistral_capabilities() {
+        let Ok(db) = PricingDatabase::from_default_source() else {
+            panic!("extended pricing source should load");
+        };
+        let usage = Usage::new(1000, 500);
+
+        let nova = db.calculate("amazon.nova-2-lite-v1:0", &usage);
+        assert!((nova - 0.00018).abs() < 1e-12);
+
+        let Some(nova_info) = db.get_model_info("amazon.nova-2-lite-v1:0") else {
+            panic!("nova 2 lite pricing entry should exist");
+        };
+        assert_eq!(
+            nova_info
+                .extra
+                .get("supports_reasoning")
+                .and_then(serde_json::Value::as_bool),
+            Some(true)
+        );
+
+        assert!(db.supports_feature("magistral-small-2509", "function_calling"));
+        assert!(db.supports_feature("magistral-small-2509", "vision"));
+        assert!(db.supports_feature("magistral-medium-2509", "function_calling"));
+        assert!(db.supports_feature("magistral-medium-2509", "vision"));
+    }
+
+    #[test]
     fn test_model_info() {
         let db = PricingDatabase::default();
 

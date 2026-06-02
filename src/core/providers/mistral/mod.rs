@@ -163,6 +163,21 @@ impl MistralProvider {
     fn is_embedding_model(&self, model: &str) -> bool {
         model.contains("embed")
     }
+
+    fn canonical_model_id(&self, model: &str) -> String {
+        let normalized = model
+            .strip_prefix("mistral/")
+            .or_else(|| model.strip_prefix("mistralai/"))
+            .unwrap_or(model);
+
+        self.models
+            .iter()
+            .find(|model_info| model_info.id == normalized)
+            .and_then(|model_info| model_info.metadata.get("alias_for"))
+            .and_then(|alias| alias.as_str())
+            .unwrap_or(normalized)
+            .to_string()
+    }
 }
 
 impl LLMProvider for MistralProvider {
@@ -224,15 +239,17 @@ impl LLMProvider for MistralProvider {
         request: ChatRequest,
         _context: RequestContext,
     ) -> Result<Value, ProviderError> {
+        let canonical_model = self.canonical_model_id(&request.model);
+
         // Use the OpenAI transformer from base_provider
         let mut body = OpenAIRequestTransformer::transform_chat_request(&request);
 
         // Mistral-specific adjustments
-        if let Some(seed) = body.get("seed").cloned()
-            && let Some(obj) = body.as_object_mut()
-        {
-            obj.remove("seed");
-            obj.insert("random_seed".to_string(), seed);
+        if let Some(obj) = body.as_object_mut() {
+            obj.insert("model".to_string(), Value::String(canonical_model));
+            if let Some(seed) = obj.remove("seed") {
+                obj.insert("random_seed".to_string(), seed);
+            }
         }
 
         Ok(body)
@@ -407,7 +424,7 @@ impl LLMProvider for MistralProvider {
         output_tokens: u32,
     ) -> Result<f64, ProviderError> {
         let usage = crate::core::pricing::Usage::new(input_tokens, output_tokens);
-        Ok(get_pricing_db().calculate(model, &usage))
+        Ok(get_pricing_db().calculate_for_provider("mistral", model, &usage))
     }
 }
 

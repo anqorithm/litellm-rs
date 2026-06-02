@@ -186,6 +186,12 @@ async fn test_current_mistral_alias_metadata() {
     assert!(medium_3_5.supports_multimodal);
     assert_eq!(medium_3_5.input_cost_per_1k_tokens, Some(0.0015));
     assert_eq!(medium_3_5.output_cost_per_1k_tokens, Some(0.0075));
+
+    let Some(magistral) = models.iter().find(|m| m.id == "magistral-medium-2509") else {
+        panic!("magistral-medium-2509 should be present");
+    };
+    assert!(magistral.supports_tools);
+    assert!(magistral.supports_multimodal);
 }
 
 #[tokio::test]
@@ -294,8 +300,58 @@ async fn test_transform_request_basic() {
 
     assert!(result.is_ok());
     let transformed = result.unwrap();
-    assert_eq!(transformed["model"], "mistral-large");
+    assert_eq!(transformed["model"], "mistral-large-2512");
     assert!(transformed["messages"].is_array());
+}
+
+#[tokio::test]
+async fn test_transform_request_rewrites_current_alias() {
+    let Ok(provider) = MistralProvider::new(create_test_config()).await else {
+        panic!("mistral test provider should initialize");
+    };
+
+    let request = ChatRequest {
+        model: "mistral-small-4".to_string(),
+        messages: vec![ChatMessage {
+            role: MessageRole::User,
+            content: Some(MessageContent::Text("Hello".to_string())),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let context = RequestContext::default();
+    let result = provider.transform_request(request, context).await;
+
+    let Ok(transformed) = result else {
+        panic!("transform_request should succeed for mistral-small-4");
+    };
+    assert_eq!(transformed["model"], "mistral-small-2603");
+}
+
+#[tokio::test]
+async fn test_transform_request_strips_mistral_prefix() {
+    let Ok(provider) = MistralProvider::new(create_test_config()).await else {
+        panic!("mistral test provider should initialize");
+    };
+
+    let request = ChatRequest {
+        model: "mistral/mistral-small-4".to_string(),
+        messages: vec![ChatMessage {
+            role: MessageRole::User,
+            content: Some(MessageContent::Text("Hello".to_string())),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let context = RequestContext::default();
+    let result = provider.transform_request(request, context).await;
+
+    let Ok(transformed) = result else {
+        panic!("transform_request should succeed for mistral-prefixed model");
+    };
+    assert_eq!(transformed["model"], "mistral-small-2603");
 }
 
 #[tokio::test]
@@ -352,6 +408,19 @@ async fn test_calculate_cost_current_small_model() {
         .calculate_cost("mistral-small-2603", 1000, 500)
         .await;
     assert!(matches!(cost, Ok(v) if v > 0.0));
+}
+
+#[tokio::test]
+async fn test_calculate_cost_current_alias_prices_are_deterministic() {
+    let Ok(provider) = MistralProvider::new(create_test_config()).await else {
+        panic!("mistral test provider should initialize");
+    };
+
+    let large = provider.calculate_cost("mistral-large", 1000, 500).await;
+    let small = provider.calculate_cost("mistral-small", 1000, 500).await;
+
+    assert!(matches!(large, Ok(v) if (v - 0.00125).abs() < f64::EPSILON));
+    assert!(matches!(small, Ok(v) if (v - 0.00045).abs() < f64::EPSILON));
 }
 
 #[tokio::test]

@@ -557,7 +557,29 @@
     "supports_vision": true,
     "supports_streaming": true
   },
+  "mistral-large": {
+    "max_tokens": 262144,
+    "max_input_tokens": 262144,
+    "input_cost_per_token": 5e-07,
+    "output_cost_per_token": 1.5e-06,
+    "litellm_provider": "mistral",
+    "mode": "chat",
+    "supports_function_calling": true,
+    "supports_vision": true,
+    "supports_streaming": true
+  },
   "mistral-medium-3-5": {
+    "max_tokens": 256000,
+    "max_input_tokens": 256000,
+    "input_cost_per_token": 1.5e-06,
+    "output_cost_per_token": 7.5e-06,
+    "litellm_provider": "mistral",
+    "mode": "chat",
+    "supports_function_calling": true,
+    "supports_vision": true,
+    "supports_streaming": true
+  },
+  "mistral-medium": {
     "max_tokens": 256000,
     "max_input_tokens": 256000,
     "input_cost_per_token": 1.5e-06,
@@ -579,6 +601,28 @@
     "supports_vision": true,
     "supports_streaming": true
   },
+  "mistral-small": {
+    "max_tokens": 256000,
+    "max_input_tokens": 256000,
+    "input_cost_per_token": 1.5e-07,
+    "output_cost_per_token": 6e-07,
+    "litellm_provider": "mistral",
+    "mode": "chat",
+    "supports_function_calling": true,
+    "supports_vision": true,
+    "supports_streaming": true
+  },
+  "mistral-small-4": {
+    "max_tokens": 256000,
+    "max_input_tokens": 256000,
+    "input_cost_per_token": 1.5e-07,
+    "output_cost_per_token": 6e-07,
+    "litellm_provider": "mistral",
+    "mode": "chat",
+    "supports_function_calling": true,
+    "supports_vision": true,
+    "supports_streaming": true
+  },
   "magistral-small-2509": {
     "max_tokens": 128000,
     "max_input_tokens": 128000,
@@ -586,7 +630,8 @@
     "output_cost_per_token": 1.5e-06,
     "litellm_provider": "mistral",
     "mode": "chat",
-    "supports_function_calling": false,
+    "supports_function_calling": true,
+    "supports_vision": true,
     "supports_streaming": true
   },
   "magistral-medium-2509": {
@@ -596,7 +641,8 @@
     "output_cost_per_token": 5e-06,
     "litellm_provider": "mistral",
     "mode": "chat",
-    "supports_function_calling": false,
+    "supports_function_calling": true,
+    "supports_vision": true,
     "supports_streaming": true
   },
   "devstral-2512": {
@@ -802,12 +848,13 @@
     "max_tokens": 64000,
     "max_input_tokens": 1000000,
     "max_output_tokens": 64000,
-    "input_cost_per_token": 0,
-    "output_cost_per_token": 0,
+    "input_cost_per_token": 6e-08,
+    "output_cost_per_token": 2.4e-07,
     "litellm_provider": "bedrock",
     "mode": "chat",
     "supports_function_calling": true,
     "supports_vision": true,
+    "supports_reasoning": true,
     "supports_streaming": true
   }
 }

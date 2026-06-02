@@ -203,6 +203,10 @@ impl DefaultRouter {
         )
         .await;
 
+        // Add xAI provider if API key is available
+        Self::register_openai_like_provider_from_env(&mut provider_registry, "xai", "XAI_API_KEY")
+            .await;
+
         Ok(Self {
             provider_registry: Arc::new(provider_registry),
         })

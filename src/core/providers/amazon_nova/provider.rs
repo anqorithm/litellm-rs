@@ -248,6 +248,7 @@ impl AmazonNovaProvider {
 
         // Map short names to full names
         match model {
+            "nova-2-lite" => "amazon.nova-2-lite-v1:0".to_string(),
             "nova-pro" => "amazon.nova-pro-v1:0".to_string(),
             "nova-lite" => "amazon.nova-lite-v1:0".to_string(),
             "nova-micro" => "amazon.nova-micro-v1:0".to_string(),
@@ -372,6 +373,10 @@ mod tests {
         assert_eq!(
             provider.normalize_model_name("nova-pro"),
             "amazon.nova-pro-v1:0"
+        );
+        assert_eq!(
+            provider.normalize_model_name("nova-2-lite"),
+            "amazon.nova-2-lite-v1:0"
         );
         assert_eq!(
             provider.normalize_model_name("nova-lite"),

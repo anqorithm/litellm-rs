@@ -66,6 +66,12 @@ const DYNAMIC_PROVIDER_PREFIXES: &[DynamicProviderPrefix] = &[
         default_api_base: "https://open.bigmodel.cn/api/paas/v4",
     },
     DynamicProviderPrefix {
+        prefix: "xai/",
+        provider_type: "xai",
+        provider_label: "xAI",
+        default_api_base: "https://api.x.ai/v1",
+    },
+    DynamicProviderPrefix {
         prefix: "openai/",
         provider_type: "openai",
         provider_label: "OpenAI",
@@ -377,6 +383,19 @@ mod tests {
         assert_eq!(route.provider_label, "Zhipu");
         assert_eq!(route.actual_model, "glm-5");
         assert_eq!(route.api_base, "https://open.bigmodel.cn/api/paas/v4");
+    }
+
+    #[test]
+    fn test_resolve_dynamic_route_for_xai() {
+        let options = CompletionOptions::default();
+        let Some(route) = resolve_dynamic_provider_route("xai/grok-4.3", &options) else {
+            panic!("xAI route should resolve");
+        };
+
+        assert_eq!(route.provider_type, "xai");
+        assert_eq!(route.provider_label, "xAI");
+        assert_eq!(route.actual_model, "grok-4.3");
+        assert_eq!(route.api_base, "https://api.x.ai/v1");
     }
 
     #[test]

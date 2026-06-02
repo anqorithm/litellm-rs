@@ -106,7 +106,9 @@ impl AmazonNovaModelRegistry {
             1_000_000,
             64_000,
         )
-        .with_vision();
+        .with_pricing(0.00006, 0.00024)
+        .with_vision()
+        .with_reasoning();
         models.insert("amazon.nova-2-lite-v1:0".to_string(), nova_2_lite.clone());
 
         // Nova Pro - High capability model
@@ -297,7 +299,10 @@ mod tests {
         assert_eq!(nova_2_lite.context_length, 1_000_000);
         assert_eq!(nova_2_lite.max_output_tokens, 64_000);
         assert!(nova_2_lite.supports_vision);
+        assert!(nova_2_lite.supports_reasoning);
         assert!(nova_2_lite.supports_tools);
+        assert_eq!(nova_2_lite.input_cost_per_1k, 0.00006);
+        assert_eq!(nova_2_lite.output_cost_per_1k, 0.00024);
 
         // Micro is text-only
         let micro = registry.get("amazon.nova-micro-v1:0").unwrap();
@@ -358,6 +363,9 @@ mod tests {
         let (input, output) = pricing.unwrap();
         assert!(input > 0.0);
         assert!(output > 0.0);
+
+        let nova_2_lite_pricing = registry.get_pricing("nova-2-lite");
+        assert_eq!(nova_2_lite_pricing, Some((0.00006, 0.00024)));
     }
 
     #[test]
