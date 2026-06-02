@@ -19,12 +19,35 @@ fn require_pricing_field(
     pricing_type: &str,
     field: &str,
 ) -> Result<f64> {
-    value.ok_or_else(|| {
+    let value = value.ok_or_else(|| {
         GatewayError::Config(format!(
             "Missing {} for model {}: {}",
             pricing_type, model, field
         ))
-    })
+    })?;
+    if value < 0.0 || value.is_nan() {
+        return Err(GatewayError::Config(format!(
+            "Invalid {} for model {}: {} ({})",
+            pricing_type, model, field, value
+        )));
+    }
+    Ok(value)
+}
+
+fn require_total_time_seconds(model: &str, total_time_seconds: Option<f64>) -> Result<f64> {
+    let total_time_seconds = total_time_seconds.ok_or_else(|| {
+        GatewayError::validation(format!(
+            "Missing total_time_seconds for time-based pricing model {}",
+            model
+        ))
+    })?;
+    if total_time_seconds < 0.0 || total_time_seconds.is_nan() {
+        return Err(GatewayError::validation(format!(
+            "Invalid total_time_seconds ({}) for model {}",
+            total_time_seconds, model
+        )));
+    }
+    Ok(total_time_seconds)
 }
 
 /// Pricing service using LiteLLM data format
@@ -91,10 +114,12 @@ impl PricingService {
             .get_model_info(model)
             .ok_or_else(|| GatewayError::not_found(format!("Model not found: {}", model)))?;
 
-        let provider = model_info.litellm_provider.clone();
+        if model_info.cost_per_second.is_some() {
+            let total_time_seconds = require_total_time_seconds(model, total_time_seconds)?;
+            return self.calculate_time_based_cost(model, &model_info, total_time_seconds);
+        }
 
-        // Provider-specific cost calculation
-        match provider.as_str() {
+        match model_info.litellm_provider.as_str() {
             "openai" | "azure" => {
                 self.calculate_token_based_cost(model, &model_info, input_tokens, output_tokens)
             }
@@ -109,15 +134,6 @@ impl PricingService {
                 prompt,
                 completion,
             ),
-            "replicate" | "together_ai" | "baseten" => {
-                let total_time_seconds = total_time_seconds.ok_or_else(|| {
-                    GatewayError::validation(format!(
-                        "Missing total_time_seconds for time-based pricing model {}",
-                        model
-                    ))
-                })?;
-                self.calculate_time_based_cost(model, &model_info, total_time_seconds)
-            }
             "zhipuai" | "glm" => {
                 self.calculate_token_based_cost(model, &model_info, input_tokens, output_tokens)
             }

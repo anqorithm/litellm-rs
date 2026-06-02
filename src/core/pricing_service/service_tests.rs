@@ -42,6 +42,14 @@ fn create_character_based_model_info() -> LiteLLMModelInfo {
     }
 }
 
+fn create_time_based_model_info(provider: &str) -> LiteLLMModelInfo {
+    let mut model_info = create_test_model_info(provider);
+    model_info.input_cost_per_token = None;
+    model_info.output_cost_per_token = None;
+    model_info.cost_per_second = Some(0.001);
+    model_info
+}
+
 // ==================== Provider and Model Listing Tests ====================
 
 #[test]
@@ -294,10 +302,7 @@ async fn test_calculate_completion_cost_propagates_missing_token_pricing() {
 #[tokio::test]
 async fn test_calculate_completion_cost_requires_time_for_time_based_pricing() {
     let service = PricingService::new(None);
-    let mut model_info = create_test_model_info("replicate");
-    model_info.input_cost_per_token = None;
-    model_info.output_cost_per_token = None;
-    model_info.cost_per_second = Some(0.001);
+    let model_info = create_time_based_model_info("replicate");
     service.add_custom_model("replicate/timed".to_string(), model_info);
     service.pricing_data.write().last_updated = SystemTime::now();
 
@@ -310,6 +315,169 @@ async fn test_calculate_completion_cost_requires_time_for_time_based_pricing() {
         Err(GatewayError::Validation(message))
             if message.contains("replicate/timed") && message.contains("total_time_seconds")
     ));
+}
+
+#[test]
+fn pricing_review_rejects_negative_token_pricing_field() {
+    let service = PricingService::new(None);
+    let mut model_info = create_test_model_info("openai");
+    model_info.input_cost_per_token = Some(-0.00001);
+
+    let result = service.calculate_token_based_cost("gpt-negative-token", &model_info, 1000, 500);
+
+    assert!(matches!(
+        result,
+        Err(GatewayError::Config(message))
+            if message.contains("gpt-negative-token")
+                && message.contains("input_cost_per_token")
+                && message.contains("Invalid token pricing")
+    ));
+}
+
+#[test]
+fn pricing_review_rejects_nan_token_pricing_field() {
+    let service = PricingService::new(None);
+    let mut model_info = create_test_model_info("openai");
+    model_info.output_cost_per_token = Some(f64::NAN);
+
+    let result = service.calculate_token_based_cost("gpt-nan-token", &model_info, 1000, 500);
+
+    assert!(matches!(
+        result,
+        Err(GatewayError::Config(message))
+            if message.contains("gpt-nan-token")
+                && message.contains("output_cost_per_token")
+                && message.contains("Invalid token pricing")
+    ));
+}
+
+#[test]
+fn pricing_review_rejects_negative_character_pricing_field() {
+    let service = PricingService::new(None);
+    let mut model_info = create_character_based_model_info();
+    model_info.output_cost_per_character = Some(-0.000002);
+
+    let result = service.calculate_google_cost(
+        "gemini-negative-char",
+        &model_info,
+        10,
+        5,
+        Some("p"),
+        Some("c"),
+    );
+
+    assert!(matches!(
+        result,
+        Err(GatewayError::Config(message))
+            if message.contains("gemini-negative-char")
+                && message.contains("output_cost_per_character")
+                && message.contains("Invalid character pricing")
+    ));
+}
+
+#[test]
+fn pricing_review_rejects_negative_time_pricing_field() {
+    let service = PricingService::new(None);
+    let mut model_info = create_time_based_model_info("replicate");
+    model_info.cost_per_second = Some(-0.001);
+
+    let result = service.calculate_time_based_cost("replicate/negative-time", &model_info, 10.0);
+
+    assert!(matches!(
+        result,
+        Err(GatewayError::Config(message))
+            if message.contains("replicate/negative-time")
+                && message.contains("cost_per_second")
+                && message.contains("Invalid time pricing")
+    ));
+}
+
+#[tokio::test]
+async fn pricing_review_rejects_negative_total_time_seconds() {
+    let service = PricingService::new(None);
+    service.add_custom_model(
+        "replicate/negative-duration".to_string(),
+        create_time_based_model_info("replicate"),
+    );
+    service.pricing_data.write().last_updated = SystemTime::now();
+
+    let result = service
+        .calculate_completion_cost("replicate/negative-duration", 0, 0, None, None, Some(-1.0))
+        .await;
+
+    assert!(matches!(
+        result,
+        Err(GatewayError::Validation(message))
+            if message.contains("replicate/negative-duration")
+                && message.contains("Invalid total_time_seconds")
+    ));
+}
+
+#[tokio::test]
+async fn pricing_review_rejects_nan_total_time_seconds() {
+    let service = PricingService::new(None);
+    service.add_custom_model(
+        "replicate/nan-duration".to_string(),
+        create_time_based_model_info("replicate"),
+    );
+    service.pricing_data.write().last_updated = SystemTime::now();
+
+    let result = service
+        .calculate_completion_cost("replicate/nan-duration", 0, 0, None, None, Some(f64::NAN))
+        .await;
+
+    assert!(matches!(
+        result,
+        Err(GatewayError::Validation(message))
+            if message.contains("replicate/nan-duration")
+                && message.contains("Invalid total_time_seconds")
+    ));
+}
+
+#[tokio::test]
+async fn pricing_review_uses_token_pricing_for_token_priced_together_ai_model() {
+    let service = PricingService::new(None);
+    service.add_custom_model(
+        "together/token-priced".to_string(),
+        create_test_model_info("together_ai"),
+    );
+    service.pricing_data.write().last_updated = SystemTime::now();
+
+    let result = service
+        .calculate_completion_cost("together/token-priced", 1000, 500, None, None, None)
+        .await;
+
+    let result = match result {
+        Ok(result) => result,
+        Err(error) => panic!("expected token pricing success, got {error:?}"),
+    };
+
+    assert_eq!(result.cost_type, CostType::TokenBased);
+    assert_eq!(result.input_cost, 1000.0 * 0.00001);
+    assert_eq!(result.output_cost, 500.0 * 0.00003);
+}
+
+#[tokio::test]
+async fn pricing_review_uses_token_pricing_for_token_priced_baseten_model() {
+    let service = PricingService::new(None);
+    service.add_custom_model(
+        "baseten/token-priced".to_string(),
+        create_test_model_info("baseten"),
+    );
+    service.pricing_data.write().last_updated = SystemTime::now();
+
+    let result = service
+        .calculate_completion_cost("baseten/token-priced", 2000, 750, None, None, None)
+        .await;
+
+    let result = match result {
+        Ok(result) => result,
+        Err(error) => panic!("expected token pricing success, got {error:?}"),
+    };
+
+    assert_eq!(result.cost_type, CostType::TokenBased);
+    assert_eq!(result.input_cost, 2000.0 * 0.00001);
+    assert_eq!(result.output_cost, 750.0 * 0.00003);
 }
 
 // ==================== Clone Tests ====================
