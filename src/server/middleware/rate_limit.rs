@@ -44,16 +44,13 @@ impl KeyTracker {
         }
     }
 
-    /// Check-and-record atomically: returns (allowed, retry_after_secs)
-    fn check_and_record(&mut self, limit: u32, window: Duration) -> (bool, u64) {
+    fn check(&mut self, limit: u32, window: Duration) -> (bool, u64) {
         let now = Instant::now();
-        // Evict timestamps outside the window
         self.timestamps
             .retain(|&ts| now.duration_since(ts) < window);
 
         let count = self.timestamps.len() as u32;
         if count >= limit {
-            // Estimate when the oldest entry expires
             let retry_after = self
                 .timestamps
                 .first()
@@ -62,11 +59,20 @@ impl KeyTracker {
                     window.saturating_sub(age).as_secs().max(1)
                 })
                 .unwrap_or(window.as_secs());
-            (false, retry_after)
-        } else {
-            self.timestamps.push(now);
-            (true, 0)
+            return (false, retry_after);
         }
+
+        (true, 0)
+    }
+
+    /// Check-and-record atomically: returns (allowed, retry_after_secs)
+    fn check_and_record(&mut self, limit: u32, window: Duration) -> (bool, u64) {
+        let (allowed, retry_after) = self.check(limit, window);
+        if allowed {
+            self.timestamps.push(Instant::now());
+        }
+
+        (allowed, retry_after)
     }
 }
 
@@ -168,10 +174,93 @@ async fn check_rate_limit_key(
     })
 }
 
+async fn check_rate_limit_key_status(
+    key: &str,
+    requests_per_minute: u32,
+    fallback_store: &DashMap<String, KeyTracker>,
+) -> Result<RateLimitPass, RateLimitRejection> {
+    if let Some(global_limiter) = get_global_rate_limiter() {
+        let limit = global_limiter.limit();
+        let result = global_limiter.check(key).await;
+
+        if !result.allowed {
+            return Err(RateLimitRejection {
+                source: GLOBAL_LIMITER_SOURCE,
+                retry_after: result.retry_after_secs.unwrap_or(60),
+                limit,
+            });
+        }
+
+        return Ok(RateLimitPass {
+            source: GLOBAL_LIMITER_SOURCE,
+            limit,
+            remaining: result.remaining,
+        });
+    }
+
+    let window = Duration::from_secs(60);
+    let Some(mut tracker) = fallback_store.get_mut(key) else {
+        return Ok(RateLimitPass {
+            source: FALLBACK_LIMITER_SOURCE,
+            limit: requests_per_minute,
+            remaining: requests_per_minute,
+        });
+    };
+
+    let (allowed, retry_after) = tracker.check(requests_per_minute, window);
+    if !allowed {
+        return Err(RateLimitRejection {
+            source: FALLBACK_LIMITER_SOURCE,
+            retry_after,
+            limit: requests_per_minute,
+        });
+    }
+
+    Ok(RateLimitPass {
+        source: FALLBACK_LIMITER_SOURCE,
+        limit: requests_per_minute,
+        remaining: requests_per_minute.saturating_sub(tracker.timestamps.len() as u32),
+    })
+}
+
 fn auth_rejection_fallback_store() -> Arc<DashMap<String, KeyTracker>> {
     AUTH_REJECTION_FALLBACK_STORE
         .get_or_init(|| Arc::new(DashMap::new()))
         .clone()
+}
+
+pub(super) async fn reject_if_rate_limited_for_auth_attempt(
+    req: &ServiceRequest,
+    requests_per_minute: u32,
+    trusted_proxies: &[String],
+) -> Result<(), actix_web::Error> {
+    let key = extract_client_key(req, trusted_proxies);
+    let fallback_store = auth_rejection_fallback_store();
+
+    match check_rate_limit_key_status(&key, requests_per_minute, &fallback_store).await {
+        Ok(pass) => {
+            debug!(
+                client = %key,
+                limit = pass.limit,
+                remaining = pass.remaining,
+                "Rate limit pre-check passed for auth attempt ({} limiter)",
+                pass.source
+            );
+            Ok(())
+        }
+        Err(rejection) => {
+            warn!(
+                client = %key,
+                "Rate limit exceeded before auth verification ({} limiter): retry after {}s",
+                rejection.source,
+                rejection.retry_after
+            );
+            Err(actix_web::Error::from(RateLimitError {
+                retry_after: rejection.retry_after,
+                limit: rejection.limit,
+            }))
+        }
+    }
 }
 
 pub(super) async fn enforce_rate_limit_for_rejected_auth(
@@ -538,6 +627,33 @@ mod tests {
         let key = extract_client_key(&req, &[]);
 
         assert_eq!(key, "user:user-123");
+    }
+
+    #[test]
+    fn test_key_tracker_status_check_does_not_record() {
+        let mut tracker = KeyTracker::new();
+        let window = Duration::from_secs(60);
+
+        let (allowed, retry_after) = tracker.check(1, window);
+
+        assert!(allowed);
+        assert_eq!(retry_after, 0);
+        assert!(tracker.timestamps.is_empty());
+    }
+
+    #[test]
+    fn test_key_tracker_status_check_rejects_full_bucket_without_recording() {
+        let mut tracker = KeyTracker::new();
+        let window = Duration::from_secs(60);
+        let (allowed, _) = tracker.check_and_record(1, window);
+        assert!(allowed);
+        let recorded = tracker.timestamps.len();
+
+        let (allowed, retry_after) = tracker.check(1, window);
+
+        assert!(!allowed);
+        assert!(retry_after > 0);
+        assert_eq!(tracker.timestamps.len(), recorded);
     }
 
     #[test]

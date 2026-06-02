@@ -238,7 +238,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_invalid_auth_hits_gateway_rate_limit_before_auth_short_circuit() {
+    async fn test_rotating_invalid_auth_hits_gateway_rate_limit_before_auth_short_circuit() {
         let state = build_test_state_with_rate_limit(true, true, Some(1)).await;
         let hit_counter = Arc::new(AtomicUsize::new(0));
 
@@ -268,11 +268,11 @@ mod tests {
         let second = test::TestRequest::get()
             .uri(AUTH_PROBE_PATH)
             .peer_addr("203.0.113.102:1001".parse().unwrap())
-            .insert_header(("x-api-key", "gw-invalid-auth-rate-limit-key"))
+            .insert_header(("x-api-key", "gw-invalid-auth-rate-limit-key-rotated"))
             .to_request();
         let second_error = test::try_call_service(&app, second)
             .await
-            .expect_err("second invalid-auth request should hit gateway rate limit");
+            .expect_err("second rotating invalid-auth request should hit gateway rate limit");
         assert_eq!(
             second_error.as_response_error().status_code(),
             StatusCode::TOO_MANY_REQUESTS
