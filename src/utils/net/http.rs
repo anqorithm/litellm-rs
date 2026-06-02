@@ -102,6 +102,9 @@ static SHARED_HTTP_CLIENT: OnceLock<Client> = OnceLock::new();
 /// Timeout-specific client cache (keyed by milliseconds)
 static TIMEOUT_CLIENT_CACHE: OnceLock<DashMap<u64, Arc<Client>>> = OnceLock::new();
 
+/// Timeout-specific SSRF-safe client cache (keyed by milliseconds)
+static SSRF_SAFE_TIMEOUT_CLIENT_CACHE: OnceLock<DashMap<u64, Arc<Client>>> = OnceLock::new();
+
 /// Create a reqwest client builder with unified pool/timeout defaults.
 pub fn create_client_builder_with_config(
     timeout: Duration,
@@ -228,10 +231,20 @@ pub fn create_streaming_client() -> Result<Client, reqwest::Error> {
 pub fn get_ssrf_safe_client_with_timeout_fallible(
     timeout: Duration,
 ) -> Result<Arc<Client>, reqwest::Error> {
-    create_client_builder_with_config(timeout, &HttpClientPoolConfig::default())
-        .dns_resolver(Arc::new(SsrfSafeDnsResolver))
-        .build()
-        .map(Arc::new)
+    let cache = SSRF_SAFE_TIMEOUT_CLIENT_CACHE.get_or_init(DashMap::new);
+    let timeout_millis = timeout.as_millis().min(u64::MAX as u128) as u64;
+
+    if let Some(existing) = cache.get(&timeout_millis) {
+        return Ok(existing.clone());
+    }
+
+    let client = Arc::new(
+        create_client_builder_with_config(timeout, &HttpClientPoolConfig::default())
+            .dns_resolver(Arc::new(SsrfSafeDnsResolver))
+            .build()?,
+    );
+    cache.insert(timeout_millis, client.clone());
+    Ok(client)
 }
 
 /// Create a custom HTTP client with specific timeout and default headers

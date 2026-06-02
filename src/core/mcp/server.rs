@@ -14,7 +14,9 @@ use super::protocol::{
 };
 use super::tools::{Tool, ToolCall, ToolList, ToolResult};
 use super::transport::Transport;
-use crate::utils::net::http::get_client_with_timeout;
+use crate::utils::net::http::{
+    get_client_with_timeout, get_ssrf_safe_client_with_timeout_fallible,
+};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
@@ -70,7 +72,17 @@ impl McpServer {
 
         // Get shared client with appropriate timeout
         let timeout_secs = config.timeout_ms / 1000;
-        let http_client = get_client_with_timeout(Duration::from_secs(timeout_secs.max(1)));
+        let timeout = Duration::from_secs(timeout_secs.max(1));
+        let http_client = match config.transport {
+            Transport::Http | Transport::Sse | Transport::WebSocket => {
+                get_ssrf_safe_client_with_timeout_fallible(timeout).map_err(|error| {
+                    McpError::ConfigurationError {
+                        message: format!("Failed to create SSRF-safe HTTP client: {error}"),
+                    }
+                })?
+            }
+            Transport::Stdio => get_client_with_timeout(timeout),
+        };
 
         // Build custom headers for this server
         let mut headers = reqwest::header::HeaderMap::new();

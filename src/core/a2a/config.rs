@@ -3,7 +3,7 @@
 //! Configuration types for A2A agents including authentication and provider settings.
 
 use crate::config::models::defaults::default_true;
-use crate::core::net::validate_outbound_url_str;
+use crate::core::net::validate_outbound_url_str_without_resolution;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -228,7 +228,8 @@ impl AgentConfig {
             ));
         }
 
-        validate_outbound_url_str(&self.url).map_err(|error| error.to_string())?;
+        validate_outbound_url_str_without_resolution(&self.url)
+            .map_err(|error| error.to_string())?;
 
         Ok(())
     }

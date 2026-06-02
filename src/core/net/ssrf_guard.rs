@@ -51,15 +51,41 @@ pub fn validate_outbound_url_str(raw_url: &str) -> Result<Url, SsrfError> {
     Ok(url)
 }
 
+/// Parse and validate an outbound URL string without doing DNS resolution.
+pub fn validate_outbound_url_str_without_resolution(raw_url: &str) -> Result<Url, SsrfError> {
+    let url = Url::parse(raw_url).map_err(|error| SsrfError::InvalidUrl {
+        url: raw_url.to_string(),
+        message: error.to_string(),
+    })?;
+
+    validate_outbound_url_without_resolution(&url)?;
+    Ok(url)
+}
+
 /// Validate an already parsed outbound URL.
 pub fn validate_outbound_url(url: &Url) -> Result<(), SsrfError> {
     validate_outbound_url_with_resolver(url, resolve_host_addresses)
+}
+
+/// Validate an already parsed outbound URL without doing DNS resolution.
+pub fn validate_outbound_url_without_resolution(url: &Url) -> Result<(), SsrfError> {
+    resolution_target(url)?;
+    Ok(())
 }
 
 fn validate_outbound_url_with_resolver<F>(url: &Url, resolver: F) -> Result<(), SsrfError>
 where
     F: Fn(&str, u16) -> Result<Vec<IpAddr>, SsrfError>,
 {
+    if let Some((host, port)) = resolution_target(url)? {
+        let addresses = resolver(&host, port)?;
+        validate_resolved_addresses(host, addresses)?;
+    }
+
+    Ok(())
+}
+
+fn resolution_target(url: &Url) -> Result<Option<(String, u16)>, SsrfError> {
     match url.scheme() {
         "http" | "https" | "ws" | "wss" => {}
         scheme => {
@@ -78,24 +104,27 @@ where
     }
 
     if !is_literal_ip_host(&host) {
-        let port = url.port_or_known_default().unwrap_or(0);
-        let addresses = resolver(&host, port)?;
+        return Ok(Some((host, url.port_or_known_default().unwrap_or(0))));
+    }
 
-        if addresses.is_empty() {
-            return Err(SsrfError::HostResolutionFailed {
-                host,
-                message: "no addresses returned".to_string(),
-            });
-        }
+    Ok(None)
+}
 
-        if let Some(address) = addresses
-            .iter()
-            .find(|address| is_private_or_reserved_ip(address))
-        {
-            return Err(SsrfError::PrivateOrReservedHost {
-                host: format!("{host} ({address})"),
-            });
-        }
+fn validate_resolved_addresses(host: String, addresses: Vec<IpAddr>) -> Result<(), SsrfError> {
+    if addresses.is_empty() {
+        return Err(SsrfError::HostResolutionFailed {
+            host,
+            message: "no addresses returned".to_string(),
+        });
+    }
+
+    if let Some(address) = addresses
+        .iter()
+        .find(|address| is_private_or_reserved_ip(address))
+    {
+        return Err(SsrfError::PrivateOrReservedHost {
+            host: format!("{host} ({address})"),
+        });
     }
 
     Ok(())

@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use super::transport::Transport;
-use crate::core::net::validate_outbound_url_str;
+use crate::core::net::validate_outbound_url_str_without_resolution;
 
 /// MCP Server configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -143,7 +143,8 @@ impl McpServerConfig {
                         self.url
                     ));
                 }
-                validate_outbound_url_str(&self.url).map_err(|error| error.to_string())?;
+                validate_outbound_url_str_without_resolution(&self.url)
+                    .map_err(|error| error.to_string())?;
             }
             Transport::Stdio => {
                 // For stdio, URL is a command path - no strict validation
@@ -155,7 +156,8 @@ impl McpServerConfig {
                         self.url
                     ));
                 }
-                validate_outbound_url_str(&self.url).map_err(|error| error.to_string())?;
+                validate_outbound_url_str_without_resolution(&self.url)
+                    .map_err(|error| error.to_string())?;
             }
         }
 

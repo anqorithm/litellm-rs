@@ -8,6 +8,7 @@ use tokio::sync::RwLock;
 
 use super::config::AgentConfig;
 use super::error::{A2AError, A2AResult};
+use crate::utils::net::http::get_ssrf_safe_client_with_timeout_fallible;
 
 /// Agent registry entry
 #[derive(Debug, Clone)]
@@ -247,10 +248,19 @@ impl AgentRegistry {
             }
         };
 
-        let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(10))
-            .build()
-            .unwrap_or_default();
+        let client =
+            match get_ssrf_safe_client_with_timeout_fallible(std::time::Duration::from_secs(10)) {
+                Ok(client) => client,
+                Err(error) => {
+                    tracing::error!(
+                        agent = name,
+                        error = %error,
+                        "Failed to create SSRF-safe health-check HTTP client"
+                    );
+                    self.update_state(name, AgentState::Unhealthy).await;
+                    return;
+                }
+            };
 
         let state = match client.get(&url).send().await {
             Ok(resp) if resp.status().is_success() => AgentState::Healthy,
@@ -480,8 +490,8 @@ mod tests {
     async fn test_get_for_routing_triggers_health_check() {
         let registry = AgentRegistry::new();
 
-        // Use a validation-safe public IP where HTTPS probing should fail quickly.
-        let config = AgentConfig::new("probe-agent", "https://93.184.216.34/health");
+        // Use a validation-safe reserved domain so the probe fails without external egress.
+        let config = AgentConfig::new("probe-agent", "https://example.invalid/health");
         registry.register(config).await.unwrap();
 
         // Starts as Unknown
@@ -498,7 +508,7 @@ mod tests {
     async fn test_get_for_routing_skips_known_state() {
         let registry = AgentRegistry::new();
 
-        let config = AgentConfig::new("known-agent", "https://93.184.216.34/health");
+        let config = AgentConfig::new("known-agent", "https://example.invalid/health");
         registry.register(config).await.unwrap();
         registry
             .update_state("known-agent", AgentState::Healthy)
@@ -513,8 +523,8 @@ mod tests {
     async fn test_check_agent_health_unreachable() {
         let registry = AgentRegistry::new();
 
-        // Use a validation-safe public IP where HTTPS probing should fail quickly.
-        let config = AgentConfig::new("bad-agent", "https://93.184.216.34/health");
+        // Use a validation-safe reserved domain so the probe fails without external egress.
+        let config = AgentConfig::new("bad-agent", "https://example.invalid/health");
         registry.register(config).await.unwrap();
 
         registry.check_agent_health("bad-agent").await;
