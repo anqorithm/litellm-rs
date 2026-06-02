@@ -347,13 +347,14 @@ fn is_plain_runtime_profile_id(model_id: &str) -> bool {
 }
 
 fn looks_like_versioned_foundation_model_id(model_id: &str) -> bool {
-    let Some((model_id, revision)) = model_id.split_once(':') else {
-        return false;
+    let (model_id, has_revision) = if let Some((model_id, revision)) = model_id.split_once(':') {
+        if revision.is_empty() || !revision.chars().all(|c| c.is_ascii_digit()) {
+            return false;
+        }
+        (model_id, true)
+    } else {
+        (model_id, false)
     };
-
-    if revision.is_empty() || !revision.chars().all(|c| c.is_ascii_digit()) {
-        return false;
-    }
 
     if model_id.matches('.').count() != 1 {
         return false;
@@ -362,11 +363,13 @@ fn looks_like_versioned_foundation_model_id(model_id: &str) -> bool {
     let Some((_vendor, model_name)) = model_id.split_once('.') else {
         return false;
     };
-    let Some((_name, version)) = model_name.rsplit_once("-v") else {
+    let Some((name, version)) = model_name.rsplit_once("-v") else {
         return false;
     };
 
-    !version.is_empty() && version.chars().all(|c| c.is_ascii_digit())
+    !version.is_empty()
+        && version.chars().all(|c| c.is_ascii_digit())
+        && (has_revision || name == "model")
 }
 
 fn push_unique(values: &mut Vec<String>, value: String) {
@@ -639,7 +642,7 @@ mod tests {
 
     #[test]
     fn dotted_plain_runtime_profile_id_uses_runtime_fallback() {
-        for model_id in ["my.team.profile:1", "team.profile-v1", "unknown.model-v1"] {
+        for model_id in ["my.team.profile:1", "team.profile-v1"] {
             let parsed = parse_bedrock_model_id(model_id);
 
             assert_eq!(parsed.kind, BedrockModelIdKind::FoundationModel);
@@ -671,11 +674,12 @@ mod tests {
 
     #[test]
     fn unknown_versioned_foundation_model_id_is_not_runtime_profile() {
-        let parsed = parse_bedrock_model_id("unknown.model-v1:0");
+        let model_id = "unknown.model-v1:0";
+        let parsed = parse_bedrock_model_id(model_id);
 
-        assert_eq!(parsed.metadata_lookup_ids, vec!["unknown.model-v1:0"]);
+        assert_eq!(parsed.metadata_lookup_ids, vec![model_id]);
         assert_eq!(parsed.runtime_config_fallback, None);
-        assert!(super::get_model_config_for_model_id("unknown.model-v1:0").is_err());
+        assert!(super::get_model_config_for_model_id(model_id).is_err());
     }
 
     #[test]
