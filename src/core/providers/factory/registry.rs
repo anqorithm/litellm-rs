@@ -22,6 +22,12 @@ use super::builder::{
     config_u64,
 };
 
+fn provider_diagnostic_name(provider_type: &ProviderType) -> &'static str {
+    provider_registry::entry_for_type(provider_type)
+        .map(|entry| entry.canonical_name)
+        .unwrap_or("custom")
+}
+
 impl Provider {
     /// Create provider from configuration asynchronously
     ///
@@ -153,7 +159,7 @@ impl Provider {
                     Some(d) => d,
                     None => {
                         return Err(ProviderError::not_implemented(
-                            "unknown",
+                            provider_diagnostic_name(pt),
                             format!("Catalog definition for '{}' disappeared unexpectedly", name),
                         ));
                     }
@@ -177,7 +183,7 @@ impl Provider {
                 Ok(Provider::OpenAILike(provider))
             }
             _ => Err(ProviderError::not_implemented(
-                "unknown",
+                provider_diagnostic_name(&provider_type),
                 format!("Factory for {:?} not yet implemented", provider_type),
             )),
         }
@@ -290,6 +296,11 @@ mod tests {
                 "Expected NotImplemented for {:?}, got {}",
                 provider_type,
                 err
+            );
+            assert_eq!(
+                err.provider(),
+                provider_type.to_string(),
+                "NotImplemented provider name should identify the requested provider"
             );
         }
     }
