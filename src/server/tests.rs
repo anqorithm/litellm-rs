@@ -2,13 +2,12 @@
 //!
 //! This module contains all tests for the server components.
 
+use crate::config::models::gateway::GATEWAY_ENV_LOCK;
 #[cfg(test)]
 use crate::server::builder::{ServerBuilder, load_default_config_or_env, load_explicit_config};
 use crate::server::types::ServerRequestMetrics;
 use crate::utils::error::gateway_error::GatewayError;
 use std::io::Write;
-
-static ENV_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 const GATEWAY_ENV_KEYS: &[&str] = &[
     "LITELLM_HOST",
@@ -145,7 +144,7 @@ async fn explicit_config_path_parse_error_fails_without_env_fallback() {
 
 #[tokio::test]
 async fn default_config_path_can_fall_back_to_env_when_file_is_missing() {
-    let _env_lock = ENV_LOCK.lock().await;
+    let _env_lock = GATEWAY_ENV_LOCK.lock().await;
     let _env = EnvGuard::with_minimal_gateway_config();
     let temp_dir = match tempfile::tempdir() {
         Ok(temp_dir) => temp_dir,

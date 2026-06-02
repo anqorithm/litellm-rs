@@ -9,6 +9,8 @@ use crate::utils::error::gateway_error::{GatewayError, Result};
 use std::path::Path;
 use tracing::info;
 
+const DEFAULT_CONFIG_PATH: &str = "config/gateway.yaml";
+
 /// Server builder for easier configuration
 pub struct ServerBuilder {
     config: Option<Config>,
@@ -44,10 +46,18 @@ impl Default for ServerBuilder {
 
 /// Run the server with automatic configuration loading
 pub async fn run_server() -> Result<()> {
+    run_server_with_default_config_overrides(None, None).await
+}
+
+/// Run the server with automatic configuration loading and CLI overrides.
+pub async fn run_server_with_default_config_overrides(
+    host: Option<&str>,
+    port: Option<u16>,
+) -> Result<()> {
     info!("🚀 Starting Rust LiteLLM Gateway");
 
-    let config = load_default_config_or_env(Path::new("config/gateway.yaml")).await?;
-    run_server_with_loaded_config(config, None, None).await
+    let config = load_default_config_or_env(Path::new(DEFAULT_CONFIG_PATH)).await?;
+    run_server_with_loaded_config(config, host, port).await
 }
 
 /// Run the server with an explicit configuration path.

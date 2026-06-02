@@ -4,7 +4,8 @@
 
 #![allow(missing_docs)]
 
-use clap::{Parser, Subcommand};
+use clap::parser::ValueSource;
+use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use litellm_rs::server;
 use litellm_rs::storage::database::Database;
 use litellm_rs::{Config, VERSION};
@@ -12,6 +13,8 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 #[cfg(any(feature = "tracing", test))]
 use tracing::Level;
+
+const DEFAULT_CONFIG_PATH: &str = "config/gateway.yaml";
 
 #[derive(Debug, Parser)]
 #[command(
@@ -25,7 +28,7 @@ struct Cli {
         short,
         long,
         global = true,
-        default_value = "config/gateway.yaml",
+        default_value = DEFAULT_CONFIG_PATH,
         value_name = "FILE"
     )]
     config: PathBuf,
@@ -63,6 +66,27 @@ enum Commands {
 enum DatabaseCommands {
     /// Run database migrations.
     Migrate,
+}
+
+#[derive(Debug)]
+struct ParsedCli {
+    cli: Cli,
+    config_is_explicit: bool,
+}
+
+fn parse_cli_from<I, T>(args: I) -> Result<ParsedCli, clap::Error>
+where
+    I: IntoIterator<Item = T>,
+    T: Into<std::ffi::OsString> + Clone,
+{
+    let matches = Cli::command().try_get_matches_from(args)?;
+    let config_is_explicit = matches.value_source("config") == Some(ValueSource::CommandLine);
+    let cli = Cli::from_arg_matches(&matches)?;
+
+    Ok(ParsedCli {
+        cli,
+        config_is_explicit,
+    })
 }
 
 #[cfg(any(feature = "tracing", test))]
@@ -111,18 +135,29 @@ async fn load_config_with_overrides(
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    let cli = Cli::parse();
+    let ParsedCli {
+        cli,
+        config_is_explicit,
+    } = parse_cli_from(std::env::args_os()).unwrap_or_else(|error| error.exit());
     init_logging(cli.log_level.as_deref());
 
     let command = cli.command.unwrap_or(Commands::Serve);
     let result = match command {
         Commands::Serve => {
-            server::builder::run_server_with_config_overrides(
-                &cli.config,
-                cli.host.as_deref(),
-                cli.port,
-            )
-            .await
+            if config_is_explicit {
+                server::builder::run_server_with_config_overrides(
+                    &cli.config,
+                    cli.host.as_deref(),
+                    cli.port,
+                )
+                .await
+            } else {
+                server::builder::run_server_with_default_config_overrides(
+                    cli.host.as_deref(),
+                    cli.port,
+                )
+                .await
+            }
         }
         Commands::ValidateConfig => {
             match load_config_with_overrides(&cli.config, cli.host.as_deref(), cli.port).await {
@@ -166,16 +201,20 @@ mod tests {
 
     #[test]
     fn parses_trailing_global_config_for_migration() {
-        let cli = Cli::try_parse_from([
+        let parsed = match parse_cli_from([
             "gateway",
             "database",
             "migrate",
             "--config",
             "/tmp/gateway.yaml",
-        ])
-        .unwrap();
+        ]) {
+            Ok(parsed) => parsed,
+            Err(error) => panic!("expected database migrate args to parse: {error}"),
+        };
+        let cli = parsed.cli;
 
         assert_eq!(cli.config, PathBuf::from("/tmp/gateway.yaml"));
+        assert!(parsed.config_is_explicit);
         match cli.command {
             Some(Commands::Database {
                 command: DatabaseCommands::Migrate,
@@ -186,14 +225,32 @@ mod tests {
 
     #[test]
     fn defaults_to_config_file_when_omitted() {
-        let cli = Cli::try_parse_from(["gateway", "validate-config"]).unwrap();
+        let parsed = match parse_cli_from(["gateway", "validate-config"]) {
+            Ok(parsed) => parsed,
+            Err(error) => panic!("expected validate-config args to parse: {error}"),
+        };
+        let cli = parsed.cli;
         assert_eq!(cli.config, PathBuf::from("config/gateway.yaml"));
+        assert!(!parsed.config_is_explicit);
         assert!(matches!(cli.command, Some(Commands::ValidateConfig)));
     }
 
     #[test]
+    fn serve_without_config_uses_implicit_default_config() {
+        let parsed = match parse_cli_from(["gateway", "serve"]) {
+            Ok(parsed) => parsed,
+            Err(error) => panic!("expected serve args to parse: {error}"),
+        };
+        let cli = parsed.cli;
+
+        assert_eq!(cli.config, PathBuf::from(DEFAULT_CONFIG_PATH));
+        assert!(!parsed.config_is_explicit);
+        assert!(matches!(cli.command, Some(Commands::Serve)));
+    }
+
+    #[test]
     fn accepts_legacy_startup_overrides() {
-        let cli = Cli::try_parse_from([
+        let parsed = match parse_cli_from([
             "gateway",
             "--config",
             "/tmp/gateway.yaml",
@@ -203,10 +260,14 @@ mod tests {
             "8080",
             "--log-level",
             "debug",
-        ])
-        .unwrap();
+        ]) {
+            Ok(parsed) => parsed,
+            Err(error) => panic!("expected legacy startup args to parse: {error}"),
+        };
+        let cli = parsed.cli;
 
         assert_eq!(cli.config, PathBuf::from("/tmp/gateway.yaml"));
+        assert!(parsed.config_is_explicit);
         assert_eq!(cli.host.as_deref(), Some("0.0.0.0"));
         assert_eq!(cli.port, Some(8080));
         assert_eq!(cli.log_level.as_deref(), Some("debug"));
