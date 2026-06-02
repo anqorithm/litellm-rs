@@ -7,6 +7,7 @@ use crate::server::middleware::auth_rate_limiter::get_auth_rate_limiter;
 use crate::server::middleware::helpers::{
     extract_auth_method_with_api_key_header, is_public_route,
 };
+use crate::server::middleware::rate_limit::enforce_rate_limit_for_rejected_auth;
 use crate::server::state::AppState;
 use actix_web::dev::{Service, ServiceRequest, ServiceResponse, Transform, forward_ready};
 use actix_web::{HttpMessage, HttpRequest, web};
@@ -77,6 +78,9 @@ where
             let enable_jwt = cfg.auth().enable_jwt;
             let enable_api_key = cfg.auth().enable_api_key;
             let api_key_header = cfg.auth().api_key_header.clone();
+            let rate_limit_enabled = cfg.gateway.rate_limit.enabled;
+            let rate_limit_rpm = cfg.gateway.rate_limit.default_rpm;
+            let trusted_proxies = cfg.server().trusted_proxies.clone();
 
             let context = build_request_context(&mut req);
             let auth_method =
@@ -96,6 +100,13 @@ where
             }
 
             if let Err(wait_seconds) = rate_limiter.check_allowed(&client_id) {
+                enforce_gateway_rate_limit_for_auth_rejection(
+                    &req,
+                    rate_limit_enabled,
+                    rate_limit_rpm,
+                    &trusted_proxies,
+                )
+                .await?;
                 return Err(actix_web::error::ErrorTooManyRequests(format!(
                     "Too many failed attempts. Try again in {} seconds",
                     wait_seconds
@@ -105,12 +116,26 @@ where
             let auth_method = match auth_method {
                 AuthMethod::Jwt(_) if !enable_jwt => {
                     rate_limiter.record_failure(&client_id);
+                    enforce_gateway_rate_limit_for_auth_rejection(
+                        &req,
+                        rate_limit_enabled,
+                        rate_limit_rpm,
+                        &trusted_proxies,
+                    )
+                    .await?;
                     return Err(actix_web::error::ErrorUnauthorized(
                         "JWT authentication disabled",
                     ));
                 }
                 AuthMethod::ApiKey(_) if !enable_api_key => {
                     rate_limiter.record_failure(&client_id);
+                    enforce_gateway_rate_limit_for_auth_rejection(
+                        &req,
+                        rate_limit_enabled,
+                        rate_limit_rpm,
+                        &trusted_proxies,
+                    )
+                    .await?;
                     return Err(actix_web::error::ErrorUnauthorized(
                         "API key authentication disabled",
                     ));
@@ -120,6 +145,13 @@ where
 
             if matches!(auth_method, AuthMethod::None) {
                 rate_limiter.record_failure(&client_id);
+                enforce_gateway_rate_limit_for_auth_rejection(
+                    &req,
+                    rate_limit_enabled,
+                    rate_limit_rpm,
+                    &trusted_proxies,
+                )
+                .await?;
                 return Err(actix_web::error::ErrorUnauthorized(
                     "Missing authentication",
                 ));
@@ -149,6 +181,13 @@ where
                             .clone()
                             .unwrap_or_else(|| "unauthorized".to_string())
                     );
+                    enforce_gateway_rate_limit_for_auth_rejection(
+                        &req,
+                        rate_limit_enabled,
+                        rate_limit_rpm,
+                        &trusted_proxies,
+                    )
+                    .await?;
                     Err(actix_web::error::ErrorUnauthorized(
                         result.error.unwrap_or_else(|| "Unauthorized".to_string()),
                     ))
@@ -163,6 +202,19 @@ where
             }
         })
     }
+}
+
+async fn enforce_gateway_rate_limit_for_auth_rejection(
+    req: &ServiceRequest,
+    enabled: bool,
+    requests_per_minute: u32,
+    trusted_proxies: &[String],
+) -> Result<(), actix_web::Error> {
+    if !enabled {
+        return Ok(());
+    }
+
+    enforce_rate_limit_for_rejected_auth(req, requests_per_minute, trusted_proxies).await
 }
 
 /// Extract request context from request

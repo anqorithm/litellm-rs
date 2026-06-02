@@ -14,6 +14,7 @@ use std::future::Future;
 use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 use tracing::{debug, info, warn};
 
@@ -25,6 +26,11 @@ use tracing::{debug, info, warn};
 /// attacker rotates source addresses. The value matches `AuthRateLimiter`'s
 /// `DEFAULT_MAX_ENTRIES`.
 const MAX_FALLBACK_ENTRIES: usize = 10_000;
+
+static AUTH_REJECTION_FALLBACK_STORE: OnceLock<Arc<DashMap<String, KeyTracker>>> = OnceLock::new();
+
+const GLOBAL_LIMITER_SOURCE: &str = "global";
+const FALLBACK_LIMITER_SOURCE: &str = "fallback";
 
 /// Fallback per-key tracker for sliding window when global rate limiter is unavailable
 struct KeyTracker {
@@ -64,6 +70,18 @@ impl KeyTracker {
     }
 }
 
+struct RateLimitPass {
+    source: &'static str,
+    limit: u32,
+    remaining: u32,
+}
+
+struct RateLimitRejection {
+    source: &'static str,
+    retry_after: u64,
+    limit: u32,
+}
+
 /// Evict trackers when the fallback store exceeds the cap.
 ///
 /// Two-pass strategy: first drop trackers whose latest timestamp is already
@@ -92,6 +110,101 @@ fn enforce_fallback_capacity(store: &DashMap<String, KeyTracker>, window: Durati
     candidates.sort_by_key(|(ts, _)| *ts);
     for (_, key) in candidates.into_iter().take(overflow) {
         store.remove(&key);
+    }
+}
+
+async fn check_rate_limit_key(
+    key: &str,
+    requests_per_minute: u32,
+    fallback_store: &DashMap<String, KeyTracker>,
+) -> Result<RateLimitPass, RateLimitRejection> {
+    if let Some(global_limiter) = get_global_rate_limiter() {
+        let limit = global_limiter.limit();
+        let result = global_limiter.check_and_record(key).await;
+
+        if !result.allowed {
+            return Err(RateLimitRejection {
+                source: GLOBAL_LIMITER_SOURCE,
+                retry_after: result.retry_after_secs.unwrap_or(60),
+                limit,
+            });
+        }
+
+        return Ok(RateLimitPass {
+            source: GLOBAL_LIMITER_SOURCE,
+            limit,
+            remaining: result.remaining,
+        });
+    }
+
+    let window = Duration::from_secs(60);
+    let (allowed, retry_after) = {
+        let mut tracker = fallback_store
+            .entry(key.to_string())
+            .or_insert_with(KeyTracker::new);
+        tracker.check_and_record(requests_per_minute, window)
+    };
+    if fallback_store.len() > MAX_FALLBACK_ENTRIES {
+        enforce_fallback_capacity(fallback_store, window);
+    }
+
+    if !allowed {
+        return Err(RateLimitRejection {
+            source: FALLBACK_LIMITER_SOURCE,
+            retry_after,
+            limit: requests_per_minute,
+        });
+    }
+
+    let remaining = fallback_store
+        .get(key)
+        .map(|tracker| requests_per_minute.saturating_sub(tracker.timestamps.len() as u32))
+        .unwrap_or(requests_per_minute);
+
+    Ok(RateLimitPass {
+        source: FALLBACK_LIMITER_SOURCE,
+        limit: requests_per_minute,
+        remaining,
+    })
+}
+
+fn auth_rejection_fallback_store() -> Arc<DashMap<String, KeyTracker>> {
+    AUTH_REJECTION_FALLBACK_STORE
+        .get_or_init(|| Arc::new(DashMap::new()))
+        .clone()
+}
+
+pub(super) async fn enforce_rate_limit_for_rejected_auth(
+    req: &ServiceRequest,
+    requests_per_minute: u32,
+    trusted_proxies: &[String],
+) -> Result<(), actix_web::Error> {
+    let key = extract_client_key(req, trusted_proxies);
+    let fallback_store = auth_rejection_fallback_store();
+
+    match check_rate_limit_key(&key, requests_per_minute, &fallback_store).await {
+        Ok(pass) => {
+            debug!(
+                client = %key,
+                limit = pass.limit,
+                remaining = pass.remaining,
+                "Rate limit check passed for rejected auth path ({} limiter)",
+                pass.source
+            );
+            Ok(())
+        }
+        Err(rejection) => {
+            warn!(
+                client = %key,
+                "Rate limit exceeded for rejected auth path ({} limiter): retry after {}s",
+                rejection.source,
+                rejection.retry_after
+            );
+            Err(actix_web::Error::from(RateLimitError {
+                retry_after: rejection.retry_after,
+                limit: rejection.limit,
+            }))
+        }
     }
 }
 
@@ -259,84 +372,39 @@ where
 
         let client_key = extract_client_key(&req, &trusted_proxies);
 
-        // --- Try global rate limiter first ---
-        if let Some(global_limiter) = get_global_rate_limiter() {
-            let limit = global_limiter.limit();
-            // service.call() returns a lazy future; it only executes on .await.
-            // We must call it here because it consumes `req`, but we will NOT
-            // await it if the rate check fails — so no downstream work is wasted.
-            let fut = self.service.call(req);
-            let key = client_key.clone();
-
-            return Box::pin(async move {
-                let result = global_limiter.check_and_record(&key).await;
-
-                if !result.allowed {
-                    let retry_after = result.retry_after_secs.unwrap_or(60);
-                    warn!(
-                        client = %key,
-                        path = %path,
-                        "Rate limit exceeded (global limiter): retry after {}s",
-                        retry_after
-                    );
-                    let err = RateLimitError { retry_after, limit };
-                    return Err(actix_web::Error::from(err));
-                }
-
-                debug!(
-                    client = %key,
-                    remaining = result.remaining,
-                    "Rate limit check passed (global limiter)"
-                );
-
-                let res = fut.await?;
-                let duration = start_time.elapsed();
-                info!(
-                    "{} {} completed in {:?} with status {}",
-                    method,
-                    path,
-                    duration,
-                    res.status()
-                );
-                Ok(res)
-            });
-        }
-
-        // --- Fallback: in-process sliding window using middleware's requests_per_minute ---
         let fallback_store = self.fallback_store.clone();
+        // service.call() returns a lazy future; it only executes on .await.
+        // We must call it here because it consumes `req`, but we will NOT
+        // await it if the rate check fails, so no downstream work is wasted.
         let fut = self.service.call(req);
         let key = client_key.clone();
 
         Box::pin(async move {
-            let window = Duration::from_secs(60);
-            let (allowed, retry_after) = {
-                let mut tracker = fallback_store
-                    .entry(key.clone())
-                    .or_insert_with(KeyTracker::new);
-                tracker.check_and_record(requests_per_minute, window)
+            let pass = match check_rate_limit_key(&key, requests_per_minute, &fallback_store).await
+            {
+                Ok(pass) => pass,
+                Err(rejection) => {
+                    warn!(
+                        client = %key,
+                        path = %path,
+                        "Rate limit exceeded ({} limiter): retry after {}s",
+                        rejection.source,
+                        rejection.retry_after
+                    );
+                    let err = RateLimitError {
+                        retry_after: rejection.retry_after,
+                        limit: rejection.limit,
+                    };
+                    return Err(actix_web::Error::from(err));
+                }
             };
-            if fallback_store.len() > MAX_FALLBACK_ENTRIES {
-                enforce_fallback_capacity(&fallback_store, window);
-            }
-
-            if !allowed {
-                warn!(
-                    client = %key,
-                    path = %path,
-                    "Rate limit exceeded (fallback limiter): retry after {}s",
-                    retry_after
-                );
-                let err = RateLimitError {
-                    retry_after,
-                    limit: requests_per_minute,
-                };
-                return Err(actix_web::Error::from(err));
-            }
 
             debug!(
                 client = %key,
-                limit = requests_per_minute,
-                "Rate limit check passed (fallback limiter)"
+                limit = pass.limit,
+                remaining = pass.remaining,
+                "Rate limit check passed ({} limiter)",
+                pass.source
             );
 
             let res = fut.await?;
