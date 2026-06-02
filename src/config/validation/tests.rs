@@ -193,10 +193,32 @@ fn test_cache_validation_skips_when_disabled() {
         enabled: false,
         ttl: 0,
         max_size: 0,
-        semantic_cache: true,
+        semantic_cache: false,
         similarity_threshold: 2.0,
     };
     assert!(Validate::validate(&config).is_ok());
+}
+
+#[test]
+fn test_cache_validation_rejects_unwired_cache_enabled() {
+    let config = CacheConfig {
+        enabled: true,
+        ..Default::default()
+    };
+
+    let error = Validate::validate(&config).unwrap_err();
+    assert!(error.contains("not wired into runtime"));
+}
+
+#[test]
+fn test_cache_validation_rejects_unwired_semantic_cache() {
+    let config = CacheConfig {
+        semantic_cache: true,
+        ..Default::default()
+    };
+
+    let error = Validate::validate(&config).unwrap_err();
+    assert!(error.contains("not wired into runtime"));
 }
 
 #[test]
