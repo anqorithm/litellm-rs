@@ -330,7 +330,24 @@ fn pricing_review_rejects_negative_token_pricing_field() {
         Err(GatewayError::Config(message))
             if message.contains("gpt-negative-token")
                 && message.contains("input_cost_per_token")
-                && message.contains("Negative token pricing")
+                && message.contains("Invalid token pricing")
+    ));
+}
+
+#[test]
+fn pricing_review_rejects_nan_token_pricing_field() {
+    let service = PricingService::new(None);
+    let mut model_info = create_test_model_info("openai");
+    model_info.output_cost_per_token = Some(f64::NAN);
+
+    let result = service.calculate_token_based_cost("gpt-nan-token", &model_info, 1000, 500);
+
+    assert!(matches!(
+        result,
+        Err(GatewayError::Config(message))
+            if message.contains("gpt-nan-token")
+                && message.contains("output_cost_per_token")
+                && message.contains("Invalid token pricing")
     ));
 }
 
@@ -354,7 +371,7 @@ fn pricing_review_rejects_negative_character_pricing_field() {
         Err(GatewayError::Config(message))
             if message.contains("gemini-negative-char")
                 && message.contains("output_cost_per_character")
-                && message.contains("Negative character pricing")
+                && message.contains("Invalid character pricing")
     ));
 }
 
@@ -371,7 +388,7 @@ fn pricing_review_rejects_negative_time_pricing_field() {
         Err(GatewayError::Config(message))
             if message.contains("replicate/negative-time")
                 && message.contains("cost_per_second")
-                && message.contains("Negative time pricing")
+                && message.contains("Invalid time pricing")
     ));
 }
 
@@ -392,7 +409,28 @@ async fn pricing_review_rejects_negative_total_time_seconds() {
         result,
         Err(GatewayError::Validation(message))
             if message.contains("replicate/negative-duration")
-                && message.contains("Negative total_time_seconds")
+                && message.contains("Invalid total_time_seconds")
+    ));
+}
+
+#[tokio::test]
+async fn pricing_review_rejects_nan_total_time_seconds() {
+    let service = PricingService::new(None);
+    service.add_custom_model(
+        "replicate/nan-duration".to_string(),
+        create_time_based_model_info("replicate"),
+    );
+    service.pricing_data.write().last_updated = SystemTime::now();
+
+    let result = service
+        .calculate_completion_cost("replicate/nan-duration", 0, 0, None, None, Some(f64::NAN))
+        .await;
+
+    assert!(matches!(
+        result,
+        Err(GatewayError::Validation(message))
+            if message.contains("replicate/nan-duration")
+                && message.contains("Invalid total_time_seconds")
     ));
 }
 

@@ -25,9 +25,9 @@ fn require_pricing_field(
             pricing_type, model, field
         ))
     })?;
-    if value < 0.0 {
+    if value < 0.0 || value.is_nan() {
         return Err(GatewayError::Config(format!(
-            "Negative {} for model {}: {} ({})",
+            "Invalid {} for model {}: {} ({})",
             pricing_type, model, field, value
         )));
     }
@@ -41,9 +41,9 @@ fn require_total_time_seconds(model: &str, total_time_seconds: Option<f64>) -> R
             model
         ))
     })?;
-    if total_time_seconds < 0.0 {
+    if total_time_seconds < 0.0 || total_time_seconds.is_nan() {
         return Err(GatewayError::validation(format!(
-            "Negative total_time_seconds ({}) for model {}",
+            "Invalid total_time_seconds ({}) for model {}",
             total_time_seconds, model
         )));
     }
