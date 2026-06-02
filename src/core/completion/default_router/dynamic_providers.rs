@@ -561,7 +561,7 @@ fn dynamic_openai_compatible_config(
         base: BaseConfig {
             api_key: Some(api_key.to_string()),
             api_base: Some(api_base.to_string()),
-            timeout: 60,
+            timeout: options.timeout.unwrap_or(60),
             max_retries: 3,
             headers: options.headers.clone().unwrap_or_default(),
             organization: options.organization.clone(),
@@ -689,6 +689,7 @@ mod tests {
         let options = CompletionOptions {
             headers: Some(headers),
             organization: Some("org-stream-test".to_string()),
+            timeout: Some(17),
             ..CompletionOptions::default()
         };
 
@@ -709,6 +710,7 @@ mod tests {
         );
         assert_eq!(config.organization.as_deref(), Some("org-stream-test"));
         assert_eq!(config.base.organization.as_deref(), Some("org-stream-test"));
+        assert_eq!(config.base.timeout, 17);
     }
 
     #[test]

@@ -2,12 +2,17 @@
 //!
 //! Dynamic model support - accepts any model name and passes it through
 
+use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::{model::ModelInfo, model::ProviderCapability};
 use std::collections::HashMap;
 
+const XAI_HIGH_CONTEXT_THRESHOLD_TOKENS: u32 = 200_000;
 const XAI_GROK_43_INPUT_COST_PER_1K: f64 = 0.00125;
 const XAI_GROK_43_OUTPUT_COST_PER_1K: f64 = 0.0025;
 const XAI_GROK_43_CONTEXT_LENGTH: u32 = 1_000_000;
+const XAI_GROK_BUILD_INPUT_COST_PER_1K: f64 = 0.001;
+const XAI_GROK_BUILD_OUTPUT_COST_PER_1K: f64 = 0.002;
+const XAI_GROK_BUILD_CONTEXT_LENGTH: u32 = 256_000;
 
 const XAI_GROK_43_MODEL_IDS: &[&str] = &[
     "grok-4.3",
@@ -42,6 +47,48 @@ const XAI_GROK_43_MODEL_IDS: &[&str] = &[
     "grok-4-1-fast-reasoning-latest",
     "grok-4-1-fast-non-reasoning",
     "grok-4-1-fast-non-reasoning-latest",
+];
+
+const XAI_GROK_420_MODEL_IDS: &[&str] = &[
+    "grok-4.20-multi-agent-0309",
+    "grok-4.20-multi-agent",
+    "grok-4.20-multi-agent-latest",
+    "grok-4.20-multi-agent-beta-latest",
+    "grok-4.20-multi-agent-experimental-beta-0304",
+    "grok-4.20-multi-agent-experimental-beta-latest",
+    "grok-4.20-multi-agent-beta-0309",
+    "grok-4.20-0309-reasoning",
+    "grok-4.20-reasoning-latest",
+    "grok-4.20",
+    "grok-4.20-reasoning",
+    "grok-4.20-0309",
+    "grok-4.20-beta-0309-reasoning",
+    "grok-4.20-beta",
+    "grok-4.20-beta-0309",
+    "grok-4.20-beta-latest",
+    "grok-4.20-beta-latest-reasoning",
+    "grok-4.20-beta-reasoning",
+    "grok-4.20-experimental-beta-0304-reasoning",
+    "grok-4.20-experimental-beta-0304",
+    "grok-4.20-experimental-beta-reasoning-latest",
+    "grok-4.20-experimental-beta-latest",
+    "grok-4.20-reasoning-gv2",
+    "grok-4.20-0309-non-reasoning",
+    "grok-4.20-non-reasoning",
+    "grok-4.20-non-reasoning-latest",
+    "grok-4.20-beta-non-reasoning",
+    "grok-4.20-beta-latest-non-reasoning",
+    "grok-4.20-experimental-beta-0304-non-reasoning",
+    "grok-4.20-experimental-beta-non-reasoning-latest",
+    "grok-4.20-beta-0309-non-reasoning",
+    "grok-4.20-non-reasoning-gv2",
+];
+
+const XAI_GROK_BUILD_MODEL_IDS: &[&str] = &[
+    "grok-build-0.1",
+    "grok-code-fast-1",
+    "grok-code-fast",
+    "grok-code-fast-1-0825",
 ];
 
 /// OpenAI-like model registry
@@ -115,7 +162,24 @@ impl OpenAILikeModelRegistry {
         let mut registry = Self::new();
         registry.default_context_length = 128000; // Most modern models support large contexts
         registry.default_output_length = 4096;
-        registry.register_xai_grok_43_family();
+        registry.register_xai_model_family(
+            XAI_GROK_43_MODEL_IDS,
+            XAI_GROK_43_CONTEXT_LENGTH,
+            XAI_GROK_43_INPUT_COST_PER_1K,
+            XAI_GROK_43_OUTPUT_COST_PER_1K,
+        );
+        registry.register_xai_model_family(
+            XAI_GROK_420_MODEL_IDS,
+            XAI_GROK_43_CONTEXT_LENGTH,
+            XAI_GROK_43_INPUT_COST_PER_1K,
+            XAI_GROK_43_OUTPUT_COST_PER_1K,
+        );
+        registry.register_xai_model_family(
+            XAI_GROK_BUILD_MODEL_IDS,
+            XAI_GROK_BUILD_CONTEXT_LENGTH,
+            XAI_GROK_BUILD_INPUT_COST_PER_1K,
+            XAI_GROK_BUILD_OUTPUT_COST_PER_1K,
+        );
         registry
     }
 
@@ -136,17 +200,23 @@ impl OpenAILikeModelRegistry {
         self.known_models.insert(config.id.clone(), config);
     }
 
-    fn register_xai_grok_43_family(&mut self) {
-        for model_id in XAI_GROK_43_MODEL_IDS {
+    fn register_xai_model_family(
+        &mut self,
+        model_ids: &[&str],
+        context_length: u32,
+        input_cost_per_1k: f64,
+        output_cost_per_1k: f64,
+    ) {
+        for model_id in model_ids {
             self.register_model(OpenAILikeModelConfig {
                 id: (*model_id).to_string(),
-                max_context_length: XAI_GROK_43_CONTEXT_LENGTH,
+                max_context_length: context_length,
                 max_output_length: Some(self.default_output_length),
                 supports_streaming: true,
                 supports_tools: true,
                 supports_multimodal: true,
-                input_cost_per_1k: Some(XAI_GROK_43_INPUT_COST_PER_1K),
-                output_cost_per_1k: Some(XAI_GROK_43_OUTPUT_COST_PER_1K),
+                input_cost_per_1k: Some(input_cost_per_1k),
+                output_cost_per_1k: Some(output_cost_per_1k),
             });
         }
     }
@@ -252,6 +322,35 @@ impl OpenAILikeModelRegistry {
     }
 }
 
+pub fn validate_xai_standard_cost_window(
+    provider_name: &str,
+    model_id: &str,
+    input_tokens: u32,
+) -> Result<(), ProviderError> {
+    if provider_name == "xai"
+        && input_tokens > XAI_HIGH_CONTEXT_THRESHOLD_TOKENS
+        && is_known_xai_priced_model(model_id)
+    {
+        return Err(ProviderError::configuration(
+            "xai",
+            format!(
+                "xAI high-context pricing is not represented for {} above {} input tokens",
+                model_id, XAI_HIGH_CONTEXT_THRESHOLD_TOKENS
+            ),
+        ));
+    }
+
+    Ok(())
+}
+
+fn is_known_xai_priced_model(model_id: &str) -> bool {
+    let model_id = model_id.strip_prefix("xai/").unwrap_or(model_id);
+
+    XAI_GROK_43_MODEL_IDS.contains(&model_id)
+        || XAI_GROK_420_MODEL_IDS.contains(&model_id)
+        || XAI_GROK_BUILD_MODEL_IDS.contains(&model_id)
+}
+
 /// Get a static registry instance with defaults
 pub fn get_openai_like_registry() -> &'static OpenAILikeModelRegistry {
     static REGISTRY: std::sync::LazyLock<OpenAILikeModelRegistry> =
@@ -339,7 +438,14 @@ mod tests {
     fn test_static_registry_prices_xai_grok_models() {
         let registry = get_openai_like_registry();
 
-        for model_id in ["grok-4.3", "xai/grok-4.3", "grok-latest"] {
+        for model_id in [
+            "grok-4.3",
+            "xai/grok-4.3",
+            "grok-latest",
+            "grok-4.20-multi-agent-0309",
+            "grok-4.20-0309-reasoning",
+            "grok-4.20-0309-non-reasoning",
+        ] {
             let info = registry.get_model_info(model_id);
 
             assert_eq!(info.id, model_id);
@@ -358,5 +464,29 @@ mod tests {
         }
 
         assert!(registry.is_known_model("xai/grok-4.3"));
+    }
+
+    #[test]
+    fn test_static_registry_prices_xai_grok_build_model() {
+        let registry = get_openai_like_registry();
+        let info = registry.get_model_info("grok-build-0.1");
+
+        assert_eq!(info.max_context_length, 256_000);
+        assert_eq!(
+            info.input_cost_per_1k_tokens,
+            Some(XAI_GROK_BUILD_INPUT_COST_PER_1K)
+        );
+        assert_eq!(
+            info.output_cost_per_1k_tokens,
+            Some(XAI_GROK_BUILD_OUTPUT_COST_PER_1K)
+        );
+    }
+
+    #[test]
+    fn test_xai_high_context_cost_validation_rejects_flat_estimate() {
+        assert!(validate_xai_standard_cost_window("xai", "grok-4.3", 200_001).is_err());
+        assert!(validate_xai_standard_cost_window("xai", "grok-4.3", 200_000).is_ok());
+        assert!(validate_xai_standard_cost_window("groq", "grok-4.3", 200_001).is_ok());
+        assert!(validate_xai_standard_cost_window("xai", "unknown-grok", 200_001).is_ok());
     }
 }

@@ -187,7 +187,6 @@ impl OpenAILikeProvider {
             return Err(self.map_error_response(status.as_u16(), &body));
         }
 
-        // Create stream handler using unified SSE parser
         let stream = response.bytes_stream();
         Ok(Box::pin(super::streaming::create_openai_like_stream(
             stream,
@@ -196,7 +195,6 @@ impl OpenAILikeProvider {
 
     /// Transform ChatRequest to OpenAI API format
     fn transform_chat_request(&self, request: ChatRequest) -> Result<Value, OpenAILikeError> {
-        // Get effective model name (strip prefix if configured)
         let model = self.config.get_effective_model(&request.model);
 
         let mut openai_request = serde_json::json!({
@@ -204,7 +202,6 @@ impl OpenAILikeProvider {
             "messages": request.messages
         });
 
-        // Add optional parameters
         if let Some(temp) = request.temperature {
             openai_request["temperature"] = serde_json::json!(temp);
         }
@@ -259,7 +256,10 @@ impl OpenAILikeProvider {
                 .map_err(|e| OpenAILikeError::serialization(PROVIDER_NAME, e.to_string()))?;
         }
 
-        // Wire OpenRouter reasoning parameter from ThinkingConfig before extra_params consumes request
+        if let Some(reasoning_effort) = request.reasoning_effort {
+            openai_request["reasoning_effort"] = Value::String(reasoning_effort);
+        }
+
         let openrouter_thinking_params = if self.config.provider_name == "openrouter" {
             if let Some(thinking_config) = &request.thinking {
                 let params =
@@ -276,28 +276,21 @@ impl OpenAILikeProvider {
             None
         };
 
-        // Forward extra_params (e.g. OpenRouter-specific params, frequency_penalty, etc.)
         if let Some(obj) = openai_request.as_object_mut() {
             for (key, value) in request.extra_params {
                 obj.insert(key, value);
             }
-            // Merge OpenRouter reasoning params without overwriting user-supplied nested keys.
-            // If both extra_params and the thinking transform produced a "reasoning" object,
-            // merge their inner keys so that user-provided flags (e.g. "exclude") are preserved.
             if let Some(Value::Object(params)) = openrouter_thinking_params {
                 for (key, value) in params {
                     match obj.get_mut(&key) {
                         Some(Value::Object(existing)) if value.is_object() => {
-                            // Deep merge: add thinking-param keys not already set by the user.
                             if let Value::Object(incoming) = value {
                                 for (k, v) in incoming {
                                     existing.entry(k).or_insert(v);
                                 }
                             }
                         }
-                        Some(_) => {
-                            // User already set this top-level key via extra_params; keep it.
-                        }
+                        Some(_) => {}
                         None => {
                             obj.insert(key, value);
                         }
@@ -492,6 +485,7 @@ impl LLMProvider for OpenAILikeProvider {
         input_tokens: u32,
         output_tokens: u32,
     ) -> Result<f64, ProviderError> {
+        super::models::validate_xai_standard_cost_window(&self.provider_name, model, input_tokens)?;
         let model_info = self.get_model_info(model);
 
         let input_cost = model_info
@@ -530,6 +524,7 @@ impl LLMProvider for OpenAILikeProvider {
             "logit_bias",
             "logprobs",
             "top_logprobs",
+            "reasoning_effort",
         ]
     }
 
@@ -621,6 +616,7 @@ mod tests {
             messages: vec![],
             temperature: Some(0.7),
             max_tokens: Some(100),
+            reasoning_effort: Some("high".to_string()),
             ..Default::default()
         };
 
@@ -631,6 +627,7 @@ mod tests {
         assert_eq!(json["model"], "test-model");
         assert!((json["temperature"].as_f64().unwrap() - 0.7).abs() < 0.001);
         assert_eq!(json["max_tokens"], 100);
+        assert_eq!(json["reasoning_effort"], "high");
     }
 
     #[tokio::test]
