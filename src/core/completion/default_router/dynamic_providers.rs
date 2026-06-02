@@ -72,6 +72,12 @@ const DYNAMIC_PROVIDER_PREFIXES: &[DynamicProviderPrefix] = &[
         default_api_base: "https://api.x.ai/v1",
     },
     DynamicProviderPrefix {
+        prefix: "groq/",
+        provider_type: "groq",
+        provider_label: "Groq",
+        default_api_base: "https://api.groq.com/openai/v1",
+    },
+    DynamicProviderPrefix {
         prefix: "openai/",
         provider_type: "openai",
         provider_label: "OpenAI",
@@ -137,23 +143,79 @@ fn resolve_dynamic_provider_api_key(
     options: &CompletionOptions,
     route: &DynamicProviderRoute<'_>,
 ) -> Option<String> {
-    options.api_key.clone().or_else(|| {
-        custom_api_base_api_key_fallback(options, route, std::env::var("OPENAI_API_KEY").ok())
-    })
+    resolve_dynamic_provider_api_key_from_sources(
+        options,
+        route,
+        dynamic_provider_api_key(route),
+        std::env::var("OPENAI_API_KEY").ok(),
+    )
+}
+
+fn resolve_dynamic_provider_api_key_from_sources(
+    options: &CompletionOptions,
+    route: &DynamicProviderRoute<'_>,
+    provider_api_key: Option<String>,
+    openai_api_key: Option<String>,
+) -> Option<String> {
+    if let Some(api_key) = options.api_key.clone() {
+        return Some(api_key);
+    }
+
+    options.api_base.as_ref()?;
+    custom_api_base_api_key_fallback(options, route, openai_api_key, provider_api_key)
+}
+
+fn dynamic_provider_api_key(route: &DynamicProviderRoute<'_>) -> Option<String> {
+    dynamic_provider_api_key_env_var(route).and_then(|env_var| std::env::var(env_var).ok())
+}
+
+fn dynamic_provider_api_key_env_var(route: &DynamicProviderRoute<'_>) -> Option<&'static str> {
+    match route.provider_type {
+        "openai" => Some("OPENAI_API_KEY"),
+        "openrouter" => Some("OPENROUTER_API_KEY"),
+        "anthropic" => Some("ANTHROPIC_API_KEY"),
+        "deepseek" => Some("DEEPSEEK_API_KEY"),
+        "moonshot" => Some("MOONSHOT_API_KEY"),
+        "minimax" => Some("MINIMAX_API_KEY"),
+        "zhipu" => Some("ZHIPU_API_KEY"),
+        "xai" => Some("XAI_API_KEY"),
+        "groq" => Some("GROQ_API_KEY"),
+        "azure_ai" => Some("AZURE_AI_API_KEY"),
+        _ => None,
+    }
+}
+
+fn is_openai_compatible_api_key_fallback(route: &DynamicProviderRoute<'_>) -> bool {
+    matches!(
+        route.provider_type,
+        "openai-compatible"
+            | "openai"
+            | "openrouter"
+            | "deepseek"
+            | "moonshot"
+            | "minimax"
+            | "zhipu"
+            | "xai"
+            | "groq"
+    )
+}
+
+fn uses_dynamic_openai_like_provider(route: &DynamicProviderRoute<'_>) -> bool {
+    matches!(route.provider_type, "openrouter" | "xai" | "groq")
 }
 
 fn custom_api_base_api_key_fallback(
     options: &CompletionOptions,
     route: &DynamicProviderRoute<'_>,
     openai_api_key: Option<String>,
+    provider_api_key: Option<String>,
 ) -> Option<String> {
-    if options.api_base.is_some()
-        && (route.provider_type == "openai-compatible" || route.provider_type == "xai")
-    {
-        Some(openai_api_key.unwrap_or_else(|| "dummy-key-for-local".to_string()))
-    } else {
-        None
-    }
+    options.api_base.as_ref()?;
+
+    provider_api_key.or_else(|| {
+        is_openai_compatible_api_key_fallback(route)
+            .then(|| openai_api_key.unwrap_or_else(|| "dummy-key-for-local".to_string()))
+    })
 }
 
 impl DefaultRouter {
@@ -203,7 +265,7 @@ impl DefaultRouter {
                 )
                 .await?
             }
-            "xai" => {
+            _ if uses_dynamic_openai_like_provider(&route) => {
                 self.create_dynamic_openai_like(&route, &api_key, chat_request, context, options)
                     .await?
             }
@@ -263,7 +325,7 @@ impl DefaultRouter {
                 )
                 .await?
             }
-            "xai" => {
+            _ if uses_dynamic_openai_like_provider(&route) => {
                 self.create_dynamic_openai_like_stream(
                     &route,
                     &api_key,
