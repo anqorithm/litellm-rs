@@ -518,6 +518,7 @@ fn test_transform_stream_chunk() {
             delta: OpenAIDelta {
                 role: Some("assistant".to_string()),
                 content: Some("Hello".to_string()),
+                reasoning_content: None,
                 audio: None,
                 tool_calls: None,
                 function_call: None,
@@ -550,6 +551,7 @@ fn test_transform_stream_chunk_with_finish() {
             delta: OpenAIDelta {
                 role: None,
                 content: None,
+                reasoning_content: None,
                 audio: None,
                 tool_calls: None,
                 function_call: None,
@@ -583,6 +585,7 @@ fn test_transform_delta_roles() {
         let delta = OpenAIDelta {
             role: Some(role.to_string()),
             content: None,
+            reasoning_content: None,
             audio: None,
             tool_calls: None,
             function_call: None,
@@ -598,6 +601,7 @@ fn test_transform_delta_propagates_tool_and_function_calls() {
     let delta = OpenAIDelta {
         role: None,
         content: None,
+        reasoning_content: None,
         audio: None,
         tool_calls: Some(vec![OpenAIToolCallDelta {
             index: 0,

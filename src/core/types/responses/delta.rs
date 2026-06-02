@@ -8,6 +8,14 @@ use super::super::thinking::ThinkingDelta;
 /// Streaming audio delta content.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AudioDelta {
+    /// Provider audio response identifier, when included in stream metadata.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+
+    /// Provider audio expiration timestamp, when included in stream metadata.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<i64>,
+
     /// Base64 encoded audio delta.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data: Option<String>,
