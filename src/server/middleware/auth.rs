@@ -7,7 +7,9 @@ use crate::server::middleware::auth_rate_limiter::get_auth_rate_limiter;
 use crate::server::middleware::helpers::{
     extract_auth_method_with_api_key_header, is_public_route,
 };
-use crate::server::middleware::rate_limit::enforce_rate_limit_for_rejected_auth;
+use crate::server::middleware::rate_limit::{
+    enforce_rate_limit_for_rejected_auth, reject_if_rate_limited_for_auth_attempt,
+};
 use crate::server::state::AppState;
 use actix_web::dev::{Service, ServiceRequest, ServiceResponse, Transform, forward_ready};
 use actix_web::{HttpMessage, HttpRequest, web};
@@ -157,6 +159,16 @@ where
                 ));
             }
 
+            if requires_auth_verification(&auth_method) {
+                reject_if_gateway_rate_limited_before_auth(
+                    &req,
+                    rate_limit_enabled,
+                    rate_limit_rpm,
+                    &trusted_proxies,
+                )
+                .await?;
+            }
+
             match app_state.auth.authenticate(auth_method, context).await {
                 Ok(result) if result.success => {
                     rate_limiter.record_success(&client_id);
@@ -215,6 +227,26 @@ async fn enforce_gateway_rate_limit_for_auth_rejection(
     }
 
     enforce_rate_limit_for_rejected_auth(req, requests_per_minute, trusted_proxies).await
+}
+
+async fn reject_if_gateway_rate_limited_before_auth(
+    req: &ServiceRequest,
+    enabled: bool,
+    requests_per_minute: u32,
+    trusted_proxies: &[String],
+) -> Result<(), actix_web::Error> {
+    if !enabled {
+        return Ok(());
+    }
+
+    reject_if_rate_limited_for_auth_attempt(req, requests_per_minute, trusted_proxies).await
+}
+
+fn requires_auth_verification(auth_method: &AuthMethod) -> bool {
+    matches!(
+        auth_method,
+        AuthMethod::Jwt(_) | AuthMethod::ApiKey(_) | AuthMethod::Session(_)
+    )
 }
 
 /// Extract request context from request
@@ -382,5 +414,19 @@ mod tests {
             get_client_identifier(&req_b, &auth_b)
         );
         assert_eq!(get_client_identifier(&req_a, &auth_a), "ip:203.0.113.80");
+    }
+
+    #[test]
+    fn auth_verification_precheck_only_applies_to_present_credentials() {
+        assert!(requires_auth_verification(&AuthMethod::Jwt(
+            "jwt-token".to_string()
+        )));
+        assert!(requires_auth_verification(&AuthMethod::ApiKey(
+            "api-key".to_string()
+        )));
+        assert!(requires_auth_verification(&AuthMethod::Session(
+            "session-id".to_string()
+        )));
+        assert!(!requires_auth_verification(&AuthMethod::None));
     }
 }
