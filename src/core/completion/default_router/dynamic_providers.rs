@@ -127,6 +127,12 @@ fn resolve_dynamic_provider_route<'a>(
         })
 }
 
+pub(super) fn is_named_dynamic_provider_route(model: &str, options: &CompletionOptions) -> bool {
+    resolve_dynamic_provider_route(model, options)
+        .map(|route| route.provider_type != "openai-compatible")
+        .unwrap_or(false)
+}
+
 fn resolve_dynamic_provider_api_key(
     options: &CompletionOptions,
     route: &DynamicProviderRoute<'_>,
@@ -141,7 +147,9 @@ fn custom_api_base_api_key_fallback(
     route: &DynamicProviderRoute<'_>,
     openai_api_key: Option<String>,
 ) -> Option<String> {
-    if route.provider_type == "openai-compatible" && options.api_base.is_some() {
+    if options.api_base.is_some()
+        && (route.provider_type == "openai-compatible" || route.provider_type == "xai")
+    {
         Some(openai_api_key.unwrap_or_else(|| "dummy-key-for-local".to_string()))
     } else {
         None
@@ -159,13 +167,11 @@ impl DefaultRouter {
     ) -> Result<Option<CompletionResponse>> {
         let model = &chat_request.model;
 
-        // Only proceed if user provided an API key
-        let api_key = match &options.api_key {
-            Some(key) => key.clone(),
-            None => return Ok(None),
+        let Some(route) = resolve_dynamic_provider_route(model, options) else {
+            return Ok(None);
         };
 
-        let Some(route) = resolve_dynamic_provider_route(model, options) else {
+        let Some(api_key) = resolve_dynamic_provider_api_key(options, &route) else {
             return Ok(None);
         };
 

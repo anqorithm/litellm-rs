@@ -140,6 +140,50 @@ async fn test_xai_high_context_uses_registered_pricing() {
 }
 
 #[tokio::test]
+async fn test_non_xai_provider_does_not_use_xai_pricing() {
+    use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
+
+    let config = OpenAILikeConfig::new("https://api.groq.com/openai/v1")
+        .with_provider_name("groq")
+        .with_skip_api_key(true);
+    let Ok(provider) = OpenAILikeProvider::new(config).await else {
+        panic!("OpenAI-like test provider should initialize");
+    };
+
+    let cost = LLMProvider::calculate_cost(&provider, "grok-4.3", 250_000, 1_000).await;
+
+    assert!(matches!(cost, Ok(value) if value == 0.0));
+}
+
+#[tokio::test]
+async fn test_xai_reasoning_effort_rejects_incompatible_params() {
+    let config = OpenAILikeConfig::new("https://api.x.ai/v1")
+        .with_provider_name("xai")
+        .with_skip_api_key(true);
+    let Ok(provider) = OpenAILikeProvider::new(config).await else {
+        panic!("xAI test provider should initialize");
+    };
+
+    let request = ChatRequest {
+        model: "grok-4.3".to_string(),
+        messages: vec![],
+        reasoning_effort: Some("high".to_string()),
+        stop: Some(vec!["done".to_string()]),
+        presence_penalty: Some(0.1),
+        ..Default::default()
+    };
+
+    let Err(err) = provider.transform_chat_request(request) else {
+        panic!("xAI reasoning with incompatible params should fail");
+    };
+
+    let message = err.to_string();
+    assert!(message.contains("reasoning_effort is incompatible"));
+    assert!(message.contains("stop"));
+    assert!(message.contains("presence_penalty"));
+}
+
+#[tokio::test]
 async fn test_model_prefix_stripping() {
     let config = OpenAILikeConfig::new("http://localhost:8000/v1")
         .with_model_prefix("custom/")

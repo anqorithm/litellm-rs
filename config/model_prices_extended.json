@@ -708,6 +708,17 @@
     "supports_vision": true,
     "supports_streaming": true
   },
+  "mistral-medium-2508": {
+    "max_tokens": 131072,
+    "max_input_tokens": 131072,
+    "input_cost_per_token": 4e-07,
+    "output_cost_per_token": 2e-06,
+    "litellm_provider": "mistral",
+    "mode": "chat",
+    "supports_function_calling": true,
+    "supports_vision": true,
+    "supports_streaming": true
+  },
   "mistral-medium-3-5": {
     "max_tokens": 256000,
     "max_input_tokens": 256000,

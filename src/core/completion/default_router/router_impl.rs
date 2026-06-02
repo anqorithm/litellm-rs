@@ -136,6 +136,14 @@ impl Router for DefaultRouter {
             );
         }
 
+        if dynamic_providers::is_named_dynamic_provider_route(&chat_request.model, &options)
+            && let Some(response) = self
+                .try_dynamic_provider_creation(&chat_request, context.clone(), &options)
+                .await?
+        {
+            return Ok(response);
+        }
+
         // Check if user provided custom api_base (Python LiteLLM compatibility)
         if let Some(api_base) = &options.api_base {
             use crate::core::providers::base::BaseConfig;

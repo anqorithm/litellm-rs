@@ -338,6 +338,14 @@ pub fn xai_reasoning_param_for_model(model_id: &str) -> Option<XaiReasoningParam
     }
 }
 
+pub fn is_xai_priced_model(model_id: &str) -> bool {
+    let model_id = model_id.strip_prefix("xai/").unwrap_or(model_id);
+
+    XAI_GROK_43_MODEL_IDS.contains(&model_id)
+        || XAI_GROK_420_MODEL_IDS.contains(&model_id)
+        || XAI_GROK_BUILD_MODEL_IDS.contains(&model_id)
+}
+
 fn is_xai_grok_43_reasoning_effort_model(model_id: &str) -> bool {
     matches!(model_id, "grok-4.3" | "grok-4.3-latest" | "grok-latest")
 }
@@ -488,5 +496,8 @@ mod tests {
             Some(XaiReasoningParam::NestedReasoningEffort)
         );
         assert_eq!(xai_reasoning_param_for_model("grok-4.20"), None);
+        assert!(is_xai_priced_model("xai/grok-4.3"));
+        assert!(is_xai_priced_model("grok-build-0.1"));
+        assert!(!is_xai_priced_model("unknown-grok"));
     }
 }

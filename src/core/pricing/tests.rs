@@ -174,6 +174,23 @@ fn gpt55_shared_pricing_charges_long_context_tiers() {
 }
 
 #[test]
+fn mistral_medium_2508_shared_pricing_uses_exact_row() {
+    let usage = Usage::new(1_000, 500);
+    let expected_cost = 0.0014;
+
+    let Ok(shared_db) = PricingDatabase::from_default_source() else {
+        panic!("shared pricing source should load");
+    };
+
+    assert!(
+        (shared_db.calculate_for_provider("mistral", "mistral-medium-2508", &usage)
+            - expected_cost)
+            .abs()
+            < 1e-12
+    );
+}
+
+#[test]
 fn gpt55_provider_prefixed_pro_pricing_uses_exact_model() {
     let usage = Usage::new(1_000, 500);
     let expected_pro_cost = 1_000.0 * 0.00003 + 500.0 * 0.00018;

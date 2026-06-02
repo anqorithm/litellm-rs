@@ -160,6 +160,27 @@ fn test_dynamic_xai_uses_openai_like_config() {
 }
 
 #[test]
+fn test_xai_api_base_override_stays_named_dynamic_route() {
+    let options = CompletionOptions {
+        api_base: Some("http://localhost:5567/v1".to_string()),
+        ..CompletionOptions::default()
+    };
+
+    assert!(is_named_dynamic_provider_route("xai/grok-4.3", &options));
+
+    let Some(route) = resolve_dynamic_provider_route("xai/grok-4.3", &options) else {
+        panic!("xAI route should resolve before generic custom api_base");
+    };
+
+    assert_eq!(route.provider_type, "xai");
+    assert_eq!(route.actual_model, "grok-4.3");
+    assert_eq!(route.api_base, "http://localhost:5567/v1");
+
+    let api_key = custom_api_base_api_key_fallback(&options, &route, None);
+    assert_eq!(api_key.as_deref(), Some("dummy-key-for-local"));
+}
+
+#[test]
 fn test_api_key_fallback_does_not_apply_to_prefixed_routes() {
     let options = CompletionOptions::default();
     let Some(route) = resolve_dynamic_provider_route("xai/grok-4.3", &options) else {

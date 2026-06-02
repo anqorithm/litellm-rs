@@ -323,6 +323,8 @@ impl OpenAILikeProvider {
             return Ok(());
         }
 
+        Self::reject_xai_reasoning_incompatible_params(request)?;
+
         match super::models::xai_reasoning_param_for_model(model) {
             Some(super::models::XaiReasoningParam::TopLevelReasoningEffort) => {
                 request["reasoning_effort"] = Value::String(effort);
@@ -337,6 +339,25 @@ impl OpenAILikeProvider {
                 format!("xAI model {model} does not support reasoning_effort"),
             )),
         }
+    }
+
+    fn reject_xai_reasoning_incompatible_params(request: &Value) -> Result<(), OpenAILikeError> {
+        let incompatible_params = ["stop", "presence_penalty", "frequency_penalty"]
+            .into_iter()
+            .filter(|field| request.get(*field).is_some())
+            .collect::<Vec<_>>();
+
+        if incompatible_params.is_empty() {
+            return Ok(());
+        }
+
+        Err(OpenAILikeError::configuration(
+            PROVIDER_NAME,
+            format!(
+                "xAI reasoning_effort is incompatible with {}",
+                incompatible_params.join(", ")
+            ),
+        ))
     }
 
     fn transform_chat_response(&self, response: Value) -> Result<ChatResponse, OpenAILikeError> {
@@ -522,6 +543,10 @@ impl LLMProvider for OpenAILikeProvider {
         input_tokens: u32,
         output_tokens: u32,
     ) -> Result<f64, ProviderError> {
+        if self.config.provider_name != "xai" && super::models::is_xai_priced_model(model) {
+            return Ok(0.0);
+        }
+
         let model_info = self.get_model_info(model);
 
         let input_cost = model_info
