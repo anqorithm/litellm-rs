@@ -24,6 +24,7 @@ const ENV_DATABASE_MAX_CONNECTIONS: &str = "LITELLM_DATABASE_MAX_CONNECTIONS";
 const ENV_DATABASE_CONNECTION_TIMEOUT: &str = "LITELLM_DATABASE_CONNECTION_TIMEOUT";
 const ENV_DATABASE_SSL: &str = "LITELLM_DATABASE_SSL";
 const ENV_DATABASE_ENABLED: &str = "LITELLM_DATABASE_ENABLED";
+const ENV_DATABASE_AUTO_MIGRATE: &str = "LITELLM_DATABASE_AUTO_MIGRATE";
 const ENV_REDIS_URL: &str = "LITELLM_REDIS_URL";
 const ENV_REDIS_ENABLED: &str = "LITELLM_REDIS_ENABLED";
 const ENV_REDIS_MAX_CONNECTIONS: &str = "LITELLM_REDIS_MAX_CONNECTIONS";
@@ -328,6 +329,9 @@ impl GatewayConfig {
         }
         if let Some(enabled) = parse_env_bool(ENV_DATABASE_ENABLED)? {
             config.storage.database.enabled = enabled;
+        }
+        if let Some(auto_migrate) = parse_env_bool(ENV_DATABASE_AUTO_MIGRATE)? {
+            config.storage.database.auto_migrate = auto_migrate;
         }
 
         if let Some(redis_url) = env_var(ENV_REDIS_URL) {

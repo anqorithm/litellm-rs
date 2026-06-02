@@ -110,9 +110,7 @@ impl DatabaseConfig {
         if other.enabled {
             self.enabled = true;
         }
-        if other.auto_migrate {
-            self.auto_migrate = true;
-        }
+        self.auto_migrate = other.auto_migrate;
         if other.fallback_to_sqlite {
             self.fallback_to_sqlite = true;
         }
@@ -306,13 +304,13 @@ mod tests {
     }
 
     #[test]
-    fn test_database_config_merge_preserves_auto_migrate_on_default_overlay() {
+    fn test_database_config_merge_auto_migrate_false_overrides_base() {
         let base = DatabaseConfig {
             auto_migrate: true,
             ..DatabaseConfig::default()
         };
         let merged = base.merge(DatabaseConfig::default());
-        assert!(merged.auto_migrate);
+        assert!(!merged.auto_migrate);
     }
 
     #[test]

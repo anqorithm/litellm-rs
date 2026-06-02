@@ -155,8 +155,8 @@ impl SeaOrmDatabase {
         let pending_migrations: Vec<String> = Migrator::get_migration_files()
             .into_iter()
             .filter_map(|migration| {
-                let name = migration.name().to_string();
-                (!applied_versions.contains(&name)).then_some(name)
+                let name = migration.name();
+                (!applied_versions.contains(name)).then_some(name.to_string())
             })
             .collect();
 
