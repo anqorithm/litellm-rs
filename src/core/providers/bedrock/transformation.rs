@@ -775,7 +775,7 @@ mod tests {
 
         let response = transform_chat_response(
             &raw_response,
-            "arn:aws:bedrock:us-east-1:123456789012:custom-model-deployment/ABC123",
+            "arn:aws:bedrock:us-east-1:123456789012:unknown-resource/ABC123",
         )
         .unwrap_or_else(|err| panic!("native response should parse: {err}"));
 
