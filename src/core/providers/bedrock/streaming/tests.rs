@@ -2,7 +2,6 @@ use super::*;
 use crate::core::providers::bedrock::model_config::{BedrockApiType, BedrockModelFamily};
 
 const TEST_MODEL_ID: &str = "anthropic.claude-3-haiku-20240307-v1:0";
-const TEST_REQUEST_ID: &str = "test-request-id";
 
 // ==================== HeaderValue Tests ====================
 
@@ -122,17 +121,12 @@ fn test_parse_event_message_minimal() {
 
 fn create_test_stream(model_family: BedrockModelFamily, api_type: BedrockApiType) -> BedrockStream {
     let stream = futures::stream::empty::<Result<Bytes, reqwest::Error>>();
-    BedrockStream::new(
-        stream,
-        model_family,
-        api_type,
-        TEST_MODEL_ID,
-        TEST_REQUEST_ID,
-    )
+    BedrockStream::new(stream, model_family, api_type, TEST_MODEL_ID)
 }
 
 fn assert_chunk_metadata(stream: &BedrockStream, chunk: &crate::core::types::responses::ChatChunk) {
-    assert_eq!(chunk.id, stream.request_id);
+    assert_eq!(chunk.id, stream.completion_id);
+    assert!(chunk.id.starts_with("bedrock-"));
     assert_eq!(chunk.model, stream.request_model_id);
     assert_eq!(chunk.created, stream.created);
 }
@@ -450,7 +444,6 @@ async fn test_stream_drains_buffered_events_on_eof() {
         BedrockModelFamily::Mistral,
         BedrockApiType::InvokeStream,
         TEST_MODEL_ID,
-        TEST_REQUEST_ID,
     );
 
     let first = bedrock_stream
@@ -469,7 +462,7 @@ async fn test_stream_drains_buffered_events_on_eof() {
     assert_eq!(first.id, second.id);
     assert_eq!(first.model, second.model);
     assert_eq!(first.created, second.created);
-    assert_eq!(first.id, TEST_REQUEST_ID);
+    assert!(first.id.starts_with("bedrock-"));
     assert_eq!(first.model, TEST_MODEL_ID);
     assert!(bedrock_stream.next().await.is_none());
 }
@@ -491,7 +484,6 @@ async fn test_stream_surfaces_bedrock_exception_events() {
         BedrockModelFamily::Mistral,
         BedrockApiType::InvokeStream,
         TEST_MODEL_ID,
-        TEST_REQUEST_ID,
     );
 
     let err = bedrock_stream
@@ -765,11 +757,20 @@ fn test_bedrock_stream_creation() {
         BedrockModelFamily::Claude,
         BedrockApiType::InvokeStream,
         TEST_MODEL_ID,
-        TEST_REQUEST_ID,
     );
     assert!(bedrock_stream.buffer.is_empty());
     assert_eq!(bedrock_stream.request_model_id, TEST_MODEL_ID);
-    assert_eq!(bedrock_stream.request_id, TEST_REQUEST_ID);
+    assert!(bedrock_stream.completion_id.starts_with("bedrock-"));
+}
+
+#[test]
+fn test_bedrock_stream_completion_id_is_generated_per_stream() {
+    let first = create_test_stream_claude();
+    let second = create_test_stream_claude();
+
+    assert_ne!(first.completion_id, second.completion_id);
+    assert!(first.completion_id.starts_with("bedrock-"));
+    assert!(second.completion_id.starts_with("bedrock-"));
 }
 
 #[test]
