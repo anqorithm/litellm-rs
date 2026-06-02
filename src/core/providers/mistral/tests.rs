@@ -437,6 +437,31 @@ async fn test_calculate_cost_current_alias_prices_are_deterministic() {
 }
 
 #[tokio::test]
+async fn test_calculate_cost_new_aliases_use_canonical_pricing() {
+    let Ok(provider) = MistralProvider::new(create_test_config()).await else {
+        panic!("mistral test provider should initialize");
+    };
+
+    let cases = [
+        ("magistral-medium-1-2", "magistral-medium-2509", 0.0045),
+        ("magistral-small-1-2", "magistral-small-2509", 0.00125),
+        ("devstral-2-2512", "devstral-2512", 0.0014),
+    ];
+
+    for (alias, canonical, expected) in cases {
+        let Ok(alias_cost) = provider.calculate_cost(alias, 1000, 500).await else {
+            panic!("alias cost should calculate for {alias}");
+        };
+        let Ok(canonical_cost) = provider.calculate_cost(canonical, 1000, 500).await else {
+            panic!("canonical cost should calculate for {canonical}");
+        };
+
+        assert!((alias_cost - expected).abs() < f64::EPSILON);
+        assert_eq!(alias_cost, canonical_cost);
+    }
+}
+
+#[tokio::test]
 async fn test_calculate_cost_embed_model() {
     let provider = MistralProvider::new(create_test_config()).await.unwrap();
 

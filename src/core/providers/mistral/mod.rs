@@ -423,8 +423,9 @@ impl LLMProvider for MistralProvider {
         input_tokens: u32,
         output_tokens: u32,
     ) -> Result<f64, ProviderError> {
+        let canonical_model = self.canonical_model_id(model);
         let usage = crate::core::pricing::Usage::new(input_tokens, output_tokens);
-        Ok(get_pricing_db().calculate_for_provider("mistral", model, &usage))
+        Ok(get_pricing_db().calculate_for_provider("mistral", &canonical_model, &usage))
     }
 }
 

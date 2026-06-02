@@ -5,6 +5,45 @@
 use crate::core::types::{model::ModelInfo, model::ProviderCapability};
 use std::collections::HashMap;
 
+const XAI_GROK_43_INPUT_COST_PER_1K: f64 = 0.00125;
+const XAI_GROK_43_OUTPUT_COST_PER_1K: f64 = 0.0025;
+const XAI_GROK_43_CONTEXT_LENGTH: u32 = 1_000_000;
+
+const XAI_GROK_43_MODEL_IDS: &[&str] = &[
+    "grok-4.3",
+    "grok-4.3-latest",
+    "grok-latest",
+    "grok-3",
+    "grok-3-latest",
+    "grok-3-beta",
+    "grok-3-fast",
+    "grok-3-fast-latest",
+    "grok-3-fast-beta",
+    "grok-3-mini",
+    "grok-3-mini-latest",
+    "grok-3-mini-beta",
+    "grok-3-mini-fast",
+    "grok-3-mini-fast-latest",
+    "grok-3-mini-fast-beta",
+    "grok-3-mini-high",
+    "grok-3-mini-high-beta",
+    "grok-3-mini-fast-high",
+    "grok-3-mini-fast-high-beta",
+    "grok-4-0709",
+    "grok-4",
+    "grok-4-latest",
+    "grok-4-fast-reasoning",
+    "grok-4-fast",
+    "grok-4-fast-reasoning-latest",
+    "grok-4-fast-non-reasoning",
+    "grok-4-fast-non-reasoning-latest",
+    "grok-4-1-fast-reasoning",
+    "grok-4-1-fast",
+    "grok-4-1-fast-reasoning-latest",
+    "grok-4-1-fast-non-reasoning",
+    "grok-4-1-fast-non-reasoning-latest",
+];
+
 /// OpenAI-like model registry
 ///
 /// Unlike other providers, this registry accepts ANY model name
@@ -76,6 +115,7 @@ impl OpenAILikeModelRegistry {
         let mut registry = Self::new();
         registry.default_context_length = 128000; // Most modern models support large contexts
         registry.default_output_length = 4096;
+        registry.register_xai_grok_43_family();
         registry
     }
 
@@ -96,14 +136,37 @@ impl OpenAILikeModelRegistry {
         self.known_models.insert(config.id.clone(), config);
     }
 
+    fn register_xai_grok_43_family(&mut self) {
+        for model_id in XAI_GROK_43_MODEL_IDS {
+            self.register_model(OpenAILikeModelConfig {
+                id: (*model_id).to_string(),
+                max_context_length: XAI_GROK_43_CONTEXT_LENGTH,
+                max_output_length: Some(self.default_output_length),
+                supports_streaming: true,
+                supports_tools: true,
+                supports_multimodal: true,
+                input_cost_per_1k: Some(XAI_GROK_43_INPUT_COST_PER_1K),
+                output_cost_per_1k: Some(XAI_GROK_43_OUTPUT_COST_PER_1K),
+            });
+        }
+    }
+
+    fn known_config_for_model(&self, model_id: &str) -> Option<&OpenAILikeModelConfig> {
+        self.known_models.get(model_id).or_else(|| {
+            model_id
+                .strip_prefix("xai/")
+                .and_then(|stripped| self.known_models.get(stripped))
+        })
+    }
+
     /// Get model info for any model name
     ///
     /// If the model is known, returns its specific configuration.
     /// Otherwise, returns default configuration that allows the request to proceed.
     pub fn get_model_info(&self, model_id: &str) -> ModelInfo {
-        if let Some(config) = self.known_models.get(model_id) {
+        if let Some(config) = self.known_config_for_model(model_id) {
             ModelInfo {
-                id: config.id.clone(),
+                id: model_id.to_string(),
                 name: config.id.clone(),
                 provider: "openai_like".to_string(),
                 max_context_length: config.max_context_length,
@@ -169,7 +232,7 @@ impl OpenAILikeModelRegistry {
 
     /// Check if a model is known (has explicit configuration)
     pub fn is_known_model(&self, model_id: &str) -> bool {
-        self.known_models.contains_key(model_id)
+        self.known_config_for_model(model_id).is_some()
     }
 
     /// Get all known models as ModelInfo list
@@ -270,5 +333,30 @@ mod tests {
     fn test_static_registry() {
         let registry = get_openai_like_registry();
         assert!(registry.supports_model("any-model"));
+    }
+
+    #[test]
+    fn test_static_registry_prices_xai_grok_models() {
+        let registry = get_openai_like_registry();
+
+        for model_id in ["grok-4.3", "xai/grok-4.3", "grok-latest"] {
+            let info = registry.get_model_info(model_id);
+
+            assert_eq!(info.id, model_id);
+            assert_eq!(info.provider, "openai_like");
+            assert_eq!(info.max_context_length, 1_000_000);
+            assert!(info.supports_tools);
+            assert!(info.supports_multimodal);
+            assert_eq!(
+                info.input_cost_per_1k_tokens,
+                Some(XAI_GROK_43_INPUT_COST_PER_1K)
+            );
+            assert_eq!(
+                info.output_cost_per_1k_tokens,
+                Some(XAI_GROK_43_OUTPUT_COST_PER_1K)
+            );
+        }
+
+        assert!(registry.is_known_model("xai/grok-4.3"));
     }
 }

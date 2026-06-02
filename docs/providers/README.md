@@ -66,9 +66,6 @@ let response = completion("gemini-3.1-pro-preview", messages, None).await?;
 
 // xAI Grok, routed through the OpenAI-compatible provider catalog
 let response = completion("xai/grok-4.3", messages, None).await?;
-
-// Meta Llama 4
-let response = completion("llama4-scout", messages, None).await?;
 ```
 
 ### Provider Prefixes

@@ -564,10 +564,10 @@ fn dynamic_openai_compatible_config(
             timeout: 60,
             max_retries: 3,
             headers: options.headers.clone().unwrap_or_default(),
-            organization: None,
+            organization: options.organization.clone(),
             api_version: None,
         },
-        organization: None,
+        organization: options.organization.clone(),
         project: None,
         model_mappings: Default::default(),
         features: Default::default(),
@@ -688,6 +688,7 @@ mod tests {
         headers.insert("x-request-source".to_string(), "stream-test".to_string());
         let options = CompletionOptions {
             headers: Some(headers),
+            organization: Some("org-stream-test".to_string()),
             ..CompletionOptions::default()
         };
 
@@ -706,6 +707,8 @@ mod tests {
                 .map(String::as_str),
             Some("stream-test")
         );
+        assert_eq!(config.organization.as_deref(), Some("org-stream-test"));
+        assert_eq!(config.base.organization.as_deref(), Some("org-stream-test"));
     }
 
     #[test]
