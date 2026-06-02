@@ -347,10 +347,13 @@ fn is_plain_runtime_profile_id(model_id: &str) -> bool {
 }
 
 fn looks_like_versioned_foundation_model_id(model_id: &str) -> bool {
-    let model_id = model_id
-        .split_once(':')
-        .map(|(id, _revision)| id)
-        .unwrap_or(model_id);
+    let Some((model_id, revision)) = model_id.split_once(':') else {
+        return false;
+    };
+
+    if revision.is_empty() || !revision.chars().all(|c| c.is_ascii_digit()) {
+        return false;
+    }
 
     if model_id.matches('.').count() != 1 {
         return false;
@@ -636,20 +639,22 @@ mod tests {
 
     #[test]
     fn dotted_plain_runtime_profile_id_uses_runtime_fallback() {
-        let parsed = parse_bedrock_model_id("my.team.profile:1");
+        for model_id in ["my.team.profile:1", "team.profile-v1", "unknown.model-v1"] {
+            let parsed = parse_bedrock_model_id(model_id);
 
-        assert_eq!(parsed.kind, BedrockModelIdKind::FoundationModel);
-        assert_eq!(parsed.metadata_lookup_ids, vec!["my.team.profile:1"]);
-        assert_eq!(
-            parsed.runtime_config_fallback,
-            Some(RuntimeConfigFallback::Converse)
-        );
+            assert_eq!(parsed.kind, BedrockModelIdKind::FoundationModel);
+            assert_eq!(parsed.metadata_lookup_ids, vec![model_id]);
+            assert_eq!(
+                parsed.runtime_config_fallback,
+                Some(RuntimeConfigFallback::Converse)
+            );
 
-        let config = config_for("my.team.profile:1");
-        assert_eq!(
-            config.api_type,
-            crate::core::providers::bedrock::BedrockApiType::ConverseStream
-        );
+            let config = config_for(model_id);
+            assert_eq!(
+                config.api_type,
+                crate::core::providers::bedrock::BedrockApiType::ConverseStream
+            );
+        }
     }
 
     #[test]
@@ -666,13 +671,11 @@ mod tests {
 
     #[test]
     fn unknown_versioned_foundation_model_id_is_not_runtime_profile() {
-        for model_id in ["unknown.model-v1", "unknown.model-v1:0"] {
-            let parsed = parse_bedrock_model_id(model_id);
+        let parsed = parse_bedrock_model_id("unknown.model-v1:0");
 
-            assert_eq!(parsed.metadata_lookup_ids, vec![model_id]);
-            assert_eq!(parsed.runtime_config_fallback, None);
-            assert!(super::get_model_config_for_model_id(model_id).is_err());
-        }
+        assert_eq!(parsed.metadata_lookup_ids, vec!["unknown.model-v1:0"]);
+        assert_eq!(parsed.runtime_config_fallback, None);
+        assert!(super::get_model_config_for_model_id("unknown.model-v1:0").is_err());
     }
 
     #[test]
