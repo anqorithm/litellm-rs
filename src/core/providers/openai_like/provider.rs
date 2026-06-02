@@ -47,7 +47,6 @@ pub struct OpenAILikeProvider {
 impl OpenAILikeProvider {
     /// Create a new OpenAI-like provider
     pub async fn new(config: OpenAILikeConfig) -> Result<Self, OpenAILikeError> {
-        // Validate configuration
         config
             .validate()
             .map_err(|e| OpenAILikeError::configuration(PROVIDER_NAME, e))?;
@@ -86,27 +85,22 @@ impl OpenAILikeProvider {
     fn get_request_headers(&self) -> Vec<HeaderPair> {
         let mut headers = Vec::with_capacity(4 + self.config.custom_headers.len());
 
-        // Add Authorization header if API key is provided
         if let Some(api_key) = &self.config.base.api_key {
             headers.push(header("Authorization", format!("Bearer {}", api_key)));
         }
 
-        // Add organization header if present
         if let Some(org) = &self.config.base.organization {
             headers.push(header("OpenAI-Organization", org.clone()));
         }
 
-        // Add base headers
         for (key, value) in &self.config.base.headers {
             headers.push(header_owned(key.clone(), value.clone()));
         }
 
-        // Add custom headers
         for (key, value) in &self.config.custom_headers {
             headers.push(header_owned(key.clone(), value.clone()));
         }
 
-        // Add OpenRouter-specific headers when OR_SITE_URL / OR_APP_NAME are set
         if self.config.provider_name == "openrouter" {
             if let Ok(site_url) = std::env::var("OR_SITE_URL") {
                 headers.push(header_owned("HTTP-Referer".to_string(), site_url));
@@ -124,10 +118,8 @@ impl OpenAILikeProvider {
         &self,
         request: ChatRequest,
     ) -> Result<ChatResponse, OpenAILikeError> {
-        // Transform request to OpenAI format
         let openai_request = self.transform_chat_request(request)?;
 
-        // Execute HTTP request
         let url = format!("{}/chat/completions", self.config.get_api_base());
         let headers = self.get_request_headers();
         let body = Some(openai_request);
@@ -138,7 +130,6 @@ impl OpenAILikeProvider {
             .await
             .map_err(|e| OpenAILikeError::network(PROVIDER_NAME, e.to_string()))?;
 
-        // Check for error status codes
         let status = response.status();
         if !status.is_success() {
             let body = response.text().await.unwrap_or_default();
@@ -153,7 +144,6 @@ impl OpenAILikeProvider {
         let response_json: Value = serde_json::from_slice(&response_bytes)
             .map_err(|e| OpenAILikeError::response_parsing(PROVIDER_NAME, e.to_string()))?;
 
-        // Transform response back to standard format
         self.transform_chat_response(response_json)
     }
 
@@ -165,11 +155,9 @@ impl OpenAILikeProvider {
         Pin<Box<dyn Stream<Item = Result<ChatChunk, OpenAILikeError>> + Send>>,
         OpenAILikeError,
     > {
-        // Transform request with streaming enabled
         let mut openai_request = self.transform_chat_request(request)?;
         openai_request["stream"] = Value::Bool(true);
 
-        // Execute streaming request via pool_manager's client
         let url = format!("{}/chat/completions", self.config.get_api_base());
         let client = self.pool_manager.client();
         let headers = self.get_request_headers();
@@ -180,14 +168,12 @@ impl OpenAILikeProvider {
             .await
             .map_err(|e| OpenAILikeError::network(PROVIDER_NAME, e.to_string()))?;
 
-        // Check for error status codes
         let status = response.status();
         if !status.is_success() {
             let body = response.text().await.unwrap_or_default();
             return Err(self.map_error_response(status.as_u16(), &body));
         }
 
-        // Create stream handler using unified SSE parser
         let stream = response.bytes_stream();
         Ok(Box::pin(super::streaming::create_openai_like_stream(
             stream,
@@ -196,7 +182,6 @@ impl OpenAILikeProvider {
 
     /// Transform ChatRequest to OpenAI API format
     fn transform_chat_request(&self, request: ChatRequest) -> Result<Value, OpenAILikeError> {
-        // Get effective model name (strip prefix if configured)
         let model = self.config.get_effective_model(&request.model);
 
         let mut openai_request = serde_json::json!({
@@ -204,7 +189,6 @@ impl OpenAILikeProvider {
             "messages": request.messages
         });
 
-        // Add optional parameters
         if let Some(temp) = request.temperature {
             openai_request["temperature"] = serde_json::json!(temp);
         }
@@ -276,28 +260,43 @@ impl OpenAILikeProvider {
             None
         };
 
-        // Forward extra_params (e.g. OpenRouter-specific params, frequency_penalty, etc.)
+        macro_rules! insert_optional_param {
+            ($field:ident) => {
+                if let Some(value) = request.$field {
+                    openai_request[stringify!($field)] =
+                        serde_json::to_value(value).map_err(|e| {
+                            OpenAILikeError::serialization(PROVIDER_NAME, e.to_string())
+                        })?;
+                }
+            };
+        }
+        insert_optional_param!(frequency_penalty);
+        insert_optional_param!(presence_penalty);
+        insert_optional_param!(logit_bias);
+        insert_optional_param!(logprobs);
+        insert_optional_param!(top_logprobs);
+        insert_optional_param!(reasoning_effort);
+        insert_optional_param!(store);
+        insert_optional_param!(metadata);
+        insert_optional_param!(service_tier);
+        insert_optional_param!(parallel_tool_calls);
+
         if let Some(obj) = openai_request.as_object_mut() {
             for (key, value) in request.extra_params {
-                obj.insert(key, value);
+                obj.entry(key).or_insert(value);
             }
-            // Merge OpenRouter reasoning params without overwriting user-supplied nested keys.
-            // If both extra_params and the thinking transform produced a "reasoning" object,
-            // merge their inner keys so that user-provided flags (e.g. "exclude") are preserved.
+
             if let Some(Value::Object(params)) = openrouter_thinking_params {
                 for (key, value) in params {
                     match obj.get_mut(&key) {
                         Some(Value::Object(existing)) if value.is_object() => {
-                            // Deep merge: add thinking-param keys not already set by the user.
                             if let Value::Object(incoming) = value {
                                 for (k, v) in incoming {
                                     existing.entry(k).or_insert(v);
                                 }
                             }
                         }
-                        Some(_) => {
-                            // User already set this top-level key via extra_params; keep it.
-                        }
+                        Some(_) => {}
                         None => {
                             obj.insert(key, value);
                         }
