@@ -411,14 +411,14 @@ impl Provider {
         input_tokens: u32,
         output_tokens: u32,
     ) -> Result<f64, ProviderError> {
-        let usage = crate::core::pricing::Usage::new(input_tokens, output_tokens);
-
-        Ok(
-            crate::core::pricing::get_pricing_db().calculate_for_provider(
-                self.name(),
-                model,
-                &usage,
-            ),
+        use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
+        dispatch_provider!(
+            async_err,
+            self,
+            calculate_cost,
+            model,
+            input_tokens,
+            output_tokens
         )
     }
 
@@ -516,6 +516,40 @@ mod tests {
             ),
             "expected provider-specific NotSupported, got {err}"
         );
+    }
+
+    #[tokio::test]
+    async fn test_provider_enum_calculate_cost_delegates_mistral_aliases() {
+        let Ok(mistral_provider) = mistral::MistralProvider::new(mistral::MistralConfig {
+            api_key: "sk-test".to_string(),
+            ..mistral::MistralConfig::default()
+        })
+        .await
+        else {
+            panic!("Mistral provider should initialize with a test API key");
+        };
+        let provider = Provider::Mistral(mistral_provider);
+
+        let Ok(alias_cost) = provider
+            .calculate_cost("magistral-medium-1-2", 1000, 500)
+            .await
+        else {
+            panic!("Mistral alias cost should calculate");
+        };
+        let Ok(canonical_cost) = provider
+            .calculate_cost("magistral-medium-2509", 1000, 500)
+            .await
+        else {
+            panic!("Mistral canonical cost should calculate");
+        };
+        let Ok(devstral_alias_cost) = provider.calculate_cost("devstral-2-2512", 1000, 500).await
+        else {
+            panic!("Devstral alias cost should calculate");
+        };
+
+        assert!((alias_cost - canonical_cost).abs() < 1e-12);
+        assert!((alias_cost - 0.0045).abs() < 1e-12);
+        assert!((devstral_alias_cost - 0.0014).abs() < 1e-12);
     }
 
     #[tokio::test]
