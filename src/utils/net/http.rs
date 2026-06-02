@@ -29,9 +29,9 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 use tracing::{debug, warn};
 
-use crate::config::validation::is_private_or_internal_ip;
+use crate::core::net::is_private_or_reserved_ip;
 
-/// DNS resolver that rejects private/internal IP addresses at resolution time.
+/// DNS resolver that rejects private/reserved IP addresses at resolution time.
 ///
 /// This mitigates DNS-rebinding attacks: even if a hostname resolves to a public IP
 /// at config-validation time, every actual request re-validates the resolved address,
@@ -51,14 +51,11 @@ impl reqwest::dns::Resolve for SsrfSafeDnsResolver {
             .map_err(std::io::Error::other)?;
 
             let addrs = addrs?;
-            let safe: Vec<SocketAddr> = addrs
-                .into_iter()
-                .filter(|addr| !is_private_or_internal_ip(&addr.ip()))
-                .collect();
+            let safe = filter_ssrf_safe_addresses(addrs);
 
             if safe.is_empty() {
                 return Err(
-                    "Host resolves to private/internal IP address (SSRF protection)"
+                    "Host resolves to private/reserved IP address (SSRF protection)"
                         .to_string()
                         .into(),
                 );
@@ -67,6 +64,13 @@ impl reqwest::dns::Resolve for SsrfSafeDnsResolver {
             Ok(Box::new(safe.into_iter()) as reqwest::dns::Addrs)
         })
     }
+}
+
+fn filter_ssrf_safe_addresses(addrs: Vec<SocketAddr>) -> Vec<SocketAddr> {
+    addrs
+        .into_iter()
+        .filter(|addr| !is_private_or_reserved_ip(&addr.ip()))
+        .collect()
 }
 
 /// Configuration for the HTTP client pool
@@ -226,7 +230,7 @@ pub fn create_streaming_client() -> Result<Client, reqwest::Error> {
 /// Get or create an HTTP client with SSRF-safe DNS resolution for the given timeout.
 ///
 /// Unlike `get_client_with_timeout_fallible`, this client installs `SsrfSafeDnsResolver`
-/// so every request re-validates the resolved IP against private/internal ranges.
+/// so every request re-validates the resolved IP against private/reserved ranges.
 /// Use this for providers whose endpoint URL is user-controlled to prevent DNS-rebinding attacks.
 pub fn get_ssrf_safe_client_with_timeout_fallible(
     timeout: Duration,
@@ -240,6 +244,7 @@ pub fn get_ssrf_safe_client_with_timeout_fallible(
 
     let client = Arc::new(
         create_client_builder_with_config(timeout, &HttpClientPoolConfig::default())
+            .no_proxy()
             .dns_resolver(Arc::new(SsrfSafeDnsResolver))
             .build()?,
     );
@@ -278,6 +283,7 @@ pub struct HttpClientCacheStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
     #[test]
     fn test_shared_client_creation() {
@@ -309,6 +315,36 @@ mod tests {
     fn test_client_with_timeout_fallible_caching() {
         let client1 = get_client_with_timeout_fallible(Duration::from_millis(1500)).unwrap();
         let client2 = get_client_with_timeout_fallible(Duration::from_millis(1500)).unwrap();
+
+        assert!(Arc::ptr_eq(&client1, &client2));
+    }
+
+    #[test]
+    fn test_ssrf_safe_dns_filter_rejects_private_and_reserved_addresses() {
+        let addrs = vec![
+            SocketAddr::from((Ipv4Addr::new(93, 184, 216, 34), 443)),
+            SocketAddr::from((Ipv4Addr::new(198, 18, 0, 1), 443)),
+            SocketAddr::from((Ipv4Addr::new(224, 0, 0, 1), 443)),
+        ];
+
+        let safe = filter_ssrf_safe_addresses(addrs);
+
+        assert_eq!(safe.len(), 1);
+        assert_eq!(safe[0].ip(), IpAddr::V4(Ipv4Addr::new(93, 184, 216, 34)));
+    }
+
+    #[test]
+    fn test_ssrf_safe_client_with_timeout_fallible_caching() {
+        let client1 = match get_ssrf_safe_client_with_timeout_fallible(Duration::from_millis(1500))
+        {
+            Ok(client) => client,
+            Err(error) => panic!("SSRF-safe client should build: {error}"),
+        };
+        let client2 = match get_ssrf_safe_client_with_timeout_fallible(Duration::from_millis(1500))
+        {
+            Ok(client) => client,
+            Err(error) => panic!("SSRF-safe client should build: {error}"),
+        };
 
         assert!(Arc::ptr_eq(&client1, &client2));
     }
