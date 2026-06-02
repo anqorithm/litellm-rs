@@ -2,11 +2,9 @@
 //!
 //! Dynamic model support - accepts any model name and passes it through
 
-use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::{model::ModelInfo, model::ProviderCapability};
 use std::collections::HashMap;
 
-const XAI_HIGH_CONTEXT_THRESHOLD_TOKENS: u32 = 200_000;
 const XAI_GROK_43_INPUT_COST_PER_1K: f64 = 0.00125;
 const XAI_GROK_43_OUTPUT_COST_PER_1K: f64 = 0.0025;
 const XAI_GROK_43_CONTEXT_LENGTH: u32 = 1_000_000;
@@ -90,6 +88,12 @@ const XAI_GROK_BUILD_MODEL_IDS: &[&str] = &[
     "grok-code-fast",
     "grok-code-fast-1-0825",
 ];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum XaiReasoningParam {
+    TopLevelReasoningEffort,
+    NestedReasoningEffort,
+}
 
 /// OpenAI-like model registry
 ///
@@ -322,33 +326,24 @@ impl OpenAILikeModelRegistry {
     }
 }
 
-pub fn validate_xai_standard_cost_window(
-    provider_name: &str,
-    model_id: &str,
-    input_tokens: u32,
-) -> Result<(), ProviderError> {
-    if provider_name == "xai"
-        && input_tokens > XAI_HIGH_CONTEXT_THRESHOLD_TOKENS
-        && is_known_xai_priced_model(model_id)
-    {
-        return Err(ProviderError::configuration(
-            "xai",
-            format!(
-                "xAI high-context pricing is not represented for {} above {} input tokens",
-                model_id, XAI_HIGH_CONTEXT_THRESHOLD_TOKENS
-            ),
-        ));
-    }
-
-    Ok(())
-}
-
-fn is_known_xai_priced_model(model_id: &str) -> bool {
+pub fn xai_reasoning_param_for_model(model_id: &str) -> Option<XaiReasoningParam> {
     let model_id = model_id.strip_prefix("xai/").unwrap_or(model_id);
 
-    XAI_GROK_43_MODEL_IDS.contains(&model_id)
-        || XAI_GROK_420_MODEL_IDS.contains(&model_id)
-        || XAI_GROK_BUILD_MODEL_IDS.contains(&model_id)
+    if is_xai_grok_43_reasoning_effort_model(model_id) {
+        Some(XaiReasoningParam::TopLevelReasoningEffort)
+    } else if is_xai_grok_420_multi_agent_model(model_id) {
+        Some(XaiReasoningParam::NestedReasoningEffort)
+    } else {
+        None
+    }
+}
+
+fn is_xai_grok_43_reasoning_effort_model(model_id: &str) -> bool {
+    matches!(model_id, "grok-4.3" | "grok-4.3-latest" | "grok-latest")
+}
+
+fn is_xai_grok_420_multi_agent_model(model_id: &str) -> bool {
+    model_id.starts_with("grok-4.20-multi-agent")
 }
 
 /// Get a static registry instance with defaults
@@ -483,10 +478,15 @@ mod tests {
     }
 
     #[test]
-    fn test_xai_high_context_cost_validation_rejects_flat_estimate() {
-        assert!(validate_xai_standard_cost_window("xai", "grok-4.3", 200_001).is_err());
-        assert!(validate_xai_standard_cost_window("xai", "grok-4.3", 200_000).is_ok());
-        assert!(validate_xai_standard_cost_window("groq", "grok-4.3", 200_001).is_ok());
-        assert!(validate_xai_standard_cost_window("xai", "unknown-grok", 200_001).is_ok());
+    fn test_xai_reasoning_param_shape_by_model() {
+        assert_eq!(
+            xai_reasoning_param_for_model("xai/grok-4.3"),
+            Some(XaiReasoningParam::TopLevelReasoningEffort)
+        );
+        assert_eq!(
+            xai_reasoning_param_for_model("grok-4.20-multi-agent-0309"),
+            Some(XaiReasoningParam::NestedReasoningEffort)
+        );
+        assert_eq!(xai_reasoning_param_for_model("grok-4.20"), None);
     }
 }

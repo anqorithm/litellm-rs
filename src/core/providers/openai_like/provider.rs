@@ -243,6 +243,8 @@ impl OpenAILikeProvider {
                 .map_err(|e| OpenAILikeError::serialization(PROVIDER_NAME, e.to_string()))?;
         }
 
+        let reasoning_effort = request.reasoning_effort;
+
         let openrouter_thinking_params = if self.config.provider_name == "openrouter" {
             if let Some(thinking_config) = &request.thinking {
                 let params =
@@ -274,11 +276,14 @@ impl OpenAILikeProvider {
         insert_optional_param!(logit_bias);
         insert_optional_param!(logprobs);
         insert_optional_param!(top_logprobs);
-        insert_optional_param!(reasoning_effort);
         insert_optional_param!(store);
         insert_optional_param!(metadata);
         insert_optional_param!(service_tier);
         insert_optional_param!(parallel_tool_calls);
+
+        if let Some(effort) = reasoning_effort {
+            self.insert_reasoning_effort(&mut openai_request, &model, effort)?;
+        }
 
         if let Some(obj) = openai_request.as_object_mut() {
             for (key, value) in request.extra_params {
@@ -305,6 +310,33 @@ impl OpenAILikeProvider {
         }
 
         Ok(openai_request)
+    }
+
+    fn insert_reasoning_effort(
+        &self,
+        request: &mut Value,
+        model: &str,
+        effort: String,
+    ) -> Result<(), OpenAILikeError> {
+        if self.config.provider_name != "xai" {
+            request["reasoning_effort"] = Value::String(effort);
+            return Ok(());
+        }
+
+        match super::models::xai_reasoning_param_for_model(model) {
+            Some(super::models::XaiReasoningParam::TopLevelReasoningEffort) => {
+                request["reasoning_effort"] = Value::String(effort);
+                Ok(())
+            }
+            Some(super::models::XaiReasoningParam::NestedReasoningEffort) => {
+                request["reasoning"] = serde_json::json!({ "effort": effort });
+                Ok(())
+            }
+            None => Err(OpenAILikeError::configuration(
+                PROVIDER_NAME,
+                format!("xAI model {model} does not support reasoning_effort"),
+            )),
+        }
     }
 
     fn transform_chat_response(&self, response: Value) -> Result<ChatResponse, OpenAILikeError> {
@@ -490,7 +522,6 @@ impl LLMProvider for OpenAILikeProvider {
         input_tokens: u32,
         output_tokens: u32,
     ) -> Result<f64, ProviderError> {
-        super::models::validate_xai_standard_cost_window(&self.provider_name, model, input_tokens)?;
         let model_info = self.get_model_info(model);
 
         let input_cost = model_info

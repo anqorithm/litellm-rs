@@ -65,6 +65,81 @@ async fn test_request_transformation() {
 }
 
 #[tokio::test]
+async fn test_xai_grok_43_reasoning_effort_is_top_level() {
+    let config = OpenAILikeConfig::new("https://api.x.ai/v1")
+        .with_provider_name("xai")
+        .with_skip_api_key(true);
+    let provider = OpenAILikeProvider::new(config).await.unwrap();
+
+    let request = ChatRequest {
+        model: "grok-4.3".to_string(),
+        messages: vec![],
+        reasoning_effort: Some("high".to_string()),
+        ..Default::default()
+    };
+
+    let json = provider.transform_chat_request(request).unwrap();
+    assert_eq!(json["reasoning_effort"], "high");
+    assert!(json.get("reasoning").is_none());
+}
+
+#[tokio::test]
+async fn test_xai_multi_agent_reasoning_effort_is_nested() {
+    let config = OpenAILikeConfig::new("https://api.x.ai/v1")
+        .with_provider_name("xai")
+        .with_skip_api_key(true);
+    let provider = OpenAILikeProvider::new(config).await.unwrap();
+
+    let request = ChatRequest {
+        model: "grok-4.20-multi-agent-0309".to_string(),
+        messages: vec![],
+        reasoning_effort: Some("xhigh".to_string()),
+        ..Default::default()
+    };
+
+    let json = provider.transform_chat_request(request).unwrap();
+    assert_eq!(json["reasoning"]["effort"], "xhigh");
+    assert!(json.get("reasoning_effort").is_none());
+}
+
+#[tokio::test]
+async fn test_xai_grok_420_rejects_reasoning_effort() {
+    let config = OpenAILikeConfig::new("https://api.x.ai/v1")
+        .with_provider_name("xai")
+        .with_skip_api_key(true);
+    let provider = OpenAILikeProvider::new(config).await.unwrap();
+
+    let request = ChatRequest {
+        model: "grok-4.20".to_string(),
+        messages: vec![],
+        reasoning_effort: Some("high".to_string()),
+        ..Default::default()
+    };
+
+    let err = provider.transform_chat_request(request).unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("does not support reasoning_effort")
+    );
+}
+
+#[tokio::test]
+async fn test_xai_high_context_uses_registered_pricing() {
+    use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
+
+    let config = OpenAILikeConfig::new("https://api.x.ai/v1")
+        .with_provider_name("xai")
+        .with_skip_api_key(true);
+    let provider = OpenAILikeProvider::new(config).await.unwrap();
+
+    let cost = LLMProvider::calculate_cost(&provider, "grok-4.3", 250_000, 1_000)
+        .await
+        .unwrap();
+
+    assert!((cost - 0.315).abs() < 1e-12);
+}
+
+#[tokio::test]
 async fn test_model_prefix_stripping() {
     let config = OpenAILikeConfig::new("http://localhost:8000/v1")
         .with_model_prefix("custom/")

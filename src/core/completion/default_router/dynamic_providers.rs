@@ -197,6 +197,10 @@ impl DefaultRouter {
                 )
                 .await?
             }
+            "xai" => {
+                self.create_dynamic_openai_like(&route, &api_key, chat_request, context, options)
+                    .await?
+            }
             _ => {
                 self.create_dynamic_openai_compatible(
                     &route,
@@ -250,6 +254,16 @@ impl DefaultRouter {
                     &route.api_base,
                     chat_request,
                     context,
+                )
+                .await?
+            }
+            "xai" => {
+                self.create_dynamic_openai_like_stream(
+                    &route,
+                    &api_key,
+                    chat_request,
+                    context,
+                    options,
                 )
                 .await?
             }
@@ -364,6 +378,40 @@ impl DefaultRouter {
         convert_from_chat_completion_response(response)
     }
 
+    async fn create_dynamic_openai_like(
+        &self,
+        route: &DynamicProviderRoute<'_>,
+        api_key: &str,
+        chat_request: &ChatRequest,
+        context: RequestContext,
+        options: &CompletionOptions,
+    ) -> Result<CompletionResponse> {
+        use crate::core::providers::openai_like::OpenAILikeProvider;
+        use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
+
+        let config = dynamic_openai_like_config(api_key, &route.api_base, route, options);
+        let provider = OpenAILikeProvider::new(config).await.map_err(|e| {
+            GatewayError::internal(format!(
+                "Failed to create dynamic {} provider: {}",
+                route.provider_label, e
+            ))
+        })?;
+
+        let mut updated_request = chat_request.clone();
+        updated_request.model = route.actual_model.to_string();
+
+        let response = LLMProvider::chat_completion(&provider, updated_request, context)
+            .await
+            .map_err(|e| {
+                GatewayError::internal(format!(
+                    "Dynamic {} provider error: {}",
+                    route.provider_label, e
+                ))
+            })?;
+
+        convert_from_chat_completion_response(response)
+    }
+
     async fn create_dynamic_openai_compatible_stream(
         &self,
         route: &DynamicProviderRoute<'_>,
@@ -390,6 +438,41 @@ impl DefaultRouter {
 
         let stream = provider
             .chat_completion_stream(updated_request, context)
+            .await
+            .map_err(|e| {
+                GatewayError::internal(format!(
+                    "Dynamic {} streaming error: {}",
+                    route.provider_label, e
+                ))
+            })?;
+
+        Ok(convert_provider_stream(stream, route.provider_label))
+    }
+
+    async fn create_dynamic_openai_like_stream(
+        &self,
+        route: &DynamicProviderRoute<'_>,
+        api_key: &str,
+        chat_request: &ChatRequest,
+        context: RequestContext,
+        options: &CompletionOptions,
+    ) -> Result<CompletionStream> {
+        use crate::core::providers::openai_like::OpenAILikeProvider;
+        use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
+
+        let config = dynamic_openai_like_config(api_key, &route.api_base, route, options);
+        let provider = OpenAILikeProvider::new(config).await.map_err(|e| {
+            GatewayError::internal(format!(
+                "Failed to create dynamic {} streaming provider: {}",
+                route.provider_label, e
+            ))
+        })?;
+
+        let mut updated_request = chat_request.clone();
+        updated_request.model = route.actual_model.to_string();
+        updated_request.stream = true;
+
+        let stream = LLMProvider::chat_completion_stream(&provider, updated_request, context)
             .await
             .map_err(|e| {
                 GatewayError::internal(format!(
@@ -574,162 +657,20 @@ fn dynamic_openai_compatible_config(
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_resolve_dynamic_route_for_moonshot() {
-        let options = CompletionOptions::default();
-        let route = resolve_dynamic_provider_route("moonshot/kimi-k2.5", &options).unwrap();
-
-        assert_eq!(route.provider_type, "moonshot");
-        assert_eq!(route.provider_label, "Moonshot");
-        assert_eq!(route.actual_model, "kimi-k2.5");
-        assert_eq!(route.api_base, "https://api.moonshot.cn/v1");
-    }
-
-    #[test]
-    fn test_resolve_dynamic_route_for_minimax() {
-        let options = CompletionOptions::default();
-        let route =
-            resolve_dynamic_provider_route("minimax/MiniMax-M2.5-lightning", &options).unwrap();
-
-        assert_eq!(route.provider_type, "minimax");
-        assert_eq!(route.provider_label, "MiniMax");
-        assert_eq!(route.actual_model, "MiniMax-M2.5-lightning");
-        assert_eq!(route.api_base, "https://api.minimax.chat/v1");
-    }
-
-    #[test]
-    fn test_resolve_dynamic_route_for_glm_alias() {
-        let options = CompletionOptions::default();
-        let route = resolve_dynamic_provider_route("glm/glm-5", &options).unwrap();
-
-        assert_eq!(route.provider_type, "zhipu");
-        assert_eq!(route.provider_label, "Zhipu");
-        assert_eq!(route.actual_model, "glm-5");
-        assert_eq!(route.api_base, "https://open.bigmodel.cn/api/paas/v4");
-    }
-
-    #[test]
-    fn test_resolve_dynamic_route_for_zai_alias() {
-        let options = CompletionOptions::default();
-        let route = resolve_dynamic_provider_route("zai/glm-5", &options).unwrap();
-
-        assert_eq!(route.provider_type, "zhipu");
-        assert_eq!(route.provider_label, "Zhipu");
-        assert_eq!(route.actual_model, "glm-5");
-        assert_eq!(route.api_base, "https://open.bigmodel.cn/api/paas/v4");
-    }
-
-    #[test]
-    fn test_resolve_dynamic_route_for_xai() {
-        let options = CompletionOptions::default();
-        let Some(route) = resolve_dynamic_provider_route("xai/grok-4.3", &options) else {
-            panic!("xAI route should resolve");
-        };
-
-        assert_eq!(route.provider_type, "xai");
-        assert_eq!(route.provider_label, "xAI");
-        assert_eq!(route.actual_model, "grok-4.3");
-        assert_eq!(route.api_base, "https://api.x.ai/v1");
-    }
-
-    #[test]
-    fn test_resolve_dynamic_route_with_custom_api_base() {
-        let options = CompletionOptions {
-            api_base: Some("http://localhost:5567/v1".to_string()),
-            ..CompletionOptions::default()
-        };
-
-        let route = resolve_dynamic_provider_route("my-custom-model", &options).unwrap();
-        assert_eq!(route.provider_type, "openai-compatible");
-        assert_eq!(route.provider_label, "OpenAI-Compatible");
-        assert_eq!(route.actual_model, "my-custom-model");
-        assert_eq!(route.api_base, "http://localhost:5567/v1");
-    }
-
-    #[test]
-    fn test_custom_api_base_api_key_fallback_uses_env_key() {
-        let options = CompletionOptions {
-            api_base: Some("http://localhost:5567/v1".to_string()),
-            ..CompletionOptions::default()
-        };
-        let Some(route) = resolve_dynamic_provider_route("my-custom-model", &options) else {
-            panic!("custom api_base route should resolve");
-        };
-
-        let api_key =
-            custom_api_base_api_key_fallback(&options, &route, Some("sk-from-env".to_string()));
-
-        assert_eq!(api_key.as_deref(), Some("sk-from-env"));
-    }
-
-    #[test]
-    fn test_custom_api_base_api_key_fallback_uses_dummy_without_env_key() {
-        let options = CompletionOptions {
-            api_base: Some("http://localhost:5567/v1".to_string()),
-            ..CompletionOptions::default()
-        };
-        let Some(route) = resolve_dynamic_provider_route("my-custom-model", &options) else {
-            panic!("custom api_base route should resolve");
-        };
-
-        let api_key = custom_api_base_api_key_fallback(&options, &route, None);
-
-        assert_eq!(api_key.as_deref(), Some("dummy-key-for-local"));
-    }
-
-    #[test]
-    fn test_dynamic_openai_compatible_config_preserves_headers() {
-        let mut headers = std::collections::HashMap::new();
-        headers.insert("x-proxy-route".to_string(), "tenant-a".to_string());
-        headers.insert("x-request-source".to_string(), "stream-test".to_string());
-        let options = CompletionOptions {
-            headers: Some(headers),
-            organization: Some("org-stream-test".to_string()),
-            timeout: Some(17),
-            ..CompletionOptions::default()
-        };
-
-        let config =
-            dynamic_openai_compatible_config("sk-test", "http://localhost:5567/v1", &options);
-
-        assert_eq!(
-            config.base.headers.get("x-proxy-route").map(String::as_str),
-            Some("tenant-a")
-        );
-        assert_eq!(
-            config
-                .base
-                .headers
-                .get("x-request-source")
-                .map(String::as_str),
-            Some("stream-test")
-        );
-        assert_eq!(config.organization.as_deref(), Some("org-stream-test"));
-        assert_eq!(config.base.organization.as_deref(), Some("org-stream-test"));
-        assert_eq!(config.base.timeout, 17);
-    }
-
-    #[test]
-    fn test_api_key_fallback_does_not_apply_to_prefixed_routes() {
-        let options = CompletionOptions::default();
-        let Some(route) = resolve_dynamic_provider_route("xai/grok-4.3", &options) else {
-            panic!("prefixed route should resolve");
-        };
-
-        let api_key =
-            custom_api_base_api_key_fallback(&options, &route, Some("sk-from-env".to_string()));
-
-        assert!(api_key.is_none());
-    }
-
-    #[test]
-    fn test_resolve_dynamic_route_without_prefix_or_api_base() {
-        let options = CompletionOptions::default();
-        let route = resolve_dynamic_provider_route("my-custom-model", &options);
-        assert!(route.is_none());
-    }
+fn dynamic_openai_like_config(
+    api_key: &str,
+    api_base: &str,
+    route: &DynamicProviderRoute<'_>,
+    options: &CompletionOptions,
+) -> crate::core::providers::openai_like::OpenAILikeConfig {
+    let mut config =
+        crate::core::providers::openai_like::OpenAILikeConfig::with_api_key(api_base, api_key)
+            .with_provider_name(route.provider_type);
+    config.base.timeout = options.timeout.unwrap_or(60);
+    config.base.headers = options.headers.clone().unwrap_or_default();
+    config.base.organization = options.organization.clone();
+    config
 }
+
+#[cfg(test)]
+mod tests;
