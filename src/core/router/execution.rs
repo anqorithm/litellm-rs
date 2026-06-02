@@ -93,6 +93,10 @@ pub fn router_error_to_provider_error(err: RouterError) -> ProviderError {
             provider: "router",
             message: format!("No available deployment: {}", msg),
         },
+        RouterError::UnsupportedCapability { model, capability } => ProviderError::invalid_request(
+            "router",
+            format!("Model '{model}' does not support capability {capability}"),
+        ),
         RouterError::AllDeploymentsInCooldown(msg) => ProviderError::ProviderUnavailable {
             provider: "router",
             message: format!("All deployments in cooldown: {}", msg),

@@ -23,7 +23,7 @@ impl Router {
     /// 4. Select based on routing strategy
     /// 5. Increment active_requests counter
     pub fn select_deployment(&self, model_name: &str) -> Result<DeploymentId, RouterError> {
-        self.select_deployment_matching(model_name, |_| true)
+        self.select_deployment_matching(model_name, |_| true, None)
     }
 
     /// Select the best deployment for a model that supports `capability`.
@@ -36,13 +36,22 @@ impl Router {
         model_name: &str,
         capability: &ProviderCapability,
     ) -> Result<DeploymentId, RouterError> {
-        self.select_deployment_matching(model_name, |deployment| {
-            deployment
-                .provider
-                .capabilities()
-                .iter()
-                .any(|cap| cap == capability)
-        })
+        let no_matching_candidate_error = RouterError::UnsupportedCapability {
+            model: model_name.to_string(),
+            capability: format!("{capability:?}"),
+        };
+
+        self.select_deployment_matching(
+            model_name,
+            |deployment| {
+                deployment
+                    .provider
+                    .capabilities()
+                    .iter()
+                    .any(|cap| cap == capability)
+            },
+            Some(no_matching_candidate_error),
+        )
     }
 
     /// Select a deployment ID from pre-built routing contexts.
@@ -84,6 +93,7 @@ impl Router {
         &self,
         model_name: &str,
         is_candidate: F,
+        no_matching_candidate_error: Option<RouterError>,
     ) -> Result<DeploymentId, RouterError>
     where
         F: Fn(&Deployment) -> bool,
@@ -109,12 +119,15 @@ impl Router {
         // 3. Filter and build routing contexts in one pass to avoid cloning a
         // temporary candidate ID vector and then looking everything up again.
         let total_deployments = deployment_ids_ref.len();
+        let mut existing_deployments = 0;
+        let mut matching_deployments = 0;
         let mut routing_contexts = Vec::with_capacity(total_deployments);
 
         for id in deployment_ids_ref.iter() {
             let Some(deployment) = self.deployments.get(id.as_str()) else {
                 continue;
             };
+            existing_deployments += 1;
 
             if !is_candidate(&deployment) {
                 tracing::trace!(
@@ -125,6 +138,7 @@ impl Router {
                 );
                 continue;
             }
+            matching_deployments += 1;
 
             // Check cooldown first: is_in_cooldown() resets health
             // from Cooldown to Degraded when the cooldown period expires.
@@ -201,6 +215,13 @@ impl Router {
         }
 
         if routing_contexts.is_empty() {
+            if existing_deployments > 0
+                && matching_deployments == 0
+                && let Some(err) = no_matching_candidate_error
+            {
+                return Err(err);
+            }
+
             tracing::warn!(
                 model = %model_name,
                 total_deployments = total_deployments,

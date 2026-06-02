@@ -38,6 +38,10 @@ pub enum RouterError {
     #[error("No available deployment for model: {0}")]
     NoAvailableDeployment(String),
 
+    /// The model exists, but no deployment supports the requested capability
+    #[error("Model '{model}' does not support capability: {capability}")]
+    UnsupportedCapability { model: String, capability: String },
+
     /// Deployment not found by ID
     #[error("Deployment not found: {0}")]
     DeploymentNotFound(String),
@@ -175,6 +179,18 @@ mod tests {
     }
 
     #[test]
+    fn test_router_error_unsupported_capability() {
+        let error = RouterError::UnsupportedCapability {
+            model: "gpt-4".to_string(),
+            capability: "TextToSpeech".to_string(),
+        };
+        assert_eq!(
+            error.to_string(),
+            "Model 'gpt-4' does not support capability: TextToSpeech"
+        );
+    }
+
+    #[test]
     fn test_router_error_deployment_not_found() {
         let error = RouterError::DeploymentNotFound("dep-123".to_string());
         assert_eq!(error.to_string(), "Deployment not found: dep-123");
@@ -245,6 +261,10 @@ mod tests {
         let errors = vec![
             RouterError::ModelNotFound("a".to_string()),
             RouterError::NoAvailableDeployment("b".to_string()),
+            RouterError::UnsupportedCapability {
+                model: "b".to_string(),
+                capability: "c".to_string(),
+            },
             RouterError::DeploymentNotFound("c".to_string()),
             RouterError::AllDeploymentsInCooldown("d".to_string()),
             RouterError::RateLimitExceeded("e".to_string()),
@@ -252,7 +272,7 @@ mod tests {
             RouterError::FallbackCycle("g".to_string()),
         ];
 
-        assert_eq!(errors.len(), 7);
+        assert_eq!(errors.len(), 8);
         for error in errors {
             assert!(!error.to_string().is_empty());
         }
