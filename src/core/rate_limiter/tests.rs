@@ -1,17 +1,25 @@
 //! Tests for rate limiter
 
-use super::RateLimitRecordSource;
 #[cfg(test)]
 use super::limiter::RateLimiter;
+use super::{RateLimitRecordSource, RateLimitReservation};
 use crate::config::models::rate_limit::{RateLimitConfig, RateLimitStrategy};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 fn test_config(enabled: bool, rpm: u32) -> RateLimitConfig {
+    test_config_with_strategy(enabled, rpm, RateLimitStrategy::SlidingWindow)
+}
+
+fn test_config_with_strategy(
+    enabled: bool,
+    rpm: u32,
+    strategy: RateLimitStrategy,
+) -> RateLimitConfig {
     RateLimitConfig {
         enabled,
         default_rpm: rpm,
         default_tpm: 100000,
-        strategy: RateLimitStrategy::SlidingWindow,
+        strategy,
         ..Default::default()
     }
 }
@@ -153,17 +161,35 @@ async fn test_atomic_check_and_record() {
 async fn test_release_recorded_local_source_restores_capacity() {
     let limiter = RateLimiter::new(test_config(true, 1));
 
-    let (result, source) = limiter.check_and_record_with_source("auth-ip").await;
+    let (result, reservation) = limiter.check_and_record_with_source("auth-ip").await;
     assert!(result.allowed);
-    assert_eq!(source, RateLimitRecordSource::Local);
+    assert_eq!(reservation.source(), RateLimitRecordSource::Local);
 
     let blocked = limiter.check_and_record("auth-ip").await;
     assert!(!blocked.allowed);
 
-    limiter.release_recorded("auth-ip", source).await;
+    limiter.release_recorded("auth-ip", reservation).await;
 
     let allowed_again = limiter.check_and_record("auth-ip").await;
     assert!(allowed_again.allowed);
+}
+
+#[tokio::test]
+async fn test_release_recorded_sliding_and_fixed_windows_remove_empty_entry() {
+    for strategy in [
+        RateLimitStrategy::SlidingWindow,
+        RateLimitStrategy::FixedWindow,
+    ] {
+        let limiter = RateLimiter::new(test_config_with_strategy(true, 1, strategy));
+
+        let (result, reservation) = limiter.check_and_record_with_source("auth-ip").await;
+        assert!(result.allowed);
+        assert!(limiter.entries.contains_key("auth-ip"));
+
+        limiter.release_recorded("auth-ip", reservation).await;
+
+        assert!(!limiter.entries.contains_key("auth-ip"));
+    }
 }
 
 #[tokio::test]
@@ -174,7 +200,10 @@ async fn test_release_recorded_distributed_source_keeps_local_capacity() {
     assert!(result.allowed);
 
     limiter
-        .release_recorded("auth-ip", RateLimitRecordSource::Distributed)
+        .release_recorded(
+            "auth-ip",
+            RateLimitReservation::for_test(RateLimitRecordSource::Distributed, Instant::now(), 60),
+        )
         .await;
 
     let blocked = limiter.check_and_record("auth-ip").await;

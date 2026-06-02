@@ -1,6 +1,6 @@
 //! Rate limiting middleware
 
-use crate::core::rate_limiter::{RateLimitRecordSource, get_global_rate_limiter};
+use crate::core::rate_limiter::{RateLimitReservation, get_global_rate_limiter};
 use crate::core::types::context::RequestContext;
 use crate::server::state::AppState;
 use actix_web::dev::{Service, ServiceRequest, ServiceResponse, Transform, forward_ready};
@@ -44,12 +44,17 @@ impl KeyTracker {
         }
     }
 
-    fn release(&mut self) {
-        self.timestamps.pop();
+    fn release(&mut self, recorded_at: Instant) -> bool {
+        let Some(position) = self.timestamps.iter().position(|&ts| ts == recorded_at) else {
+            return false;
+        };
+
+        self.timestamps.remove(position);
+        true
     }
 
-    /// Check-and-record atomically: returns (allowed, retry_after_secs)
-    fn check_and_record(&mut self, limit: u32, window: Duration) -> (bool, u64) {
+    /// Check-and-record atomically: returns (allowed, retry_after_secs, recorded_at)
+    fn check_and_record(&mut self, limit: u32, window: Duration) -> (bool, u64, Option<Instant>) {
         let now = Instant::now();
         self.timestamps
             .retain(|&ts| now.duration_since(ts) < window);
@@ -64,11 +69,11 @@ impl KeyTracker {
                     window.saturating_sub(age).as_secs().max(1)
                 })
                 .unwrap_or(window.as_secs());
-            return (false, retry_after);
+            return (false, retry_after, None);
         }
 
         self.timestamps.push(now);
-        (true, 0)
+        (true, 0, Some(now))
     }
 }
 
@@ -76,7 +81,7 @@ struct RateLimitPass {
     source: &'static str,
     limit: u32,
     remaining: u32,
-    record_source: Option<RateLimitRecordSource>,
+    reservation: RecordedRateLimitReservation,
 }
 
 struct RateLimitRejection {
@@ -86,9 +91,17 @@ struct RateLimitRejection {
 }
 
 enum RateLimitReservationSource {
-    Global(RateLimitRecordSource),
-    Fallback(Arc<DashMap<String, KeyTracker>>),
+    Global(RateLimitReservation),
+    Fallback {
+        store: Arc<DashMap<String, KeyTracker>>,
+        recorded_at: Instant,
+    },
     Noop,
+}
+
+enum RecordedRateLimitReservation {
+    Global(RateLimitReservation),
+    Fallback(Instant),
 }
 
 pub(super) struct AuthRateLimitReservation {
@@ -113,9 +126,18 @@ impl AuthRateLimitReservation {
                         .await;
                 }
             }
-            RateLimitReservationSource::Fallback(store) => {
-                if let Some(mut tracker) = store.get_mut(&self.key) {
-                    tracker.release();
+            RateLimitReservationSource::Fallback { store, recorded_at } => {
+                let should_remove = {
+                    let Some(mut tracker) = store.get_mut(&self.key) else {
+                        return;
+                    };
+
+                    tracker.release(recorded_at);
+                    tracker.timestamps.is_empty()
+                };
+
+                if should_remove {
+                    store.remove(&self.key);
                 }
             }
             RateLimitReservationSource::Noop => {}
@@ -161,7 +183,7 @@ async fn check_rate_limit_key(
 ) -> Result<RateLimitPass, RateLimitRejection> {
     if let Some(global_limiter) = get_global_rate_limiter() {
         let limit = global_limiter.limit();
-        let (result, record_source) = global_limiter.check_and_record_with_source(key).await;
+        let (result, reservation) = global_limiter.check_and_record_with_source(key).await;
 
         if !result.allowed {
             return Err(RateLimitRejection {
@@ -175,12 +197,12 @@ async fn check_rate_limit_key(
             source: GLOBAL_LIMITER_SOURCE,
             limit,
             remaining: result.remaining,
-            record_source: Some(record_source),
+            reservation: RecordedRateLimitReservation::Global(reservation),
         });
     }
 
     let window = Duration::from_secs(60);
-    let (allowed, retry_after) = {
+    let (allowed, retry_after, recorded_at) = {
         let mut tracker = fallback_store
             .entry(key.to_string())
             .or_insert_with(KeyTracker::new);
@@ -198,6 +220,14 @@ async fn check_rate_limit_key(
         });
     }
 
+    let Some(recorded_at) = recorded_at else {
+        return Err(RateLimitRejection {
+            source: FALLBACK_LIMITER_SOURCE,
+            retry_after: window.as_secs().max(1),
+            limit: requests_per_minute,
+        });
+    };
+
     let remaining = fallback_store
         .get(key)
         .map(|tracker| requests_per_minute.saturating_sub(tracker.timestamps.len() as u32))
@@ -207,7 +237,7 @@ async fn check_rate_limit_key(
         source: FALLBACK_LIMITER_SOURCE,
         limit: requests_per_minute,
         remaining,
-        record_source: None,
+        reservation: RecordedRateLimitReservation::Fallback(recorded_at),
     })
 }
 
@@ -234,10 +264,17 @@ pub(super) async fn reserve_rate_limit_for_auth_attempt(
                 "Rate limit reservation passed for auth attempt ({} limiter)",
                 pass.source
             );
-            let source = pass
-                .record_source
-                .map(RateLimitReservationSource::Global)
-                .unwrap_or_else(|| RateLimitReservationSource::Fallback(fallback_store));
+            let source = match pass.reservation {
+                RecordedRateLimitReservation::Global(reservation) => {
+                    RateLimitReservationSource::Global(reservation)
+                }
+                RecordedRateLimitReservation::Fallback(recorded_at) => {
+                    RateLimitReservationSource::Fallback {
+                        store: fallback_store,
+                        recorded_at,
+                    }
+                }
+            };
             Ok(AuthRateLimitReservation { key, source })
         }
         Err(rejection) => {
@@ -508,6 +545,13 @@ mod tests {
     use actix_web::test::TestRequest;
     use uuid::Uuid;
 
+    fn require_recorded_at(value: Option<Instant>) -> Instant {
+        match value {
+            Some(value) => value,
+            None => panic!("allowed reservation should record a timestamp"),
+        }
+    }
+
     #[test]
     fn test_parse_peer_ip_ipv4_with_port() {
         assert_eq!(parse_peer_ip("127.0.0.1:1234"), "127.0.0.1");
@@ -626,11 +670,12 @@ mod tests {
         let mut tracker = KeyTracker::new();
         let window = Duration::from_secs(60);
 
-        let (allowed, _) = tracker.check_and_record(1, window);
+        let (allowed, _, recorded_at) = tracker.check_and_record(1, window);
         assert!(allowed);
+        let recorded_at = require_recorded_at(recorded_at);
         assert_eq!(tracker.timestamps.len(), 1);
 
-        tracker.release();
+        tracker.release(recorded_at);
 
         assert!(tracker.timestamps.is_empty());
     }
@@ -639,17 +684,38 @@ mod tests {
     fn test_key_tracker_release_allows_new_reservation() {
         let mut tracker = KeyTracker::new();
         let window = Duration::from_secs(60);
-        let (allowed, _) = tracker.check_and_record(1, window);
+        let (allowed, _, recorded_at) = tracker.check_and_record(1, window);
         assert!(allowed);
-        let (allowed, retry_after) = tracker.check_and_record(1, window);
+        let recorded_at = require_recorded_at(recorded_at);
+        let (allowed, retry_after, _) = tracker.check_and_record(1, window);
         assert!(!allowed);
         assert!(retry_after > 0);
 
-        tracker.release();
-        let (allowed, retry_after) = tracker.check_and_record(1, window);
+        tracker.release(recorded_at);
+        let (allowed, retry_after, _) = tracker.check_and_record(1, window);
 
         assert!(allowed);
         assert_eq!(retry_after, 0);
+    }
+
+    #[test]
+    fn test_key_tracker_release_keeps_newer_rejected_auth_slot() {
+        let mut tracker = KeyTracker::new();
+        let window = Duration::from_secs(60);
+
+        let (first_allowed, _, first_recorded_at) = tracker.check_and_record(2, window);
+        assert!(first_allowed);
+        let first_recorded_at = require_recorded_at(first_recorded_at);
+
+        std::thread::sleep(Duration::from_millis(1));
+
+        let (second_allowed, _, second_recorded_at) = tracker.check_and_record(2, window);
+        assert!(second_allowed);
+        let second_recorded_at = require_recorded_at(second_recorded_at);
+
+        tracker.release(first_recorded_at);
+
+        assert_eq!(tracker.timestamps, vec![second_recorded_at]);
     }
 
     #[test]

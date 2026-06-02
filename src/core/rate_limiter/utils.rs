@@ -2,6 +2,7 @@
 
 use super::limiter::RateLimiter;
 use super::types::RateLimitResult;
+use crate::config::models::rate_limit::RateLimitStrategy;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -14,9 +15,16 @@ impl RateLimiter {
         let limit = self.config.default_rpm as f64;
         self.entries.retain(|_, entry| {
             entry.timestamps.retain(|&t| t > window_start);
-            // Keep entry if it has recent timestamps OR has consumed tokens (not full bucket).
-            // A full bucket (tokens == limit) with no timestamps means the key is idle.
-            !entry.timestamps.is_empty() || entry.tokens < limit
+            match self.config.strategy {
+                RateLimitStrategy::SlidingWindow | RateLimitStrategy::FixedWindow => {
+                    !entry.timestamps.is_empty()
+                }
+                RateLimitStrategy::TokenBucket => {
+                    // Keep entry if it has recent timestamps OR has consumed tokens (not full bucket).
+                    // A full bucket (tokens == limit) with no timestamps means the key is idle.
+                    !entry.timestamps.is_empty() || entry.tokens < limit
+                }
+            }
         });
     }
 
