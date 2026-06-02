@@ -337,6 +337,7 @@ impl LLMProvider for BedrockProvider {
 
         // Use streaming endpoint
         let operation = streaming_operation_for_api_type(&model_config.api_type);
+        let request_id = context.request_id.clone();
         let body = match &model_config.api_type {
             BedrockApiType::Converse | BedrockApiType::ConverseStream => {
                 converse_streaming_request_body(&request)?
@@ -358,6 +359,8 @@ impl LLMProvider for BedrockProvider {
             response.bytes_stream(),
             model_config.family.clone(),
             model_config.api_type.clone(),
+            request.model.clone(),
+            request_id,
         );
 
         Ok(Box::pin(stream))
