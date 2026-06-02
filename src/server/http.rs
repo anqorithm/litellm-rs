@@ -2,8 +2,8 @@
 //!
 //! This module provides the HttpServer struct and its core methods.
 
-use crate::config::Config;
 use crate::config::models::server::{CorsConfig, ServerConfig};
+use crate::config::{Config, Validate};
 use crate::core::budget::UnifiedBudgetLimits;
 use crate::core::pricing_service::PricingService;
 use crate::core::rate_limiter::{get_global_rate_limiter, init_global_rate_limiter_with_redis};
@@ -40,6 +40,8 @@ impl HttpServer {
         info!("Creating HTTP server");
 
         Self::validate_cors_config(&config.gateway.server.cors)?;
+        Validate::validate(&config.gateway.cache)
+            .map_err(|e| GatewayError::Config(format!("Invalid cache configuration: {}", e)))?;
         start_auth_rate_limiter_cleanup_task();
 
         let storage = crate::storage::StorageLayer::new(&config.gateway.storage).await?;
@@ -458,6 +460,28 @@ mod tests {
              got: {:?}",
             result.err()
         );
+    }
+
+    #[tokio::test]
+    async fn new_rejects_unwired_cache_config() {
+        let mut config = Config::default();
+        config.gateway.storage.database.enabled = false;
+        config.gateway.storage.redis.enabled = false;
+        config.gateway.pricing.source = None;
+        config.gateway.cache.enabled = true;
+
+        let error = match HttpServer::new(&config).await {
+            Ok(_) => panic!("expected unwired cache configuration to fail startup"),
+            Err(error) => error,
+        };
+
+        match error {
+            GatewayError::Config(message) => {
+                assert!(message.contains("Invalid cache configuration"));
+                assert!(message.contains("not wired into runtime"));
+            }
+            other => panic!("expected config error, got: {other:?}"),
+        }
     }
 
     /// In-memory budget snapshots load succeeds (returns empty) on sqlite, so
