@@ -163,6 +163,8 @@ impl SdkConfigBuilder {
             base_url: None,
             models: vec![
                 "gpt-5.4".to_string(),
+                "gpt-5.5".to_string(),
+                "gpt-5.5-pro".to_string(),
                 "gpt-5.4-mini".to_string(),
                 "gpt-5.4-nano".to_string(),
             ],
@@ -587,6 +589,11 @@ mod tests {
                 .iter()
                 .any(|model| model.starts_with("gpt-"))
         );
+        assert_eq!(
+            config.providers[0].models.first(),
+            Some(&"gpt-5.4".to_string())
+        );
+        assert!(config.providers[0].models.contains(&"gpt-5.4".to_string()));
     }
 
     #[test]

@@ -20,6 +20,8 @@ pub struct TokenUtils;
 
 impl TokenUtils {
     const OPENAI_MODELS: &'static [&'static str] = &[
+        "gpt-5.5",
+        "gpt-5.5-pro",
         "gpt-5.4",
         "gpt-5.4-mini",
         "gpt-5.4-nano",
@@ -252,6 +254,7 @@ impl TokenUtils {
 
     pub fn get_max_tokens_for_model(model: &str) -> Option<usize> {
         match model.to_lowercase().as_str() {
+            m if m.contains("gpt-5.5") => Some(1_048_576),
             m if m.contains("gpt-5.4")
                 && !m.contains("gpt-5.4-mini")
                 && !m.contains("gpt-5.4-nano") =>
@@ -286,7 +289,29 @@ impl TokenUtils {
         input_tokens: usize,
         output_tokens: usize,
     ) -> Result<f64, ProviderError> {
+        let model_lower = model.to_lowercase();
+        if model_lower.contains("gpt-5.5") {
+            let input_price = if !model_lower.contains("gpt-5.5-pro") && input_tokens > 272_000 {
+                0.010
+            } else if model_lower.contains("gpt-5.5-pro") {
+                0.030
+            } else {
+                0.005
+            };
+            let output_price = if !model_lower.contains("gpt-5.5-pro") && input_tokens > 272_000 {
+                0.045
+            } else if model_lower.contains("gpt-5.5-pro") {
+                0.180
+            } else {
+                0.030
+            };
+            return Ok((input_tokens as f64 / 1000.0) * input_price
+                + (output_tokens as f64 / 1000.0) * output_price);
+        }
+
         let (input_price, output_price) = match model.to_lowercase().as_str() {
+            m if m.contains("gpt-5.5-pro") => (0.030, 0.180),
+            m if m.contains("gpt-5.5") => (0.005, 0.030),
             m if m.contains("gpt-5.4-pro") => (0.030, 0.180),
             m if m.contains("gpt-5.4-mini") => (0.00075, 0.0045),
             m if m.contains("gpt-5.4-nano") => (0.0002, 0.00125),
@@ -429,6 +454,10 @@ mod tests {
             Some(32768)
         );
         assert_eq!(
+            TokenUtils::get_max_tokens_for_model("gpt-5.5-pro"),
+            Some(1_048_576)
+        );
+        assert_eq!(
             TokenUtils::get_max_tokens_for_model("gpt-5.4-pro"),
             Some(1_048_576)
         );
@@ -451,6 +480,12 @@ mod tests {
     fn test_cost_calculation() {
         let cost = TokenUtils::calculate_cost("gpt-4", 1000, 500).unwrap();
         assert!(cost > 0.0);
+
+        let Ok(gpt55_long_context_cost) = TokenUtils::calculate_cost("gpt-5.5", 300_000, 2_000)
+        else {
+            panic!("gpt-5.5 token utility cost should calculate");
+        };
+        assert!((gpt55_long_context_cost - 3.09).abs() < 1e-12);
 
         let result = TokenUtils::calculate_cost("unknown-model", 1000, 500);
         assert!(result.is_err());

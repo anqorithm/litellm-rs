@@ -230,6 +230,34 @@ fn test_get_supported_openai_params_gpt4() {
 }
 
 #[test]
+fn test_get_supported_openai_params_gpt55() {
+    let provider = create_test_provider();
+    let params = provider.get_supported_openai_params("gpt-5.5");
+    let prefixed_params = provider.get_supported_openai_params("openai/gpt-5.5");
+
+    assert!(params.contains(&"tools"));
+    assert!(params.contains(&"tool_choice"));
+    assert!(params.contains(&"response_format"));
+    assert!(params.contains(&"stream"));
+    assert!(params.contains(&"reasoning_effort"));
+    assert_eq!(params, prefixed_params);
+}
+
+#[test]
+fn test_get_supported_openai_params_gpt55_pro() {
+    let provider = create_test_provider();
+    let params = provider.get_supported_openai_params("gpt-5.5-pro");
+    let prefixed_params = provider.get_supported_openai_params("openai/gpt-5.5-pro");
+
+    assert!(params.contains(&"tools"));
+    assert!(params.contains(&"tool_choice"));
+    assert!(params.contains(&"response_format"));
+    assert!(params.contains(&"reasoning_effort"));
+    assert!(!params.contains(&"stream"));
+    assert_eq!(params, prefixed_params);
+}
+
+#[test]
 fn test_get_supported_openai_params_gpt35() {
     let provider = create_test_provider();
     let params = provider.get_supported_openai_params("gpt-3.5-turbo");
@@ -642,7 +670,7 @@ fn test_model_recommendations() {
 
     assert_eq!(
         provider.get_best_model_for_task(super::client::OpenAITask::GeneralChat),
-        Some("gpt-5.4".to_string())
+        Some("gpt-5.5".to_string())
     );
 
     assert_eq!(

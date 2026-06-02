@@ -491,9 +491,56 @@ impl LLMProvider for OpenAIProvider {
     // ==================== Python LiteLLM Compatible Interface ====================
 
     fn get_supported_openai_params(&self, model: &str) -> &'static [&'static str] {
+        let model = model.strip_prefix("openai/").unwrap_or(model);
+
         // Return parameters based on model capabilities
         if let Some(model_spec) = self.model_registry.get_model_spec(model) {
             match model_spec.family {
+                super::models::OpenAIModelFamily::GPT55 => &[
+                    "messages",
+                    "model",
+                    "temperature",
+                    "max_tokens",
+                    "max_completion_tokens",
+                    "top_p",
+                    "frequency_penalty",
+                    "presence_penalty",
+                    "stop",
+                    "stream",
+                    "tools",
+                    "tool_choice",
+                    "parallel_tool_calls",
+                    "response_format",
+                    "user",
+                    "seed",
+                    "n",
+                    "logit_bias",
+                    "logprobs",
+                    "top_logprobs",
+                    "reasoning_effort",
+                ],
+                super::models::OpenAIModelFamily::GPT55Pro => &[
+                    "messages",
+                    "model",
+                    "temperature",
+                    "max_tokens",
+                    "max_completion_tokens",
+                    "top_p",
+                    "frequency_penalty",
+                    "presence_penalty",
+                    "stop",
+                    "tools",
+                    "tool_choice",
+                    "parallel_tool_calls",
+                    "response_format",
+                    "user",
+                    "seed",
+                    "n",
+                    "logit_bias",
+                    "logprobs",
+                    "top_logprobs",
+                    "reasoning_effort",
+                ],
                 super::models::OpenAIModelFamily::GPT4
                 | super::models::OpenAIModelFamily::GPT4Turbo
                 | super::models::OpenAIModelFamily::GPT4O => &[
