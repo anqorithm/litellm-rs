@@ -11,7 +11,7 @@ mod tests {
     use litellm_rs::core::models::{ApiKey, Metadata, UsageStats};
     use litellm_rs::core::types::context::RequestContext;
     use litellm_rs::server::http::HttpServer;
-    use litellm_rs::server::middleware::AuthMiddleware;
+    use litellm_rs::server::middleware::{AuthMiddleware, RateLimitMiddleware};
     use litellm_rs::server::state::AppState;
     use litellm_rs::utils::auth::crypto::keys::{extract_api_key_prefix, hash_api_key};
     use serde::{Deserialize, Serialize};
@@ -61,7 +61,11 @@ mod tests {
         HttpResponse::Ok().json(payload)
     }
 
-    async fn build_test_state(enable_jwt: bool, enable_api_key: bool) -> AppState {
+    async fn build_test_state_with_rate_limit(
+        enable_jwt: bool,
+        enable_api_key: bool,
+        default_rpm: Option<u32>,
+    ) -> AppState {
         let mut config = Config::default();
         config.gateway.auth.enable_jwt = enable_jwt;
         config.gateway.auth.enable_api_key = enable_api_key;
@@ -69,6 +73,10 @@ mod tests {
         config.gateway.storage.database.enabled = false;
         config.gateway.storage.redis.enabled = false;
         config.gateway.pricing.source = Some("config/model_prices_extended.json".to_string());
+        if let Some(default_rpm) = default_rpm {
+            config.gateway.rate_limit.enabled = true;
+            config.gateway.rate_limit.default_rpm = default_rpm;
+        }
 
         let server = HttpServer::new(&config)
             .await
@@ -80,6 +88,10 @@ mod tests {
             .await
             .expect("failed to run in-memory DB migrations for auth middleware integration test");
         state
+    }
+
+    async fn build_test_state(enable_jwt: bool, enable_api_key: bool) -> AppState {
+        build_test_state_with_rate_limit(enable_jwt, enable_api_key, None).await
     }
 
     async fn seed_valid_principal(state: &AppState) -> SeededPrincipal {
@@ -182,6 +194,90 @@ mod tests {
         );
         assert_eq!(hit_counter.load(Ordering::SeqCst), 0);
         assert!(error.to_string().contains("Invalid API key"));
+    }
+
+    #[tokio::test]
+    async fn test_missing_auth_hits_gateway_rate_limit_before_auth_short_circuit() {
+        let state = build_test_state_with_rate_limit(true, true, Some(1)).await;
+        let hit_counter = Arc::new(AtomicUsize::new(0));
+
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(state))
+                .app_data(web::Data::new(hit_counter.clone()))
+                .wrap(RateLimitMiddleware::new(1))
+                .wrap(AuthMiddleware)
+                .route(AUTH_PROBE_PATH, web::get().to(auth_probe)),
+        )
+        .await;
+
+        let first = test::TestRequest::get()
+            .uri(AUTH_PROBE_PATH)
+            .peer_addr("203.0.113.101:1000".parse().unwrap())
+            .to_request();
+        let first_error = test::try_call_service(&app, first)
+            .await
+            .expect_err("first missing-auth request should fail in auth middleware");
+        assert_eq!(
+            first_error.as_response_error().status_code(),
+            StatusCode::UNAUTHORIZED
+        );
+
+        let second = test::TestRequest::get()
+            .uri(AUTH_PROBE_PATH)
+            .peer_addr("203.0.113.101:1001".parse().unwrap())
+            .to_request();
+        let second_error = test::try_call_service(&app, second)
+            .await
+            .expect_err("second missing-auth request should hit gateway rate limit");
+        assert_eq!(
+            second_error.as_response_error().status_code(),
+            StatusCode::TOO_MANY_REQUESTS
+        );
+        assert_eq!(hit_counter.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn test_invalid_auth_hits_gateway_rate_limit_before_auth_short_circuit() {
+        let state = build_test_state_with_rate_limit(true, true, Some(1)).await;
+        let hit_counter = Arc::new(AtomicUsize::new(0));
+
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(state))
+                .app_data(web::Data::new(hit_counter.clone()))
+                .wrap(RateLimitMiddleware::new(1))
+                .wrap(AuthMiddleware)
+                .route(AUTH_PROBE_PATH, web::get().to(auth_probe)),
+        )
+        .await;
+
+        let first = test::TestRequest::get()
+            .uri(AUTH_PROBE_PATH)
+            .peer_addr("203.0.113.102:1000".parse().unwrap())
+            .insert_header(("x-api-key", "gw-invalid-auth-rate-limit-key"))
+            .to_request();
+        let first_error = test::try_call_service(&app, first)
+            .await
+            .expect_err("first invalid-auth request should fail in auth middleware");
+        assert_eq!(
+            first_error.as_response_error().status_code(),
+            StatusCode::UNAUTHORIZED
+        );
+
+        let second = test::TestRequest::get()
+            .uri(AUTH_PROBE_PATH)
+            .peer_addr("203.0.113.102:1001".parse().unwrap())
+            .insert_header(("x-api-key", "gw-invalid-auth-rate-limit-key"))
+            .to_request();
+        let second_error = test::try_call_service(&app, second)
+            .await
+            .expect_err("second invalid-auth request should hit gateway rate limit");
+        assert_eq!(
+            second_error.as_response_error().status_code(),
+            StatusCode::TOO_MANY_REQUESTS
+        );
+        assert_eq!(hit_counter.load(Ordering::SeqCst), 0);
     }
 
     #[tokio::test]
