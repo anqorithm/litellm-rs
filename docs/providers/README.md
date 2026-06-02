@@ -11,12 +11,14 @@ LiteLLM-RS supports 100+ AI providers through a unified interface. This section 
 - [**DeepSeek**](./deepseek.md) - DeepSeek V4 Flash & Pro
 - [**Google**](./google.md) - Gemini Pro, PaLM, Vertex AI
 - [**Azure OpenAI**](./azure-openai.md) - Enterprise OpenAI deployment
+- **xAI** - OpenAI-compatible Grok routing with pass-through model IDs
 
 ### **Tier 2 Providers** (Core Features)
 - **Cohere** - Command models and embeddings
-- **Mistral** - Mistral 7B, 8x7B, Large
+- **Mistral** - Mistral Large 3, Medium, Small 4, Magistral, Devstral, Pixtral
 - **Together AI** - Open source models
 - **Groq** - High-speed inference
+- **Meta Llama** - Llama 4 Scout and Maverick through the Llama-compatible endpoint
 - **Replicate** - Custom model hosting
 
 ### **Tier 3 Providers** (Basic Support)
@@ -37,7 +39,10 @@ LiteLLM-RS supports 100+ AI providers through a unified interface. This section 
 | Google | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
 | Azure OpenAI | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Cohere | ✅ | ✅ | ❌ | ❌ | ✅ | ❌ |
-| Mistral | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ |
+| Mistral | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| xAI | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
+| AWS Bedrock / Nova | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
+| Meta Llama | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
 
 ## 🚀 Quick Usage Examples
 
@@ -58,6 +63,9 @@ let response = completion("claude-opus-4-7", messages, None).await?;
 
 // Google Gemini
 let response = completion("gemini-3.1-pro-preview", messages, None).await?;
+
+// xAI Grok, routed through the OpenAI-compatible provider catalog
+let response = completion("xai/grok-4.3", messages, None).await?;
 ```
 
 ### Provider Prefixes
@@ -66,7 +74,14 @@ let response = completion("gemini-3.1-pro-preview", messages, None).await?;
 let openai_response = completion("openai/gpt-5.5", messages, None).await?;
 let anthropic_response = completion("anthropic/claude-opus-4-7", messages, None).await?;
 let deepseek_response = completion("deepseek/deepseek-v4-flash", messages, None).await?;
+let xai_response = completion("xai/grok-4.3", messages, None).await?;
 ```
+
+### xAI Pass-Through Models
+The xAI entry in the Tier 1 provider catalog is OpenAI-compatible and does not
+maintain a static model registry. Pass current xAI model IDs directly, such as
+`xai/grok-4.3`; the provider definition supplies `https://api.x.ai/v1` and
+`XAI_API_KEY`.
 
 ## ⚙️ Configuration
 
@@ -87,6 +102,9 @@ export GOOGLE_APPLICATION_CREDENTIALS=/path/to/credentials.json
 # Azure OpenAI
 export AZURE_OPENAI_API_KEY=your_key_here
 export AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com
+
+# xAI
+export XAI_API_KEY=your_key_here
 
 # AWS Bedrock native runtime
 export AWS_ACCESS_KEY_ID=your_key_here

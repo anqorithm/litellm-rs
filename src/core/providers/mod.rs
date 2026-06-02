@@ -411,15 +411,23 @@ impl Provider {
         input_tokens: u32,
         output_tokens: u32,
     ) -> Result<f64, ProviderError> {
-        let usage = crate::core::pricing::Usage::new(input_tokens, output_tokens);
-
-        Ok(
-            crate::core::pricing::get_pricing_db().calculate_for_provider(
-                self.name(),
-                model,
-                &usage,
-            ),
+        use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
+        let model = self.strip_provider_prefix(model);
+        dispatch_provider!(
+            async_err,
+            self,
+            calculate_cost,
+            model,
+            input_tokens,
+            output_tokens
         )
+    }
+
+    fn strip_provider_prefix<'a>(&self, model: &'a str) -> &'a str {
+        model
+            .strip_prefix(self.name())
+            .and_then(|model| model.strip_prefix('/'))
+            .unwrap_or(model)
     }
 
     /// Execute streaming chat completion
@@ -516,6 +524,59 @@ mod tests {
             ),
             "expected provider-specific NotSupported, got {err}"
         );
+    }
+
+    #[tokio::test]
+    async fn test_provider_enum_calculate_cost_delegates_mistral_aliases() {
+        let Ok(mistral_provider) = mistral::MistralProvider::new(mistral::MistralConfig {
+            api_key: "sk-test".to_string(),
+            ..mistral::MistralConfig::default()
+        })
+        .await
+        else {
+            panic!("Mistral provider should initialize with a test API key");
+        };
+        let provider = Provider::Mistral(mistral_provider);
+
+        let Ok(alias_cost) = provider
+            .calculate_cost("magistral-medium-1-2", 1000, 500)
+            .await
+        else {
+            panic!("Mistral alias cost should calculate");
+        };
+        let Ok(canonical_cost) = provider
+            .calculate_cost("magistral-medium-2509", 1000, 500)
+            .await
+        else {
+            panic!("Mistral canonical cost should calculate");
+        };
+        let Ok(devstral_alias_cost) = provider.calculate_cost("devstral-2-2512", 1000, 500).await
+        else {
+            panic!("Devstral alias cost should calculate");
+        };
+
+        assert!((alias_cost - canonical_cost).abs() < 1e-12);
+        assert!((alias_cost - 0.0045).abs() < 1e-12);
+        assert!((devstral_alias_cost - 0.0014).abs() < 1e-12);
+    }
+
+    #[tokio::test]
+    async fn test_provider_enum_calculate_cost_strips_openai_prefix() {
+        let mut config = openai::OpenAIConfig::default();
+        config.base.api_key = Some("sk-test123456789012345678901234567890123456".to_string());
+        let Ok(openai_provider) = openai::OpenAIProvider::new(config).await else {
+            panic!("OpenAI provider should initialize with a test API key");
+        };
+        let provider = Provider::OpenAI(openai_provider);
+
+        let Ok(cost) = provider
+            .calculate_cost("openai/gpt-5.5-pro", 1000, 500)
+            .await
+        else {
+            panic!("prefixed OpenAI cost should calculate");
+        };
+
+        assert!((cost - 0.12).abs() < 1e-12);
     }
 
     #[tokio::test]

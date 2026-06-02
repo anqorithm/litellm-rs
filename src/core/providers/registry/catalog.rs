@@ -134,7 +134,12 @@ fn build_catalog() -> HashMap<&'static str, ProviderDefinition> {
             "https://api.friendli.ai/v1",
             "FRIENDLIAI_API_KEY",
         ),
-        def("xai", "xAI", "https://api.x.ai/v1", "XAI_API_KEY"),
+        // xAI publishes OpenAI-compatible chat endpoints; model IDs are
+        // passed through instead of enumerated in this static provider catalog.
+        ProviderDefinition {
+            model_prefix: Some("xai/"),
+            ..def("xai", "xAI", "https://api.x.ai/v1", "XAI_API_KEY")
+        },
         // ===== Group 1c: Local inference (no API key) =====
         def_local("vllm", "vLLM", "http://localhost:8000/v1"),
         def_local("hosted_vllm", "Hosted vLLM", "http://localhost:8000/v1"),
@@ -326,5 +331,28 @@ fn def_local(
         auth_type: AuthType::None,
         skip_api_key: true,
         model_prefix: None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_xai_openai_compatible_pass_through_definition() {
+        let Some(definition) = get_definition("xai") else {
+            panic!("xAI provider definition should be registered");
+        };
+
+        assert_eq!(definition.name, "xai");
+        assert_eq!(definition.display_name, "xAI");
+        assert_eq!(definition.base_url, "https://api.x.ai/v1");
+        assert_eq!(definition.auth_env_var, "XAI_API_KEY");
+        assert_eq!(definition.auth_type, AuthType::Bearer);
+        assert!(!definition.skip_api_key);
+        assert_eq!(definition.model_prefix, Some("xai/"));
+
+        let config = definition.to_openai_like_config(Some("sk-test"), None);
+        assert_eq!(config.model_prefix.as_deref(), Some("xai/"));
     }
 }

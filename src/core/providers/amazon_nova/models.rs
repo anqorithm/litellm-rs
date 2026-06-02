@@ -98,6 +98,19 @@ impl AmazonNovaModelRegistry {
     pub fn new() -> Self {
         let mut models = HashMap::new();
 
+        // Nova 2 Lite - Bedrock runtime multimodal model
+        let nova_2_lite = AmazonNovaModel::new(
+            "amazon.nova-2-lite-v1:0",
+            "Amazon Nova 2 Lite",
+            "Cost-efficient multimodal model for automation, documents, and support",
+            1_000_000,
+            64_000,
+        )
+        .with_pricing(0.0003, 0.0025)
+        .with_vision()
+        .with_reasoning();
+        models.insert("amazon.nova-2-lite-v1:0".to_string(), nova_2_lite.clone());
+
         // Nova Pro - High capability model
         models.insert(
             "amazon.nova-pro-v1:0".to_string(),
@@ -172,6 +185,7 @@ impl AmazonNovaModelRegistry {
             .get("amazon.nova-premier-v1:0")
             .expect("nova-premier-v1:0 was just inserted")
             .clone();
+        models.insert("nova-2-lite".to_string(), nova_2_lite);
         models.insert("nova-pro".to_string(), nova_pro);
         models.insert("nova-lite".to_string(), nova_lite);
         models.insert("nova-micro".to_string(), nova_micro);
@@ -246,6 +260,7 @@ mod tests {
     #[test]
     fn test_model_registry_default() {
         let registry = AmazonNovaModelRegistry::new();
+        assert!(registry.is_supported("amazon.nova-2-lite-v1:0"));
         assert!(registry.is_supported("amazon.nova-pro-v1:0"));
         assert!(registry.is_supported("amazon.nova-lite-v1:0"));
         assert!(registry.is_supported("amazon.nova-micro-v1:0"));
@@ -254,6 +269,7 @@ mod tests {
     #[test]
     fn test_model_registry_aliases() {
         let registry = AmazonNovaModelRegistry::new();
+        assert!(registry.is_supported("nova-2-lite"));
         assert!(registry.is_supported("nova-pro"));
         assert!(registry.is_supported("nova-lite"));
         assert!(registry.is_supported("nova-micro"));
@@ -276,6 +292,17 @@ mod tests {
         assert!(pro.supports_vision);
         assert!(pro.supports_reasoning);
         assert!(pro.supports_tools);
+
+        let Some(nova_2_lite) = registry.get("amazon.nova-2-lite-v1:0") else {
+            panic!("nova 2 lite should be registered");
+        };
+        assert_eq!(nova_2_lite.context_length, 1_000_000);
+        assert_eq!(nova_2_lite.max_output_tokens, 64_000);
+        assert!(nova_2_lite.supports_vision);
+        assert!(nova_2_lite.supports_reasoning);
+        assert!(nova_2_lite.supports_tools);
+        assert_eq!(nova_2_lite.input_cost_per_1k, 0.0003);
+        assert_eq!(nova_2_lite.output_cost_per_1k, 0.0025);
 
         // Micro is text-only
         let micro = registry.get("amazon.nova-micro-v1:0").unwrap();
@@ -336,6 +363,9 @@ mod tests {
         let (input, output) = pricing.unwrap();
         assert!(input > 0.0);
         assert!(output > 0.0);
+
+        let nova_2_lite_pricing = registry.get_pricing("nova-2-lite");
+        assert_eq!(nova_2_lite_pricing, Some((0.0003, 0.0025)));
     }
 
     #[test]

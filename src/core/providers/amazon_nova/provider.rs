@@ -236,6 +236,10 @@ impl AmazonNovaProvider {
             body["tool_choice"] = serde_json::json!(tool_choice);
         }
 
+        if let Some(reasoning_effort) = &request.reasoning_effort {
+            body["reasoning_effort"] = serde_json::json!(reasoning_effort);
+        }
+
         body
     }
 
@@ -248,6 +252,7 @@ impl AmazonNovaProvider {
 
         // Map short names to full names
         match model {
+            "nova-2-lite" => "amazon.nova-2-lite-v1:0".to_string(),
             "nova-pro" => "amazon.nova-pro-v1:0".to_string(),
             "nova-lite" => "amazon.nova-lite-v1:0".to_string(),
             "nova-micro" => "amazon.nova-micro-v1:0".to_string(),
@@ -374,6 +379,10 @@ mod tests {
             "amazon.nova-pro-v1:0"
         );
         assert_eq!(
+            provider.normalize_model_name("nova-2-lite"),
+            "amazon.nova-2-lite-v1:0"
+        );
+        assert_eq!(
             provider.normalize_model_name("nova-lite"),
             "amazon.nova-lite-v1:0"
         );
@@ -420,11 +429,13 @@ mod tests {
             messages: vec![],
             max_tokens: Some(100),
             max_completion_tokens: Some(200), // Should take precedence
+            reasoning_effort: Some("high".to_string()),
             ..Default::default()
         };
 
         let body = provider.transform_chat_request(request);
         assert_eq!(body["max_tokens"], 200);
+        assert_eq!(body["reasoning_effort"], "high");
     }
 
     #[test]
