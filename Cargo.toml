@@ -16,6 +16,7 @@ include = [
     "src/**/*",
     "config/*.example",
     "config/*.template",
+    "config/model_prices_extended.json",
     "migrations/**/*",
     "build.rs",
     "Cargo.toml",

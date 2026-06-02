@@ -59,11 +59,16 @@ fn create_valid_config() -> GatewayConfig {
 // ==================== GatewayConfig Default Tests ====================
 
 #[test]
-fn test_default_pricing_source_matches_example_path() {
+fn test_default_pricing_source_uses_embedded_source() {
     let config = GatewayPricingConfig::default();
 
     assert_eq!(config.source.as_deref(), Some(DEFAULT_PRICING_SOURCE));
-    assert!(!std::path::Path::new(config.source.as_deref().unwrap()).is_absolute());
+    assert!(
+        config
+            .source
+            .as_deref()
+            .is_some_and(|source| source.starts_with("embedded://"))
+    );
 }
 
 #[test]
