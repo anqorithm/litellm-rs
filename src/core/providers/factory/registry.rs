@@ -187,9 +187,71 @@ impl Provider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use provider_registry::{ProviderDispatchKind, provider_type_registry};
 
     fn supported_factory_provider_types() -> Vec<ProviderType> {
         Provider::factory_supported_provider_types().to_vec()
+    }
+
+    fn minimal_dispatch_config() -> serde_json::Value {
+        serde_json::json!({
+            "api_key": "sk-test-key",
+            "api_base": "https://example.test/v1",
+            "base_url": "https://example.test/v1",
+            "endpoint": "https://example.test/v1",
+            "provider_name": "test-openai-compatible",
+            "organization": "test-account",
+            "account_id": "test-account",
+            "aws_access_key_id": "AKIA_TEST",
+            "aws_secret_access_key": "secret-test",
+            "aws_region": "us-east-1",
+            "skip_api_key": false
+        })
+    }
+
+    #[tokio::test]
+    async fn test_dispatch_kind_matches_runtime_variant() {
+        for entry in provider_type_registry() {
+            if !entry.is_dispatchable() {
+                continue;
+            }
+
+            let provider =
+                Provider::from_config_async(entry.provider_type.clone(), minimal_dispatch_config())
+                    .await
+                    .unwrap_or_else(|err| {
+                        panic!(
+                            "{:?} should be creatable for dispatch-kind guard: {}",
+                            entry.provider_type, err
+                        )
+                    });
+
+            match entry.dispatch_kind {
+                ProviderDispatchKind::Native => match (&entry.provider_type, &provider) {
+                    (ProviderType::OpenAI, Provider::OpenAI(_))
+                    | (ProviderType::Anthropic, Provider::Anthropic(_))
+                    | (ProviderType::Bedrock, Provider::Bedrock(_))
+                    | (ProviderType::Mistral, Provider::Mistral(_))
+                    | (ProviderType::Cloudflare, Provider::Cloudflare(_)) => {}
+                    _ => panic!(
+                        "{:?} is classified Native but created runtime provider {:?}",
+                        entry.provider_type,
+                        provider.provider_type()
+                    ),
+                },
+                ProviderDispatchKind::ExplicitOpenAiLike
+                | ProviderDispatchKind::CatalogOpenAiLike => assert!(
+                    matches!(provider, Provider::OpenAILike(_)),
+                    "{:?} is classified OpenAI-like but created {:?}",
+                    entry.provider_type,
+                    provider.provider_type()
+                ),
+                ProviderDispatchKind::UnsupportedEnum => unreachable!(
+                    "{:?} is not dispatchable and should have been skipped",
+                    entry.provider_type
+                ),
+            }
+        }
     }
 
     #[tokio::test]
