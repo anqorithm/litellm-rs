@@ -9,7 +9,7 @@
 /// Lifecycle decision for a provider module directory.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProviderModuleLifecycle {
-    /// The provider is reachable from the runtime factory or a supported runtime path.
+    /// The provider module is reachable through a native runtime `Provider` enum branch.
     Wire,
     /// The provider should be represented by catalog metadata instead of a code module.
     CatalogOnly,
@@ -34,18 +34,18 @@ pub static PROVIDER_MODULE_LIFECYCLE: &[ProviderModuleLifecycleEntry] = &[
         "ai21",
         "specialized provider module; not wired through the LLM factory yet",
     ),
-    wire(
+    stub(
         "amazon_nova",
-        "ProviderType::AmazonNova has an explicit OpenAI-compatible factory branch",
+        "native module retained; ProviderType::AmazonNova currently uses a generic OpenAI-compatible adapter",
     ),
     wire("anthropic", "native Provider enum variant"),
-    wire(
+    stub(
         "azure",
-        "ProviderType::Azure has an explicit OpenAI-compatible factory branch",
+        "native Azure module retained; ProviderType::Azure currently uses a generic OpenAI-compatible adapter",
     ),
-    wire(
+    stub(
         "azure_ai",
-        "ProviderType::AzureAI has an explicit OpenAI-compatible factory branch",
+        "native Azure AI module retained; ProviderType::AzureAI currently uses a generic OpenAI-compatible adapter",
     ),
     internal("base", "shared provider infrastructure"),
     stub(
@@ -99,9 +99,9 @@ pub static PROVIDER_MODULE_LIFECYCLE: &[ProviderModuleLifecycleEntry] = &[
         "specialized provider module; not wired through the LLM factory yet",
     ),
     internal("factory", "provider construction infrastructure"),
-    wire(
+    stub(
         "fal_ai",
-        "ProviderType::FalAI has an explicit OpenAI-compatible factory branch",
+        "native Fal AI module retained; ProviderType::FalAI currently uses a generic OpenAI-compatible adapter",
     ),
     stub(
         "firecrawl",
@@ -111,13 +111,13 @@ pub static PROVIDER_MODULE_LIFECYCLE: &[ProviderModuleLifecycleEntry] = &[
         "gemini",
         "specialized provider module used for model metadata but not wired through the LLM factory",
     ),
-    wire(
+    stub(
         "github",
-        "ProviderType::GitHub has an explicit OpenAI-compatible factory branch",
+        "native GitHub module retained; ProviderType::GitHub currently uses a generic OpenAI-compatible adapter",
     ),
-    wire(
+    stub(
         "github_copilot",
-        "ProviderType::GitHubCopilot has an explicit OpenAI-compatible factory branch",
+        "native GitHub Copilot module retained; ProviderType::GitHubCopilot currently uses a generic OpenAI-compatible adapter",
     ),
     stub(
         "gigachat",
@@ -148,9 +148,9 @@ pub static PROVIDER_MODULE_LIFECYCLE: &[ProviderModuleLifecycleEntry] = &[
         "manus",
         "specialized provider module; not wired through the LLM factory yet",
     ),
-    wire(
+    stub(
         "meta_llama",
-        "ProviderType::MetaLlama has an explicit OpenAI-compatible factory branch",
+        "native Meta Llama module retained; ProviderType::MetaLlama currently uses a generic OpenAI-compatible adapter",
     ),
     internal(
         "milvus",
@@ -196,9 +196,9 @@ pub static PROVIDER_MODULE_LIFECYCLE: &[ProviderModuleLifecycleEntry] = &[
         "specialized provider module; not wired through the LLM factory yet",
     ),
     internal("registry", "provider catalog and lifecycle infrastructure"),
-    wire(
+    stub(
         "replicate",
-        "ProviderType::Replicate has an explicit OpenAI-compatible factory branch",
+        "native Replicate module retained; ProviderType::Replicate currently uses a generic OpenAI-compatible adapter",
     ),
     stub(
         "runwayml",
@@ -241,17 +241,17 @@ pub static PROVIDER_MODULE_LIFECYCLE: &[ProviderModuleLifecycleEntry] = &[
         "triton",
         "specialized provider module; not wired through the LLM factory yet",
     ),
-    wire(
+    stub(
         "v0",
-        "ProviderType::V0 has an explicit OpenAI-compatible factory branch",
+        "native V0 module retained; ProviderType::V0 currently uses a generic OpenAI-compatible adapter",
     ),
     stub(
         "vercel_ai",
         "specialized provider module; not wired through the LLM factory yet",
     ),
-    wire(
+    stub(
         "vertex_ai",
-        "ProviderType::VertexAI has an explicit OpenAI-compatible factory branch",
+        "native Vertex AI module retained; ProviderType::VertexAI currently uses a generic OpenAI-compatible adapter",
     ),
     stub(
         "voyage",
@@ -303,6 +303,45 @@ mod tests {
             .iter()
             .map(|entry| entry.module_name)
             .collect()
+    }
+
+    fn lifecycle_for(module_name: &str) -> ProviderModuleLifecycle {
+        PROVIDER_MODULE_LIFECYCLE
+            .iter()
+            .find(|entry| entry.module_name == module_name)
+            .unwrap_or_else(|| panic!("missing lifecycle entry for {module_name}"))
+            .lifecycle
+    }
+
+    #[test]
+    fn lifecycle_classifies_phase0_key_provider_modules() {
+        assert_eq!(lifecycle_for("bedrock"), ProviderModuleLifecycle::Wire);
+        assert_eq!(lifecycle_for("vertex_ai"), ProviderModuleLifecycle::Stub);
+        assert_eq!(lifecycle_for("azure"), ProviderModuleLifecycle::Stub);
+        assert_eq!(lifecycle_for("azure_ai"), ProviderModuleLifecycle::Stub);
+        assert_eq!(lifecycle_for("cohere"), ProviderModuleLifecycle::Stub);
+        assert_eq!(lifecycle_for("gemini"), ProviderModuleLifecycle::Stub);
+    }
+
+    #[test]
+    fn lifecycle_wire_entries_are_native_runtime_modules() {
+        let actual = PROVIDER_MODULE_LIFECYCLE
+            .iter()
+            .filter(|entry| entry.lifecycle == ProviderModuleLifecycle::Wire)
+            .map(|entry| entry.module_name)
+            .collect::<BTreeSet<_>>();
+        let expected = [
+            "anthropic",
+            "bedrock",
+            "cloudflare",
+            "mistral",
+            "openai",
+            "openai_like",
+        ]
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+
+        assert_eq!(actual, expected);
     }
 
     #[test]
