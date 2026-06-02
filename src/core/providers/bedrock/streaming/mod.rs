@@ -21,8 +21,8 @@ pub struct BedrockStream {
     buffer: Vec<u8>,
     model_family: BedrockModelFamily,
     api_type: BedrockApiType,
+    completion_id: String,
     request_model_id: String,
-    request_id: String,
     created: i64,
 }
 
@@ -33,7 +33,6 @@ impl BedrockStream {
         model_family: BedrockModelFamily,
         api_type: BedrockApiType,
         request_model_id: impl Into<String>,
-        request_id: impl Into<String>,
     ) -> Self {
         let mapped_stream = stream
             .map(|result| result.map_err(|e| ProviderError::network("bedrock", e.to_string())));
@@ -43,8 +42,8 @@ impl BedrockStream {
             buffer: Vec::new(),
             model_family,
             api_type,
+            completion_id: format!("bedrock-{}", uuid::Uuid::new_v4()),
             request_model_id: request_model_id.into(),
-            request_id: request_id.into(),
             created: chrono::Utc::now().timestamp(),
         }
     }
@@ -206,7 +205,7 @@ impl BedrockStream {
         use crate::core::types::responses::ChatStreamChoice;
 
         ChatChunk {
-            id: self.request_id.clone(),
+            id: self.completion_id.clone(),
             object: "chat.completion.chunk".to_string(),
             created: self.created,
             model: self.request_model_id.clone(),

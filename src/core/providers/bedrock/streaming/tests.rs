@@ -122,17 +122,11 @@ fn test_parse_event_message_minimal() {
 
 fn create_test_stream(model_family: BedrockModelFamily, api_type: BedrockApiType) -> BedrockStream {
     let stream = futures::stream::empty::<Result<Bytes, reqwest::Error>>();
-    BedrockStream::new(
-        stream,
-        model_family,
-        api_type,
-        TEST_MODEL_ID,
-        TEST_REQUEST_ID,
-    )
+    BedrockStream::new(stream, model_family, api_type, TEST_MODEL_ID)
 }
 
 fn assert_chunk_metadata(stream: &BedrockStream, chunk: &crate::core::types::responses::ChatChunk) {
-    assert_eq!(chunk.id, stream.request_id);
+    assert_eq!(chunk.id, stream.completion_id);
     assert_eq!(chunk.model, stream.request_model_id);
     assert_eq!(chunk.created, stream.created);
 }
@@ -450,7 +444,6 @@ async fn test_stream_drains_buffered_events_on_eof() {
         BedrockModelFamily::Mistral,
         BedrockApiType::InvokeStream,
         TEST_MODEL_ID,
-        TEST_REQUEST_ID,
     );
 
     let first = bedrock_stream
@@ -469,7 +462,8 @@ async fn test_stream_drains_buffered_events_on_eof() {
     assert_eq!(first.id, second.id);
     assert_eq!(first.model, second.model);
     assert_eq!(first.created, second.created);
-    assert_eq!(first.id, TEST_REQUEST_ID);
+    assert_eq!(first.id, bedrock_stream.completion_id);
+    assert_ne!(first.id, TEST_REQUEST_ID);
     assert_eq!(first.model, TEST_MODEL_ID);
     assert!(bedrock_stream.next().await.is_none());
 }
@@ -491,7 +485,6 @@ async fn test_stream_surfaces_bedrock_exception_events() {
         BedrockModelFamily::Mistral,
         BedrockApiType::InvokeStream,
         TEST_MODEL_ID,
-        TEST_REQUEST_ID,
     );
 
     let err = bedrock_stream
@@ -765,16 +758,16 @@ fn test_bedrock_stream_creation() {
         BedrockModelFamily::Claude,
         BedrockApiType::InvokeStream,
         TEST_MODEL_ID,
-        TEST_REQUEST_ID,
     );
     assert!(bedrock_stream.buffer.is_empty());
+    assert!(bedrock_stream.completion_id.starts_with("bedrock-"));
     assert_eq!(bedrock_stream.request_model_id, TEST_MODEL_ID);
-    assert_eq!(bedrock_stream.request_id, TEST_REQUEST_ID);
+    assert_ne!(bedrock_stream.completion_id, TEST_REQUEST_ID);
 }
 
 #[test]
 fn test_bedrock_stream_different_models() {
-    let streams = vec![
+    let streams = [
         create_test_stream_claude(),
         create_test_stream(BedrockModelFamily::Nova, BedrockApiType::ConverseStream),
         create_test_stream_titan(),
