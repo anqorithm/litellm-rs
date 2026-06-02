@@ -775,7 +775,7 @@ fn test_bedrock_stream_completion_id_is_generated_per_stream() {
 
 #[test]
 fn test_bedrock_stream_different_models() {
-    let streams = vec![
+    let streams = [
         create_test_stream_claude(),
         create_test_stream(BedrockModelFamily::Nova, BedrockApiType::ConverseStream),
         create_test_stream_titan(),
