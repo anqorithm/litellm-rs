@@ -282,7 +282,7 @@ static MODEL_PRICING: LazyLock<HashMap<&'static str, ModelPricing>> = LazyLock::
         "mistral.voxtral-mini-3b-2507",
         "mistral.voxtral-small-24b-2507",
         "moonshot.kimi-k2-thinking",
-        "moonshot.kimi-k2.5",
+        "moonshotai.kimi-k2.5",
         "nvidia.nemotron-nano-12b-v2",
         "nvidia.nemotron-nano-9b-v2",
         "openai.gpt-oss-120b-1:0",
