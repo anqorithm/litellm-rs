@@ -496,7 +496,7 @@ mod tests {
         let usage = Usage::new(1000, 500);
 
         let nova = db.calculate("amazon.nova-2-lite-v1:0", &usage);
-        assert!((nova - 0.00018).abs() < 1e-12);
+        assert!((nova - 0.00155).abs() < 1e-12);
 
         let Some(nova_info) = db.get_model_info("amazon.nova-2-lite-v1:0") else {
             panic!("nova 2 lite pricing entry should exist");

@@ -192,6 +192,64 @@ impl DefaultRouter {
         Ok(Some(response))
     }
 
+    pub(super) async fn try_dynamic_provider_stream_creation(
+        &self,
+        chat_request: &ChatRequest,
+        context: RequestContext,
+        options: &CompletionOptions,
+    ) -> Result<Option<CompletionStream>> {
+        let api_key = match &options.api_key {
+            Some(key) => key.clone(),
+            None => return Ok(None),
+        };
+
+        let Some(route) = resolve_dynamic_provider_route(&chat_request.model, options) else {
+            return Ok(None);
+        };
+
+        debug!(
+            provider_type = %route.provider_type,
+            model = %route.actual_model,
+            "Creating dynamic streaming provider for model"
+        );
+
+        let stream = match route.provider_type {
+            "anthropic" => {
+                self.create_dynamic_anthropic_stream(
+                    route.actual_model,
+                    &api_key,
+                    &route.api_base,
+                    chat_request,
+                    context,
+                )
+                .await?
+            }
+            "azure_ai" => {
+                self.create_dynamic_azure_ai_stream(
+                    route.actual_model,
+                    &api_key,
+                    &route.api_base,
+                    chat_request,
+                    context,
+                )
+                .await?
+            }
+            _ => {
+                self.create_dynamic_openai_compatible_stream(
+                    route.actual_model,
+                    &api_key,
+                    &route.api_base,
+                    chat_request,
+                    context,
+                    route.provider_label,
+                )
+                .await?
+            }
+        };
+
+        Ok(Some(stream))
+    }
+
     /// Create dynamic Anthropic provider
     async fn create_dynamic_anthropic(
         &self,
@@ -220,6 +278,35 @@ impl DefaultRouter {
             })?;
 
         convert_from_chat_completion_response(response)
+    }
+
+    async fn create_dynamic_anthropic_stream(
+        &self,
+        model: &str,
+        api_key: &str,
+        api_base: &str,
+        chat_request: &ChatRequest,
+        context: RequestContext,
+    ) -> Result<CompletionStream> {
+        use crate::core::providers::anthropic::{AnthropicConfig, AnthropicProvider};
+        use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
+
+        let config = AnthropicConfig::new(api_key)
+            .with_base_url(api_base)
+            .with_experimental(false);
+        let provider = AnthropicProvider::new(config)?;
+
+        let mut updated_request = chat_request.clone();
+        updated_request.model = model.to_string();
+        updated_request.stream = true;
+
+        let stream = LLMProvider::chat_completion_stream(&provider, updated_request, context)
+            .await
+            .map_err(|e| {
+                GatewayError::internal(format!("Dynamic Anthropic streaming error: {}", e))
+            })?;
+
+        Ok(convert_provider_stream(stream, "Anthropic"))
     }
 
     /// Create dynamic OpenAI-compatible provider
@@ -273,6 +360,57 @@ impl DefaultRouter {
         convert_from_chat_completion_response(response)
     }
 
+    async fn create_dynamic_openai_compatible_stream(
+        &self,
+        model: &str,
+        api_key: &str,
+        api_base: &str,
+        chat_request: &ChatRequest,
+        context: RequestContext,
+        provider_name: &str,
+    ) -> Result<CompletionStream> {
+        use crate::core::providers::base::BaseConfig;
+        use crate::core::providers::openai::OpenAIProvider;
+        use crate::core::providers::openai::config::OpenAIConfig;
+        use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
+
+        let config = OpenAIConfig {
+            base: BaseConfig {
+                api_key: Some(api_key.to_string()),
+                api_base: Some(api_base.to_string()),
+                timeout: 60,
+                max_retries: 3,
+                headers: Default::default(),
+                organization: None,
+                api_version: None,
+            },
+            organization: None,
+            project: None,
+            model_mappings: Default::default(),
+            features: Default::default(),
+        };
+
+        let provider = OpenAIProvider::new(config).await.map_err(|e| {
+            GatewayError::internal(format!(
+                "Failed to create dynamic {} streaming provider: {}",
+                provider_name, e
+            ))
+        })?;
+
+        let mut updated_request = chat_request.clone();
+        updated_request.model = model.to_string();
+        updated_request.stream = true;
+
+        let stream = provider
+            .chat_completion_stream(updated_request, context)
+            .await
+            .map_err(|e| {
+                GatewayError::internal(format!("Dynamic {} streaming error: {}", provider_name, e))
+            })?;
+
+        Ok(convert_provider_stream(stream, provider_name))
+    }
+
     /// Create dynamic Azure AI provider
     #[cfg(feature = "providers-extra")]
     async fn create_dynamic_azure_ai(
@@ -319,6 +457,54 @@ impl DefaultRouter {
         convert_from_chat_completion_response(response)
     }
 
+    #[cfg(feature = "providers-extra")]
+    async fn create_dynamic_azure_ai_stream(
+        &self,
+        model: &str,
+        api_key: &str,
+        api_base: &str,
+        chat_request: &ChatRequest,
+        context: RequestContext,
+    ) -> Result<CompletionStream> {
+        use crate::core::providers::azure_ai::{AzureAIConfig, AzureAIProvider};
+        use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
+
+        let mut config = AzureAIConfig::new("azure_ai");
+        config.base.api_key = Some(api_key.to_string());
+        config.base.api_base = Some(api_base.to_string());
+
+        if config.base.api_key.is_none()
+            && let Ok(key) = std::env::var("AZURE_AI_API_KEY")
+        {
+            config.base.api_key = Some(key);
+        }
+        if config.base.api_base.is_none()
+            && let Ok(base) = std::env::var("AZURE_AI_API_BASE")
+        {
+            config.base.api_base = Some(base);
+        }
+
+        let provider = AzureAIProvider::new(config).map_err(|e| {
+            GatewayError::internal(format!(
+                "Failed to create dynamic Azure AI streaming provider: {}",
+                e
+            ))
+        })?;
+
+        let mut updated_request = chat_request.clone();
+        updated_request.model = model.to_string();
+        updated_request.stream = true;
+
+        let stream = provider
+            .chat_completion_stream(updated_request, context)
+            .await
+            .map_err(|e| {
+                GatewayError::internal(format!("Dynamic Azure AI streaming error: {}", e))
+            })?;
+
+        Ok(convert_provider_stream(stream, "Azure AI"))
+    }
+
     /// Create dynamic Azure AI provider (stub when providers-extra is disabled)
     #[cfg(not(feature = "providers-extra"))]
     async fn create_dynamic_azure_ai(
@@ -334,6 +520,43 @@ impl DefaultRouter {
             "dynamic azure_ai requires the `providers-extra` feature",
         ))
     }
+
+    #[cfg(not(feature = "providers-extra"))]
+    async fn create_dynamic_azure_ai_stream(
+        &self,
+        _model: &str,
+        _api_key: &str,
+        _api_base: &str,
+        _chat_request: &ChatRequest,
+        _context: RequestContext,
+    ) -> Result<CompletionStream> {
+        Err(GatewayError::not_implemented(
+            "dynamic azure_ai streaming requires the `providers-extra` feature",
+        ))
+    }
+}
+
+fn convert_provider_stream(
+    stream: std::pin::Pin<
+        Box<
+            dyn futures::Stream<
+                    Item = std::result::Result<
+                        crate::core::types::responses::ChatChunk,
+                        crate::core::providers::ProviderError,
+                    >,
+                > + Send,
+        >,
+    >,
+    provider_name: &str,
+) -> CompletionStream {
+    let provider_name = provider_name.to_string();
+    Box::pin(stream.map(move |result| {
+        result
+            .map(convert_chat_chunk_to_completion_chunk)
+            .map_err(|e| {
+                GatewayError::internal(format!("Dynamic {provider_name} stream chunk error: {e}"))
+            })
+    }))
 }
 
 #[cfg(test)]

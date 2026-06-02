@@ -244,6 +244,13 @@ impl Router for DefaultRouter {
         // Create request context
         let context = RequestContext::new();
 
+        if let Some(stream) = self
+            .try_dynamic_provider_stream_creation(&chat_request, context.clone(), &options)
+            .await?
+        {
+            return Ok(stream);
+        }
+
         // Find provider
         let providers = self.provider_registry.all();
 
