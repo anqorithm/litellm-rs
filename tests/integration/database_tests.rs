@@ -228,6 +228,74 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn test_storage_layer_allow_degraded_accepts_budget_only_schema_gap() {
+        let temp_dir = match TempDir::new() {
+            Ok(temp_dir) => temp_dir,
+            Err(err) => panic!("temp dir should be created: {}", err),
+        };
+        let migration_config = sqlite_file_db_config(&temp_dir, false);
+        let db = match Database::new(&migration_config).await {
+            Ok(db) => db,
+            Err(err) => panic!("SQLite file database should connect: {}", err),
+        };
+        let migrations = Migrator::migrations();
+        let budget_migration = migrations
+            .last()
+            .expect("budget migration should be last")
+            .name()
+            .to_string();
+        assert_eq!(
+            budget_migration, "m20240501_000001_create_budget_limit_snapshots",
+            "test setup depends on budget snapshots being the only pending migration"
+        );
+        let migrations_before_budget = match migrations.len().checked_sub(1) {
+            Some(count) => count,
+            None => panic!("migration list should not be empty"),
+        };
+        drop(migrations);
+        if let Err(err) = Migrator::up(db.connection(), Some(migrations_before_budget as u32)).await
+        {
+            panic!(
+                "core migrations should apply before budget migration: {}",
+                err
+            );
+        }
+        if let Err(err) = db.close().await {
+            panic!(
+                "database should close cleanly before startup check: {}",
+                err
+            );
+        }
+
+        let err = match StorageLayer::new(&storage_config(sqlite_file_db_config(&temp_dir, false)))
+            .await
+        {
+            Ok(_) => panic!("budget-only schema gap must fail when allow_degraded=false"),
+            Err(err) => err,
+        };
+        assert!(
+            err.to_string().contains(&budget_migration),
+            "error should identify the pending budget migration, got: {}",
+            err
+        );
+
+        let mut allow_degraded_config = sqlite_file_db_config(&temp_dir, false);
+        allow_degraded_config.allow_degraded = true;
+        let storage = match StorageLayer::new(&storage_config(allow_degraded_config)).await {
+            Ok(storage) => storage,
+            Err(err) => panic!(
+                "allow_degraded=true should allow startup when only budget migration is pending: {}",
+                err
+            ),
+        };
+        let budget_load = storage.database.load_budget_limit_snapshots().await;
+        assert!(
+            budget_load.is_err(),
+            "budget snapshots should remain unavailable for Server::new to degrade"
+        );
+    }
+
     #[tokio::test(flavor = "current_thread")]
     async fn test_storage_layer_sqlite_fallback_runs_startup_migrations() {
         let _guard = ENV_LOCK.lock().await;

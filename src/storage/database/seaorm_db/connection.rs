@@ -139,6 +139,15 @@ impl SeaOrmDatabase {
     /// Verify all repository migrations have already been applied without
     /// creating or modifying migration metadata.
     pub async fn verify_migrations_applied(&self) -> Result<()> {
+        self.verify_migrations_applied_except(&[]).await
+    }
+
+    /// Verify migrations while allowing explicitly degraded feature migrations
+    /// to remain pending.
+    pub async fn verify_migrations_applied_except(
+        &self,
+        allowed_pending_migrations: &[&str],
+    ) -> Result<()> {
         let applied_migrations = seaql_migrations::Entity::find()
             .all(&self.db)
             .await
@@ -156,7 +165,8 @@ impl SeaOrmDatabase {
             .into_iter()
             .filter_map(|migration| {
                 let name = migration.name();
-                (!applied_versions.contains(name)).then_some(name.to_string())
+                (!applied_versions.contains(name) && !allowed_pending_migrations.contains(&name))
+                    .then_some(name.to_string())
             })
             .collect();
 

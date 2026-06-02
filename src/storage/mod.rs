@@ -21,6 +21,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 
+const BUDGET_LIMIT_SNAPSHOT_MIGRATION: &str = "m20240501_000001_create_budget_limit_snapshots";
+
 /// Returns the default base directory for local gateway state.
 ///
 /// Resolution order:
@@ -184,13 +186,21 @@ impl StorageLayer {
         info!(
             "Database startup migrations disabled; verifying configured schema is already present"
         );
-        database.verify_migrations_applied().await.map_err(|e| {
-            GatewayError::Storage(format!(
-                "Database schema check failed while storage.database.auto_migrate=false. \
+        let allowed_pending = if config.allow_degraded {
+            &[BUDGET_LIMIT_SNAPSHOT_MIGRATION][..]
+        } else {
+            &[][..]
+        };
+        database
+            .verify_migrations_applied_except(allowed_pending)
+            .await
+            .map_err(|e| {
+                GatewayError::Storage(format!(
+                    "Database schema check failed while storage.database.auto_migrate=false. \
                  Run migrations before startup or set storage.database.auto_migrate=true: {}",
-                e
-            ))
-        })?;
+                    e
+                ))
+            })?;
         database.health_check().await.map_err(|e| {
             GatewayError::Storage(format!(
                 "Database health check failed while storage.database.auto_migrate=false: {}",
