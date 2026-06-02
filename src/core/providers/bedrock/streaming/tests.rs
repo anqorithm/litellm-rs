@@ -2,7 +2,6 @@ use super::*;
 use crate::core::providers::bedrock::model_config::{BedrockApiType, BedrockModelFamily};
 
 const TEST_MODEL_ID: &str = "anthropic.claude-3-haiku-20240307-v1:0";
-const TEST_REQUEST_ID: &str = "test-request-id";
 
 // ==================== HeaderValue Tests ====================
 
@@ -127,6 +126,7 @@ fn create_test_stream(model_family: BedrockModelFamily, api_type: BedrockApiType
 
 fn assert_chunk_metadata(stream: &BedrockStream, chunk: &crate::core::types::responses::ChatChunk) {
     assert_eq!(chunk.id, stream.completion_id);
+    assert!(chunk.id.starts_with("bedrock-"));
     assert_eq!(chunk.model, stream.request_model_id);
     assert_eq!(chunk.created, stream.created);
 }
@@ -463,7 +463,7 @@ async fn test_stream_drains_buffered_events_on_eof() {
     assert_eq!(first.model, second.model);
     assert_eq!(first.created, second.created);
     assert_eq!(first.id, bedrock_stream.completion_id);
-    assert_ne!(first.id, TEST_REQUEST_ID);
+    assert!(first.id.starts_with("bedrock-"));
     assert_eq!(first.model, TEST_MODEL_ID);
     assert!(bedrock_stream.next().await.is_none());
 }
@@ -762,7 +762,16 @@ fn test_bedrock_stream_creation() {
     assert!(bedrock_stream.buffer.is_empty());
     assert!(bedrock_stream.completion_id.starts_with("bedrock-"));
     assert_eq!(bedrock_stream.request_model_id, TEST_MODEL_ID);
-    assert_ne!(bedrock_stream.completion_id, TEST_REQUEST_ID);
+}
+
+#[test]
+fn test_bedrock_stream_completion_id_is_generated_per_stream() {
+    let first = create_test_stream_claude();
+    let second = create_test_stream_claude();
+
+    assert_ne!(first.completion_id, second.completion_id);
+    assert!(first.completion_id.starts_with("bedrock-"));
+    assert!(second.completion_id.starts_with("bedrock-"));
 }
 
 #[test]
