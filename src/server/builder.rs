@@ -44,7 +44,10 @@ impl Default for ServerBuilder {
 
 /// Run the server with automatic configuration loading
 pub async fn run_server() -> Result<()> {
-    run_server_with_config_path("config/gateway.yaml").await
+    info!("🚀 Starting Rust LiteLLM Gateway");
+
+    let config = load_default_config_or_env(Path::new("config/gateway.yaml")).await?;
+    run_server_with_loaded_config(config, None, None).await
 }
 
 /// Run the server with an explicit configuration path.
@@ -66,14 +69,21 @@ where
 {
     info!("🚀 Starting Rust LiteLLM Gateway");
 
-    // Auto-load configuration file
     let config_path = config_path.as_ref();
-    info!("📄 Loading configuration file: {}", config_path.display());
+    let config = load_explicit_config(config_path).await?;
+    run_server_with_loaded_config(config, host, port).await
+}
 
-    let mut config = match Config::from_file(config_path).await {
+pub(super) async fn load_default_config_or_env(config_path: &Path) -> Result<Config> {
+    info!(
+        "📄 Loading default configuration file: {}",
+        config_path.display()
+    );
+
+    match Config::from_file(config_path).await {
         Ok(config) => {
             info!("✅ Configuration file loaded successfully");
-            config
+            Ok(config)
         }
         Err(file_error) => {
             info!(
@@ -84,18 +94,37 @@ where
             match Config::from_env() {
                 Ok(config) => {
                     info!("✅ Loaded configuration from environment variables");
-                    config
+                    Ok(config)
                 }
-                Err(env_error) => {
-                    return Err(GatewayError::Config(format!(
-                        "Failed to load configuration from file ({}) and environment ({}).",
-                        file_error, env_error
-                    )));
-                }
+                Err(env_error) => Err(GatewayError::Config(format!(
+                    "Failed to load default configuration file ({}) and environment ({}).",
+                    file_error, env_error
+                ))),
             }
         }
-    };
+    }
+}
 
+pub(super) async fn load_explicit_config(config_path: &Path) -> Result<Config> {
+    info!(
+        "📄 Loading explicit configuration file: {}",
+        config_path.display()
+    );
+
+    Config::from_file(config_path).await.map_err(|file_error| {
+        GatewayError::Config(format!(
+            "Failed to load explicit configuration file {}: {}",
+            config_path.display(),
+            file_error
+        ))
+    })
+}
+
+async fn run_server_with_loaded_config(
+    mut config: Config,
+    host: Option<&str>,
+    port: Option<u16>,
+) -> Result<()> {
     if let Some(host) = host {
         config.gateway.server.host = host.to_string();
     }
