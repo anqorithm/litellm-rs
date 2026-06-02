@@ -496,7 +496,17 @@ impl LLMProvider for OpenAIProvider {
         // Return parameters based on model capabilities
         if let Some(model_spec) = self.model_registry.get_model_spec(model) {
             match model_spec.family {
-                super::models::OpenAIModelFamily::GPT55 => &[
+                super::models::OpenAIModelFamily::GPT5
+                | super::models::OpenAIModelFamily::GPT5Mini
+                | super::models::OpenAIModelFamily::GPT5Nano
+                | super::models::OpenAIModelFamily::GPT51
+                | super::models::OpenAIModelFamily::GPT51Thinking
+                | super::models::OpenAIModelFamily::GPT52
+                | super::models::OpenAIModelFamily::GPT52Codex
+                | super::models::OpenAIModelFamily::GPT54
+                | super::models::OpenAIModelFamily::GPT54Mini
+                | super::models::OpenAIModelFamily::GPT54Nano
+                | super::models::OpenAIModelFamily::GPT55 => &[
                     "messages",
                     "model",
                     "temperature",
@@ -518,8 +528,13 @@ impl LLMProvider for OpenAIProvider {
                     "logprobs",
                     "top_logprobs",
                     "reasoning_effort",
+                    "store",
+                    "metadata",
+                    "service_tier",
                 ],
-                super::models::OpenAIModelFamily::GPT55Pro => &[
+                super::models::OpenAIModelFamily::GPT52Pro
+                | super::models::OpenAIModelFamily::GPT54Pro
+                | super::models::OpenAIModelFamily::GPT55Pro => &[
                     "messages",
                     "model",
                     "temperature",
@@ -540,10 +555,19 @@ impl LLMProvider for OpenAIProvider {
                     "logprobs",
                     "top_logprobs",
                     "reasoning_effort",
+                    "store",
+                    "metadata",
+                    "service_tier",
                 ],
                 super::models::OpenAIModelFamily::GPT4
                 | super::models::OpenAIModelFamily::GPT4Turbo
-                | super::models::OpenAIModelFamily::GPT4O => &[
+                | super::models::OpenAIModelFamily::GPT4O
+                | super::models::OpenAIModelFamily::GPT4OMini
+                | super::models::OpenAIModelFamily::GPT41
+                | super::models::OpenAIModelFamily::GPT41Mini
+                | super::models::OpenAIModelFamily::GPT41Nano
+                | super::models::OpenAIModelFamily::GPT4OAudio
+                | super::models::OpenAIModelFamily::GPTAudio => &[
                     "messages",
                     "model",
                     "temperature",
@@ -564,6 +588,9 @@ impl LLMProvider for OpenAIProvider {
                     "logit_bias",
                     "logprobs",
                     "top_logprobs",
+                    "store",
+                    "metadata",
+                    "service_tier",
                 ],
                 super::models::OpenAIModelFamily::GPT35 => &[
                     "messages",
@@ -582,12 +609,21 @@ impl LLMProvider for OpenAIProvider {
                     "n",
                     "logit_bias",
                 ],
-                super::models::OpenAIModelFamily::O1 => &[
+                super::models::OpenAIModelFamily::O1
+                | super::models::OpenAIModelFamily::O1Pro
+                | super::models::OpenAIModelFamily::O3
+                | super::models::OpenAIModelFamily::O3Pro
+                | super::models::OpenAIModelFamily::O3Mini
+                | super::models::OpenAIModelFamily::O4Mini => &[
                     "messages",
                     "model",
                     "max_completion_tokens",
                     "stream",
                     "user",
+                    "reasoning_effort",
+                    "store",
+                    "metadata",
+                    "service_tier",
                 ],
                 _ => &[
                     "messages",

@@ -240,6 +240,9 @@ fn test_get_supported_openai_params_gpt55() {
     assert!(params.contains(&"response_format"));
     assert!(params.contains(&"stream"));
     assert!(params.contains(&"reasoning_effort"));
+    assert!(params.contains(&"store"));
+    assert!(params.contains(&"metadata"));
+    assert!(params.contains(&"service_tier"));
     assert_eq!(params, prefixed_params);
 }
 
@@ -253,8 +256,55 @@ fn test_get_supported_openai_params_gpt55_pro() {
     assert!(params.contains(&"tool_choice"));
     assert!(params.contains(&"response_format"));
     assert!(params.contains(&"reasoning_effort"));
+    assert!(params.contains(&"store"));
+    assert!(params.contains(&"metadata"));
+    assert!(params.contains(&"service_tier"));
     assert!(!params.contains(&"stream"));
     assert_eq!(params, prefixed_params);
+}
+
+#[test]
+fn test_get_supported_openai_params_advertises_forwarded_chat_fields() {
+    let provider = create_test_provider();
+
+    for model in [
+        "gpt-4o",
+        "gpt-4o-mini",
+        "gpt-4o-audio-preview",
+        "gpt-audio",
+        "gpt-4.1",
+        "gpt-4.1-mini",
+        "gpt-4.1-nano",
+        "gpt-5",
+        "gpt-5-mini",
+        "gpt-5-nano",
+        "gpt-5.1",
+        "gpt-5.1-thinking",
+        "gpt-5.2",
+        "gpt-5.2-pro",
+        "gpt-5.2-codex",
+        "gpt-5.4",
+        "gpt-5.4-mini",
+        "gpt-5.4-pro",
+        "gpt-5.4-nano",
+        "gpt-5.5",
+        "gpt-5.5-pro",
+        "o1-preview",
+        "o1-pro",
+        "o3",
+        "o3-pro",
+        "o3-mini",
+        "o4-mini",
+    ] {
+        let params = provider.get_supported_openai_params(model);
+
+        for forwarded_param in ["store", "metadata", "service_tier"] {
+            assert!(
+                params.contains(&forwarded_param),
+                "{model} supported params should advertise forwarded field {forwarded_param}"
+            );
+        }
+    }
 }
 
 #[test]
