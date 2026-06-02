@@ -589,7 +589,7 @@ fn test_gateway_config_merge_pricing_uses_explicit_default_overlay_source() {
 
 #[test]
 fn test_gateway_config_merge_pricing_uses_env_default_overlay_source() {
-    let _guard = ENV_LOCK.lock().unwrap();
+    let _guard = GATEWAY_ENV_LOCK.blocking_lock();
     clear_test_env();
     unsafe {
         env::set_var(ENV_ENABLE_JWT, "false");
