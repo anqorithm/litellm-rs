@@ -500,17 +500,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_server_creation() {
-        let config = McpServerConfig::new("test", "https://example.com/mcp");
+        let config = McpServerConfig::new("test", "https://1.1.1.1/mcp");
         let server = McpServer::new(config).unwrap();
 
         assert_eq!(server.name(), "test");
-        assert_eq!(server.url(), "https://example.com/mcp");
+        assert_eq!(server.url(), "https://1.1.1.1/mcp");
         assert!(!server.is_connected().await);
     }
 
     #[tokio::test]
     async fn test_server_with_auth() {
-        let config = McpServerConfig::new("test", "https://example.com/mcp")
+        let config = McpServerConfig::new("test", "https://1.1.1.1/mcp")
             .with_auth(AuthConfig::bearer("token123"));
 
         let server = McpServer::new(config).unwrap();
@@ -523,7 +523,7 @@ mod tests {
 
         // Register a server
         registry
-            .register(McpServerConfig::new("server1", "https://example.com/mcp1"))
+            .register(McpServerConfig::new("server1", "https://1.1.1.1/mcp1"))
             .await
             .unwrap();
 
@@ -544,13 +544,13 @@ mod tests {
         let registry = McpServerRegistry::new();
 
         registry
-            .register(McpServerConfig::new("server1", "https://example.com/mcp1"))
+            .register(McpServerConfig::new("server1", "https://1.1.1.1/mcp1"))
             .await
             .unwrap();
 
         // Registering again should fail
         let result = registry
-            .register(McpServerConfig::new("server1", "https://example.com/mcp2"))
+            .register(McpServerConfig::new("server1", "https://1.1.1.1/mcp2"))
             .await;
 
         assert!(matches!(result, Err(McpError::ServerAlreadyExists { .. })));
@@ -561,7 +561,7 @@ mod tests {
         let registry = McpServerRegistry::new();
 
         registry
-            .register(McpServerConfig::new("server1", "https://example.com/mcp1"))
+            .register(McpServerConfig::new("server1", "https://1.1.1.1/mcp1"))
             .await
             .unwrap();
 
@@ -572,7 +572,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_server_initial_state() {
-        let config = McpServerConfig::new("test", "https://example.com/mcp");
+        let config = McpServerConfig::new("test", "https://1.1.1.1/mcp");
         let server = McpServer::new(config).unwrap();
 
         assert_eq!(server.state().await, ServerState::Disconnected);
@@ -616,7 +616,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_tools_baseline_rejects_definition_change() {
-        let config = McpServerConfig::new("test", "https://example.com/mcp");
+        let config = McpServerConfig::new("test", "https://1.1.1.1/mcp");
         let server = McpServer::new(config).unwrap();
         let initial = ToolList {
             tools: vec![Tool::new("search").with_description("Search docs")],

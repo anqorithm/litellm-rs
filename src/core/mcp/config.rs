@@ -487,7 +487,7 @@ mod tests {
     #[test]
     fn test_server_config_validation_valid_http() {
         let config =
-            McpServerConfig::new("test", "https://example.com").with_transport(Transport::Http);
+            McpServerConfig::new("test", "https://1.1.1.1").with_transport(Transport::Http);
         assert!(config.validate().is_ok());
     }
 
@@ -520,7 +520,7 @@ mod tests {
 
     #[test]
     fn test_server_config_validation_allows_public_websocket() {
-        let config = McpServerConfig::new("test", "wss://mcp.example.com/socket")
+        let config = McpServerConfig::new("test", "wss://1.1.1.1/socket")
             .with_transport(Transport::WebSocket);
         assert!(config.validate().is_ok());
     }

@@ -430,7 +430,7 @@ mod tests {
     #[test]
     fn test_agent_config_validation() {
         // Valid config
-        let config = AgentConfig::new("test", "https://example.com");
+        let config = AgentConfig::new("test", "https://1.1.1.1");
         assert!(config.validate().is_ok());
 
         // Empty name
@@ -557,8 +557,8 @@ mod tests {
     }
 
     #[test]
-    fn test_ssrf_public_domain_allowed() {
-        let config = AgentConfig::new("test", "https://api.example.com/v1/agent");
+    fn test_ssrf_additional_public_ip_allowed() {
+        let config = AgentConfig::new("test", "https://1.1.1.1/v1/agent");
         assert!(config.validate().is_ok());
     }
 

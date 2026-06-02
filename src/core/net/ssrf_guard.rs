@@ -1,7 +1,7 @@
 //! SSRF guard helpers for outbound URLs.
 
 use std::fmt;
-use std::net::IpAddr;
+use std::net::{IpAddr, ToSocketAddrs};
 use url::Url;
 
 /// Error returned when an outbound URL is not safe to use.
@@ -11,6 +11,7 @@ pub enum SsrfError {
     UnsupportedScheme { scheme: String },
     MissingHost { url: String },
     PrivateOrReservedHost { host: String },
+    HostResolutionFailed { host: String, message: String },
 }
 
 impl fmt::Display for SsrfError {
@@ -28,6 +29,10 @@ impl fmt::Display for SsrfError {
             SsrfError::PrivateOrReservedHost { host } => write!(
                 f,
                 "Outbound URL targets a private or reserved address '{host}', which is not allowed (SSRF protection)"
+            ),
+            SsrfError::HostResolutionFailed { host, message } => write!(
+                f,
+                "Outbound URL host '{host}' could not be resolved: {message} (SSRF protection)"
             ),
         }
     }
@@ -48,6 +53,13 @@ pub fn validate_outbound_url_str(raw_url: &str) -> Result<Url, SsrfError> {
 
 /// Validate an already parsed outbound URL.
 pub fn validate_outbound_url(url: &Url) -> Result<(), SsrfError> {
+    validate_outbound_url_with_resolver(url, resolve_host_addresses)
+}
+
+fn validate_outbound_url_with_resolver<F>(url: &Url, resolver: F) -> Result<(), SsrfError>
+where
+    F: Fn(&str, u16) -> Result<Vec<IpAddr>, SsrfError>,
+{
     match url.scheme() {
         "http" | "https" | "ws" | "wss" => {}
         scheme => {
@@ -65,7 +77,38 @@ pub fn validate_outbound_url(url: &Url) -> Result<(), SsrfError> {
         return Err(SsrfError::PrivateOrReservedHost { host });
     }
 
+    if !is_literal_ip_host(&host) {
+        let port = url.port_or_known_default().unwrap_or(0);
+        let addresses = resolver(&host, port)?;
+
+        if addresses.is_empty() {
+            return Err(SsrfError::HostResolutionFailed {
+                host,
+                message: "no addresses returned".to_string(),
+            });
+        }
+
+        if let Some(address) = addresses
+            .iter()
+            .find(|address| is_private_or_reserved_ip(address))
+        {
+            return Err(SsrfError::PrivateOrReservedHost {
+                host: format!("{host} ({address})"),
+            });
+        }
+    }
+
     Ok(())
+}
+
+fn resolve_host_addresses(host: &str, port: u16) -> Result<Vec<IpAddr>, SsrfError> {
+    (host, port)
+        .to_socket_addrs()
+        .map(|addresses| addresses.map(|address| address.ip()).collect())
+        .map_err(|error| SsrfError::HostResolutionFailed {
+            host: host.to_string(),
+            message: error.to_string(),
+        })
 }
 
 /// Extract the lowercase host portion from a URL string.
@@ -96,6 +139,13 @@ pub fn is_private_or_reserved_host(host: &str) -> bool {
     }
 
     false
+}
+
+fn is_literal_ip_host(host: &str) -> bool {
+    host.trim()
+        .trim_matches(['[', ']'])
+        .parse::<IpAddr>()
+        .is_ok()
 }
 
 /// Check whether a parsed IP address falls within private or reserved ranges.
@@ -147,6 +197,13 @@ pub fn is_private_or_reserved_ip(ip: &IpAddr) -> bool {
 mod tests {
     use super::*;
     use std::net::{Ipv4Addr, Ipv6Addr};
+
+    fn parse_test_url(raw_url: &str) -> Url {
+        match Url::parse(raw_url) {
+            Ok(url) => url,
+            Err(error) => panic!("test URL should parse: {error}"),
+        }
+    }
 
     #[test]
     fn extract_url_host_parses_standard_hosts() {
@@ -214,7 +271,7 @@ mod tests {
 
     #[test]
     fn validate_outbound_url_rejects_private_targets() {
-        let url = Url::parse("http://169.254.169.254/latest/meta-data/").unwrap();
+        let url = parse_test_url("http://169.254.169.254/latest/meta-data/");
         assert!(matches!(
             validate_outbound_url(&url),
             Err(SsrfError::PrivateOrReservedHost { .. })
@@ -223,13 +280,67 @@ mod tests {
 
     #[test]
     fn validate_outbound_url_allows_public_targets() {
-        let url = Url::parse("https://api.example.com/v1").unwrap();
+        let url = parse_test_url("https://8.8.8.8/v1");
         assert!(validate_outbound_url(&url).is_ok());
     }
 
     #[test]
+    fn validate_outbound_url_rejects_hostname_resolving_to_private_address() {
+        let url = parse_test_url("https://api.example.com/v1");
+
+        let result = validate_outbound_url_with_resolver(&url, |_host, _port| {
+            Ok(vec![IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))])
+        });
+
+        assert!(matches!(
+            result,
+            Err(SsrfError::PrivateOrReservedHost { .. })
+        ));
+    }
+
+    #[test]
+    fn validate_outbound_url_allows_hostname_resolving_to_public_address() {
+        let url = parse_test_url("https://api.example.com/v1");
+
+        let result = validate_outbound_url_with_resolver(&url, |_host, _port| {
+            Ok(vec![IpAddr::V4(Ipv4Addr::new(93, 184, 216, 34))])
+        });
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn validate_outbound_url_rejects_unresolvable_hostname() {
+        let url = parse_test_url("https://api.example.com/v1");
+
+        let result = validate_outbound_url_with_resolver(&url, |host, _port| {
+            Err(SsrfError::HostResolutionFailed {
+                host: host.to_string(),
+                message: "lookup failed".to_string(),
+            })
+        });
+
+        assert!(matches!(
+            result,
+            Err(SsrfError::HostResolutionFailed { .. })
+        ));
+    }
+
+    #[test]
+    fn validate_outbound_url_rejects_empty_dns_answers() {
+        let url = parse_test_url("https://api.example.com/v1");
+
+        let result = validate_outbound_url_with_resolver(&url, |_host, _port| Ok(vec![]));
+
+        assert!(matches!(
+            result,
+            Err(SsrfError::HostResolutionFailed { .. })
+        ));
+    }
+
+    #[test]
     fn validate_outbound_url_rejects_unsupported_scheme() {
-        let url = Url::parse("file:///tmp/socket").unwrap();
+        let url = parse_test_url("file:///tmp/socket");
         assert!(matches!(
             validate_outbound_url(&url),
             Err(SsrfError::UnsupportedScheme { .. })
