@@ -412,6 +412,7 @@ impl Provider {
         output_tokens: u32,
     ) -> Result<f64, ProviderError> {
         use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
+        let model = self.strip_provider_prefix(model);
         dispatch_provider!(
             async_err,
             self,
@@ -420,6 +421,13 @@ impl Provider {
             input_tokens,
             output_tokens
         )
+    }
+
+    fn strip_provider_prefix<'a>(&self, model: &'a str) -> &'a str {
+        model
+            .strip_prefix(self.name())
+            .and_then(|model| model.strip_prefix('/'))
+            .unwrap_or(model)
     }
 
     /// Execute streaming chat completion
@@ -550,6 +558,25 @@ mod tests {
         assert!((alias_cost - canonical_cost).abs() < 1e-12);
         assert!((alias_cost - 0.0045).abs() < 1e-12);
         assert!((devstral_alias_cost - 0.0014).abs() < 1e-12);
+    }
+
+    #[tokio::test]
+    async fn test_provider_enum_calculate_cost_strips_openai_prefix() {
+        let mut config = openai::OpenAIConfig::default();
+        config.base.api_key = Some("sk-test123456789012345678901234567890123456".to_string());
+        let Ok(openai_provider) = openai::OpenAIProvider::new(config).await else {
+            panic!("OpenAI provider should initialize with a test API key");
+        };
+        let provider = Provider::OpenAI(openai_provider);
+
+        let Ok(cost) = provider
+            .calculate_cost("openai/gpt-5.5-pro", 1000, 500)
+            .await
+        else {
+            panic!("prefixed OpenAI cost should calculate");
+        };
+
+        assert!((cost - 0.12).abs() < 1e-12);
     }
 
     #[tokio::test]

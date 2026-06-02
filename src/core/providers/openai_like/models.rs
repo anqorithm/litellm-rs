@@ -347,7 +347,7 @@ pub fn is_xai_priced_model(model_id: &str) -> bool {
 }
 
 fn is_xai_grok_43_reasoning_effort_model(model_id: &str) -> bool {
-    matches!(model_id, "grok-4.3" | "grok-4.3-latest" | "grok-latest")
+    XAI_GROK_43_MODEL_IDS.contains(&model_id)
 }
 
 fn is_xai_grok_420_multi_agent_model(model_id: &str) -> bool {
@@ -489,6 +489,14 @@ mod tests {
     fn test_xai_reasoning_param_shape_by_model() {
         assert_eq!(
             xai_reasoning_param_for_model("xai/grok-4.3"),
+            Some(XaiReasoningParam::TopLevelReasoningEffort)
+        );
+        assert_eq!(
+            xai_reasoning_param_for_model("xai/grok-4"),
+            Some(XaiReasoningParam::TopLevelReasoningEffort)
+        );
+        assert_eq!(
+            xai_reasoning_param_for_model("xai/grok-3"),
             Some(XaiReasoningParam::TopLevelReasoningEffort)
         );
         assert_eq!(

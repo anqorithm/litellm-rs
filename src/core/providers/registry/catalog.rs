@@ -136,7 +136,10 @@ fn build_catalog() -> HashMap<&'static str, ProviderDefinition> {
         ),
         // xAI publishes OpenAI-compatible chat endpoints; model IDs are
         // passed through instead of enumerated in this static provider catalog.
-        def("xai", "xAI", "https://api.x.ai/v1", "XAI_API_KEY"),
+        ProviderDefinition {
+            model_prefix: Some("xai/"),
+            ..def("xai", "xAI", "https://api.x.ai/v1", "XAI_API_KEY")
+        },
         // ===== Group 1c: Local inference (no API key) =====
         def_local("vllm", "vLLM", "http://localhost:8000/v1"),
         def_local("hosted_vllm", "Hosted vLLM", "http://localhost:8000/v1"),
@@ -347,6 +350,9 @@ mod tests {
         assert_eq!(definition.auth_env_var, "XAI_API_KEY");
         assert_eq!(definition.auth_type, AuthType::Bearer);
         assert!(!definition.skip_api_key);
-        assert_eq!(definition.model_prefix, None);
+        assert_eq!(definition.model_prefix, Some("xai/"));
+
+        let config = definition.to_openai_like_config(Some("sk-test"), None);
+        assert_eq!(config.model_prefix.as_deref(), Some("xai/"));
     }
 }
