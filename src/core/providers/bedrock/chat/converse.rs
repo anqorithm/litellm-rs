@@ -337,8 +337,18 @@ pub(in crate::core::providers::bedrock) fn transform_to_converse(
                             tool_use: ToolUseBlock {
                                 tool_use_id: tool_call.id.clone(),
                                 name: tool_call.function.name.clone(),
-                                input: serde_json::from_str::<Value>(&tool_call.function.arguments)
-                                    .unwrap_or(Value::Object(Default::default())),
+                                input: serde_json::from_str::<Value>(
+                                    &tool_call.function.arguments,
+                                )
+                                .map_err(|err| {
+                                    ProviderError::invalid_request(
+                                        "bedrock",
+                                        format!(
+                                            "Invalid Bedrock assistant tool-call arguments JSON while building Converse ToolUse block for tool_call_id='{}', function='{}': {}",
+                                            tool_call.id, tool_call.function.name, err
+                                        ),
+                                    )
+                                })?,
                             },
                         });
                     }
@@ -671,6 +681,10 @@ fn tool_result_contents_from_value(value: &Value) -> Result<Vec<ToolResultConten
 #[cfg(test)]
 #[path = "converse_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "converse_tool_call_tests.rs"]
+mod tool_call_tests;
 
 #[cfg(test)]
 #[path = "converse_parameter_policy_tests.rs"]
