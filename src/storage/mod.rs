@@ -15,11 +15,13 @@ pub mod vector;
 
 pub use dependency_status::DependencyStatus;
 
-use crate::config::models::storage::StorageConfig;
+use crate::config::models::storage::{DatabaseConfig, StorageConfig};
 use crate::utils::error::gateway_error::{GatewayError, Result};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
+
+const BUDGET_LIMIT_SNAPSHOT_MIGRATION: &str = "m20240501_000001_create_budget_limit_snapshots";
 
 /// Returns the default base directory for local gateway state.
 ///
@@ -77,7 +79,7 @@ impl StorageLayer {
         // Initialize database
         debug!("Connecting to database");
         let database = Arc::new(database::Database::new(&config.database).await?);
-        database.migrate().await?;
+        Self::initialize_database_schema(&database, &config.database).await?;
 
         // Initialize Redis (fail-fast unless allow_degraded is set)
         debug!("Creating Redis connection pool");
@@ -169,6 +171,50 @@ impl StorageLayer {
             redis_status,
             vector_status,
         })
+    }
+
+    async fn initialize_database_schema(
+        database: &database::Database,
+        config: &DatabaseConfig,
+    ) -> Result<()> {
+        if Self::should_run_startup_migrations(database, config) {
+            info!("Running database migrations during storage startup");
+            database.migrate().await?;
+            return Ok(());
+        }
+
+        info!(
+            "Database startup migrations disabled; verifying configured schema is already present"
+        );
+        let allowed_pending = if config.allow_degraded {
+            &[BUDGET_LIMIT_SNAPSHOT_MIGRATION][..]
+        } else {
+            &[][..]
+        };
+        database
+            .verify_migrations_applied_except(allowed_pending)
+            .await
+            .map_err(|e| {
+                GatewayError::Storage(format!(
+                    "Database schema check failed while storage.database.auto_migrate=false. \
+                 Run migrations before startup or set storage.database.auto_migrate=true: {}",
+                    e
+                ))
+            })?;
+        database.health_check().await.map_err(|e| {
+            GatewayError::Storage(format!(
+                "Database health check failed while storage.database.auto_migrate=false: {}",
+                e
+            ))
+        })?;
+        Ok(())
+    }
+
+    fn should_run_startup_migrations(
+        database: &database::Database,
+        config: &DatabaseConfig,
+    ) -> bool {
+        !config.enabled || config.auto_migrate || database.is_sqlite_fallback()
     }
 
     /// Run database migrations
@@ -457,6 +503,7 @@ mod tests {
                 connection_timeout: 5,
                 ssl: false,
                 enabled: true,
+                auto_migrate: false,
                 fallback_to_sqlite: false,
                 allow_degraded: false,
             },
@@ -533,6 +580,56 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn configured_database_without_auto_migrate_requires_existing_schema() {
+        let config = StorageConfig {
+            database: DatabaseConfig {
+                url: "sqlite::memory:".to_string(),
+                max_connections: 1,
+                connection_timeout: 1,
+                ssl: false,
+                enabled: true,
+                auto_migrate: false,
+                fallback_to_sqlite: false,
+                allow_degraded: false,
+            },
+            redis: RedisConfig::default(),
+            files: FileStorageConfig::default(),
+            vector_db: None,
+        };
+
+        let err = match StorageLayer::new(&config).await {
+            Ok(_) => panic!("configured database without schema must fail when auto_migrate=false"),
+            Err(err) => err,
+        };
+        assert!(
+            err.to_string().contains("auto_migrate=false"),
+            "error should explain how to enable or run migrations, got: {}",
+            err
+        );
+    }
+
+    #[tokio::test]
+    async fn configured_database_with_auto_migrate_runs_startup_migrations() {
+        let config = StorageConfig {
+            database: sqlite_db_config(),
+            redis: RedisConfig::default(),
+            files: FileStorageConfig::default(),
+            vector_db: None,
+        };
+
+        let storage = match StorageLayer::new(&config).await {
+            Ok(storage) => storage,
+            Err(err) => panic!("auto_migrate=true should initialize SQLite schema: {}", err),
+        };
+        let snapshots = match storage.database.load_budget_limit_snapshots().await {
+            Ok(snapshots) => snapshots,
+            Err(err) => panic!("startup migration should create budget tables: {}", err),
+        };
+
+        assert!(snapshots.is_empty());
+    }
+
+    #[tokio::test]
     async fn storage_layer_migrate_is_idempotent_after_startup_migration() {
         let config = StorageConfig {
             database: DatabaseConfig::default(),
@@ -571,6 +668,7 @@ mod tests {
             connection_timeout: 1,
             ssl: false,
             enabled: true,
+            auto_migrate: true,
             fallback_to_sqlite: false,
             allow_degraded: false,
         }

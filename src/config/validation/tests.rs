@@ -240,6 +240,7 @@ fn test_database_validation_skips_when_disabled() {
         max_connections: 0,
         connection_timeout: 0,
         ssl: false,
+        auto_migrate: false,
         fallback_to_sqlite: false,
         allow_degraded: false,
     };

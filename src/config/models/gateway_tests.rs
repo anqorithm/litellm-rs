@@ -4,12 +4,14 @@ use std::sync::Mutex;
 
 static ENV_LOCK: Mutex<()> = Mutex::new(());
 
-const TEST_ENV_KEYS: [&str; 21] = [
+const TEST_ENV_KEYS: [&str; 23] = [
     ENV_HOST,
     ENV_PORT,
     ENV_WORKERS,
     ENV_TIMEOUT,
     ENV_DATABASE_URL,
+    ENV_DATABASE_ENABLED,
+    ENV_DATABASE_AUTO_MIGRATE,
     ENV_ENABLE_JWT,
     ENV_ENABLE_API_KEY,
     ENV_JWT_SECRET,
@@ -82,6 +84,8 @@ fn test_gateway_config_from_env() {
             ENV_DATABASE_URL,
             "postgresql://env-user:env-pass@localhost/env-db",
         );
+        env::set_var(ENV_DATABASE_ENABLED, "true");
+        env::set_var(ENV_DATABASE_AUTO_MIGRATE, "true");
         env::set_var(ENV_ENABLE_JWT, "true");
         env::set_var(ENV_JWT_SECRET, "StrongJwtSecretWithMixedCaseAndNumbers1234");
         env::set_var(ENV_PROVIDERS, "openai");
@@ -107,6 +111,8 @@ fn test_gateway_config_from_env() {
         config.storage.database.url,
         "postgresql://env-user:env-pass@localhost/env-db"
     );
+    assert!(config.storage.database.enabled);
+    assert!(config.storage.database.auto_migrate);
     assert_eq!(config.providers.len(), 1);
     assert_eq!(config.providers[0].name, "openai");
     assert_eq!(config.providers[0].provider_type, "openai");

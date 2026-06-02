@@ -88,6 +88,9 @@ storage:
     connection_timeout: 5
     ssl: false
     enabled: false
+    # Keep false in production runtime. Run migrations before startup, or set
+    # true only when this process is allowed to execute database DDL.
+    auto_migrate: false
   redis:
     url: "redis://localhost:6379"
     # Enable only when Redis is deployed; otherwise the gateway uses local

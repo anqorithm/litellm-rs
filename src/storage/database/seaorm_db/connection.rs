@@ -1,7 +1,8 @@
 use crate::config::models::storage::DatabaseConfig;
 use crate::utils::error::gateway_error::{GatewayError, Result};
 use sea_orm::*;
-use sea_orm_migration::MigratorTrait;
+use sea_orm_migration::{MigratorTrait, seaql_migrations};
+use std::collections::HashSet;
 use std::time::Duration;
 use tracing::{debug, info, warn};
 
@@ -26,7 +27,11 @@ impl SeaOrmDatabase {
                     DatabaseBackendType::PostgreSQL
                 };
                 info!("Database connection established ({:?})", backend_type);
-                Ok(Self { db, backend_type })
+                Ok(Self {
+                    db,
+                    backend_type,
+                    sqlite_fallback: false,
+                })
             }
             Err(e) => {
                 if config.fallback_to_sqlite
@@ -59,6 +64,7 @@ impl SeaOrmDatabase {
         Ok(Self {
             db,
             backend_type: DatabaseBackendType::SQLite,
+            sqlite_fallback: false,
         })
     }
 
@@ -105,6 +111,7 @@ impl SeaOrmDatabase {
         Ok(Self {
             db,
             backend_type: DatabaseBackendType::SQLite,
+            sqlite_fallback: true,
         })
     }
 
@@ -115,7 +122,7 @@ impl SeaOrmDatabase {
 
     /// Check if using SQLite fallback
     pub fn is_sqlite_fallback(&self) -> bool {
-        self.backend_type == DatabaseBackendType::SQLite
+        self.sqlite_fallback
     }
 
     /// Run database migrations
@@ -127,6 +134,50 @@ impl SeaOrmDatabase {
         })?;
         info!("Database migrations completed successfully");
         Ok(())
+    }
+
+    /// Verify all repository migrations have already been applied without
+    /// creating or modifying migration metadata.
+    pub async fn verify_migrations_applied(&self) -> Result<()> {
+        self.verify_migrations_applied_except(&[]).await
+    }
+
+    /// Verify migrations while allowing explicitly degraded feature migrations
+    /// to remain pending.
+    pub async fn verify_migrations_applied_except(
+        &self,
+        allowed_pending_migrations: &[&str],
+    ) -> Result<()> {
+        let applied_migrations = seaql_migrations::Entity::find()
+            .all(&self.db)
+            .await
+            .map_err(|e| {
+                GatewayError::Storage(format!(
+                    "Database migration metadata is missing or unreadable: {}",
+                    e
+                ))
+            })?;
+        let applied_versions: HashSet<String> = applied_migrations
+            .into_iter()
+            .map(|migration| migration.version)
+            .collect();
+        let pending_migrations: Vec<String> = Migrator::get_migration_files()
+            .into_iter()
+            .filter_map(|migration| {
+                let name = migration.name();
+                (!applied_versions.contains(name) && !allowed_pending_migrations.contains(&name))
+                    .then_some(name.to_string())
+            })
+            .collect();
+
+        if pending_migrations.is_empty() {
+            return Ok(());
+        }
+
+        Err(GatewayError::Storage(format!(
+            "Database schema has pending migrations: {}",
+            pending_migrations.join(", ")
+        )))
     }
 
     /// Get the underlying database connection
