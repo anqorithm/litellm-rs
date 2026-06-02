@@ -5,12 +5,42 @@
 
 #[cfg(test)]
 mod tests {
+    use litellm_rs::config::models::file_storage::FileStorageConfig;
     use litellm_rs::config::models::storage::DatabaseConfig;
+    use litellm_rs::config::models::storage::{RedisConfig, StorageConfig};
     use litellm_rs::core::models::user::types::User;
     use litellm_rs::core::models::{ApiKey, Metadata, RateLimits, UsageStats};
-    use litellm_rs::storage::database::{Database, DatabaseBackendType};
+    use litellm_rs::storage::StorageLayer;
+    use litellm_rs::storage::database::{Database, DatabaseBackendType, migration::Migrator};
     use sea_orm::{ConnectionTrait, DatabaseBackend, Statement, Value};
+    use sea_orm_migration::MigratorTrait;
+    use tempfile::TempDir;
     use uuid::Uuid;
+
+    fn sqlite_file_db_config(temp_dir: &TempDir, auto_migrate: bool) -> DatabaseConfig {
+        DatabaseConfig {
+            url: format!(
+                "sqlite://{}?mode=rwc",
+                temp_dir.path().join("gateway.db").display()
+            ),
+            max_connections: 1,
+            connection_timeout: 1,
+            ssl: false,
+            enabled: true,
+            auto_migrate,
+            fallback_to_sqlite: false,
+            allow_degraded: false,
+        }
+    }
+
+    fn storage_config(database: DatabaseConfig) -> StorageConfig {
+        StorageConfig {
+            database,
+            redis: RedisConfig::default(),
+            files: FileStorageConfig::default(),
+            vector_db: None,
+        }
+    }
 
     /// Test basic database connection and health check
     #[tokio::test]
@@ -21,6 +51,7 @@ mod tests {
             connection_timeout: 5,
             ssl: false,
             enabled: true,
+            auto_migrate: false,
             fallback_to_sqlite: false,
             allow_degraded: false,
         };
@@ -51,6 +82,7 @@ mod tests {
             connection_timeout: 5,
             ssl: false,
             enabled: true,
+            auto_migrate: false,
             fallback_to_sqlite: false,
             allow_degraded: false,
         };
@@ -70,6 +102,7 @@ mod tests {
             connection_timeout: 5,
             ssl: false,
             enabled: true,
+            auto_migrate: false,
             fallback_to_sqlite: false,
             allow_degraded: false,
         };
@@ -97,6 +130,79 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_storage_layer_auto_migrate_false_accepts_pre_migrated_schema() {
+        let temp_dir = match TempDir::new() {
+            Ok(temp_dir) => temp_dir,
+            Err(err) => panic!("temp dir should be created: {}", err),
+        };
+        let migration_config = sqlite_file_db_config(&temp_dir, false);
+        let db = match Database::new(&migration_config).await {
+            Ok(db) => db,
+            Err(err) => panic!("SQLite file database should connect: {}", err),
+        };
+        if let Err(err) = db.migrate().await {
+            panic!("manual migration should prepare schema: {}", err);
+        }
+        if let Err(err) = db.close().await {
+            panic!(
+                "database should close cleanly before startup check: {}",
+                err
+            );
+        }
+
+        let storage =
+            match StorageLayer::new(&storage_config(sqlite_file_db_config(&temp_dir, false))).await
+            {
+                Ok(storage) => storage,
+                Err(err) => panic!(
+                    "pre-migrated configured database should start with auto_migrate=false: {}",
+                    err
+                ),
+            };
+        let health = match storage.health_check().await {
+            Ok(health) => health,
+            Err(err) => panic!("pre-migrated database should pass health check: {}", err),
+        };
+
+        assert!(health.database);
+    }
+
+    #[tokio::test]
+    async fn test_storage_layer_auto_migrate_false_rejects_partial_schema() {
+        let temp_dir = match TempDir::new() {
+            Ok(temp_dir) => temp_dir,
+            Err(err) => panic!("temp dir should be created: {}", err),
+        };
+        let migration_config = sqlite_file_db_config(&temp_dir, false);
+        let db = match Database::new(&migration_config).await {
+            Ok(db) => db,
+            Err(err) => panic!("SQLite file database should connect: {}", err),
+        };
+        if let Err(err) = Migrator::up(db.connection(), Some(1)).await {
+            panic!("partial migration should apply first migration: {}", err);
+        }
+        if let Err(err) = db.close().await {
+            panic!(
+                "database should close cleanly before startup check: {}",
+                err
+            );
+        }
+
+        let err = match StorageLayer::new(&storage_config(sqlite_file_db_config(&temp_dir, false)))
+            .await
+        {
+            Ok(_) => panic!("partial schema must fail when auto_migrate=false"),
+            Err(err) => err,
+        };
+
+        assert!(
+            err.to_string().contains("pending migrations"),
+            "error should identify pending migrations, got: {}",
+            err
+        );
+    }
+
+    #[tokio::test]
     async fn test_database_disabled_uses_in_memory_sqlite() {
         let config = DatabaseConfig {
             url: "postgresql://unreachable-host:5432/unreachable-db".to_string(),
@@ -104,6 +210,7 @@ mod tests {
             connection_timeout: 1,
             ssl: false,
             enabled: false,
+            auto_migrate: false,
             fallback_to_sqlite: false,
             allow_degraded: false,
         };
@@ -128,6 +235,7 @@ mod tests {
             connection_timeout: 5,
             ssl: false,
             enabled: true,
+            auto_migrate: false,
             fallback_to_sqlite: false,
             allow_degraded: false,
         };
@@ -152,6 +260,7 @@ mod tests {
             connection_timeout: 5,
             ssl: false,
             enabled: true,
+            auto_migrate: false,
             fallback_to_sqlite: false,
             allow_degraded: false,
         };
@@ -176,6 +285,7 @@ mod tests {
             connection_timeout: 5,
             ssl: false,
             enabled: true,
+            auto_migrate: false,
             fallback_to_sqlite: false,
             allow_degraded: false,
         };
@@ -197,6 +307,7 @@ mod tests {
             connection_timeout: 5,
             ssl: false,
             enabled: true,
+            auto_migrate: false,
             fallback_to_sqlite: false,
             allow_degraded: false,
         };
@@ -346,6 +457,7 @@ mod tests {
             connection_timeout: 5,
             ssl: false,
             enabled: true,
+            auto_migrate: false,
             fallback_to_sqlite: false,
             allow_degraded: false,
         };

@@ -54,6 +54,7 @@ storage:
     connection_timeout: 5
     ssl: false
     enabled: false
+    auto_migrate: false
   redis:
     url: "redis://localhost:6379"
     enabled: false
