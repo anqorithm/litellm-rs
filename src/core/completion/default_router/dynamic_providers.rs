@@ -199,12 +199,11 @@ impl DefaultRouter {
             }
             _ => {
                 self.create_dynamic_openai_compatible(
-                    route.actual_model,
+                    &route,
                     &api_key,
-                    &route.api_base,
                     chat_request,
                     context,
-                    route.provider_label,
+                    options,
                 )
                 .await?
             }
@@ -256,12 +255,11 @@ impl DefaultRouter {
             }
             _ => {
                 self.create_dynamic_openai_compatible_stream(
-                    route.actual_model,
+                    &route,
                     &api_key,
-                    &route.api_base,
                     chat_request,
                     context,
-                    route.provider_label,
+                    options,
                 )
                 .await?
             }
@@ -332,49 +330,35 @@ impl DefaultRouter {
     /// Create dynamic OpenAI-compatible provider
     async fn create_dynamic_openai_compatible(
         &self,
-        model: &str,
+        route: &DynamicProviderRoute<'_>,
         api_key: &str,
-        api_base: &str,
         chat_request: &ChatRequest,
         context: RequestContext,
-        provider_name: &str,
+        options: &CompletionOptions,
     ) -> Result<CompletionResponse> {
-        use crate::core::providers::base::BaseConfig;
         use crate::core::providers::openai::OpenAIProvider;
-        use crate::core::providers::openai::config::OpenAIConfig;
         use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 
-        let config = OpenAIConfig {
-            base: BaseConfig {
-                api_key: Some(api_key.to_string()),
-                api_base: Some(api_base.to_string()),
-                timeout: 60,
-                max_retries: 3,
-                headers: Default::default(),
-                organization: None,
-                api_version: None,
-            },
-            organization: None,
-            project: None,
-            model_mappings: Default::default(),
-            features: Default::default(),
-        };
+        let config = dynamic_openai_compatible_config(api_key, &route.api_base, options);
 
         let provider = OpenAIProvider::new(config).await.map_err(|e| {
             GatewayError::internal(format!(
                 "Failed to create dynamic {} provider: {}",
-                provider_name, e
+                route.provider_label, e
             ))
         })?;
 
         let mut updated_request = chat_request.clone();
-        updated_request.model = model.to_string();
+        updated_request.model = route.actual_model.to_string();
 
         let response = provider
             .chat_completion(updated_request, context)
             .await
             .map_err(|e| {
-                GatewayError::internal(format!("Dynamic {} provider error: {}", provider_name, e))
+                GatewayError::internal(format!(
+                    "Dynamic {} provider error: {}",
+                    route.provider_label, e
+                ))
             })?;
 
         convert_from_chat_completion_response(response)
@@ -382,53 +366,39 @@ impl DefaultRouter {
 
     async fn create_dynamic_openai_compatible_stream(
         &self,
-        model: &str,
+        route: &DynamicProviderRoute<'_>,
         api_key: &str,
-        api_base: &str,
         chat_request: &ChatRequest,
         context: RequestContext,
-        provider_name: &str,
+        options: &CompletionOptions,
     ) -> Result<CompletionStream> {
-        use crate::core::providers::base::BaseConfig;
         use crate::core::providers::openai::OpenAIProvider;
-        use crate::core::providers::openai::config::OpenAIConfig;
         use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 
-        let config = OpenAIConfig {
-            base: BaseConfig {
-                api_key: Some(api_key.to_string()),
-                api_base: Some(api_base.to_string()),
-                timeout: 60,
-                max_retries: 3,
-                headers: Default::default(),
-                organization: None,
-                api_version: None,
-            },
-            organization: None,
-            project: None,
-            model_mappings: Default::default(),
-            features: Default::default(),
-        };
+        let config = dynamic_openai_compatible_config(api_key, &route.api_base, options);
 
         let provider = OpenAIProvider::new(config).await.map_err(|e| {
             GatewayError::internal(format!(
                 "Failed to create dynamic {} streaming provider: {}",
-                provider_name, e
+                route.provider_label, e
             ))
         })?;
 
         let mut updated_request = chat_request.clone();
-        updated_request.model = model.to_string();
+        updated_request.model = route.actual_model.to_string();
         updated_request.stream = true;
 
         let stream = provider
             .chat_completion_stream(updated_request, context)
             .await
             .map_err(|e| {
-                GatewayError::internal(format!("Dynamic {} streaming error: {}", provider_name, e))
+                GatewayError::internal(format!(
+                    "Dynamic {} streaming error: {}",
+                    route.provider_label, e
+                ))
             })?;
 
-        Ok(convert_provider_stream(stream, provider_name))
+        Ok(convert_provider_stream(stream, route.provider_label))
     }
 
     /// Create dynamic Azure AI provider
@@ -579,6 +549,31 @@ fn convert_provider_stream(
     }))
 }
 
+fn dynamic_openai_compatible_config(
+    api_key: &str,
+    api_base: &str,
+    options: &CompletionOptions,
+) -> crate::core::providers::openai::config::OpenAIConfig {
+    use crate::core::providers::base::BaseConfig;
+    use crate::core::providers::openai::config::OpenAIConfig;
+
+    OpenAIConfig {
+        base: BaseConfig {
+            api_key: Some(api_key.to_string()),
+            api_base: Some(api_base.to_string()),
+            timeout: 60,
+            max_retries: 3,
+            headers: options.headers.clone().unwrap_or_default(),
+            organization: None,
+            api_version: None,
+        },
+        organization: None,
+        project: None,
+        model_mappings: Default::default(),
+        features: Default::default(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -684,6 +679,33 @@ mod tests {
         let api_key = custom_api_base_api_key_fallback(&options, &route, None);
 
         assert_eq!(api_key.as_deref(), Some("dummy-key-for-local"));
+    }
+
+    #[test]
+    fn test_dynamic_openai_compatible_config_preserves_headers() {
+        let mut headers = std::collections::HashMap::new();
+        headers.insert("x-proxy-route".to_string(), "tenant-a".to_string());
+        headers.insert("x-request-source".to_string(), "stream-test".to_string());
+        let options = CompletionOptions {
+            headers: Some(headers),
+            ..CompletionOptions::default()
+        };
+
+        let config =
+            dynamic_openai_compatible_config("sk-test", "http://localhost:5567/v1", &options);
+
+        assert_eq!(
+            config.base.headers.get("x-proxy-route").map(String::as_str),
+            Some("tenant-a")
+        );
+        assert_eq!(
+            config
+                .base
+                .headers
+                .get("x-request-source")
+                .map(String::as_str),
+            Some("stream-test")
+        );
     }
 
     #[test]

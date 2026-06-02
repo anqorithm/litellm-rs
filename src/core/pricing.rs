@@ -482,10 +482,12 @@ mod tests {
         let large = db.calculate_for_provider("mistral", "mistral-large", &usage);
         let small = db.calculate_for_provider("mistral", "mistral-small", &usage);
         let small_4 = db.calculate_for_provider("mistral", "mistral-small-4", &usage);
+        let small_2506 = db.calculate_for_provider("mistral", "mistral-small-2506", &usage);
 
         assert!((large - 0.00125).abs() < 1e-12);
         assert!((small - 0.00045).abs() < 1e-12);
         assert!((small_4 - 0.00045).abs() < 1e-12);
+        assert!((small_2506 - 0.00025).abs() < 1e-12);
     }
 
     #[test]

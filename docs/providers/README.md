@@ -64,9 +64,6 @@ let response = completion("claude-opus-4-7", messages, None).await?;
 // Google Gemini
 let response = completion("gemini-3.1-pro-preview", messages, None).await?;
 
-// Mistral Small 4
-let response = completion("mistral-small-2603", messages, None).await?;
-
 // xAI Grok, routed through the OpenAI-compatible provider catalog
 let response = completion("xai/grok-4.3", messages, None).await?;
 

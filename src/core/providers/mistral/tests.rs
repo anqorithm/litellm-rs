@@ -411,6 +411,19 @@ async fn test_calculate_cost_current_small_model() {
 }
 
 #[tokio::test]
+async fn test_calculate_cost_versioned_small_2506_keeps_catalog_rate() {
+    let Ok(provider) = MistralProvider::new(create_test_config()).await else {
+        panic!("mistral test provider should initialize");
+    };
+
+    let cost = provider
+        .calculate_cost("mistral-small-2506", 1000, 500)
+        .await;
+
+    assert!(matches!(cost, Ok(v) if (v - 0.00025).abs() < f64::EPSILON));
+}
+
+#[tokio::test]
 async fn test_calculate_cost_current_alias_prices_are_deterministic() {
     let Ok(provider) = MistralProvider::new(create_test_config()).await else {
         panic!("mistral test provider should initialize");
