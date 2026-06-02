@@ -117,8 +117,7 @@ crate::define_pooled_http_provider_with_hooks!(
 
             let status = response.status();
             if !status.is_success() {
-                let error_text = response
-                    .text()
+                let error_text = crate::core::providers::base::read_streaming_error_body(response)
                     .await
                     .unwrap_or_else(|_| "Unknown error".to_string());
                 return Err(HttpErrorMapper::map_status_code(

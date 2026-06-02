@@ -282,7 +282,9 @@ impl LLMProvider for ClarifaiProvider {
 
         if !response.status().is_success() {
             let status = response.status().as_u16();
-            let body = response.text().await.ok();
+            let body = crate::core::providers::base::read_streaming_error_body(response)
+                .await
+                .ok();
             return Err(match status {
                 400 => ClarifaiError::invalid_request(
                     "clarifai",

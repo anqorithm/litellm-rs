@@ -525,8 +525,7 @@ impl LLMProvider for LangGraphProvider {
 
         let status = response.status();
         if !status.is_success() {
-            let error_text = response
-                .text()
+            let error_text = crate::core::providers::base::read_streaming_error_body(response)
                 .await
                 .unwrap_or_else(|_| "Unknown error".to_string());
             return Err(LangGraphErrorMapper.map_http_error(status.as_u16(), &error_text));

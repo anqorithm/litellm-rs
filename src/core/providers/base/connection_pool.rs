@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::sync::LazyLock;
 use std::time::Duration;
 
+use futures::StreamExt;
 use reqwest::{Client, RequestBuilder, Response};
 use serde_json;
 
@@ -66,11 +67,15 @@ impl PoolConfig {
 }
 
 pub const STREAMING_HEADER_TIMEOUT_SECS: u64 = PoolConfig::TIMEOUT_SECS;
+pub const STREAMING_ERROR_BODY_TIMEOUT_SECS: u64 = 10;
+pub const STREAMING_ERROR_BODY_MAX_BYTES: usize = 64 * 1024;
 
 #[derive(Debug, thiserror::Error)]
 pub enum StreamingRequestError {
     #[error("streaming request did not receive response headers within {timeout:?}")]
     HeaderTimeout { timeout: Duration },
+    #[error("streaming error body did not finish within {timeout:?}")]
+    ErrorBodyTimeout { timeout: Duration },
     #[error(transparent)]
     Request(#[from] reqwest::Error),
 }
@@ -78,14 +83,14 @@ pub enum StreamingRequestError {
 impl StreamingRequestError {
     pub fn is_timeout(&self) -> bool {
         match self {
-            Self::HeaderTimeout { .. } => true,
+            Self::HeaderTimeout { .. } | Self::ErrorBodyTimeout { .. } => true,
             Self::Request(err) => err.is_timeout(),
         }
     }
 
     pub fn as_reqwest_error(&self) -> Option<&reqwest::Error> {
         match self {
-            Self::HeaderTimeout { .. } => None,
+            Self::HeaderTimeout { .. } | Self::ErrorBodyTimeout { .. } => None,
             Self::Request(err) => Some(err),
         }
     }
@@ -197,6 +202,54 @@ pub async fn send_streaming_request_with_timeout(
         Ok(Err(err)) => Err(StreamingRequestError::Request(err)),
         Err(_) => Err(StreamingRequestError::HeaderTimeout { timeout }),
     }
+}
+
+/// Read a non-success streaming response body with bounded time and memory.
+///
+/// Successful SSE bodies must stay unbounded, but error bodies are finite
+/// diagnostics. This prevents a provider that sends 4xx/5xx headers and then
+/// stalls the body from tying up the task forever.
+pub async fn read_streaming_error_body(
+    response: Response,
+) -> Result<String, StreamingRequestError> {
+    read_streaming_error_body_with_limits(
+        response,
+        Duration::from_secs(STREAMING_ERROR_BODY_TIMEOUT_SECS),
+        STREAMING_ERROR_BODY_MAX_BYTES,
+    )
+    .await
+}
+
+pub async fn read_streaming_error_body_with_limits(
+    response: Response,
+    timeout: Duration,
+    max_bytes: usize,
+) -> Result<String, StreamingRequestError> {
+    let bytes = tokio::time::timeout(timeout, async move {
+        let mut stream = response.bytes_stream();
+        let mut body = Vec::new();
+
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk?;
+            let remaining = max_bytes.saturating_sub(body.len());
+            if remaining == 0 {
+                break;
+            }
+
+            if chunk.len() > remaining {
+                body.extend_from_slice(&chunk[..remaining]);
+                break;
+            }
+
+            body.extend_from_slice(&chunk);
+        }
+
+        Ok::<_, reqwest::Error>(body)
+    })
+    .await
+    .map_err(|_| StreamingRequestError::ErrorBodyTimeout { timeout })??;
+
+    Ok(String::from_utf8_lossy(&bytes).into_owned())
 }
 
 /// Simplified connection pool without generic complexity
@@ -375,6 +428,47 @@ mod tests {
         Ok(format!("http://{addr}"))
     }
 
+    async fn delayed_error_body_url(body_delay: Duration) -> std::io::Result<String> {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await?;
+        let addr = listener.local_addr()?;
+
+        tokio::spawn(async move {
+            let (mut socket, _) = match listener.accept().await {
+                Ok(connection) => connection,
+                Err(err) => panic!("test server accept failed: {err}"),
+            };
+            let mut buffer = [0_u8; 1024];
+            if let Err(err) = socket.read(&mut buffer).await {
+                panic!("test server failed to read request: {err}");
+            }
+
+            if let Err(err) = socket
+                .write_all(b"HTTP/1.1 500 Internal Server Error\r\nContent-Length: 5\r\nConnection: close\r\n\r\n")
+                .await
+            {
+                if !matches!(
+                    err.kind(),
+                    std::io::ErrorKind::BrokenPipe | std::io::ErrorKind::ConnectionReset
+                ) {
+                    panic!("test server failed to write headers: {err}");
+                }
+                return;
+            }
+
+            tokio::time::sleep(body_delay).await;
+            if let Err(err) = socket.write_all(b"error").await {
+                if !matches!(
+                    err.kind(),
+                    std::io::ErrorKind::BrokenPipe | std::io::ErrorKind::ConnectionReset
+                ) {
+                    panic!("test server failed to write body: {err}");
+                }
+            }
+        });
+
+        Ok(format!("http://{addr}"))
+    }
+
     #[tokio::test]
     async fn test_pool_creation() {
         let pool = ConnectionPool::new();
@@ -438,6 +532,35 @@ mod tests {
         let body = response.text().await?;
 
         assert_eq!(body, "hello");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_streaming_error_body_read_is_bounded() -> Result<(), Box<dyn std::error::Error>> {
+        let url = delayed_error_body_url(Duration::from_millis(150)).await?;
+
+        let response = send_streaming_request_with_timeout(
+            streaming_client().get(url),
+            Duration::from_secs(1),
+        )
+        .await?;
+        assert_eq!(
+            response.status(),
+            reqwest::StatusCode::INTERNAL_SERVER_ERROR
+        );
+
+        let err = read_streaming_error_body_with_limits(
+            response,
+            Duration::from_millis(25),
+            STREAMING_ERROR_BODY_MAX_BYTES,
+        )
+        .await
+        .unwrap_err();
+
+        assert!(matches!(
+            err,
+            StreamingRequestError::ErrorBodyTimeout { .. }
+        ));
         Ok(())
     }
 

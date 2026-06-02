@@ -169,7 +169,9 @@ impl OpenAILikeProvider {
 
         let status = response.status();
         if !status.is_success() {
-            let body = response.text().await.unwrap_or_default();
+            let body = crate::core::providers::base::read_streaming_error_body(response)
+                .await
+                .unwrap_or_default();
             return Err(self.map_error_response(status.as_u16(), &body));
         }
 

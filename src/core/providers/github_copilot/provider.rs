@@ -480,7 +480,9 @@ impl LLMProvider for GitHubCopilotProvider {
 
         if !response.status().is_success() {
             let status = response.status().as_u16();
-            let body = response.text().await.ok();
+            let body = crate::core::providers::base::read_streaming_error_body(response)
+                .await
+                .ok();
             let body_str = body.unwrap_or_else(|| "Unknown error".to_string());
 
             // Clear cache on auth errors
