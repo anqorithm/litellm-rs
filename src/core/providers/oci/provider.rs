@@ -396,11 +396,9 @@ impl LLMProvider for OciProvider {
             req_builder = req_builder.header(key, value);
         }
 
-        let response = req_builder
-            .json(&payload)
-            .send()
-            .await
-            .map_err(|e| ProviderError::network("oci", e.to_string()))?;
+        let response =
+            crate::core::providers::base::send_streaming_request(req_builder.json(&payload), "oci")
+                .await?;
 
         if !response.status().is_success() {
             let status = response.status().as_u16();

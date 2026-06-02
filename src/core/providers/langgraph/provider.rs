@@ -513,14 +513,15 @@ impl LLMProvider for LangGraphProvider {
             .ok_or_else(|| ProviderError::authentication(PROVIDER_NAME, "API key is required"))?;
 
         let client = streaming_client();
-        let response = client
-            .post(&url)
-            .header("x-api-key", api_key)
-            .header("Content-Type", "application/json")
-            .json(&stream_request)
-            .send()
-            .await
-            .map_err(|e| ProviderError::network(PROVIDER_NAME, e.to_string()))?;
+        let response = crate::core::providers::base::send_streaming_request(
+            client
+                .post(&url)
+                .header("x-api-key", api_key)
+                .header("Content-Type", "application/json")
+                .json(&stream_request),
+            PROVIDER_NAME,
+        )
+        .await?;
 
         let status = response.status();
         if !status.is_success() {

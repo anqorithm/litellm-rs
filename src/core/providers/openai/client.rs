@@ -181,10 +181,7 @@ impl OpenAIProvider {
             req = req.header("OpenAI-Project", project);
         }
 
-        let response = req.send().await.map_err(|e| ProviderError::Network {
-            provider: "openai",
-            message: e.to_string(),
-        })?;
+        let response = crate::core::providers::base::send_streaming_request(req, "openai").await?;
 
         // Create OpenAI-specific stream handler using unified SSE parser
         let stream = response.bytes_stream();

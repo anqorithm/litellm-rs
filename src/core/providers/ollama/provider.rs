@@ -568,30 +568,40 @@ impl LLMProvider for OllamaProvider {
             req = req.header("Authorization", format!("Bearer {}", api_key));
         }
 
-        let response = req
-            .header("Content-Type", "application/json")
-            .json(&request_body)
-            .send()
-            .await
-            .map_err(|e| {
-                let error_msg = e.to_string();
-                if error_msg.contains("Connection refused") || error_msg.contains("connect error") {
-                    ProviderError::network(
+        let response = crate::core::providers::base::send_streaming_request_with_timeout(
+            req.header("Content-Type", "application/json")
+                .json(&request_body),
+            std::time::Duration::from_secs(
+                crate::core::providers::base::STREAMING_HEADER_TIMEOUT_SECS,
+            ),
+        )
+        .await
+        .map_err(|e| {
+            let error_msg = e.to_string();
+            if let Some(reqwest_error) = e.as_reqwest_error() {
+                let reqwest_error = reqwest_error.to_string();
+                if reqwest_error.contains("Connection refused")
+                    || reqwest_error.contains("connect error")
+                {
+                    return ProviderError::network(
                         "ollama",
                         format!(
                             "Failed to connect to Ollama server at {}. Is Ollama running?",
                             self.config.get_api_base()
                         ),
-                    )
-                } else if error_msg.contains("timed out") || error_msg.contains("timeout") {
-                    ProviderError::Timeout {
-                        provider: "ollama",
-                        message: error_msg,
-                    }
-                } else {
-                    ProviderError::network("ollama", error_msg)
+                    );
                 }
-            })?;
+            }
+
+            if e.is_timeout() {
+                ProviderError::Timeout {
+                    provider: "ollama",
+                    message: error_msg,
+                }
+            } else {
+                ProviderError::network("ollama", error_msg)
+            }
+        })?;
 
         // Check status
         if !response.status().is_success() {

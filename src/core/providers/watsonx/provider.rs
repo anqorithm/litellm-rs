@@ -551,11 +551,11 @@ impl LLMProvider for WatsonxProvider {
             req_builder = req_builder.header(key, value);
         }
 
-        let response = req_builder
-            .json(&payload)
-            .send()
-            .await
-            .map_err(|e| ProviderError::network("watsonx", e.to_string()))?;
+        let response = crate::core::providers::base::send_streaming_request(
+            req_builder.json(&payload),
+            "watsonx",
+        )
+        .await?;
 
         // Check status
         if !response.status().is_success() {

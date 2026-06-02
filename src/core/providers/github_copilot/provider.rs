@@ -472,13 +472,11 @@ impl LLMProvider for GitHubCopilotProvider {
 
         // Execute request
         let client = crate::core::providers::base::streaming_client();
-        let response = client
-            .post(&url)
-            .headers(headers)
-            .json(&request)
-            .send()
-            .await
-            .map_err(|e| ProviderError::network("github_copilot", e.to_string()))?;
+        let response = crate::core::providers::base::send_streaming_request(
+            client.post(&url).headers(headers).json(&request),
+            "github_copilot",
+        )
+        .await?;
 
         if !response.status().is_success() {
             let status = response.status().as_u16();

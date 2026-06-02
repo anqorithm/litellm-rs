@@ -105,14 +105,15 @@ crate::define_pooled_http_provider_with_hooks!(
             })?;
 
             let client = crate::core::providers::base::streaming_client();
-            let response = client
-                .post(&url)
-                .header("Authorization", format!("Bearer {}", api_key))
-                .header("Content-Type", "application/json")
-                .json(&body)
-                .send()
-                .await
-                .map_err(|e| ProviderError::network(PROVIDER_NAME, e.to_string()))?;
+            let response = crate::core::providers::base::send_streaming_request(
+                client
+                    .post(&url)
+                    .header("Authorization", format!("Bearer {}", api_key))
+                    .header("Content-Type", "application/json")
+                    .json(&body),
+                PROVIDER_NAME,
+            )
+            .await?;
 
             let status = response.status();
             if !status.is_success() {

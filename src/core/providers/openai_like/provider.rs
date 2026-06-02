@@ -164,10 +164,8 @@ impl OpenAILikeProvider {
         let headers = self.get_request_headers();
         let req = apply_headers(client.post(&url).json(&openai_request), headers);
 
-        let response = req
-            .send()
-            .await
-            .map_err(|e| OpenAILikeError::network(PROVIDER_NAME, e.to_string()))?;
+        let response =
+            crate::core::providers::base::send_streaming_request(req, PROVIDER_NAME).await?;
 
         let status = response.status();
         if !status.is_success() {

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::sync::LazyLock;
 use std::time::Duration;
 
-use reqwest::Client;
+use reqwest::{Client, RequestBuilder, Response};
 use serde_json;
 
 use crate::core::providers::unified_provider::ProviderError;
@@ -65,6 +65,40 @@ impl PoolConfig {
     pub const KEEPALIVE_SECS: u64 = 90;
 }
 
+pub const STREAMING_HEADER_TIMEOUT_SECS: u64 = PoolConfig::TIMEOUT_SECS;
+
+#[derive(Debug, thiserror::Error)]
+pub enum StreamingRequestError {
+    #[error("streaming request did not receive response headers within {timeout:?}")]
+    HeaderTimeout { timeout: Duration },
+    #[error(transparent)]
+    Request(#[from] reqwest::Error),
+}
+
+impl StreamingRequestError {
+    pub fn is_timeout(&self) -> bool {
+        match self {
+            Self::HeaderTimeout { .. } => true,
+            Self::Request(err) => err.is_timeout(),
+        }
+    }
+
+    pub fn as_reqwest_error(&self) -> Option<&reqwest::Error> {
+        match self {
+            Self::HeaderTimeout { .. } => None,
+            Self::Request(err) => Some(err),
+        }
+    }
+
+    pub fn into_provider_error(self, provider: &'static str) -> ProviderError {
+        if self.is_timeout() {
+            ProviderError::timeout(provider, self.to_string())
+        } else {
+            ProviderError::network(provider, self.to_string())
+        }
+    }
+}
+
 #[inline]
 fn pool_http_config() -> HttpClientPoolConfig {
     HttpClientPoolConfig {
@@ -117,20 +151,52 @@ pub fn global_client() -> Arc<Client> {
 /// # Example
 ///
 /// ```ignore
-/// use crate::core::providers::base::connection_pool::streaming_client;
+/// use crate::core::providers::base::connection_pool::{
+///     send_streaming_request, streaming_client,
+/// };
 ///
 /// // Use the shared streaming client.
-/// let response = streaming_client()
-///     .post(&url)
-///     .headers(headers)
-///     .json(&body)
-///     .send()
-///     .await?;
+/// let response = send_streaming_request(
+///     streaming_client()
+///         .post(&url)
+///         .headers(headers)
+///         .json(&body),
+///     "provider_name",
+/// )
+/// .await?;
 /// let stream = response.bytes_stream();
 /// ```
 #[inline]
 pub fn streaming_client() -> Arc<Client> {
     Arc::clone(&STREAMING_CLIENT)
+}
+
+/// Send a streaming request with a bounded pre-header phase.
+///
+/// The timeout wraps only `RequestBuilder::send()`, which completes when
+/// response headers arrive. It does not impose a total timeout on the response
+/// body stream.
+pub async fn send_streaming_request(
+    request_builder: RequestBuilder,
+    provider: &'static str,
+) -> Result<Response, ProviderError> {
+    send_streaming_request_with_timeout(
+        request_builder,
+        Duration::from_secs(STREAMING_HEADER_TIMEOUT_SECS),
+    )
+    .await
+    .map_err(|err| err.into_provider_error(provider))
+}
+
+pub async fn send_streaming_request_with_timeout(
+    request_builder: RequestBuilder,
+    timeout: Duration,
+) -> Result<Response, StreamingRequestError> {
+    match tokio::time::timeout(timeout, request_builder.send()).await {
+        Ok(Ok(response)) => Ok(response),
+        Ok(Err(err)) => Err(StreamingRequestError::Request(err)),
+        Err(_) => Err(StreamingRequestError::HeaderTimeout { timeout }),
+    }
 }
 
 /// Simplified connection pool without generic complexity
@@ -261,6 +327,53 @@ impl Default for GlobalPoolManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
+
+    async fn delayed_response_url(
+        header_delay: Duration,
+        body_delay: Duration,
+    ) -> std::io::Result<String> {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await?;
+        let addr = listener.local_addr()?;
+
+        tokio::spawn(async move {
+            let (mut socket, _) = match listener.accept().await {
+                Ok(connection) => connection,
+                Err(err) => panic!("test server accept failed: {err}"),
+            };
+            let mut buffer = [0_u8; 1024];
+            if let Err(err) = socket.read(&mut buffer).await {
+                panic!("test server failed to read request: {err}");
+            }
+
+            tokio::time::sleep(header_delay).await;
+            if let Err(err) = socket
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: close\r\n\r\n")
+                .await
+            {
+                if !matches!(
+                    err.kind(),
+                    std::io::ErrorKind::BrokenPipe | std::io::ErrorKind::ConnectionReset
+                ) {
+                    panic!("test server failed to write headers: {err}");
+                }
+                return;
+            }
+
+            tokio::time::sleep(body_delay).await;
+            if let Err(err) = socket.write_all(b"hello").await {
+                if !matches!(
+                    err.kind(),
+                    std::io::ErrorKind::BrokenPipe | std::io::ErrorKind::ConnectionReset
+                ) {
+                    panic!("test server failed to write body: {err}");
+                }
+            }
+        });
+
+        Ok(format!("http://{addr}"))
+    }
 
     #[tokio::test]
     async fn test_pool_creation() {
@@ -292,6 +405,40 @@ mod tests {
 
         assert!(Arc::ptr_eq(&stream1, &stream2));
         assert!(!Arc::ptr_eq(&stream1, &global));
+    }
+
+    #[tokio::test]
+    async fn test_streaming_send_times_out_before_headers() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let url =
+            delayed_response_url(Duration::from_millis(150), Duration::from_millis(0)).await?;
+
+        let err = send_streaming_request_with_timeout(
+            streaming_client().get(url),
+            Duration::from_millis(25),
+        )
+        .await
+        .unwrap_err();
+
+        assert!(matches!(err, StreamingRequestError::HeaderTimeout { .. }));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_streaming_send_timeout_does_not_bound_body()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let url =
+            delayed_response_url(Duration::from_millis(0), Duration::from_millis(150)).await?;
+
+        let response = send_streaming_request_with_timeout(
+            streaming_client().get(url),
+            Duration::from_millis(25),
+        )
+        .await?;
+        let body = response.text().await?;
+
+        assert_eq!(body, "hello");
+        Ok(())
     }
 
     #[tokio::test]

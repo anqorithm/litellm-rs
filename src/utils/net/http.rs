@@ -196,6 +196,10 @@ pub fn create_custom_client_with_config(
 }
 
 /// Create a streaming HTTP client with pool configuration and no total request timeout.
+///
+/// Callers should still bound the `RequestBuilder::send()` future for the
+/// response-header phase. Do not use `ClientBuilder::timeout` here because it
+/// also limits the response body lifetime.
 pub fn create_streaming_client_with_config(
     config: &HttpClientPoolConfig,
 ) -> Result<Client, reqwest::Error> {
@@ -221,7 +225,8 @@ pub fn create_custom_client(timeout: Duration) -> Result<Client, reqwest::Error>
 ///
 /// Unlike `create_custom_client`, this client does not set a total request timeout
 /// so streams lasting longer than the configured timeout value won't be cut off.
-/// Only the initial TCP connection is time-bounded via `connect_timeout`.
+/// Only the initial TCP connection is time-bounded via `connect_timeout`; callers
+/// should separately bound the response-header phase before consuming the body.
 pub fn create_streaming_client() -> Result<Client, reqwest::Error> {
     let config = HttpClientPoolConfig::default();
     create_streaming_client_with_config(&config)
