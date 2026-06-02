@@ -40,7 +40,10 @@ impl HttpServer {
         info!("Creating HTTP server");
 
         Self::validate_cors_config(&config.gateway.server.cors)?;
-        Validate::validate(&config.gateway.cache)
+        config
+            .gateway
+            .cache
+            .validate()
             .map_err(|e| GatewayError::Config(format!("Invalid cache configuration: {}", e)))?;
         start_auth_rate_limiter_cleanup_task();
 
