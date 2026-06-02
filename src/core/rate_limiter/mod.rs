@@ -11,6 +11,7 @@ mod utils;
 mod tests;
 
 // Re-export public types
+pub(crate) use limiter::RateLimitRecordSource;
 pub use limiter::RateLimiter;
 pub use types::RateLimitResult;
 

@@ -1,5 +1,6 @@
 //! Tests for rate limiter
 
+use super::RateLimitRecordSource;
 #[cfg(test)]
 use super::limiter::RateLimiter;
 use crate::config::models::rate_limit::{RateLimitConfig, RateLimitStrategy};
@@ -146,6 +147,38 @@ async fn test_atomic_check_and_record() {
     // 4th request should be blocked
     let r4 = limiter.check_and_record("atomic-key").await;
     assert!(!r4.allowed);
+}
+
+#[tokio::test]
+async fn test_release_recorded_local_source_restores_capacity() {
+    let limiter = RateLimiter::new(test_config(true, 1));
+
+    let (result, source) = limiter.check_and_record_with_source("auth-ip").await;
+    assert!(result.allowed);
+    assert_eq!(source, RateLimitRecordSource::Local);
+
+    let blocked = limiter.check_and_record("auth-ip").await;
+    assert!(!blocked.allowed);
+
+    limiter.release_recorded("auth-ip", source).await;
+
+    let allowed_again = limiter.check_and_record("auth-ip").await;
+    assert!(allowed_again.allowed);
+}
+
+#[tokio::test]
+async fn test_release_recorded_distributed_source_keeps_local_capacity() {
+    let limiter = RateLimiter::new(test_config(true, 1));
+
+    let result = limiter.check_and_record("auth-ip").await;
+    assert!(result.allowed);
+
+    limiter
+        .release_recorded("auth-ip", RateLimitRecordSource::Distributed)
+        .await;
+
+    let blocked = limiter.check_and_record("auth-ip").await;
+    assert!(!blocked.allowed);
 }
 
 #[tokio::test]

@@ -1,6 +1,6 @@
 //! Rate limiting middleware
 
-use crate::core::rate_limiter::get_global_rate_limiter;
+use crate::core::rate_limiter::{RateLimitRecordSource, get_global_rate_limiter};
 use crate::core::types::context::RequestContext;
 use crate::server::state::AppState;
 use actix_web::dev::{Service, ServiceRequest, ServiceResponse, Transform, forward_ready};
@@ -76,6 +76,7 @@ struct RateLimitPass {
     source: &'static str,
     limit: u32,
     remaining: u32,
+    record_source: Option<RateLimitRecordSource>,
 }
 
 struct RateLimitRejection {
@@ -85,7 +86,7 @@ struct RateLimitRejection {
 }
 
 enum RateLimitReservationSource {
-    Global,
+    Global(RateLimitRecordSource),
     Fallback(Arc<DashMap<String, KeyTracker>>),
     Noop,
 }
@@ -105,9 +106,11 @@ impl AuthRateLimitReservation {
 
     pub(super) async fn release(self) {
         match self.source {
-            RateLimitReservationSource::Global => {
+            RateLimitReservationSource::Global(record_source) => {
                 if let Some(global_limiter) = get_global_rate_limiter() {
-                    global_limiter.release(&self.key).await;
+                    global_limiter
+                        .release_recorded(&self.key, record_source)
+                        .await;
                 }
             }
             RateLimitReservationSource::Fallback(store) => {
@@ -158,7 +161,7 @@ async fn check_rate_limit_key(
 ) -> Result<RateLimitPass, RateLimitRejection> {
     if let Some(global_limiter) = get_global_rate_limiter() {
         let limit = global_limiter.limit();
-        let result = global_limiter.check_and_record(key).await;
+        let (result, record_source) = global_limiter.check_and_record_with_source(key).await;
 
         if !result.allowed {
             return Err(RateLimitRejection {
@@ -172,6 +175,7 @@ async fn check_rate_limit_key(
             source: GLOBAL_LIMITER_SOURCE,
             limit,
             remaining: result.remaining,
+            record_source: Some(record_source),
         });
     }
 
@@ -203,6 +207,7 @@ async fn check_rate_limit_key(
         source: FALLBACK_LIMITER_SOURCE,
         limit: requests_per_minute,
         remaining,
+        record_source: None,
     })
 }
 
@@ -229,11 +234,10 @@ pub(super) async fn reserve_rate_limit_for_auth_attempt(
                 "Rate limit reservation passed for auth attempt ({} limiter)",
                 pass.source
             );
-            let source = if pass.source == GLOBAL_LIMITER_SOURCE {
-                RateLimitReservationSource::Global
-            } else {
-                RateLimitReservationSource::Fallback(fallback_store)
-            };
+            let source = pass
+                .record_source
+                .map(RateLimitReservationSource::Global)
+                .unwrap_or_else(|| RateLimitReservationSource::Fallback(fallback_store));
             Ok(AuthRateLimitReservation { key, source })
         }
         Err(rejection) => {

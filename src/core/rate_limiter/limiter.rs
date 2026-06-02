@@ -8,6 +8,14 @@ use std::time::Duration;
 #[cfg(feature = "gateway")]
 use tracing::warn;
 
+/// Backend that recorded a rate-limit reservation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RateLimitRecordSource {
+    Disabled,
+    Local,
+    Distributed,
+}
+
 /// Rate limiter implementation
 pub struct RateLimiter {
     /// Rate limit configuration
@@ -22,6 +30,17 @@ pub struct RateLimiter {
 }
 
 impl RateLimiter {
+    fn disabled_result(&self) -> RateLimitResult {
+        RateLimitResult {
+            allowed: true,
+            current_count: 0,
+            limit: self.config.default_rpm,
+            remaining: self.config.default_rpm,
+            reset_after_secs: 0,
+            retry_after_secs: None,
+        }
+    }
+
     /// Create a new rate limiter
     pub fn new(config: RateLimitConfig) -> Self {
         Self {
@@ -64,14 +83,7 @@ impl RateLimiter {
     /// Use check_and_record() for atomic check-then-record operations.
     pub async fn check(&self, key: &str) -> RateLimitResult {
         if !self.config.enabled {
-            return RateLimitResult {
-                allowed: true,
-                current_count: 0,
-                limit: self.config.default_rpm,
-                remaining: self.config.default_rpm,
-                reset_after_secs: 0,
-                retry_after_secs: None,
-            };
+            return self.disabled_result();
         }
 
         #[cfg(feature = "gateway")]
@@ -102,15 +114,16 @@ impl RateLimiter {
     /// This is the preferred method for rate limiting as it performs both
     /// the check and record operations in a single lock acquisition.
     pub async fn check_and_record(&self, key: &str) -> RateLimitResult {
+        self.check_and_record_with_source(key).await.0
+    }
+
+    /// Atomically check and record a request, returning the backend used.
+    pub(crate) async fn check_and_record_with_source(
+        &self,
+        key: &str,
+    ) -> (RateLimitResult, RateLimitRecordSource) {
         if !self.config.enabled {
-            return RateLimitResult {
-                allowed: true,
-                current_count: 0,
-                limit: self.config.default_rpm,
-                remaining: self.config.default_rpm,
-                reset_after_secs: 0,
-                retry_after_secs: None,
-            };
+            return (self.disabled_result(), RateLimitRecordSource::Disabled);
         }
 
         #[cfg(feature = "gateway")]
@@ -119,7 +132,7 @@ impl RateLimiter {
                 .rate_limit_check_and_record(key, self.config.default_rpm, self.window.as_secs())
                 .await
             {
-                Ok(result) => return result,
+                Ok(result) => return (result, RateLimitRecordSource::Distributed),
                 Err(err) => {
                     warn!(
                         "Redis rate-limit check failed for key {}; falling back to in-process limiter: {}",
@@ -129,6 +142,13 @@ impl RateLimiter {
             }
         }
 
+        (
+            self.check_and_record_local(key).await,
+            RateLimitRecordSource::Local,
+        )
+    }
+
+    async fn check_and_record_local(&self, key: &str) -> RateLimitResult {
         match self.config.strategy {
             RateLimitStrategy::SlidingWindow => self.check_sliding_window_impl(key, true).await,
             RateLimitStrategy::TokenBucket => self.check_token_bucket_impl(key, true).await,
@@ -138,18 +158,38 @@ impl RateLimiter {
 
     /// Release one request previously reserved by `check_and_record`.
     pub async fn release(&self, key: &str) {
+        #[cfg(feature = "gateway")]
+        if self.redis.is_some() {
+            self.release_recorded(key, RateLimitRecordSource::Distributed)
+                .await;
+            return;
+        }
+
+        self.release_recorded(key, RateLimitRecordSource::Local)
+            .await;
+    }
+
+    /// Release one request previously reserved by the given backend.
+    pub(crate) async fn release_recorded(&self, key: &str, source: RateLimitRecordSource) {
         if !self.config.enabled {
             return;
         }
 
-        #[cfg(feature = "gateway")]
-        if let Some(redis) = &self.redis {
-            if let Err(err) = redis.rate_limit_release(key).await {
-                warn!("Redis rate-limit release failed for key {}: {}", key, err);
+        match source {
+            RateLimitRecordSource::Disabled => {}
+            RateLimitRecordSource::Local => self.release_local(key),
+            RateLimitRecordSource::Distributed => {
+                #[cfg(feature = "gateway")]
+                if let Some(redis) = &self.redis
+                    && let Err(err) = redis.rate_limit_release(key).await
+                {
+                    warn!("Redis rate-limit release failed for key {}: {}", key, err);
+                }
             }
-            return;
         }
+    }
 
+    fn release_local(&self, key: &str) {
         let limit = self.config.default_rpm as f64;
         let should_remove = {
             let Some(mut entry) = self.entries.get_mut(key) else {
