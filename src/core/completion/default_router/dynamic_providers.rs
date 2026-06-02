@@ -127,6 +127,27 @@ fn resolve_dynamic_provider_route<'a>(
         })
 }
 
+fn resolve_dynamic_provider_api_key(
+    options: &CompletionOptions,
+    route: &DynamicProviderRoute<'_>,
+) -> Option<String> {
+    options.api_key.clone().or_else(|| {
+        custom_api_base_api_key_fallback(options, route, std::env::var("OPENAI_API_KEY").ok())
+    })
+}
+
+fn custom_api_base_api_key_fallback(
+    options: &CompletionOptions,
+    route: &DynamicProviderRoute<'_>,
+    openai_api_key: Option<String>,
+) -> Option<String> {
+    if route.provider_type == "openai-compatible" && options.api_base.is_some() {
+        Some(openai_api_key.unwrap_or_else(|| "dummy-key-for-local".to_string()))
+    } else {
+        None
+    }
+}
+
 impl DefaultRouter {
     /// Dynamic provider creation (Python LiteLLM style)
     /// Creates providers on-demand based on model name and provided options
@@ -198,12 +219,11 @@ impl DefaultRouter {
         context: RequestContext,
         options: &CompletionOptions,
     ) -> Result<Option<CompletionStream>> {
-        let api_key = match &options.api_key {
-            Some(key) => key.clone(),
-            None => return Ok(None),
+        let Some(route) = resolve_dynamic_provider_route(&chat_request.model, options) else {
+            return Ok(None);
         };
 
-        let Some(route) = resolve_dynamic_provider_route(&chat_request.model, options) else {
+        let Some(api_key) = resolve_dynamic_provider_api_key(options, &route) else {
             return Ok(None);
         };
 
@@ -633,6 +653,50 @@ mod tests {
         assert_eq!(route.provider_label, "OpenAI-Compatible");
         assert_eq!(route.actual_model, "my-custom-model");
         assert_eq!(route.api_base, "http://localhost:5567/v1");
+    }
+
+    #[test]
+    fn test_custom_api_base_api_key_fallback_uses_env_key() {
+        let options = CompletionOptions {
+            api_base: Some("http://localhost:5567/v1".to_string()),
+            ..CompletionOptions::default()
+        };
+        let Some(route) = resolve_dynamic_provider_route("my-custom-model", &options) else {
+            panic!("custom api_base route should resolve");
+        };
+
+        let api_key =
+            custom_api_base_api_key_fallback(&options, &route, Some("sk-from-env".to_string()));
+
+        assert_eq!(api_key.as_deref(), Some("sk-from-env"));
+    }
+
+    #[test]
+    fn test_custom_api_base_api_key_fallback_uses_dummy_without_env_key() {
+        let options = CompletionOptions {
+            api_base: Some("http://localhost:5567/v1".to_string()),
+            ..CompletionOptions::default()
+        };
+        let Some(route) = resolve_dynamic_provider_route("my-custom-model", &options) else {
+            panic!("custom api_base route should resolve");
+        };
+
+        let api_key = custom_api_base_api_key_fallback(&options, &route, None);
+
+        assert_eq!(api_key.as_deref(), Some("dummy-key-for-local"));
+    }
+
+    #[test]
+    fn test_api_key_fallback_does_not_apply_to_prefixed_routes() {
+        let options = CompletionOptions::default();
+        let Some(route) = resolve_dynamic_provider_route("xai/grok-4.3", &options) else {
+            panic!("prefixed route should resolve");
+        };
+
+        let api_key =
+            custom_api_base_api_key_fallback(&options, &route, Some("sk-from-env".to_string()));
+
+        assert!(api_key.is_none());
     }
 
     #[test]
