@@ -304,7 +304,7 @@ fn arn_resource_metadata(model_id: &str) -> Option<ArnResourceMetadata> {
             }
         }
         "custom-model-deployment" | "provisioned-model" => {
-            metadata.runtime_config_fallback = Some(RuntimeConfigFallback::Converse);
+            metadata.runtime_config_fallback = Some(RuntimeConfigFallback::Invoke);
         }
         "default-prompt-router" | "prompt-router" => {
             metadata.runtime_config_fallback = Some(RuntimeConfigFallback::Converse);
@@ -330,6 +330,7 @@ fn is_geo_prefix(prefix: &str) -> bool {
 fn is_region_prefix(prefix: &str) -> bool {
     prefix.len() >= 4
         && prefix.contains('-')
+        && prefix.chars().last().is_some_and(|c| c.is_ascii_digit())
         && prefix
             .chars()
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
@@ -339,10 +340,25 @@ fn is_plain_runtime_profile_id(model_id: &str) -> bool {
     !model_id.is_empty()
         && !model_id.starts_with("arn:")
         && !model_id.contains('/')
-        && !model_id.contains('.')
         && model_id
             .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == ':')
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | ':' | '.'))
+        && !looks_like_versioned_foundation_model_id(model_id)
+}
+
+fn looks_like_versioned_foundation_model_id(model_id: &str) -> bool {
+    if model_id.contains(':') || model_id.matches('.').count() != 1 {
+        return false;
+    }
+
+    let Some((_vendor, model_name)) = model_id.split_once('.') else {
+        return false;
+    };
+    let Some((_name, version)) = model_name.rsplit_once("-v") else {
+        return false;
+    };
+
+    !version.is_empty() && version.chars().all(|c| c.is_ascii_digit())
 }
 
 fn push_unique(values: &mut Vec<String>, value: String) {
@@ -509,7 +525,7 @@ mod tests {
     }
 
     #[test]
-    fn custom_model_deployment_arn_allows_runtime_config_resolution() {
+    fn custom_model_deployment_arn_allows_invoke_runtime_config_resolution() {
         let parsed = parse_bedrock_model_id(
             "arn:aws:bedrock:us-east-1:123456789012:custom-model-deployment/123456789012",
         );
@@ -520,12 +536,12 @@ mod tests {
         );
         assert_eq!(
             parsed.runtime_config_fallback,
-            Some(RuntimeConfigFallback::Converse)
+            Some(RuntimeConfigFallback::Invoke)
         );
     }
 
     #[test]
-    fn provisioned_model_arn_allows_converse_runtime_config_resolution() {
+    fn provisioned_model_arn_allows_invoke_runtime_config_resolution() {
         let parsed = parse_bedrock_model_id(
             "arn:aws:bedrock:us-east-1:123456789012:provisioned-model/ABC123",
         );
@@ -536,7 +552,7 @@ mod tests {
         );
         assert_eq!(
             parsed.runtime_config_fallback,
-            Some(RuntimeConfigFallback::Converse)
+            Some(RuntimeConfigFallback::Invoke)
         );
     }
 
@@ -614,6 +630,45 @@ mod tests {
     }
 
     #[test]
+    fn dotted_plain_runtime_profile_id_uses_runtime_fallback() {
+        let parsed = parse_bedrock_model_id("my.team.profile:1");
+
+        assert_eq!(parsed.kind, BedrockModelIdKind::FoundationModel);
+        assert_eq!(parsed.metadata_lookup_ids, vec!["my.team.profile:1"]);
+        assert_eq!(
+            parsed.runtime_config_fallback,
+            Some(RuntimeConfigFallback::Converse)
+        );
+
+        let config = config_for("my.team.profile:1");
+        assert_eq!(
+            config.api_type,
+            crate::core::providers::bedrock::BedrockApiType::ConverseStream
+        );
+    }
+
+    #[test]
+    fn custom_hyphenated_profile_prefix_is_not_treated_as_region() {
+        let parsed = parse_bedrock_model_id("my-org.model");
+
+        assert_eq!(parsed.metadata_lookup_ids, vec!["my-org.model"]);
+        assert_eq!(parsed.family_hint.as_deref(), Some("my-org"));
+        assert_eq!(
+            parsed.runtime_config_fallback,
+            Some(RuntimeConfigFallback::Converse)
+        );
+    }
+
+    #[test]
+    fn unknown_versioned_foundation_model_id_is_not_runtime_profile() {
+        let parsed = parse_bedrock_model_id("unknown.model-v1");
+
+        assert_eq!(parsed.metadata_lookup_ids, vec!["unknown.model-v1"]);
+        assert_eq!(parsed.runtime_config_fallback, None);
+        assert!(super::get_model_config_for_model_id("unknown.model-v1").is_err());
+    }
+
+    #[test]
     fn sagemaker_endpoint_arn_uses_streaming_converse_config() {
         let model_id =
             "arn:aws:sagemaker:us-east-1:123456789012:endpoint/bedrock-marketplace-endpoint";
@@ -630,6 +685,29 @@ mod tests {
             config.api_type,
             crate::core::providers::bedrock::BedrockApiType::ConverseStream
         );
+    }
+
+    #[test]
+    fn custom_model_deployment_arn_uses_invoke_compatible_config() {
+        let config =
+            config_for("arn:aws:bedrock:us-east-1:123456789012:custom-model-deployment/ABC123");
+
+        assert_eq!(
+            config.api_type,
+            crate::core::providers::bedrock::BedrockApiType::InvokeStream
+        );
+        assert!(!config.supports_function_calling);
+    }
+
+    #[test]
+    fn provisioned_model_arn_uses_invoke_compatible_config() {
+        let config = config_for("arn:aws:bedrock:us-east-1:123456789012:provisioned-model/ABC123");
+
+        assert_eq!(
+            config.api_type,
+            crate::core::providers::bedrock::BedrockApiType::InvokeStream
+        );
+        assert!(!config.supports_function_calling);
     }
 
     #[test]

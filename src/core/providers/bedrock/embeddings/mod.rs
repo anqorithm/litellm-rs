@@ -83,6 +83,10 @@ pub async fn execute_embedding(
     }
 }
 
+fn execution_model_id(model: &str) -> String {
+    crate::core::providers::bedrock::parse_bedrock_model_id(model).execution_model_id
+}
+
 /// Execute Titan text embedding
 async fn execute_titan_embedding(
     client: &crate::core::providers::bedrock::client::BedrockClient,
@@ -105,7 +109,8 @@ async fn execute_titan_embedding(
     let titan_request = TitanEmbeddingRequest { input_text };
     let body = serde_json::to_value(titan_request)?;
 
-    let response = client.send_request(&request.model, "invoke", &body).await?;
+    let model_id = execution_model_id(&request.model);
+    let response = client.send_request(&model_id, "invoke", &body).await?;
     let titan_response: TitanEmbeddingResponse = response
         .json()
         .await
@@ -162,7 +167,8 @@ async fn execute_titan_multimodal_embedding(
     };
 
     let body = serde_json::to_value(titan_request)?;
-    let response = client.send_request(&request.model, "invoke", &body).await?;
+    let model_id = execution_model_id(&request.model);
+    let response = client.send_request(&model_id, "invoke", &body).await?;
     let titan_response: TitanEmbeddingResponse = response
         .json()
         .await
@@ -211,7 +217,8 @@ async fn execute_cohere_embedding(
     };
 
     let body = serde_json::to_value(cohere_request)?;
-    let response = client.send_request(&request.model, "invoke", &body).await?;
+    let model_id = execution_model_id(&request.model);
+    let response = client.send_request(&model_id, "invoke", &body).await?;
     let cohere_response: CohereEmbeddingResponse = response
         .json()
         .await
@@ -236,4 +243,25 @@ async fn execute_cohere_embedding(
         usage: None, // Cohere doesn't provide usage info
         embeddings: Some(data),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::execution_model_id;
+
+    #[test]
+    fn strips_bedrock_selector_for_embedding_execution() {
+        assert_eq!(
+            execution_model_id("bedrock/amazon.titan-embed-text-v2:0"),
+            "amazon.titan-embed-text-v2:0"
+        );
+    }
+
+    #[test]
+    fn preserves_inference_profile_execution_id_for_embeddings() {
+        assert_eq!(
+            execution_model_id("bedrock/us.amazon.titan-embed-text-v2:0"),
+            "us.amazon.titan-embed-text-v2:0"
+        );
+    }
 }
