@@ -195,6 +195,20 @@ pub fn create_custom_client_with_config(
     create_client_builder_with_config(timeout, config).build()
 }
 
+/// Create a streaming HTTP client with pool configuration and no total request timeout.
+pub fn create_streaming_client_with_config(
+    config: &HttpClientPoolConfig,
+) -> Result<Client, reqwest::Error> {
+    ClientBuilder::new()
+        .pool_max_idle_per_host(config.pool_max_idle_per_host)
+        .pool_idle_timeout(config.pool_idle_timeout)
+        .connect_timeout(config.connect_timeout)
+        .tcp_keepalive(config.tcp_keepalive)
+        .tcp_nodelay(true)
+        .user_agent(config.user_agent)
+        .build()
+}
+
 /// Create a custom HTTP client with specific timeout
 ///
 /// Use this when you need a one-off client that won't be reused.
@@ -210,14 +224,7 @@ pub fn create_custom_client(timeout: Duration) -> Result<Client, reqwest::Error>
 /// Only the initial TCP connection is time-bounded via `connect_timeout`.
 pub fn create_streaming_client() -> Result<Client, reqwest::Error> {
     let config = HttpClientPoolConfig::default();
-    ClientBuilder::new()
-        .pool_max_idle_per_host(config.pool_max_idle_per_host)
-        .pool_idle_timeout(config.pool_idle_timeout)
-        .connect_timeout(config.connect_timeout)
-        .tcp_keepalive(config.tcp_keepalive)
-        .tcp_nodelay(true)
-        .user_agent(config.user_agent)
-        .build()
+    create_streaming_client_with_config(&config)
 }
 
 /// Get or create an HTTP client with SSRF-safe DNS resolution for the given timeout.
@@ -265,6 +272,42 @@ pub struct HttpClientCacheStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
+
+    async fn delayed_body_url(delay: Duration) -> std::io::Result<String> {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await?;
+        let addr = listener.local_addr()?;
+
+        tokio::spawn(async move {
+            let (mut socket, _) = match listener.accept().await {
+                Ok(connection) => connection,
+                Err(err) => panic!("test server accept failed: {err}"),
+            };
+            let mut buffer = [0_u8; 1024];
+            if let Err(err) = socket.read(&mut buffer).await {
+                panic!("test server failed to read request: {err}");
+            }
+
+            if let Err(err) = socket
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: close\r\n\r\n")
+                .await
+            {
+                panic!("test server failed to write headers: {err}");
+            }
+            tokio::time::sleep(delay).await;
+            if let Err(err) = socket.write_all(b"hello").await {
+                if !matches!(
+                    err.kind(),
+                    std::io::ErrorKind::BrokenPipe | std::io::ErrorKind::ConnectionReset
+                ) {
+                    panic!("test server failed to write body: {err}");
+                }
+            }
+        });
+
+        Ok(format!("http://{addr}"))
+    }
 
     #[test]
     fn test_shared_client_creation() {
@@ -277,6 +320,29 @@ mod tests {
     fn test_custom_client_creation() {
         let client = create_custom_client(Duration::from_secs(15));
         assert!(client.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_streaming_client_has_no_total_request_timeout()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let bounded_client = create_custom_client(Duration::from_millis(50))?;
+        let timeout_url = delayed_body_url(Duration::from_millis(150)).await?;
+
+        let response = bounded_client.get(timeout_url).send().await?;
+        let timed_out = response.text().await;
+        assert!(timed_out.is_err());
+
+        let streaming_client = create_streaming_client()?;
+        let stream_url = delayed_body_url(Duration::from_millis(150)).await?;
+        let body = streaming_client
+            .get(stream_url)
+            .send()
+            .await?
+            .text()
+            .await?;
+
+        assert_eq!(body, "hello");
+        Ok(())
     }
 
     #[test]

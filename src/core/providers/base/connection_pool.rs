@@ -7,7 +7,9 @@ use reqwest::Client;
 use serde_json;
 
 use crate::core::providers::unified_provider::ProviderError;
-use crate::utils::net::http::{HttpClientPoolConfig, create_custom_client_with_config};
+use crate::utils::net::http::{
+    HttpClientPoolConfig, create_custom_client_with_config, create_streaming_client_with_config,
+};
 
 /// Type alias for HTTP headers using Cow to avoid allocations for static strings.
 ///
@@ -88,6 +90,14 @@ static GLOBAL_CLIENT: LazyLock<Arc<Client>> = LazyLock::new(|| {
     Arc::new(client)
 });
 
+static STREAMING_CLIENT: LazyLock<Arc<Client>> = LazyLock::new(|| {
+    let client = match create_streaming_client_with_config(&pool_http_config()) {
+        Ok(client) => client,
+        Err(err) => panic!("streaming HTTP client must build: {err}"),
+    };
+    Arc::new(client)
+});
+
 /// Get the global HTTP client
 ///
 /// Returns a reference to the shared global HTTP client instance.
@@ -99,9 +109,10 @@ pub fn global_client() -> Arc<Client> {
 
 /// Get a streaming-ready HTTP client
 ///
-/// Returns the global HTTP client for streaming requests.
+/// Returns a shared HTTP client for streaming requests.
 /// This should be used instead of ad hoc client construction for streaming
-/// to benefit from the streaming connection pool.
+/// to benefit from the streaming connection pool without a total request
+/// lifetime timeout.
 ///
 /// # Example
 ///
@@ -119,7 +130,7 @@ pub fn global_client() -> Arc<Client> {
 /// ```
 #[inline]
 pub fn streaming_client() -> Arc<Client> {
-    global_client()
+    Arc::clone(&STREAMING_CLIENT)
 }
 
 /// Simplified connection pool without generic complexity
@@ -271,6 +282,16 @@ mod tests {
 
         // They should point to the same underlying Arc (same pointer)
         assert!(Arc::ptr_eq(&client1, &client2));
+    }
+
+    #[tokio::test]
+    async fn test_streaming_client_is_dedicated_singleton() {
+        let stream1 = streaming_client();
+        let stream2 = streaming_client();
+        let global = global_client();
+
+        assert!(Arc::ptr_eq(&stream1, &stream2));
+        assert!(!Arc::ptr_eq(&stream1, &global));
     }
 
     #[tokio::test]

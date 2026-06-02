@@ -544,7 +544,7 @@ impl LLMProvider for WatsonxProvider {
         let payload = self.prepare_payload(&request.model, &request)?;
 
         // Execute streaming request using reqwest directly for SSE
-        let client = crate::core::http::outbound::default_outbound_client().clone();
+        let client = crate::core::providers::base::streaming_client();
         let mut req_builder = client.post(&url);
 
         for (key, value) in headers {

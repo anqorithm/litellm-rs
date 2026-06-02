@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 use crate::core::providers::base::{
     GlobalPoolManager, HeaderPair, HttpMethod, apply_headers, header, header_owned,
+    streaming_client,
 };
 use crate::core::providers::openai::{OpenAIResponseTransformer, models::OpenAIChatResponse};
 use crate::core::traits::error_mapper::trait_def::ErrorMapper;
@@ -159,7 +160,7 @@ impl OpenAILikeProvider {
         openai_request["stream"] = Value::Bool(true);
 
         let url = format!("{}/chat/completions", self.config.get_api_base());
-        let client = self.pool_manager.client();
+        let client = streaming_client();
         let headers = self.get_request_headers();
         let req = apply_headers(client.post(&url).json(&openai_request), headers);
 
