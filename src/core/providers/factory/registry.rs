@@ -88,8 +88,7 @@ impl Provider {
                 #[cfg(feature = "providers-extra")]
                 {
                     let azure_ai_config = build_azure_ai_config_from_factory(&config)?;
-                    let provider = azure_ai::AzureAIProvider::new(azure_ai_config)
-                        .map_err(|e| ProviderError::initialization("azure_ai", e.to_string()))?;
+                    let provider = azure_ai::AzureAIProvider::new(azure_ai_config)?;
                     Ok(Provider::AzureAI(provider))
                 }
                 #[cfg(not(feature = "providers-extra"))]
@@ -118,8 +117,7 @@ impl Provider {
                 #[cfg(feature = "providers-extra")]
                 {
                     let azure_config = build_azure_config_from_factory(&config)?;
-                    let provider = azure::AzureOpenAIProvider::new(azure_config)
-                        .map_err(|e| ProviderError::initialization("azure", e.to_string()))?;
+                    let provider = azure::AzureOpenAIProvider::new(azure_config)?;
                     Ok(Provider::Azure(provider))
                 }
                 #[cfg(not(feature = "providers-extra"))]

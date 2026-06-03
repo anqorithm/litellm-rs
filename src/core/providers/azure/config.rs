@@ -5,6 +5,17 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+const DEFAULT_TIMEOUT_SECS: u64 = 60;
+const DEFAULT_MAX_RETRIES: u32 = 3;
+
+fn default_timeout_secs() -> u64 {
+    DEFAULT_TIMEOUT_SECS
+}
+
+fn default_max_retries() -> u32 {
+    DEFAULT_MAX_RETRIES
+}
+
 /// Azure OpenAI configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AzureConfig {
@@ -22,6 +33,12 @@ pub struct AzureConfig {
     pub resource_group: Option<String>,
     /// Subscription ID
     pub subscription_id: Option<String>,
+    /// Request timeout in seconds
+    #[serde(default = "default_timeout_secs")]
+    pub timeout: u64,
+    /// Maximum retry attempts
+    #[serde(default = "default_max_retries")]
+    pub max_retries: u32,
     /// Custom headers
     pub custom_headers: HashMap<String, String>,
 }
@@ -36,6 +53,8 @@ impl Default for AzureConfig {
             deployment_name: None,
             resource_group: None,
             subscription_id: None,
+            timeout: DEFAULT_TIMEOUT_SECS,
+            max_retries: DEFAULT_MAX_RETRIES,
             custom_headers: HashMap::new(),
         }
     }
@@ -68,6 +87,18 @@ impl AzureConfig {
     /// Set deployment name
     pub fn with_deployment_name(mut self, deployment: String) -> Self {
         self.deployment_name = Some(deployment);
+        self
+    }
+
+    /// Set request timeout
+    pub fn with_timeout(mut self, timeout_secs: u64) -> Self {
+        self.timeout = timeout_secs;
+        self
+    }
+
+    /// Set maximum retry attempts
+    pub fn with_max_retries(mut self, max_retries: u32) -> Self {
+        self.max_retries = max_retries;
         self
     }
 
@@ -123,6 +154,14 @@ impl crate::core::traits::provider::ProviderConfig for AzureConfig {
             return Err("API version is required".to_string());
         }
 
+        if self.timeout == 0 {
+            return Err("Timeout must be greater than 0".to_string());
+        }
+
+        if self.max_retries > 10 {
+            return Err("Max retries cannot exceed 10".to_string());
+        }
+
         Ok(())
     }
 
@@ -135,11 +174,11 @@ impl crate::core::traits::provider::ProviderConfig for AzureConfig {
     }
 
     fn timeout(&self) -> std::time::Duration {
-        std::time::Duration::from_secs(60) // Default 60 seconds timeout
+        std::time::Duration::from_secs(self.timeout)
     }
 
     fn max_retries(&self) -> u32 {
-        3 // Default retry 3 times
+        self.max_retries
     }
 }
 
@@ -165,6 +204,8 @@ mod tests {
         assert!(config.azure_endpoint.is_none());
         assert_eq!(config.api_version, "2024-02-01");
         assert!(config.deployment_name.is_none());
+        assert_eq!(config.timeout, DEFAULT_TIMEOUT_SECS);
+        assert_eq!(config.max_retries, DEFAULT_MAX_RETRIES);
     }
 
     #[test]
@@ -173,7 +214,9 @@ mod tests {
             .with_api_key("test-key".to_string())
             .with_azure_endpoint("https://test.openai.azure.com".to_string())
             .with_deployment_name("gpt-4".to_string())
-            .with_api_version("2024-03-01".to_string());
+            .with_api_version("2024-03-01".to_string())
+            .with_timeout(120)
+            .with_max_retries(5);
 
         assert_eq!(config.api_key, Some("test-key".to_string()));
         assert_eq!(
@@ -182,6 +225,8 @@ mod tests {
         );
         assert_eq!(config.deployment_name, Some("gpt-4".to_string()));
         assert_eq!(config.api_version, "2024-03-01");
+        assert_eq!(config.timeout, 120);
+        assert_eq!(config.max_retries, 5);
     }
 
     #[test]
@@ -233,6 +278,20 @@ mod tests {
         assert_eq!(config.api_base(), Some("https://test.openai.azure.com"));
         assert_eq!(config.timeout(), std::time::Duration::from_secs(60));
         assert_eq!(config.max_retries(), 3);
+    }
+
+    #[test]
+    fn test_azure_config_provider_config_trait_uses_configured_timeout_and_retries() {
+        use crate::core::traits::provider::ProviderConfig;
+
+        let config = AzureConfig::new()
+            .with_api_key("test-key".to_string())
+            .with_azure_endpoint("https://test.openai.azure.com".to_string())
+            .with_timeout(90)
+            .with_max_retries(4);
+
+        assert_eq!(config.timeout(), std::time::Duration::from_secs(90));
+        assert_eq!(config.max_retries(), 4);
     }
 
     #[test]

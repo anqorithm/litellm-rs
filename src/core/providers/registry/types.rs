@@ -406,15 +406,12 @@ mod tests {
             ProviderType::Cloudflare,
         ]
         .into_iter()
-        .chain(
-            [
-                #[cfg(feature = "providers-extra")]
-                ProviderType::Azure,
-                #[cfg(feature = "providers-extra")]
-                ProviderType::AzureAI,
-            ]
-            .into_iter(),
-        )
+        .chain([
+            #[cfg(feature = "providers-extra")]
+            ProviderType::Azure,
+            #[cfg(feature = "providers-extra")]
+            ProviderType::AzureAI,
+        ])
         .collect::<HashSet<_>>();
 
         assert_eq!(native_types, expected);

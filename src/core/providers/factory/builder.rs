@@ -465,6 +465,12 @@ pub(super) fn build_azure_config_from_factory(
     {
         azure_config.deployment_name = Some(deployment_name.to_string());
     }
+    if let Some(timeout) = config_u64(config, "timeout") {
+        azure_config.timeout = timeout;
+    }
+    if let Some(max_retries) = config_u32(config, "max_retries") {
+        azure_config.max_retries = max_retries;
+    }
     merge_string_headers(&mut azure_config.custom_headers, config, "headers");
     merge_string_headers(&mut azure_config.custom_headers, config, "custom_headers");
 
