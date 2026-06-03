@@ -60,6 +60,7 @@ impl GenericA2AProvider {
     }
 
     /// Create with custom HTTP client (for testing)
+    #[cfg(test)]
     pub fn with_client(client: reqwest::Client) -> Self {
         Self {
             default_client: Ok(Arc::new(client)),

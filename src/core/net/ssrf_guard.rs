@@ -195,6 +195,7 @@ pub fn is_private_or_reserved_ip(ip: &IpAddr) -> bool {
                 || (octets[0] == 198 && (18..=19).contains(&octets[1]))
                 || (octets[0] == 198 && octets[1] == 51 && octets[2] == 100)
                 || (octets[0] == 203 && octets[1] == 0 && octets[2] == 113)
+                || octets[0] >= 240
                 || v4.is_broadcast()
                 || v4.is_multicast()
         }
@@ -272,6 +273,7 @@ mod tests {
             Ipv4Addr::new(172, 20, 0, 1),
             Ipv4Addr::new(192, 168, 0, 1),
             Ipv4Addr::new(198, 18, 0, 1),
+            Ipv4Addr::new(240, 0, 0, 1),
         ] {
             assert!(is_private_or_reserved_ip(&IpAddr::V4(ip)), "{ip}");
         }

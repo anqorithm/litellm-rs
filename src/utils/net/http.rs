@@ -325,6 +325,7 @@ mod tests {
             SocketAddr::from((Ipv4Addr::new(93, 184, 216, 34), 443)),
             SocketAddr::from((Ipv4Addr::new(198, 18, 0, 1), 443)),
             SocketAddr::from((Ipv4Addr::new(224, 0, 0, 1), 443)),
+            SocketAddr::from((Ipv4Addr::new(240, 0, 0, 1), 443)),
         ];
 
         let safe = filter_ssrf_safe_addresses(addrs);
