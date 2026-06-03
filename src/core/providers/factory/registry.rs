@@ -9,10 +9,11 @@ use crate::core::providers::unified_provider::ProviderError;
 use crate::core::providers::{
     Provider, anthropic, bedrock, cloudflare, mistral, openai, openai_like,
 };
+#[cfg(feature = "providers-extra")]
+use crate::core::providers::{azure, azure_ai};
 
 use super::builder::{
     build_amazon_nova_config_from_factory, build_anthropic_config_from_factory,
-    build_azure_ai_config_from_factory, build_azure_config_from_factory,
     build_bedrock_config_from_factory, build_cloudflare_config_from_factory,
     build_fal_ai_config_from_factory, build_github_config_from_factory,
     build_github_copilot_config_from_factory, build_meta_llama_config_from_factory,
@@ -21,6 +22,8 @@ use super::builder::{
     build_v0_config_from_factory, build_vertex_ai_config_from_factory, config_str, config_u32,
     config_u64,
 };
+#[cfg(feature = "providers-extra")]
+use super::builder::{build_azure_ai_config_from_factory, build_azure_config_from_factory};
 
 impl Provider {
     /// Create provider from configuration asynchronously
@@ -82,11 +85,20 @@ impl Provider {
                 Ok(Provider::OpenAILike(provider))
             }
             ProviderType::AzureAI => {
-                let oai_config = build_azure_ai_config_from_factory(&config)?;
-                let provider = openai_like::OpenAILikeProvider::new(oai_config)
-                    .await
-                    .map_err(|e| ProviderError::initialization("azure_ai", e.to_string()))?;
-                Ok(Provider::OpenAILike(provider))
+                #[cfg(feature = "providers-extra")]
+                {
+                    let azure_ai_config = build_azure_ai_config_from_factory(&config)?;
+                    let provider = azure_ai::AzureAIProvider::new(azure_ai_config)
+                        .map_err(|e| ProviderError::initialization("azure_ai", e.to_string()))?;
+                    Ok(Provider::AzureAI(provider))
+                }
+                #[cfg(not(feature = "providers-extra"))]
+                {
+                    Err(ProviderError::not_implemented(
+                        "azure_ai",
+                        "native Azure AI dispatch requires the `providers-extra` feature",
+                    ))
+                }
             }
             ProviderType::AmazonNova => {
                 let oai_config = build_amazon_nova_config_from_factory(&config)?;
@@ -103,11 +115,20 @@ impl Provider {
                 Ok(Provider::OpenAILike(provider))
             }
             ProviderType::Azure => {
-                let oai_config = build_azure_config_from_factory(&config)?;
-                let provider = openai_like::OpenAILikeProvider::new(oai_config)
-                    .await
-                    .map_err(|e| ProviderError::initialization("azure", e.to_string()))?;
-                Ok(Provider::OpenAILike(provider))
+                #[cfg(feature = "providers-extra")]
+                {
+                    let azure_config = build_azure_config_from_factory(&config)?;
+                    let provider = azure::AzureOpenAIProvider::new(azure_config)
+                        .map_err(|e| ProviderError::initialization("azure", e.to_string()))?;
+                    Ok(Provider::Azure(provider))
+                }
+                #[cfg(not(feature = "providers-extra"))]
+                {
+                    Err(ProviderError::not_implemented(
+                        "azure",
+                        "native Azure dispatch requires the `providers-extra` feature",
+                    ))
+                }
             }
             ProviderType::Bedrock => {
                 let bedrock_config = build_bedrock_config_from_factory(&config)?;
@@ -233,6 +254,9 @@ mod tests {
                     | (ProviderType::Bedrock, Provider::Bedrock(_))
                     | (ProviderType::Mistral, Provider::Mistral(_))
                     | (ProviderType::Cloudflare, Provider::Cloudflare(_)) => {}
+                    #[cfg(feature = "providers-extra")]
+                    (ProviderType::Azure, Provider::Azure(_))
+                    | (ProviderType::AzureAI, Provider::AzureAI(_)) => {}
                     _ => panic!(
                         "{:?} is classified Native but created runtime provider {:?}",
                         entry.provider_type,

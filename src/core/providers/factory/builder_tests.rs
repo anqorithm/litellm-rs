@@ -267,6 +267,100 @@ fn test_build_openai_like_config_from_factory_requires_api_base() {
     assert!(err.to_string().contains("base_url"));
 }
 
+#[cfg(feature = "providers-extra")]
+#[test]
+fn test_build_azure_config_from_factory_maps_native_fields() {
+    let config = serde_json::json!({
+        "api_key": "azure-key",
+        "azure_endpoint": "https://example-resource.openai.azure.com",
+        "deployment_name": "gpt-4o-prod",
+        "api_version": "2024-03-01",
+        "headers": {
+            "x-azure-base": "base"
+        },
+        "custom_headers": {
+            "x-azure-custom": "custom"
+        }
+    });
+
+    let azure_config = build_azure_config_from_factory(&config)
+        .unwrap_or_else(|err| panic!("azure config should parse: {err}"));
+
+    assert_eq!(azure_config.api_key.as_deref(), Some("azure-key"));
+    assert_eq!(
+        azure_config.azure_endpoint.as_deref(),
+        Some("https://example-resource.openai.azure.com")
+    );
+    assert_eq!(azure_config.deployment_name.as_deref(), Some("gpt-4o-prod"));
+    assert_eq!(azure_config.api_version, "2024-03-01");
+    assert_eq!(
+        azure_config
+            .custom_headers
+            .get("x-azure-base")
+            .map(String::as_str),
+        Some("base")
+    );
+    assert_eq!(
+        azure_config
+            .custom_headers
+            .get("x-azure-custom")
+            .map(String::as_str),
+        Some("custom")
+    );
+}
+
+#[cfg(feature = "providers-extra")]
+#[test]
+fn test_build_azure_ai_config_from_factory_maps_native_fields() {
+    let config = serde_json::json!({
+        "api_key": "azure-ai-key",
+        "azure_ai_endpoint": "https://example-resource.services.ai.azure.com",
+        "api_version": "2024-05-01-preview",
+        "timeout": 44,
+        "max_retries": 2,
+        "headers": {
+            "x-azure-ai-base": "base"
+        },
+        "custom_headers": {
+            "x-azure-ai-custom": "custom"
+        }
+    });
+
+    let azure_ai_config = build_azure_ai_config_from_factory(&config)
+        .unwrap_or_else(|err| panic!("azure_ai config should parse: {err}"));
+
+    assert_eq!(
+        azure_ai_config.base.api_key.as_deref(),
+        Some("azure-ai-key")
+    );
+    assert_eq!(
+        azure_ai_config.base.api_base.as_deref(),
+        Some("https://example-resource.services.ai.azure.com")
+    );
+    assert_eq!(
+        azure_ai_config.base.api_version.as_deref(),
+        Some("2024-05-01-preview")
+    );
+    assert_eq!(azure_ai_config.base.timeout, 44);
+    assert_eq!(azure_ai_config.base.max_retries, 2);
+    assert_eq!(
+        azure_ai_config
+            .base
+            .headers
+            .get("x-azure-ai-base")
+            .map(String::as_str),
+        Some("base")
+    );
+    assert_eq!(
+        azure_ai_config
+            .base
+            .headers
+            .get("x-azure-ai-custom")
+            .map(String::as_str),
+        Some("custom")
+    );
+}
+
 #[test]
 fn test_env_str_any_skips_empty_values() {
     let _guard = ENV_LOCK.lock().unwrap();

@@ -264,6 +264,10 @@ macro_rules! dispatch_provider {
             Provider::OpenAI(p) => p.$method($($arg),*),
             Provider::Anthropic(p) => p.$method($($arg),*),
             Provider::Bedrock(p) => p.$method($($arg),*),
+            #[cfg(feature = "providers-extra")]
+            Provider::Azure(p) => p.$method($($arg),*),
+            #[cfg(feature = "providers-extra")]
+            Provider::AzureAI(p) => p.$method($($arg),*),
             Provider::Mistral(p) => p.$method($($arg),*),
             Provider::Cloudflare(p) => p.$method($($arg),*),
             Provider::OpenAILike(p) => p.$method($($arg),*),
@@ -275,6 +279,10 @@ macro_rules! dispatch_provider {
             Provider::OpenAI(p) => LLMProvider::$method(p, $($arg),*).await.map_err(ProviderError::from),
             Provider::Anthropic(p) => LLMProvider::$method(p, $($arg),*).await.map_err(ProviderError::from),
             Provider::Bedrock(p) => LLMProvider::$method(p, $($arg),*).await.map_err(ProviderError::from),
+            #[cfg(feature = "providers-extra")]
+            Provider::Azure(p) => LLMProvider::$method(p, $($arg),*).await.map_err(ProviderError::from),
+            #[cfg(feature = "providers-extra")]
+            Provider::AzureAI(p) => LLMProvider::$method(p, $($arg),*).await.map_err(ProviderError::from),
             Provider::Mistral(p) => LLMProvider::$method(p, $($arg),*).await.map_err(ProviderError::from),
             Provider::Cloudflare(p) => LLMProvider::$method(p, $($arg),*).await.map_err(ProviderError::from),
             Provider::OpenAILike(p) => LLMProvider::$method(p, $($arg),*).await.map_err(ProviderError::from),
@@ -286,6 +294,10 @@ macro_rules! dispatch_provider {
             Provider::OpenAI(p) => LLMProvider::$method(p, $($arg),*),
             Provider::Anthropic(p) => LLMProvider::$method(p, $($arg),*),
             Provider::Bedrock(p) => LLMProvider::$method(p, $($arg),*),
+            #[cfg(feature = "providers-extra")]
+            Provider::Azure(p) => LLMProvider::$method(p, $($arg),*),
+            #[cfg(feature = "providers-extra")]
+            Provider::AzureAI(p) => LLMProvider::$method(p, $($arg),*),
             Provider::Mistral(p) => LLMProvider::$method(p, $($arg),*),
             Provider::Cloudflare(p) => LLMProvider::$method(p, $($arg),*),
             Provider::OpenAILike(p) => LLMProvider::$method(p, $($arg),*),
@@ -297,6 +309,10 @@ macro_rules! dispatch_provider {
             Provider::OpenAI(p) => LLMProvider::$method(p).await,
             Provider::Anthropic(p) => LLMProvider::$method(p).await,
             Provider::Bedrock(p) => LLMProvider::$method(p).await,
+            #[cfg(feature = "providers-extra")]
+            Provider::Azure(p) => LLMProvider::$method(p).await,
+            #[cfg(feature = "providers-extra")]
+            Provider::AzureAI(p) => LLMProvider::$method(p).await,
             Provider::Mistral(p) => LLMProvider::$method(p).await,
             Provider::Cloudflare(p) => LLMProvider::$method(p).await,
             Provider::OpenAILike(p) => LLMProvider::$method(p).await,
@@ -332,6 +348,10 @@ pub enum Provider {
     OpenAI(openai::OpenAIProvider),
     Anthropic(anthropic::AnthropicProvider),
     Bedrock(bedrock::BedrockProvider),
+    #[cfg(feature = "providers-extra")]
+    Azure(azure::AzureOpenAIProvider),
+    #[cfg(feature = "providers-extra")]
+    AzureAI(azure_ai::AzureAIProvider),
     Mistral(mistral::MistralProvider),
     Cloudflare(cloudflare::CloudflareProvider),
     /// Tier 1: data-driven OpenAI-compatible providers (groq, together, fireworks, etc.)
@@ -345,6 +365,10 @@ impl Provider {
             Provider::OpenAI(_) => "openai",
             Provider::Anthropic(_) => "anthropic",
             Provider::Bedrock(_) => "bedrock",
+            #[cfg(feature = "providers-extra")]
+            Provider::Azure(_) => "azure",
+            #[cfg(feature = "providers-extra")]
+            Provider::AzureAI(_) => "azure_ai",
             Provider::Mistral(_) => "mistral",
             Provider::Cloudflare(_) => "cloudflare",
             Provider::OpenAILike(p) => {
@@ -360,6 +384,10 @@ impl Provider {
             Provider::OpenAI(_) => ProviderType::OpenAI,
             Provider::Anthropic(_) => ProviderType::Anthropic,
             Provider::Bedrock(_) => ProviderType::Bedrock,
+            #[cfg(feature = "providers-extra")]
+            Provider::Azure(_) => ProviderType::Azure,
+            #[cfg(feature = "providers-extra")]
+            Provider::AzureAI(_) => ProviderType::AzureAI,
             Provider::Mistral(_) => ProviderType::Mistral,
             Provider::Cloudflare(_) => ProviderType::Cloudflare,
             Provider::OpenAILike(_) => ProviderType::OpenAICompatible,
