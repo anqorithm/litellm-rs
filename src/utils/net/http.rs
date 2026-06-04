@@ -23,13 +23,13 @@
 //! ```
 
 use dashmap::DashMap;
-use reqwest::{Client, ClientBuilder};
+use reqwest::{Client, ClientBuilder, redirect};
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 use tracing::{debug, warn};
 
-use crate::core::net::is_private_or_reserved_ip;
+use crate::core::net::{is_private_or_reserved_ip, validate_outbound_url_without_resolution};
 
 /// DNS resolver that rejects private/reserved IP addresses at resolution time.
 ///
@@ -71,6 +71,16 @@ fn filter_ssrf_safe_addresses(addrs: Vec<SocketAddr>) -> Vec<SocketAddr> {
         .into_iter()
         .filter(|addr| !is_private_or_reserved_ip(&addr.ip()))
         .collect()
+}
+
+fn ssrf_safe_redirect_policy() -> redirect::Policy {
+    redirect::Policy::custom(|attempt| {
+        if let Err(error) = validate_outbound_url_without_resolution(attempt.url()) {
+            return attempt.error(format!("Redirect target failed SSRF validation: {error}"));
+        }
+
+        redirect::Policy::limited(10).redirect(attempt)
+    })
 }
 
 /// Configuration for the HTTP client pool
@@ -246,6 +256,7 @@ pub fn get_ssrf_safe_client_with_timeout_fallible(
         create_client_builder_with_config(timeout, &HttpClientPoolConfig::default())
             .no_proxy()
             .dns_resolver(Arc::new(SsrfSafeDnsResolver))
+            .redirect(ssrf_safe_redirect_policy())
             .build()?,
     );
     cache.insert(timeout_millis, client.clone());
@@ -284,6 +295,7 @@ pub struct HttpClientCacheStats {
 mod tests {
     use super::*;
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     #[test]
     fn test_shared_client_creation() {
@@ -348,6 +360,52 @@ mod tests {
         };
 
         assert!(Arc::ptr_eq(&client1, &client2));
+    }
+
+    #[tokio::test]
+    async fn test_ssrf_safe_redirect_policy_rejects_private_redirect_targets()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+        let address = listener.local_addr()?;
+
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await?;
+            let mut buffer = [0_u8; 1024];
+            let bytes_read = stream.read(&mut buffer).await?;
+            assert!(bytes_read > 0);
+
+            let location = format!("http://127.0.0.1:{}/private", address.port());
+            let body = "redirect";
+            let response = format!(
+                "HTTP/1.1 302 Found\r\nLocation: {location}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            stream.write_all(response.as_bytes()).await?;
+            Ok::<(), std::io::Error>(())
+        });
+
+        let client = ClientBuilder::new()
+            .redirect(ssrf_safe_redirect_policy())
+            .build()?;
+        let result = client
+            .get(format!("http://127.0.0.1:{}/redirect", address.port()))
+            .send()
+            .await;
+
+        let error = match result {
+            Ok(response) => panic!(
+                "private redirect target should be rejected, got status {}",
+                response.status()
+            ),
+            Err(error) => error,
+        };
+        assert!(error.is_redirect(), "{error:?}");
+        assert!(
+            format!("{error:?}").contains("SSRF validation"),
+            "{error:?}"
+        );
+        server.await??;
+        Ok(())
     }
 
     #[test]
