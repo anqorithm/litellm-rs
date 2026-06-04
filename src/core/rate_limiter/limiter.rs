@@ -82,6 +82,24 @@ pub struct RateLimiter {
 }
 
 impl RateLimiter {
+    pub(super) fn token_bucket_reservation_window(&self) -> Duration {
+        if self.config.default_rpm == 0 {
+            return Duration::ZERO;
+        }
+
+        Duration::from_secs((60.0 / self.config.default_rpm as f64).ceil() as u64)
+            .max(Duration::from_secs(1))
+    }
+
+    fn local_reservation_reset_after_secs(&self, result: &RateLimitResult) -> u64 {
+        match self.config.strategy {
+            RateLimitStrategy::TokenBucket => self.token_bucket_reservation_window().as_secs(),
+            RateLimitStrategy::SlidingWindow | RateLimitStrategy::FixedWindow => {
+                result.reset_after_secs
+            }
+        }
+    }
+
     fn disabled_result(&self) -> RateLimitResult {
         RateLimitResult {
             allowed: true,
@@ -216,11 +234,9 @@ impl RateLimiter {
         }
 
         let result = self.check_and_record_local(key, recorded_at).await;
-        let reservation = RateLimitReservation::new(
-            RateLimitRecordSource::Local,
-            recorded_at,
-            result.reset_after_secs,
-        );
+        let reset_after_secs = self.local_reservation_reset_after_secs(&result);
+        let reservation =
+            RateLimitReservation::new(RateLimitRecordSource::Local, recorded_at, reset_after_secs);
         (result, reservation)
     }
 
@@ -263,7 +279,13 @@ impl RateLimiter {
 
         match reservation.source {
             RateLimitRecordSource::Disabled => {}
-            RateLimitRecordSource::Local => self.release_local(key, Some(reservation.recorded_at)),
+            RateLimitRecordSource::Local => {
+                if reservation.remaining_window_secs() == 0 {
+                    return;
+                }
+
+                self.release_local(key, Some(reservation.recorded_at));
+            }
             RateLimitRecordSource::Distributed => {
                 let remaining_window_secs = reservation.remaining_window_secs();
                 if remaining_window_secs == 0 {
@@ -300,7 +322,28 @@ impl RateLimiter {
                     }
                 }
                 RateLimitStrategy::TokenBucket => {
-                    entry.tokens = (entry.tokens + 1.0).min(limit);
+                    let should_refund = if let Some(recorded_at) = recorded_at {
+                        let now = Instant::now();
+                        let reservation_window = self.token_bucket_reservation_window();
+                        entry
+                            .timestamps
+                            .retain(|&ts| now.saturating_duration_since(ts) < reservation_window);
+
+                        if let Some(position) =
+                            entry.timestamps.iter().position(|&ts| ts == recorded_at)
+                        {
+                            entry.timestamps.remove(position);
+                            true
+                        } else {
+                            false
+                        }
+                    } else {
+                        true
+                    };
+
+                    if should_refund {
+                        entry.tokens = (entry.tokens + 1.0).min(limit);
+                    }
                 }
             }
 

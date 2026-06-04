@@ -2,6 +2,7 @@
 
 #[cfg(test)]
 use super::limiter::RateLimiter;
+use super::types::RateLimitEntry;
 use super::{RateLimitRecordSource, RateLimitReservation};
 use crate::config::models::rate_limit::{RateLimitConfig, RateLimitStrategy};
 use std::time::{Duration, Instant};
@@ -190,6 +191,60 @@ async fn test_release_recorded_sliding_and_fixed_windows_remove_empty_entry() {
 
         assert!(!limiter.entries.contains_key("auth-ip"));
     }
+}
+
+#[tokio::test]
+async fn test_release_recorded_token_bucket_restores_fresh_reservation() {
+    let limiter = RateLimiter::new(test_config_with_strategy(
+        true,
+        1,
+        RateLimitStrategy::TokenBucket,
+    ));
+
+    let (result, reservation) = limiter.check_and_record_with_source("auth-ip").await;
+    assert!(result.allowed);
+
+    let blocked = limiter.check_and_record("auth-ip").await;
+    assert!(!blocked.allowed);
+
+    limiter.release_recorded("auth-ip", reservation).await;
+
+    let allowed_again = limiter.check_and_record("auth-ip").await;
+    assert!(allowed_again.allowed);
+}
+
+#[tokio::test]
+async fn test_release_recorded_token_bucket_skips_expired_reservation() {
+    let limiter = RateLimiter::new(test_config_with_strategy(
+        true,
+        60,
+        RateLimitStrategy::TokenBucket,
+    ));
+    let key = "auth-ip";
+    let original_success = Instant::now() - Duration::from_secs(2);
+    let later_rejected_auth = Instant::now();
+
+    limiter.entries.insert(
+        key.to_string(),
+        RateLimitEntry {
+            timestamps: vec![original_success, later_rejected_auth],
+            tokens: 0.0,
+            last_refill: later_rejected_auth,
+        },
+    );
+
+    limiter
+        .release_recorded(
+            key,
+            RateLimitReservation::for_test(RateLimitRecordSource::Local, original_success, 1),
+        )
+        .await;
+
+    let blocked = limiter.check_and_record(key).await;
+    assert!(
+        !blocked.allowed,
+        "expired success release must not refund a later rejected-auth token"
+    );
 }
 
 #[tokio::test]

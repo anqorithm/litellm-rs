@@ -14,12 +14,16 @@ impl RateLimiter {
 
         let limit = self.config.default_rpm as f64;
         self.entries.retain(|_, entry| {
-            entry.timestamps.retain(|&t| t > window_start);
             match self.config.strategy {
                 RateLimitStrategy::SlidingWindow | RateLimitStrategy::FixedWindow => {
+                    entry.timestamps.retain(|&t| t > window_start);
                     !entry.timestamps.is_empty()
                 }
                 RateLimitStrategy::TokenBucket => {
+                    let reservation_window = self.token_bucket_reservation_window();
+                    entry
+                        .timestamps
+                        .retain(|&t| now.saturating_duration_since(t) < reservation_window);
                     // Keep entry if it has recent timestamps OR has consumed tokens (not full bucket).
                     // A full bucket (tokens == limit) with no timestamps means the key is idle.
                     !entry.timestamps.is_empty() || entry.tokens < limit

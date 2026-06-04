@@ -86,6 +86,11 @@ impl RateLimiter {
                 timestamps: Vec::new(),
             });
 
+        let reservation_window = self.token_bucket_reservation_window();
+        entry
+            .timestamps
+            .retain(|&ts| now.saturating_duration_since(ts) < reservation_window);
+
         // Refill tokens based on elapsed time
         let elapsed = now.duration_since(entry.last_refill);
         let new_tokens = elapsed.as_secs_f64() * tokens_per_second;
@@ -109,6 +114,7 @@ impl RateLimiter {
             // Atomically consume token if allowed and record flag is set
             if record {
                 entry.tokens -= 1.0;
+                entry.timestamps.push(now);
             }
             None
         };
