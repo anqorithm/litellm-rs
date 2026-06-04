@@ -310,6 +310,41 @@ mod tests {
         assert!(matches!(provider, Provider::Azure(_)));
     }
 
+    /// Test native Azure validates config at provider construction.
+    #[cfg(feature = "providers-extra")]
+    #[tokio::test]
+    async fn test_azure_provider_native_dispatch_rejects_invalid_config() {
+        let zero_timeout = json!({
+            "api_key": "azure-test-key",
+            "azure_endpoint": "https://test-resource.openai.azure.com",
+            "deployment_name": "gpt-4o-deployment",
+            "timeout": 0
+        });
+
+        let err = Provider::from_config_async(ProviderType::Azure, zero_timeout)
+            .await
+            .expect_err("native Azure should reject zero timeout");
+        assert!(
+            err.to_string().contains("Timeout must be greater than 0"),
+            "unexpected error: {err}"
+        );
+
+        let excessive_retries = json!({
+            "api_key": "azure-test-key",
+            "azure_endpoint": "https://test-resource.openai.azure.com",
+            "deployment_name": "gpt-4o-deployment",
+            "max_retries": 11
+        });
+
+        let err = Provider::from_config_async(ProviderType::Azure, excessive_retries)
+            .await
+            .expect_err("native Azure should reject excessive retries");
+        assert!(
+            err.to_string().contains("Max retries cannot exceed 10"),
+            "unexpected error: {err}"
+        );
+    }
+
     /// Test Azure AI uses the native provider path when providers-extra is enabled.
     #[cfg(feature = "providers-extra")]
     #[tokio::test]

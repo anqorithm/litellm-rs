@@ -62,7 +62,7 @@ use crate::core::types::{
 };
 
 use crate::core::traits::error_mapper::trait_def::ErrorMapper;
-use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
+use crate::core::traits::provider::{ProviderConfig, llm_provider::trait_definition::LLMProvider};
 
 /// Main Azure OpenAI provider - complete implementation
 #[derive(Debug, Clone)]
@@ -77,6 +77,10 @@ pub struct AzureOpenAIProvider {
 impl AzureOpenAIProvider {
     /// Create new Azure OpenAI provider
     pub fn new(config: AzureConfig) -> Result<Self, ProviderError> {
+        config
+            .validate()
+            .map_err(|e| ProviderError::configuration("azure", e))?;
+
         let chat_handler = AzureChatHandler::new(config.clone())?;
         let embedding_handler = AzureEmbeddingHandler::new(config.clone())?;
         let image_handler = AzureImageHandler::new(config.clone())?;
