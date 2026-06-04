@@ -2,13 +2,11 @@
 
 use super::service::PricingService;
 use super::types::LiteLLMModelInfo;
-use crate::core::pricing::parse_litellm_pricing_json;
+use crate::core::pricing::{embedded_default_pricing_models, parse_litellm_pricing_json};
 use crate::utils::error::gateway_error::{GatewayError, Result};
 use std::collections::HashMap;
 use std::time::Duration;
 use tracing::debug;
-
-const EMBEDDED_MODEL_PRICES: &str = include_str!("../../../config/model_prices_extended.json");
 
 impl PricingService {
     /// Initialize pricing data (load from URL or local file)
@@ -60,7 +58,7 @@ impl PricingService {
 
     /// Load bundled default pricing data.
     pub(super) fn load_from_embedded_default(&self) -> Result<HashMap<String, LiteLLMModelInfo>> {
-        let data = parse_litellm_pricing_json(EMBEDDED_MODEL_PRICES)
+        let data = embedded_default_pricing_models()
             .map_err(|e| GatewayError::parsing(format!("Failed to parse pricing JSON: {}", e)))?;
 
         debug!("Loaded {} models from embedded default pricing", data.len());
