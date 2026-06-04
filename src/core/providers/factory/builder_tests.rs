@@ -267,6 +267,101 @@ fn test_build_openai_like_config_from_factory_requires_api_base() {
     assert!(err.to_string().contains("base_url"));
 }
 
+#[cfg(not(feature = "providers-extra"))]
+#[test]
+fn test_build_azure_openai_like_config_from_factory_maps_fallback_fields() {
+    let config = serde_json::json!({
+        "api_key": "azure-key",
+        "azure_endpoint": "https://example-resource.openai.azure.com/openai/deployments/prod",
+        "api_version": "2024-03-01",
+        "timeout": 66,
+        "max_retries": 4,
+        "headers": {
+            "x-azure-base": "base"
+        },
+        "custom_headers": {
+            "x-azure-custom": "custom"
+        }
+    });
+
+    let oai_config = build_azure_openai_like_config_from_factory(&config)
+        .unwrap_or_else(|err| panic!("azure fallback config should parse: {err}"));
+
+    assert_eq!(oai_config.provider_name, "azure");
+    assert_eq!(oai_config.base.api_key.as_deref(), Some("azure-key"));
+    assert_eq!(
+        oai_config.base.api_base.as_deref(),
+        Some("https://example-resource.openai.azure.com/openai/deployments/prod")
+    );
+    assert_eq!(oai_config.base.api_version.as_deref(), Some("2024-03-01"));
+    assert_eq!(oai_config.base.timeout, 66);
+    assert_eq!(oai_config.base.max_retries, 4);
+    assert_eq!(
+        oai_config
+            .base
+            .headers
+            .get("x-azure-base")
+            .map(String::as_str),
+        Some("base")
+    );
+    assert_eq!(
+        oai_config
+            .custom_headers
+            .get("x-azure-custom")
+            .map(String::as_str),
+        Some("custom")
+    );
+}
+
+#[cfg(not(feature = "providers-extra"))]
+#[test]
+fn test_build_azure_ai_openai_like_config_from_factory_maps_fallback_fields() {
+    let config = serde_json::json!({
+        "api_key": "azure-ai-key",
+        "azure_ai_endpoint": "https://example-resource.services.ai.azure.com",
+        "api_version": "2024-05-01-preview",
+        "timeout": 44,
+        "max_retries": 2,
+        "headers": {
+            "x-azure-ai-base": "base"
+        },
+        "custom_headers": {
+            "x-azure-ai-custom": "custom"
+        }
+    });
+
+    let oai_config = build_azure_ai_openai_like_config_from_factory(&config)
+        .unwrap_or_else(|err| panic!("azure_ai fallback config should parse: {err}"));
+
+    assert_eq!(oai_config.provider_name, "azure_ai");
+    assert_eq!(oai_config.base.api_key.as_deref(), Some("azure-ai-key"));
+    assert_eq!(
+        oai_config.base.api_base.as_deref(),
+        Some("https://example-resource.services.ai.azure.com")
+    );
+    assert_eq!(
+        oai_config.base.api_version.as_deref(),
+        Some("2024-05-01-preview")
+    );
+    assert_eq!(oai_config.base.timeout, 44);
+    assert_eq!(oai_config.base.max_retries, 2);
+    assert_eq!(
+        oai_config
+            .base
+            .headers
+            .get("x-azure-ai-base")
+            .map(String::as_str),
+        Some("base")
+    );
+    assert_eq!(
+        oai_config
+            .custom_headers
+            .get("x-azure-ai-custom")
+            .map(String::as_str),
+        Some("custom")
+    );
+}
+
 #[cfg(feature = "providers-extra")]
 #[test]
 fn test_build_azure_config_from_factory_maps_native_fields() {
@@ -318,7 +413,7 @@ fn test_build_azure_config_from_factory_maps_native_fields() {
 fn test_build_azure_config_from_factory_normalizes_deployment_base_url() {
     let config = serde_json::json!({
         "api_key": "azure-key",
-        "base_url": "https://example-resource.openai.azure.com/openai/deployments/gpt-4o-prod",
+        "base_url": "https://example-resource.openai.azure.com/openai/deployments/prod-gpt4o/chat/completions",
         "api_version": "2024-03-01"
     });
 
@@ -329,7 +424,7 @@ fn test_build_azure_config_from_factory_normalizes_deployment_base_url() {
         azure_config.azure_endpoint.as_deref(),
         Some("https://example-resource.openai.azure.com")
     );
-    assert_eq!(azure_config.deployment_name.as_deref(), Some("gpt-4o-prod"));
+    assert_eq!(azure_config.deployment_name.as_deref(), Some("prod-gpt4o"));
 }
 
 #[cfg(feature = "providers-extra")]

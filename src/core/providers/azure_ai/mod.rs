@@ -393,6 +393,17 @@ mod tests {
     }
 
     #[test]
+    fn test_supports_custom_deployment_models() {
+        let config = create_test_config();
+        let provider = AzureAIProvider::new(config)
+            .unwrap_or_else(|err| panic!("provider should be created: {err}"));
+
+        assert!(provider.supports_model("custom-foundry-deployment"));
+        assert!(provider.supports_model("azure_ai/custom-foundry-deployment"));
+        assert!(!provider.supports_model(""));
+    }
+
+    #[test]
     fn test_get_config() {
         let config = create_test_config();
         let provider = AzureAIProvider::new(config.clone()).unwrap();

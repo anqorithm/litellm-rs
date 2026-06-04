@@ -245,6 +245,30 @@ mod tests {
     }
 
     #[test]
+    fn test_create_default_headers_with_configured_api_version_and_headers() {
+        let mut config = AzureAIConfig::new("azure_ai");
+        config.base.api_key = Some("test-api-key".to_string());
+        config.base.api_version = Some("2024-10-21".to_string());
+        config.base.headers.insert(
+            "x-ms-client-request-id".to_string(),
+            "request-1".to_string(),
+        );
+
+        let headers = config
+            .create_default_headers()
+            .unwrap_or_else(|err| panic!("headers should build: {err}"));
+
+        assert_eq!(
+            headers.get("api-version").map(String::as_str),
+            Some("2024-10-21")
+        );
+        assert_eq!(
+            headers.get("x-ms-client-request-id").map(String::as_str),
+            Some("request-1")
+        );
+    }
+
+    #[test]
     fn test_create_default_headers_no_api_key() {
         let config = AzureAIConfig::new("azure_ai");
         let result = config.create_default_headers();

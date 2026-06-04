@@ -87,6 +87,53 @@ pub(super) fn merge_string_headers_value(
     false
 }
 
+#[cfg(not(feature = "providers-extra"))]
+fn build_azure_openai_like_config_for_factory(
+    config: &serde_json::Value,
+    provider_name: &'static str,
+    endpoint_alias: &'static str,
+) -> Result<openai_like::OpenAILikeConfig, ProviderError> {
+    let api_key = macros::require_config_str(config, "api_key", provider_name)?;
+    let api_base = config_str(config, "base_url")
+        .or_else(|| config_str(config, "api_base"))
+        .or_else(|| config_str(config, "endpoint"))
+        .or_else(|| config_str(config, endpoint_alias))
+        .ok_or_else(|| {
+            ProviderError::configuration(provider_name, "base_url (or endpoint) is required")
+        })?;
+
+    let mut oai_config = openai_like::OpenAILikeConfig::with_api_key(api_base, api_key);
+    oai_config.provider_name = provider_name.to_string();
+
+    if let Some(api_version) = config_str(config, "api_version") {
+        oai_config.base.api_version = Some(api_version.to_string());
+    }
+    if let Some(timeout) = config_u64(config, "timeout") {
+        oai_config.base.timeout = timeout;
+    }
+    if let Some(max_retries) = config_u32(config, "max_retries") {
+        oai_config.base.max_retries = max_retries;
+    }
+    merge_string_headers(&mut oai_config.base.headers, config, "headers");
+    merge_string_headers(&mut oai_config.custom_headers, config, "custom_headers");
+
+    Ok(oai_config)
+}
+
+#[cfg(not(feature = "providers-extra"))]
+pub(super) fn build_azure_ai_openai_like_config_from_factory(
+    config: &serde_json::Value,
+) -> Result<openai_like::OpenAILikeConfig, ProviderError> {
+    build_azure_openai_like_config_for_factory(config, "azure_ai", "azure_ai_endpoint")
+}
+
+#[cfg(not(feature = "providers-extra"))]
+pub(super) fn build_azure_openai_like_config_from_factory(
+    config: &serde_json::Value,
+) -> Result<openai_like::OpenAILikeConfig, ProviderError> {
+    build_azure_openai_like_config_for_factory(config, "azure", "azure_endpoint")
+}
+
 pub(super) fn apply_tier1_openai_like_overrides(
     config: &mut openai_like::OpenAILikeConfig,
     settings: &std::collections::HashMap<String, serde_json::Value>,

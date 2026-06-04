@@ -24,6 +24,10 @@ use super::builder::{
 };
 #[cfg(feature = "providers-extra")]
 use super::builder::{build_azure_ai_config_from_factory, build_azure_config_from_factory};
+#[cfg(not(feature = "providers-extra"))]
+use super::builder::{
+    build_azure_ai_openai_like_config_from_factory, build_azure_openai_like_config_from_factory,
+};
 
 impl Provider {
     /// Create provider from configuration asynchronously
@@ -93,8 +97,7 @@ impl Provider {
                 }
                 #[cfg(not(feature = "providers-extra"))]
                 {
-                    let mut oai_config = build_openai_like_config_from_factory(&config)?;
-                    oai_config.provider_name = "azure_ai".to_string();
+                    let oai_config = build_azure_ai_openai_like_config_from_factory(&config)?;
                     let provider = openai_like::OpenAILikeProvider::new(oai_config)
                         .await
                         .map_err(|e| ProviderError::initialization("azure_ai", e.to_string()))?;
@@ -124,8 +127,7 @@ impl Provider {
                 }
                 #[cfg(not(feature = "providers-extra"))]
                 {
-                    let mut oai_config = build_openai_like_config_from_factory(&config)?;
-                    oai_config.provider_name = "azure".to_string();
+                    let oai_config = build_azure_openai_like_config_from_factory(&config)?;
                     let provider = openai_like::OpenAILikeProvider::new(oai_config)
                         .await
                         .map_err(|e| ProviderError::initialization("azure", e.to_string()))?;
