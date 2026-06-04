@@ -93,10 +93,12 @@ impl Provider {
                 }
                 #[cfg(not(feature = "providers-extra"))]
                 {
-                    Err(ProviderError::not_implemented(
-                        "azure_ai",
-                        "native Azure AI dispatch requires the `providers-extra` feature",
-                    ))
+                    let mut oai_config = build_openai_like_config_from_factory(&config)?;
+                    oai_config.provider_name = "azure_ai".to_string();
+                    let provider = openai_like::OpenAILikeProvider::new(oai_config)
+                        .await
+                        .map_err(|e| ProviderError::initialization("azure_ai", e.to_string()))?;
+                    Ok(Provider::OpenAILike(provider))
                 }
             }
             ProviderType::AmazonNova => {
@@ -122,10 +124,12 @@ impl Provider {
                 }
                 #[cfg(not(feature = "providers-extra"))]
                 {
-                    Err(ProviderError::not_implemented(
-                        "azure",
-                        "native Azure dispatch requires the `providers-extra` feature",
-                    ))
+                    let mut oai_config = build_openai_like_config_from_factory(&config)?;
+                    oai_config.provider_name = "azure".to_string();
+                    let provider = openai_like::OpenAILikeProvider::new(oai_config)
+                        .await
+                        .map_err(|e| ProviderError::initialization("azure", e.to_string()))?;
+                    Ok(Provider::OpenAILike(provider))
                 }
             }
             ProviderType::Bedrock => {

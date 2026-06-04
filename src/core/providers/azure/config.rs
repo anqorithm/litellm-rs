@@ -139,7 +139,21 @@ impl AzureConfig {
         self.deployment_name
             .clone()
             .or_else(|| std::env::var("AZURE_DEPLOYMENT_NAME").ok())
-            .unwrap_or_else(|| model.to_string())
+            .unwrap_or_else(|| Self::deployment_name_from_model(model))
+    }
+
+    fn deployment_name_from_model(model: &str) -> String {
+        let trimmed = model.trim();
+        if let Some(stripped) = trimmed.strip_prefix("azure/") {
+            return stripped.to_string();
+        }
+
+        trimmed
+            .split('/')
+            .next_back()
+            .filter(|value| !value.is_empty())
+            .unwrap_or(trimmed)
+            .to_string()
     }
 }
 
@@ -240,6 +254,14 @@ mod tests {
         let config_no_deployment = AzureConfig::new();
         assert_eq!(
             config_no_deployment.get_effective_deployment_name("gpt-4"),
+            "gpt-4"
+        );
+        assert_eq!(
+            config_no_deployment.get_effective_deployment_name("azure/gpt-4"),
+            "gpt-4"
+        );
+        assert_eq!(
+            config_no_deployment.get_effective_deployment_name("openai/gpt-4"),
             "gpt-4"
         );
     }

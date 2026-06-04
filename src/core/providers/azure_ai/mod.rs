@@ -146,6 +146,10 @@ impl LLMProvider for AzureAIProvider {
         MODELS.get_or_init(|| self.model_registry.to_model_infos())
     }
 
+    fn supports_model(&self, model: &str) -> bool {
+        !model.trim().is_empty()
+    }
+
     fn get_supported_openai_params(&self, _model: &str) -> &'static [&'static str] {
         &[
             "temperature",
@@ -366,6 +370,19 @@ mod tests {
         assert!(caps.contains(&ProviderCapability::Embeddings));
         assert!(caps.contains(&ProviderCapability::ImageGeneration));
         assert_eq!(caps.len(), 4);
+    }
+
+    #[test]
+    fn test_supports_custom_deployment_names() {
+        let config = create_test_config();
+        let provider = match AzureAIProvider::new(config) {
+            Ok(provider) => provider,
+            Err(err) => panic!("test Azure AI provider should be created: {err}"),
+        };
+
+        assert!(provider.supports_model("gpt-4o-prod"));
+        assert!(provider.supports_model("azure_ai/private-deployment"));
+        assert!(!provider.supports_model(""));
     }
 
     #[test]

@@ -315,6 +315,47 @@ fn test_build_azure_config_from_factory_maps_native_fields() {
 
 #[cfg(feature = "providers-extra")]
 #[test]
+fn test_build_azure_config_from_factory_normalizes_deployment_base_url() {
+    let config = serde_json::json!({
+        "api_key": "azure-key",
+        "base_url": "https://example-resource.openai.azure.com/openai/deployments/gpt-4o-prod",
+        "api_version": "2024-03-01"
+    });
+
+    let azure_config = build_azure_config_from_factory(&config)
+        .unwrap_or_else(|err| panic!("azure config should parse: {err}"));
+
+    assert_eq!(
+        azure_config.azure_endpoint.as_deref(),
+        Some("https://example-resource.openai.azure.com")
+    );
+    assert_eq!(azure_config.deployment_name.as_deref(), Some("gpt-4o-prod"));
+}
+
+#[cfg(feature = "providers-extra")]
+#[test]
+fn test_build_azure_config_from_factory_prefers_explicit_deployment_name() {
+    let config = serde_json::json!({
+        "api_key": "azure-key",
+        "base_url": "https://example-resource.openai.azure.com/openai/deployments/url-deployment/chat/completions",
+        "deployment_name": "explicit-deployment"
+    });
+
+    let azure_config = build_azure_config_from_factory(&config)
+        .unwrap_or_else(|err| panic!("azure config should parse: {err}"));
+
+    assert_eq!(
+        azure_config.azure_endpoint.as_deref(),
+        Some("https://example-resource.openai.azure.com")
+    );
+    assert_eq!(
+        azure_config.deployment_name.as_deref(),
+        Some("explicit-deployment")
+    );
+}
+
+#[cfg(feature = "providers-extra")]
+#[test]
 fn test_build_azure_ai_config_from_factory_maps_native_fields() {
     let config = serde_json::json!({
         "api_key": "azure-ai-key",

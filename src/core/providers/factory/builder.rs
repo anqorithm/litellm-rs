@@ -37,6 +37,21 @@ fn config_str_any<'a>(config: &'a serde_json::Value, keys: &[&str]) -> Option<&'
     keys.iter().find_map(|key| config_str(config, key))
 }
 
+#[cfg(feature = "providers-extra")]
+fn normalize_azure_endpoint_and_deployment(api_base: &str) -> (String, Option<String>) {
+    let trimmed = api_base.trim_end_matches('/');
+    if let Some((endpoint, deployment_path)) = trimmed.split_once("/openai/deployments/") {
+        let deployment = deployment_path
+            .split('/')
+            .next()
+            .filter(|value| !value.trim().is_empty())
+            .map(str::to_string);
+        (endpoint.to_string(), deployment)
+    } else {
+        (trimmed.to_string(), None)
+    }
+}
+
 pub(super) fn env_str_any(keys: &[&str]) -> Option<String> {
     keys.iter()
         .filter_map(|key| env::var(key).ok())
@@ -453,17 +468,20 @@ pub(super) fn build_azure_config_from_factory(
             ProviderError::configuration("azure", "base_url (or endpoint) is required")
         })?;
 
+    let (azure_endpoint, deployment_from_url) = normalize_azure_endpoint_and_deployment(api_base);
     let mut azure_config = azure::AzureConfig::new()
         .with_api_key(api_key.to_string())
-        .with_azure_endpoint(api_base.to_string());
+        .with_azure_endpoint(azure_endpoint);
 
     if let Some(api_version) = config_str(config, "api_version") {
         azure_config.api_version = api_version.to_string();
     }
-    if let Some(deployment_name) =
-        config_str(config, "deployment_name").or_else(|| config_str(config, "deployment"))
-    {
-        azure_config.deployment_name = Some(deployment_name.to_string());
+    let deployment_name = config_str(config, "deployment_name")
+        .or_else(|| config_str(config, "deployment"))
+        .map(str::to_string)
+        .or(deployment_from_url);
+    if let Some(deployment_name) = deployment_name {
+        azure_config.deployment_name = Some(deployment_name);
     }
     if let Some(timeout) = config_u64(config, "timeout") {
         azure_config.timeout = timeout;

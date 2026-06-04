@@ -92,14 +92,14 @@ pub static PROVIDER_TYPE_REGISTRY: &[ProviderRegistryEntry] = &[
         ProviderType::Azure,
         "azure",
         &["azure-openai"],
-        provider_extra_native_dispatch_kind(),
+        azure_dispatch_kind(),
         false,
     ),
     entry(
         ProviderType::AzureAI,
         "azure_ai",
         &["azureai", "azure-ai"],
-        provider_extra_native_dispatch_kind(),
+        azure_dispatch_kind(),
         false,
     ),
     entry(
@@ -327,11 +327,11 @@ const fn entry(
     }
 }
 
-const fn provider_extra_native_dispatch_kind() -> ProviderDispatchKind {
+const fn azure_dispatch_kind() -> ProviderDispatchKind {
     if cfg!(feature = "providers-extra") {
         ProviderDispatchKind::Native
     } else {
-        ProviderDispatchKind::UnsupportedEnum
+        ProviderDispatchKind::ExplicitOpenAiLike
     }
 }
 
@@ -429,11 +429,11 @@ mod tests {
         );
         assert_eq!(
             dispatch_kind_for(&ProviderType::Azure),
-            provider_extra_native_dispatch_kind()
+            azure_dispatch_kind()
         );
         assert_eq!(
             dispatch_kind_for(&ProviderType::AzureAI),
-            provider_extra_native_dispatch_kind()
+            azure_dispatch_kind()
         );
         assert_eq!(
             dispatch_kind_for(&ProviderType::OpenAICompatible),

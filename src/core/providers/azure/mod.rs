@@ -149,6 +149,10 @@ impl LLMProvider for AzureOpenAIProvider {
         &[]
     }
 
+    fn supports_model(&self, model: &str) -> bool {
+        !model.trim().is_empty()
+    }
+
     fn get_supported_openai_params(&self, _model: &str) -> &'static [&'static str] {
         &[
             "temperature",
@@ -258,6 +262,31 @@ impl LLMProvider for AzureOpenAIProvider {
         } else {
             HealthStatus::Unhealthy
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
+
+    fn create_test_provider() -> AzureOpenAIProvider {
+        let config = AzureConfig::new()
+            .with_api_key("test-key".to_string())
+            .with_azure_endpoint("https://test.openai.azure.com".to_string());
+        match AzureOpenAIProvider::new(config) {
+            Ok(provider) => provider,
+            Err(err) => panic!("test Azure provider should be created: {err}"),
+        }
+    }
+
+    #[test]
+    fn supports_custom_deployment_names() {
+        let provider = create_test_provider();
+
+        assert!(LLMProvider::supports_model(&provider, "gpt-4o-prod"));
+        assert!(LLMProvider::supports_model(&provider, "azure/gpt-4o-prod"));
+        assert!(!LLMProvider::supports_model(&provider, ""));
     }
 }
 

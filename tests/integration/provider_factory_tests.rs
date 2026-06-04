@@ -233,6 +233,56 @@ mod tests {
         assert!(matches!(provider, Provider::OpenAILike(_)));
     }
 
+    /// Test Azure OpenAI falls back to OpenAI-compatible dispatch by default.
+    #[cfg(not(feature = "providers-extra"))]
+    #[tokio::test]
+    async fn test_azure_provider_uses_openai_like_dispatch_without_providers_extra() {
+        let config = json!({
+            "api_key": "azure-test-key",
+            "base_url": "https://test-resource.openai.azure.com/openai/deployments/gpt-4o/chat/completions"
+        });
+
+        let result = Provider::from_config_async(ProviderType::Azure, config).await;
+        assert!(
+            result.is_ok(),
+            "Failed to create fallback Azure provider: {:?}",
+            result.err()
+        );
+
+        let provider = match result {
+            Ok(provider) => provider,
+            Err(err) => panic!("fallback Azure provider should be created: {err}"),
+        };
+        assert_eq!(provider.name(), "azure");
+        assert_eq!(provider.provider_type(), ProviderType::OpenAICompatible);
+        assert!(matches!(provider, Provider::OpenAILike(_)));
+    }
+
+    /// Test Azure AI falls back to OpenAI-compatible dispatch by default.
+    #[cfg(not(feature = "providers-extra"))]
+    #[tokio::test]
+    async fn test_azure_ai_provider_uses_openai_like_dispatch_without_providers_extra() {
+        let config = json!({
+            "api_key": "azure-ai-test-key",
+            "base_url": "https://test-resource.services.ai.azure.com"
+        });
+
+        let result = Provider::from_config_async(ProviderType::AzureAI, config).await;
+        assert!(
+            result.is_ok(),
+            "Failed to create fallback Azure AI provider: {:?}",
+            result.err()
+        );
+
+        let provider = match result {
+            Ok(provider) => provider,
+            Err(err) => panic!("fallback Azure AI provider should be created: {err}"),
+        };
+        assert_eq!(provider.name(), "azure_ai");
+        assert_eq!(provider.provider_type(), ProviderType::OpenAICompatible);
+        assert!(matches!(provider, Provider::OpenAILike(_)));
+    }
+
     /// Test Azure OpenAI uses the native provider path when providers-extra is enabled.
     #[cfg(feature = "providers-extra")]
     #[tokio::test]
