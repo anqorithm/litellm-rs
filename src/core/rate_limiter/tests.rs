@@ -194,6 +194,39 @@ async fn test_release_recorded_sliding_and_fixed_windows_remove_empty_entry() {
 }
 
 #[tokio::test]
+async fn test_release_recorded_sliding_window_uses_recorded_timestamp_lifetime() {
+    let limiter = RateLimiter::with_window(
+        test_config_with_strategy(true, 2, RateLimitStrategy::SlidingWindow),
+        Duration::from_secs(2),
+    );
+    let key = "auth-ip";
+    let now = Instant::now();
+    limiter.entries.insert(
+        key.to_string(),
+        RateLimitEntry {
+            timestamps: vec![now - Duration::from_millis(1500)],
+            tokens: 0.0,
+            last_refill: now,
+        },
+    );
+
+    let (result, reservation) = limiter.check_and_record_with_source(key).await;
+    assert!(result.allowed);
+
+    tokio::time::sleep(Duration::from_millis(1100)).await;
+    limiter.release_recorded(key, reservation).await;
+
+    let first_after_release = limiter.check_and_record(key).await;
+    let second_after_release = limiter.check_and_record(key).await;
+
+    assert!(first_after_release.allowed);
+    assert!(
+        second_after_release.allowed,
+        "release must remove the successful auth reservation for its full sliding window lifetime"
+    );
+}
+
+#[tokio::test]
 async fn test_release_recorded_token_bucket_restores_fresh_reservation() {
     let limiter = RateLimiter::new(test_config_with_strategy(
         true,

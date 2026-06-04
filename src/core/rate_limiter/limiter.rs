@@ -94,9 +94,8 @@ impl RateLimiter {
     fn local_reservation_reset_after_secs(&self, result: &RateLimitResult) -> u64 {
         match self.config.strategy {
             RateLimitStrategy::TokenBucket => self.token_bucket_reservation_window().as_secs(),
-            RateLimitStrategy::SlidingWindow | RateLimitStrategy::FixedWindow => {
-                result.reset_after_secs
-            }
+            RateLimitStrategy::SlidingWindow => self.window.as_secs(),
+            RateLimitStrategy::FixedWindow => result.reset_after_secs,
         }
     }
 
@@ -304,12 +303,11 @@ impl RateLimiter {
 
     fn release_local(&self, key: &str, recorded_at: Option<Instant>) {
         let limit = self.config.default_rpm as f64;
-        let should_remove = {
-            let Some(mut entry) = self.entries.get_mut(key) else {
-                return;
-            };
+        let strategy = self.config.strategy.clone();
+        let reservation_window = self.token_bucket_reservation_window();
 
-            match self.config.strategy {
+        let _removed_entry = self.entries.remove_if_mut(key, |_, entry| {
+            match &strategy {
                 RateLimitStrategy::SlidingWindow | RateLimitStrategy::FixedWindow => {
                     if let Some(recorded_at) = recorded_at {
                         if let Some(position) =
@@ -324,7 +322,6 @@ impl RateLimiter {
                 RateLimitStrategy::TokenBucket => {
                     let should_refund = if let Some(recorded_at) = recorded_at {
                         let now = Instant::now();
-                        let reservation_window = self.token_bucket_reservation_window();
                         entry
                             .timestamps
                             .retain(|&ts| now.saturating_duration_since(ts) < reservation_window);
@@ -347,7 +344,7 @@ impl RateLimiter {
                 }
             }
 
-            match self.config.strategy {
+            match &strategy {
                 RateLimitStrategy::SlidingWindow | RateLimitStrategy::FixedWindow => {
                     entry.timestamps.is_empty()
                 }
@@ -355,11 +352,7 @@ impl RateLimiter {
                     entry.timestamps.is_empty() && entry.tokens >= limit
                 }
             }
-        };
-
-        if should_remove {
-            self.entries.remove(key);
-        }
+        });
     }
 
     /// Record a request (increments counter)

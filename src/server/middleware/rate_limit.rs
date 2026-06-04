@@ -127,18 +127,10 @@ impl AuthRateLimitReservation {
                 }
             }
             RateLimitReservationSource::Fallback { store, recorded_at } => {
-                let should_remove = {
-                    let Some(mut tracker) = store.get_mut(&self.key) else {
-                        return;
-                    };
-
+                let _removed_entry = store.remove_if_mut(&self.key, |_, tracker| {
                     tracker.release(recorded_at);
                     tracker.timestamps.is_empty()
-                };
-
-                if should_remove {
-                    store.remove(&self.key);
-                }
+                });
             }
             RateLimitReservationSource::Noop => {}
         }
