@@ -42,6 +42,9 @@ const ENV_RATE_LIMIT_ENABLED: &str = "LITELLM_RATE_LIMIT_ENABLED";
 const ENV_ENTERPRISE_ENABLED: &str = "LITELLM_ENTERPRISE_ENABLED";
 const DEFAULT_PRICING_SOURCE: &str = "config/model_prices_extended.json";
 
+#[cfg(test)]
+pub(crate) static GATEWAY_ENV_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 fn env_var(key: &str) -> Option<String> {
     env::var(key)
         .ok()

@@ -1,8 +1,5 @@
 use super::*;
 use crate::config::models::enterprise::SsoConfig;
-use std::sync::Mutex;
-
-static ENV_LOCK: Mutex<()> = Mutex::new(());
 
 const TEST_ENV_KEYS: [&str; 24] = [
     ENV_HOST,
@@ -83,7 +80,7 @@ fn test_gateway_config_default() {
 
 #[test]
 fn test_gateway_config_from_env() {
-    let _guard = ENV_LOCK.lock().unwrap();
+    let _guard = GATEWAY_ENV_LOCK.blocking_lock();
     clear_test_env();
     unsafe {
         env::set_var(ENV_HOST, "127.0.0.1");
@@ -149,7 +146,7 @@ fn test_gateway_config_from_env() {
 
 #[test]
 fn test_gateway_config_from_env_allows_local_provider_without_api_key() {
-    let _guard = ENV_LOCK.lock().unwrap();
+    let _guard = GATEWAY_ENV_LOCK.blocking_lock();
     clear_test_env();
     unsafe {
         env::set_var(ENV_ENABLE_JWT, "true");
@@ -171,7 +168,7 @@ fn test_gateway_config_from_env_allows_local_provider_without_api_key() {
 
 #[test]
 fn test_gateway_config_from_env_requires_providers() {
-    let _guard = ENV_LOCK.lock().unwrap();
+    let _guard = GATEWAY_ENV_LOCK.blocking_lock();
     clear_test_env();
     unsafe {
         env::set_var(ENV_ENABLE_JWT, "true");
@@ -187,7 +184,7 @@ fn test_gateway_config_from_env_requires_providers() {
 
 #[test]
 fn test_gateway_config_from_env_invalid_port() {
-    let _guard = ENV_LOCK.lock().unwrap();
+    let _guard = GATEWAY_ENV_LOCK.blocking_lock();
     clear_test_env();
     unsafe {
         env::set_var(ENV_PORT, "invalid-port");
@@ -592,7 +589,7 @@ fn test_gateway_config_merge_pricing_uses_explicit_default_overlay_source() {
 
 #[test]
 fn test_gateway_config_merge_pricing_uses_env_default_overlay_source() {
-    let _guard = ENV_LOCK.lock().unwrap();
+    let _guard = GATEWAY_ENV_LOCK.blocking_lock();
     clear_test_env();
     unsafe {
         env::set_var(ENV_ENABLE_JWT, "false");
@@ -663,7 +660,7 @@ fn test_gateway_config_clone() {
 
 #[test]
 fn test_gateway_config_from_env_cache_enabled() {
-    let _guard = ENV_LOCK.lock().unwrap();
+    let _guard = GATEWAY_ENV_LOCK.blocking_lock();
     clear_test_env();
     unsafe {
         env::set_var(ENV_ENABLE_JWT, "true");
@@ -682,7 +679,7 @@ fn test_gateway_config_from_env_cache_enabled() {
 
 #[test]
 fn test_gateway_config_from_env_rate_limit_enabled() {
-    let _guard = ENV_LOCK.lock().unwrap();
+    let _guard = GATEWAY_ENV_LOCK.blocking_lock();
     clear_test_env();
     unsafe {
         env::set_var(ENV_ENABLE_JWT, "true");
@@ -701,7 +698,7 @@ fn test_gateway_config_from_env_rate_limit_enabled() {
 
 #[test]
 fn test_gateway_config_from_env_enterprise_enabled() {
-    let _guard = ENV_LOCK.lock().unwrap();
+    let _guard = GATEWAY_ENV_LOCK.blocking_lock();
     clear_test_env();
     unsafe {
         env::set_var(ENV_ENABLE_JWT, "true");
@@ -720,7 +717,7 @@ fn test_gateway_config_from_env_enterprise_enabled() {
 
 #[test]
 fn test_gateway_config_from_env_all_features_enabled() {
-    let _guard = ENV_LOCK.lock().unwrap();
+    let _guard = GATEWAY_ENV_LOCK.blocking_lock();
     clear_test_env();
     unsafe {
         env::set_var(ENV_ENABLE_JWT, "true");
@@ -743,7 +740,7 @@ fn test_gateway_config_from_env_all_features_enabled() {
 
 #[test]
 fn test_gateway_config_from_env_features_disabled() {
-    let _guard = ENV_LOCK.lock().unwrap();
+    let _guard = GATEWAY_ENV_LOCK.blocking_lock();
     clear_test_env();
     unsafe {
         env::set_var(ENV_ENABLE_JWT, "true");
@@ -766,7 +763,7 @@ fn test_gateway_config_from_env_features_disabled() {
 
 #[test]
 fn test_gateway_config_from_env_invalid_cache_enabled() {
-    let _guard = ENV_LOCK.lock().unwrap();
+    let _guard = GATEWAY_ENV_LOCK.blocking_lock();
     clear_test_env();
     unsafe {
         env::set_var(ENV_ENABLE_JWT, "true");
