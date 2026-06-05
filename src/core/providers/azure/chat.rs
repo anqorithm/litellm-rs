@@ -225,6 +225,9 @@ impl AzureChatHandler {
         if let Some(max_tokens) = request.max_tokens {
             body["max_tokens"] = json!(max_tokens);
         }
+        if let Some(max_completion_tokens) = request.max_completion_tokens {
+            body["max_completion_tokens"] = json!(max_completion_tokens);
+        }
         if let Some(top_p) = request.top_p {
             body["top_p"] = json!(top_p);
         }

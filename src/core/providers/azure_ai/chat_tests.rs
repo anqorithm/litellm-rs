@@ -81,6 +81,7 @@ fn test_transform_request_with_options() {
     let mut request = create_test_request();
     request.temperature = Some(0.5);
     request.max_tokens = Some(100);
+    request.max_completion_tokens = Some(120);
     request.top_p = Some(0.9);
     request.frequency_penalty = Some(0.5);
     request.presence_penalty = Some(0.5);
@@ -92,10 +93,29 @@ fn test_transform_request_with_options() {
     // Use approximate comparison for floating point values
     assert!((value["temperature"].as_f64().unwrap() - 0.5).abs() < 0.001);
     assert_eq!(value["max_tokens"], 100);
+    assert_eq!(value["max_completion_tokens"], 120);
     assert!((value["top_p"].as_f64().unwrap() - 0.9).abs() < 0.001);
     assert!((value["frequency_penalty"].as_f64().unwrap() - 0.5).abs() < 0.001);
     assert!((value["presence_penalty"].as_f64().unwrap() - 0.5).abs() < 0.001);
     assert!(value["stop"].is_array());
+}
+
+#[test]
+fn test_transform_request_preserves_extra_params_without_overriding_known_fields() {
+    let mut request = create_test_request();
+    request.temperature = Some(0.5);
+    request
+        .extra_params
+        .insert("provider_knob".to_string(), json!("kept"));
+    request
+        .extra_params
+        .insert("temperature".to_string(), json!(1.5));
+
+    let result = AzureAIChatUtils::transform_request(&request);
+    assert!(result.is_ok());
+    let value = result.unwrap();
+    assert_eq!(value["provider_knob"], "kept");
+    assert!((value["temperature"].as_f64().unwrap() - 0.5).abs() < 0.001);
 }
 
 #[test]

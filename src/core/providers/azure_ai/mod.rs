@@ -136,7 +136,6 @@ impl LLMProvider for AzureAIProvider {
             ProviderCapability::ChatCompletion,
             ProviderCapability::ChatCompletionStream,
             ProviderCapability::Embeddings,
-            ProviderCapability::ImageGeneration,
         ]
     }
 
@@ -230,10 +229,10 @@ impl LLMProvider for AzureAIProvider {
 
     async fn image_generation(
         &self,
-        request: ImageGenerationRequest,
-        context: RequestContext,
+        _request: ImageGenerationRequest,
+        _context: RequestContext,
     ) -> Result<ImageGenerationResponse, ProviderError> {
-        self.image_handler.generate_image(request, context).await
+        Err(ProviderError::not_supported("azure_ai", "image_generation"))
     }
 
     async fn health_check(&self) -> HealthStatus {
@@ -366,8 +365,33 @@ mod tests {
         assert!(caps.contains(&ProviderCapability::ChatCompletion));
         assert!(caps.contains(&ProviderCapability::ChatCompletionStream));
         assert!(caps.contains(&ProviderCapability::Embeddings));
-        assert!(caps.contains(&ProviderCapability::ImageGeneration));
-        assert_eq!(caps.len(), 4);
+        assert!(!caps.contains(&ProviderCapability::ImageGeneration));
+        assert!(!provider.supports_image_generation());
+        assert_eq!(caps.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_image_generation_not_implemented_until_response_mapping_exists() {
+        let config = create_test_config();
+        let provider = match AzureAIProvider::new(config) {
+            Ok(provider) => provider,
+            Err(err) => panic!("test Azure AI provider should be created: {err}"),
+        };
+        let request = ImageGenerationRequest {
+            prompt: "A test image".to_string(),
+            model: Some("flux-1.1-pro".to_string()),
+            n: None,
+            size: None,
+            quality: None,
+            response_format: None,
+            style: None,
+            user: None,
+        };
+
+        let result = provider
+            .image_generation(request, RequestContext::default())
+            .await;
+        assert!(matches!(result, Err(ProviderError::NotSupported { .. })));
     }
 
     #[test]

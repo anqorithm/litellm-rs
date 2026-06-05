@@ -271,6 +271,12 @@ impl AzureAIChatUtils {
             })?;
         }
 
+        if let Some(obj) = azure_request.as_object_mut() {
+            for (key, value) in &request.extra_params {
+                obj.entry(key.clone()).or_insert_with(|| value.clone());
+            }
+        }
+
         Ok(azure_request)
     }
 

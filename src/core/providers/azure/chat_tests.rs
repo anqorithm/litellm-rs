@@ -120,6 +120,7 @@ fn test_transform_request_with_options() {
         messages: vec![create_test_message(MessageRole::User, "Hello")],
         temperature: Some(0.7),
         max_tokens: Some(100),
+        max_completion_tokens: Some(120),
         top_p: Some(0.9),
         frequency_penalty: Some(0.5),
         presence_penalty: Some(0.3),
@@ -134,6 +135,7 @@ fn test_transform_request_with_options() {
     let value = result.unwrap();
     assert!((value["temperature"].as_f64().unwrap() - 0.7).abs() < 0.001);
     assert_eq!(value["max_tokens"], 100);
+    assert_eq!(value["max_completion_tokens"], 120);
     assert!((value["top_p"].as_f64().unwrap() - 0.9).abs() < 0.001);
     assert!(value["stop"].is_array());
     assert!(value["stream"].as_bool().unwrap());

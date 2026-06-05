@@ -269,6 +269,29 @@ impl LLMProvider for AzureOpenAIProvider {
     }
 }
 
+// ProviderConfig implementation is in common_utils.rs
+
+/// Azure provider factory
+pub struct AzureProviderFactory;
+
+impl AzureProviderFactory {
+    /// Create provider with default configuration
+    pub fn create_default() -> Result<AzureOpenAIProvider, ProviderError> {
+        let config = AzureConfig::new();
+        AzureOpenAIProvider::new(config)
+    }
+
+    /// Create provider with custom configuration
+    pub fn create_with_config(config: AzureConfig) -> Result<AzureOpenAIProvider, ProviderError> {
+        AzureOpenAIProvider::new(config)
+    }
+
+    /// Create provider from environment variables
+    pub fn create_from_env() -> Result<AzureOpenAIProvider, ProviderError> {
+        AzureOpenAIProvider::from_env()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -291,28 +314,5 @@ mod tests {
         assert!(LLMProvider::supports_model(&provider, "gpt-4o-prod"));
         assert!(LLMProvider::supports_model(&provider, "azure/gpt-4o-prod"));
         assert!(!LLMProvider::supports_model(&provider, ""));
-    }
-}
-
-// ProviderConfig implementation is in common_utils.rs
-
-/// Azure provider factory
-pub struct AzureProviderFactory;
-
-impl AzureProviderFactory {
-    /// Create provider with default configuration
-    pub fn create_default() -> Result<AzureOpenAIProvider, ProviderError> {
-        let config = AzureConfig::new();
-        AzureOpenAIProvider::new(config)
-    }
-
-    /// Create provider with custom configuration
-    pub fn create_with_config(config: AzureConfig) -> Result<AzureOpenAIProvider, ProviderError> {
-        AzureOpenAIProvider::new(config)
-    }
-
-    /// Create provider from environment variables
-    pub fn create_from_env() -> Result<AzureOpenAIProvider, ProviderError> {
-        AzureOpenAIProvider::from_env()
     }
 }
