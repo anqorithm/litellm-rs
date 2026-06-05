@@ -11,6 +11,23 @@ use crate::define_provider_config;
 // Configuration
 define_provider_config!(AzureAIConfig {});
 
+/// Convert routed model names to Azure AI deployment/model names.
+pub(crate) fn normalize_model_name(model: &str) -> &str {
+    let trimmed = model.trim();
+    if let Some(stripped) = trimmed.strip_prefix("azure_ai/") {
+        return stripped;
+    }
+    if let Some(stripped) = trimmed.strip_prefix("azure/") {
+        return stripped;
+    }
+
+    trimmed
+        .split('/')
+        .next_back()
+        .filter(|value| !value.is_empty())
+        .unwrap_or(trimmed)
+}
+
 impl AzureAIConfig {
     /// Create
     pub fn from_env() -> Self {
@@ -274,6 +291,27 @@ mod tests {
         let result = config.create_default_headers();
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("API key not set"));
+    }
+
+    #[test]
+    fn test_normalize_model_name_strips_provider_prefixes() {
+        assert_eq!(
+            normalize_model_name("custom-deployment"),
+            "custom-deployment"
+        );
+        assert_eq!(
+            normalize_model_name("azure_ai/custom-deployment"),
+            "custom-deployment"
+        );
+        assert_eq!(
+            normalize_model_name("azure/custom-deployment"),
+            "custom-deployment"
+        );
+        assert_eq!(
+            normalize_model_name("openai/custom-deployment"),
+            "custom-deployment"
+        );
+        assert_eq!(normalize_model_name(""), "");
     }
 
     #[test]

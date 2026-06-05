@@ -209,8 +209,9 @@ impl AzureAIChatUtils {
 
     /// Transform ChatRequest to Azure AI format
     pub fn transform_request(request: &ChatRequest) -> Result<Value, ProviderError> {
+        let model = super::config::normalize_model_name(&request.model);
         let mut azure_request = json!({
-            "model": request.model,
+            "model": model,
             "messages": Self::transform_messages(&request.messages)?
         });
 

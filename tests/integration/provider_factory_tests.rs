@@ -371,6 +371,31 @@ mod tests {
         assert!(matches!(provider, Provider::AzureAI(_)));
     }
 
+    /// Test native Azure AI keeps gateway routing deployment-driven.
+    #[cfg(feature = "providers-extra")]
+    #[tokio::test]
+    async fn test_azure_ai_native_dispatch_uses_provider_name_when_models_omitted() {
+        use litellm_rs::config::models::provider::ProviderConfig as GatewayProviderConfig;
+        use litellm_rs::core::router::UnifiedRouter;
+
+        let provider = GatewayProviderConfig {
+            name: "private-foundry-deployment".to_string(),
+            provider_type: "azure_ai".to_string(),
+            api_key: "azure-ai-test-key".to_string(),
+            base_url: Some("https://test-resource.services.ai.azure.com".to_string()),
+            enabled: true,
+            models: vec![],
+            ..GatewayProviderConfig::default()
+        };
+
+        let router = UnifiedRouter::from_gateway_config(&[provider], None)
+            .await
+            .unwrap_or_else(|err| panic!("router should build from Azure AI config: {err}"));
+
+        let models = router.list_models();
+        assert_eq!(models, vec!["private-foundry-deployment".to_string()]);
+    }
+
     /// Test provider creation fails with missing api_key
     #[tokio::test]
     async fn test_provider_creation_fails_without_api_key() {

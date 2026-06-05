@@ -141,13 +141,11 @@ impl LLMProvider for AzureAIProvider {
     }
 
     fn models(&self) -> &[ModelInfo] {
-        // Get
-        static MODELS: std::sync::OnceLock<Vec<ModelInfo>> = std::sync::OnceLock::new();
-        MODELS.get_or_init(|| self.model_registry.to_model_infos())
+        &[]
     }
 
     fn supports_model(&self, model: &str) -> bool {
-        !model.trim().is_empty()
+        !config::normalize_model_name(model).is_empty()
     }
 
     fn get_supported_openai_params(&self, _model: &str) -> &'static [&'static str] {
@@ -386,10 +384,11 @@ mod tests {
     }
 
     #[test]
-    fn test_provider_models_not_empty() {
+    fn test_provider_models_are_deployment_driven() {
         let config = create_test_config();
         let provider = AzureAIProvider::new(config).unwrap();
-        assert!(!provider.models().is_empty());
+        assert!(provider.models().is_empty());
+        assert!(!provider.get_model_registry().get_all_models().is_empty());
     }
 
     #[test]

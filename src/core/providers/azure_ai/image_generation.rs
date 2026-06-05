@@ -43,8 +43,14 @@ impl AzureAIImageHandler {
         }
 
         // Build request
+        let model = request
+            .model
+            .as_deref()
+            .map(super::config::normalize_model_name)
+            .filter(|model| !model.is_empty())
+            .unwrap_or("flux-1.1-pro");
         let azure_request = json!({
-            "model": request.model.clone().unwrap_or_else(|| "flux-1.1-pro".to_string()),
+            "model": model,
             "prompt": request.prompt,
             "n": request.n.unwrap_or(1),
             "size": request.size.clone().unwrap_or_else(|| "1024x1024".to_string()),

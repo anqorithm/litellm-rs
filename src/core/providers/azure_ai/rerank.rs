@@ -213,8 +213,9 @@ impl AzureAIRerankUtils {
 
     /// Transform RerankRequest to Azure AI format
     pub fn transform_request(request: &RerankRequest) -> Result<Value, ProviderError> {
+        let model = super::config::normalize_model_name(&request.model);
         let mut azure_request = json!({
-            "model": request.model,
+            "model": model,
             "query": request.query,
             "documents": request.documents,
         });

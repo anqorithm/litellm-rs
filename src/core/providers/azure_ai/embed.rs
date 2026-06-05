@@ -152,8 +152,9 @@ impl AzureAIEmbeddingUtils {
 
     /// Transform EmbeddingRequest to Azure AI format
     pub fn transform_request(request: &EmbeddingRequest) -> Result<Value, ProviderError> {
+        let model = super::config::normalize_model_name(&request.model);
         let mut azure_request = json!({
-            "model": request.model,
+            "model": model,
             "input": request.input
         });
 
