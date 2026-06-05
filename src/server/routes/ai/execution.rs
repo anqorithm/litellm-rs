@@ -320,6 +320,25 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_execute_with_selected_deployment_rejects_unsupported_capability() {
+        let router = build_mixed_capability_router().await;
+
+        let err = execute_with_selected_deployment(
+            &router,
+            "shared-model",
+            ProviderCapability::TextToSpeech,
+            |_provider, _model| async { Ok::<_, ProviderError>(("should not run", 0)) },
+        )
+        .await
+        .expect_err("unsupported capability should fail before execution");
+
+        assert!(matches!(
+            err,
+            GatewayError::Provider(ProviderError::InvalidRequest { .. })
+        ));
+    }
+
+    #[tokio::test]
     async fn test_execute_with_selected_deployment_maps_provider_error() {
         let router = build_test_router().await;
 

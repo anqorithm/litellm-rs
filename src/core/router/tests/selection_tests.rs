@@ -6,7 +6,9 @@
 use super::router_tests::create_test_deployment;
 use crate::core::router::config::{RouterConfig, RoutingStrategy};
 use crate::core::router::deployment::HealthStatus;
+use crate::core::router::error::RouterError;
 use crate::core::router::unified::Router;
+use crate::core::types::model::ProviderCapability;
 use std::collections::HashMap;
 use std::sync::atomic::Ordering::Relaxed;
 
@@ -132,6 +134,38 @@ async fn test_simple_shuffle_increments_active_requests() {
         after, 0,
         "release_deployment should decrement active_requests"
     );
+}
+
+#[tokio::test]
+async fn test_capability_selection_reports_unsupported_capability() {
+    let router = Router::default();
+    let d = create_test_deployment("chat-only", "shared-model").await;
+    d.state.health.store(HealthStatus::Healthy as u8, Relaxed);
+    router.add_deployment(d);
+
+    let err = router
+        .select_deployment_for_capability("shared-model", &ProviderCapability::TextToSpeech)
+        .expect_err("unsupported capability should not look unavailable");
+
+    assert!(matches!(
+        err,
+        RouterError::UnsupportedCapability { model, capability }
+            if model == "shared-model" && capability == "TextToSpeech"
+    ));
+}
+
+#[tokio::test]
+async fn test_capability_selection_reports_unavailable_when_capable_deployment_is_unhealthy() {
+    let router = Router::default();
+    let d = create_test_deployment("chat-capable", "shared-model").await;
+    d.state.health.store(HealthStatus::Unhealthy as u8, Relaxed);
+    router.add_deployment(d);
+
+    let err = router
+        .select_deployment_for_capability("shared-model", &ProviderCapability::ChatCompletion)
+        .expect_err("unhealthy capable deployment should be unavailable");
+
+    assert!(matches!(err, RouterError::NoAvailableDeployment(model) if model == "shared-model"));
 }
 
 // ==================== RoundRobin ====================
