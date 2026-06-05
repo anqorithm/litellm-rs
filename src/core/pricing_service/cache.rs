@@ -36,7 +36,9 @@ impl PricingService {
     pub async fn refresh_pricing_data(&self) -> Result<()> {
         info!("Refreshing pricing data from: {}", self.pricing_url);
 
-        let data = if self.pricing_url.starts_with("http") {
+        let data = if self.pricing_url == super::DEFAULT_PRICING_SOURCE {
+            self.load_from_embedded_default()?
+        } else if self.pricing_url.starts_with("http") {
             // Load from URL
             self.load_from_url().await?
         } else {

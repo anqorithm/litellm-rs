@@ -12,6 +12,12 @@ mod types;
 #[cfg(test)]
 mod tests;
 
+/// Built-in local pricing source used by gateway defaults.
+///
+/// Relative user-configured paths remain filesystem paths. This value is an
+/// explicit embedded source so the default does not depend on process cwd.
+pub const DEFAULT_PRICING_SOURCE: &str = "embedded://model_prices_extended";
+
 // Re-export public types
 pub use service::PricingService;
 pub use types::{

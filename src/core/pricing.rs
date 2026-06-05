@@ -7,7 +7,7 @@ use std::path::Path;
 use std::sync::LazyLock;
 use tracing::warn;
 
-const DEFAULT_PRICING_SOURCE: &str = "config/model_prices_extended.json";
+const EMBEDDED_MODEL_PRICES: &str = include_str!("../../config/model_prices_extended.json");
 
 /// LiteLLM-compatible model pricing data.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -49,6 +49,8 @@ pub struct LiteLLMModelInfo {
 
 /// Compatibility alias for callers that still import provider-base pricing.
 pub type ModelPricing = LiteLLMModelInfo;
+
+pub(crate) type PricingModelMap = HashMap<String, ModelPricing>;
 
 /// Usage information for simple pricing database calculations.
 ///
@@ -117,22 +119,12 @@ impl PricingDatabase {
         Ok(Self { models })
     }
 
-    /// Load from the same local pricing source used by gateway configuration.
+    /// Load from the bundled default pricing source used by gateway configuration.
     pub fn from_default_source() -> Result<Self, String> {
-        let possible_paths = vec![
-            DEFAULT_PRICING_SOURCE,
-            "../config/model_prices_extended.json",
-            "../../config/model_prices_extended.json",
-            "../../../config/model_prices_extended.json",
-        ];
+        let models = embedded_default_pricing_models()
+            .map_err(|e| format!("Failed to parse embedded pricing JSON: {}", e))?;
 
-        for path in &possible_paths {
-            if Path::new(path).exists() {
-                return Self::from_json_file(path);
-            }
-        }
-
-        Ok(Self::default())
+        Ok(Self { models })
     }
 
     /// Load pricing data from the default source.
@@ -539,6 +531,10 @@ pub fn parse_litellm_pricing_json(
         .filter(|(key, _)| !is_litellm_pricing_metadata_key(key))
         .map(|(key, value)| serde_json::from_value(value).map(|pricing| (key, pricing)))
         .collect()
+}
+
+pub(crate) fn embedded_default_pricing_models() -> serde_json::Result<PricingModelMap> {
+    parse_litellm_pricing_json(EMBEDDED_MODEL_PRICES)
 }
 
 pub fn is_litellm_pricing_metadata_key(key: &str) -> bool {

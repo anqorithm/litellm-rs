@@ -139,8 +139,9 @@ cache:
   similarity_threshold: 0.95
 
 pricing:
-  # PricingService source path/URL (set to null to use service default behavior)
-  source: "config/model_prices_extended.json"
+  # PricingService source path/URL. The embedded default is cwd-independent;
+  # user-provided relative paths are resolved by the process working directory.
+  source: "embedded://model_prices_extended"
 
 rate_limit:
   enabled: true

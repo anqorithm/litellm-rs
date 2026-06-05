@@ -40,7 +40,7 @@ const ENV_PRICING_SOURCE: &str = "LITELLM_PRICING_SOURCE";
 const ENV_CACHE_ENABLED: &str = "LITELLM_CACHE_ENABLED";
 const ENV_RATE_LIMIT_ENABLED: &str = "LITELLM_RATE_LIMIT_ENABLED";
 const ENV_ENTERPRISE_ENABLED: &str = "LITELLM_ENTERPRISE_ENABLED";
-const DEFAULT_PRICING_SOURCE: &str = "config/model_prices_extended.json";
+const DEFAULT_PRICING_SOURCE: &str = crate::core::pricing_service::DEFAULT_PRICING_SOURCE;
 
 #[cfg(test)]
 pub(crate) static GATEWAY_ENV_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
@@ -338,7 +338,7 @@ impl GatewayPricingConfig {
 
 fn default_pricing_source() -> Option<String> {
     // Keep the runtime default aligned with config/gateway.yaml.example.
-    // Relative paths are resolved by the process working directory.
+    // User-provided relative paths are still resolved by the process working directory.
     Some(DEFAULT_PRICING_SOURCE.to_string())
 }
 
