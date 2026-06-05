@@ -9,7 +9,7 @@ use std::time::Duration;
 use super::config::{AgentConfig, AgentProvider};
 use super::error::{A2AError, A2AResult};
 use super::message::{A2AMessage, A2AResponse, TaskResult};
-use crate::utils::net::http::get_client_with_timeout;
+use crate::utils::net::http::get_ssrf_safe_client_with_timeout_fallible;
 
 /// Trait for A2A provider implementations
 #[async_trait]
@@ -46,7 +46,7 @@ pub trait A2AProviderAdapter: Send + Sync {
 /// Uses a shared HTTP client pool for optimal connection reuse.
 pub struct GenericA2AProvider {
     /// Cached client for the default timeout (60s)
-    default_client: Arc<reqwest::Client>,
+    default_client: Result<Arc<reqwest::Client>, String>,
 }
 
 impl GenericA2AProvider {
@@ -54,32 +54,46 @@ impl GenericA2AProvider {
     pub fn new() -> Self {
         // Use the shared client pool with default A2A timeout (60s)
         Self {
-            default_client: get_client_with_timeout(Duration::from_secs(60)),
+            default_client: get_ssrf_safe_client_with_timeout_fallible(Duration::from_secs(60))
+                .map_err(|error| error.to_string()),
         }
     }
 
     /// Create with custom HTTP client (for testing)
+    #[cfg(test)]
     pub fn with_client(client: reqwest::Client) -> Self {
         Self {
-            default_client: Arc::new(client),
+            default_client: Ok(Arc::new(client)),
         }
     }
 
     /// Get the appropriate client for the given timeout
-    fn get_client(&self, timeout_ms: u64) -> Arc<reqwest::Client> {
+    fn get_client(&self, timeout_ms: u64) -> A2AResult<Arc<reqwest::Client>> {
         let timeout_secs = timeout_ms / 1000;
         if timeout_secs == 60 {
             // Use the default cached client
-            self.default_client.clone()
+            self.default_client
+                .clone()
+                .map_err(|message| A2AError::ConfigurationError {
+                    message: format!("Failed to create SSRF-safe HTTP client: {message}"),
+                })
         } else {
             // Get from global cache for other timeouts
-            get_client_with_timeout(Duration::from_secs(timeout_secs))
+            get_ssrf_safe_client_with_timeout_fallible(Duration::from_secs(timeout_secs)).map_err(
+                |error| A2AError::ConfigurationError {
+                    message: format!("Failed to create SSRF-safe HTTP client: {error}"),
+                },
+            )
         }
     }
 
     /// Build request with authentication
-    fn build_request(&self, config: &AgentConfig, message: &A2AMessage) -> reqwest::RequestBuilder {
-        let client = self.get_client(config.timeout_ms);
+    fn build_request(
+        &self,
+        config: &AgentConfig,
+        message: &A2AMessage,
+    ) -> A2AResult<reqwest::RequestBuilder> {
+        let client = self.get_client(config.timeout_ms)?;
         let mut request = client.post(&config.url).json(message);
 
         // Add API key if present
@@ -92,7 +106,7 @@ impl GenericA2AProvider {
             request = request.header(key, value);
         }
 
-        request
+        Ok(request)
     }
 }
 
@@ -114,7 +128,7 @@ impl A2AProviderAdapter for GenericA2AProvider {
         message: A2AMessage,
     ) -> A2AResult<A2AResponse> {
         let response = self
-            .build_request(config, &message)
+            .build_request(config, &message)?
             .send()
             .await
             .map_err(|e| {
@@ -309,7 +323,10 @@ mod tests {
         let provider = GenericA2AProvider::new();
         // 60 seconds is the default, should return cached client
         let client = provider.get_client(60000);
-        assert!(Arc::ptr_eq(&client, &provider.default_client));
+        assert!(matches!(
+            (&client, &provider.default_client),
+            (Ok(client), Ok(default_client)) if Arc::ptr_eq(client, default_client)
+        ));
     }
 
     #[test]
@@ -318,7 +335,10 @@ mod tests {
         // Non-60s timeout should get different client from cache
         let client = provider.get_client(30000);
         // Should not be the same as default
-        assert!(!Arc::ptr_eq(&client, &provider.default_client));
+        assert!(matches!(
+            (&client, &provider.default_client),
+            (Ok(client), Ok(default_client)) if !Arc::ptr_eq(client, default_client)
+        ));
     }
 
     // ==================== LangGraphProvider Tests ====================
@@ -435,9 +455,8 @@ mod tests {
         let config = AgentConfig::new("test-agent", "https://example.com/api");
         let message = A2AMessage::send("Hello, agent!");
 
-        let request = provider.build_request(&config, &message);
         // Request should be built without error
-        let _ = request;
+        assert!(provider.build_request(&config, &message).is_ok());
     }
 
     #[test]
@@ -447,8 +466,7 @@ mod tests {
         config.api_key = Some("test-api-key".to_string());
         let message = A2AMessage::send("Hello!");
 
-        let request = provider.build_request(&config, &message);
-        let _ = request;
+        assert!(provider.build_request(&config, &message).is_ok());
     }
 
     #[test]
@@ -460,8 +478,7 @@ mod tests {
             .insert("X-Custom-Header".to_string(), "custom-value".to_string());
         let message = A2AMessage::send("Hello!");
 
-        let request = provider.build_request(&config, &message);
-        let _ = request;
+        assert!(provider.build_request(&config, &message).is_ok());
     }
 
     #[test]
@@ -479,8 +496,7 @@ mod tests {
             .insert("X-Header-3".to_string(), "value3".to_string());
         let message = A2AMessage::send("Hello!");
 
-        let request = provider.build_request(&config, &message);
-        let _ = request;
+        assert!(provider.build_request(&config, &message).is_ok());
     }
 
     // ==================== A2AMessage Factory Tests ====================

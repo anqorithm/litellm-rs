@@ -14,7 +14,9 @@ use super::protocol::{
 };
 use super::tools::{Tool, ToolCall, ToolList, ToolResult};
 use super::transport::Transport;
-use crate::utils::net::http::get_client_with_timeout;
+use crate::utils::net::http::{
+    get_client_with_timeout, get_ssrf_safe_client_with_timeout_fallible,
+};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
@@ -70,7 +72,17 @@ impl McpServer {
 
         // Get shared client with appropriate timeout
         let timeout_secs = config.timeout_ms / 1000;
-        let http_client = get_client_with_timeout(Duration::from_secs(timeout_secs.max(1)));
+        let timeout = Duration::from_secs(timeout_secs.max(1));
+        let http_client = match config.transport {
+            Transport::Http | Transport::Sse | Transport::WebSocket => {
+                get_ssrf_safe_client_with_timeout_fallible(timeout).map_err(|error| {
+                    McpError::ConfigurationError {
+                        message: format!("Failed to create SSRF-safe HTTP client: {error}"),
+                    }
+                })?
+            }
+            Transport::Stdio => get_client_with_timeout(timeout),
+        };
 
         // Build custom headers for this server
         let mut headers = reqwest::header::HeaderMap::new();
@@ -500,17 +512,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_server_creation() {
-        let config = McpServerConfig::new("test", "https://example.com/mcp");
+        let config = McpServerConfig::new("test", "https://1.1.1.1/mcp");
         let server = McpServer::new(config).unwrap();
 
         assert_eq!(server.name(), "test");
-        assert_eq!(server.url(), "https://example.com/mcp");
+        assert_eq!(server.url(), "https://1.1.1.1/mcp");
         assert!(!server.is_connected().await);
     }
 
     #[tokio::test]
     async fn test_server_with_auth() {
-        let config = McpServerConfig::new("test", "https://example.com/mcp")
+        let config = McpServerConfig::new("test", "https://1.1.1.1/mcp")
             .with_auth(AuthConfig::bearer("token123"));
 
         let server = McpServer::new(config).unwrap();
@@ -523,7 +535,7 @@ mod tests {
 
         // Register a server
         registry
-            .register(McpServerConfig::new("server1", "https://example.com/mcp1"))
+            .register(McpServerConfig::new("server1", "https://1.1.1.1/mcp1"))
             .await
             .unwrap();
 
@@ -544,13 +556,13 @@ mod tests {
         let registry = McpServerRegistry::new();
 
         registry
-            .register(McpServerConfig::new("server1", "https://example.com/mcp1"))
+            .register(McpServerConfig::new("server1", "https://1.1.1.1/mcp1"))
             .await
             .unwrap();
 
         // Registering again should fail
         let result = registry
-            .register(McpServerConfig::new("server1", "https://example.com/mcp2"))
+            .register(McpServerConfig::new("server1", "https://1.1.1.1/mcp2"))
             .await;
 
         assert!(matches!(result, Err(McpError::ServerAlreadyExists { .. })));
@@ -561,7 +573,7 @@ mod tests {
         let registry = McpServerRegistry::new();
 
         registry
-            .register(McpServerConfig::new("server1", "https://example.com/mcp1"))
+            .register(McpServerConfig::new("server1", "https://1.1.1.1/mcp1"))
             .await
             .unwrap();
 
@@ -572,7 +584,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_server_initial_state() {
-        let config = McpServerConfig::new("test", "https://example.com/mcp");
+        let config = McpServerConfig::new("test", "https://1.1.1.1/mcp");
         let server = McpServer::new(config).unwrap();
 
         assert_eq!(server.state().await, ServerState::Disconnected);
@@ -616,7 +628,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_tools_baseline_rejects_definition_change() {
-        let config = McpServerConfig::new("test", "https://example.com/mcp");
+        let config = McpServerConfig::new("test", "https://1.1.1.1/mcp");
         let server = McpServer::new(config).unwrap();
         let initial = ToolList {
             tools: vec![Tool::new("search").with_description("Search docs")],

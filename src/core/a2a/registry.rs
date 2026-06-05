@@ -8,6 +8,7 @@ use tokio::sync::RwLock;
 
 use super::config::AgentConfig;
 use super::error::{A2AError, A2AResult};
+use crate::utils::net::http::get_ssrf_safe_client_with_timeout_fallible;
 
 /// Agent registry entry
 #[derive(Debug, Clone)]
@@ -247,10 +248,19 @@ impl AgentRegistry {
             }
         };
 
-        let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(10))
-            .build()
-            .unwrap_or_default();
+        let client =
+            match get_ssrf_safe_client_with_timeout_fallible(std::time::Duration::from_secs(10)) {
+                Ok(client) => client,
+                Err(error) => {
+                    tracing::error!(
+                        agent = name,
+                        error = %error,
+                        "Failed to create SSRF-safe health-check HTTP client"
+                    );
+                    self.update_state(name, AgentState::Unhealthy).await;
+                    return;
+                }
+            };
 
         let state = match client.get(&url).send().await {
             Ok(resp) if resp.status().is_success() => AgentState::Healthy,
@@ -330,7 +340,7 @@ mod tests {
     async fn test_register_agent() {
         let registry = AgentRegistry::new();
 
-        let config = AgentConfig::new("test-agent", "https://example.com/agent");
+        let config = AgentConfig::new("test-agent", "https://1.1.1.1/agent");
         registry.register(config).await.unwrap();
 
         assert_eq!(registry.count().await, 1);
@@ -341,7 +351,7 @@ mod tests {
     async fn test_register_duplicate() {
         let registry = AgentRegistry::new();
 
-        let config = AgentConfig::new("test-agent", "https://example.com/agent");
+        let config = AgentConfig::new("test-agent", "https://1.1.1.1/agent");
         registry.register(config.clone()).await.unwrap();
 
         let result = registry.register(config).await;
@@ -352,7 +362,7 @@ mod tests {
     async fn test_unregister_agent() {
         let registry = AgentRegistry::new();
 
-        let config = AgentConfig::new("test-agent", "https://example.com/agent");
+        let config = AgentConfig::new("test-agent", "https://1.1.1.1/agent");
         registry.register(config).await.unwrap();
 
         let removed = registry.unregister("test-agent").await;
@@ -364,7 +374,7 @@ mod tests {
     async fn test_update_state() {
         let registry = AgentRegistry::new();
 
-        let config = AgentConfig::new("test-agent", "https://example.com/agent");
+        let config = AgentConfig::new("test-agent", "https://1.1.1.1/agent");
         registry.register(config).await.unwrap();
 
         registry
@@ -380,7 +390,7 @@ mod tests {
     async fn test_record_invocation() {
         let registry = AgentRegistry::new();
 
-        let config = AgentConfig::new("test-agent", "https://example.com/agent");
+        let config = AgentConfig::new("test-agent", "https://1.1.1.1/agent");
         registry.register(config).await.unwrap();
 
         registry.record_invocation("test-agent", 0.01).await;
@@ -396,12 +406,12 @@ mod tests {
         let registry = AgentRegistry::new();
 
         // Add enabled agent
-        let config1 = AgentConfig::new("agent1", "https://example.com/agent1");
+        let config1 = AgentConfig::new("agent1", "https://1.1.1.1/agent1");
         registry.register(config1).await.unwrap();
         registry.update_state("agent1", AgentState::Healthy).await;
 
         // Add disabled agent
-        let mut config2 = AgentConfig::new("agent2", "https://example.com/agent2");
+        let mut config2 = AgentConfig::new("agent2", "https://1.1.1.1/agent2");
         config2.enabled = false;
         registry.register(config2).await.unwrap();
 
@@ -414,11 +424,11 @@ mod tests {
     async fn test_list_by_tag() {
         let registry = AgentRegistry::new();
 
-        let mut config1 = AgentConfig::new("agent1", "https://example.com/agent1");
+        let mut config1 = AgentConfig::new("agent1", "https://1.1.1.1/agent1");
         config1.tags = vec!["production".to_string()];
         registry.register(config1).await.unwrap();
 
-        let mut config2 = AgentConfig::new("agent2", "https://example.com/agent2");
+        let mut config2 = AgentConfig::new("agent2", "https://1.1.1.1/agent2");
         config2.tags = vec!["staging".to_string()];
         registry.register(config2).await.unwrap();
 
@@ -431,12 +441,12 @@ mod tests {
     async fn test_registry_stats() {
         let registry = AgentRegistry::new();
 
-        let config1 = AgentConfig::new("agent1", "https://example.com/agent1");
+        let config1 = AgentConfig::new("agent1", "https://1.1.1.1/agent1");
         registry.register(config1).await.unwrap();
         registry.update_state("agent1", AgentState::Healthy).await;
         registry.record_invocation("agent1", 0.10).await;
 
-        let config2 = AgentConfig::new("agent2", "https://example.com/agent2");
+        let config2 = AgentConfig::new("agent2", "https://1.1.1.1/agent2");
         registry.register(config2).await.unwrap();
         registry.update_state("agent2", AgentState::Unhealthy).await;
 
@@ -460,7 +470,7 @@ mod tests {
     async fn test_unknown_agent_excluded_from_available() {
         let registry = AgentRegistry::new();
 
-        let config = AgentConfig::new("agent1", "https://example.com/agent1");
+        let config = AgentConfig::new("agent1", "https://1.1.1.1/agent1");
         registry.register(config).await.unwrap();
         // New agents start as Unknown
         let entry = registry.get("agent1").await.unwrap();
@@ -480,7 +490,7 @@ mod tests {
     async fn test_get_for_routing_triggers_health_check() {
         let registry = AgentRegistry::new();
 
-        // Use a validation-safe, non-existent host so the health check marks it Unhealthy.
+        // Use a validation-safe reserved domain so the probe fails without external egress.
         let config = AgentConfig::new("probe-agent", "https://example.invalid/health");
         registry.register(config).await.unwrap();
 
@@ -513,7 +523,7 @@ mod tests {
     async fn test_check_agent_health_unreachable() {
         let registry = AgentRegistry::new();
 
-        // Use a validation-safe, non-existent host that will fail to connect.
+        // Use a validation-safe reserved domain so the probe fails without external egress.
         let config = AgentConfig::new("bad-agent", "https://example.invalid/health");
         registry.register(config).await.unwrap();
 
@@ -528,7 +538,7 @@ mod tests {
     async fn test_check_agent_health_skips_disabled() {
         let registry = AgentRegistry::new();
 
-        let mut config = AgentConfig::new("disabled-agent", "https://example.com/agent");
+        let mut config = AgentConfig::new("disabled-agent", "https://1.1.1.1/agent");
         config.enabled = false;
         registry.register(config).await.unwrap();
 

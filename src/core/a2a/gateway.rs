@@ -329,7 +329,7 @@ mod tests {
         let gateway = A2AGateway::new();
 
         gateway
-            .register_agent(AgentConfig::new("test", "https://example.com/agent"))
+            .register_agent(AgentConfig::new("test", "https://1.1.1.1/agent"))
             .await
             .unwrap();
 
@@ -341,7 +341,7 @@ mod tests {
         let gateway = A2AGateway::new();
 
         gateway
-            .register_agent(AgentConfig::new("test", "https://example.com/agent"))
+            .register_agent(AgentConfig::new("test", "https://1.1.1.1/agent"))
             .await
             .unwrap();
 
@@ -354,7 +354,7 @@ mod tests {
         let gateway = A2AGateway::new();
 
         gateway
-            .register_agent(AgentConfig::new("test", "https://example.com/agent"))
+            .register_agent(AgentConfig::new("test", "https://1.1.1.1/agent"))
             .await
             .unwrap();
 
@@ -369,8 +369,8 @@ mod tests {
     #[tokio::test]
     async fn test_from_config() {
         let mut config = A2AGatewayConfig::default();
-        config.add_agent(AgentConfig::new("agent1", "https://example.com/agent1"));
-        config.add_agent(AgentConfig::new("agent2", "https://example.com/agent2"));
+        config.add_agent(AgentConfig::new("agent1", "https://1.1.1.1/agent1"));
+        config.add_agent(AgentConfig::new("agent2", "https://1.1.1.1/agent2"));
 
         let gateway = A2AGateway::from_config(config).await.unwrap();
         assert_eq!(gateway.list_agents().await.len(), 2);
@@ -381,7 +381,7 @@ mod tests {
         let gateway = A2AGateway::new();
 
         gateway
-            .register_agent(AgentConfig::new("test", "https://example.com/agent"))
+            .register_agent(AgentConfig::new("test", "https://1.1.1.1/agent"))
             .await
             .unwrap();
 
@@ -405,7 +405,7 @@ mod tests {
         let gateway = A2AGateway::new();
 
         gateway
-            .register_agent(AgentConfig::new("test", "https://example.com/agent"))
+            .register_agent(AgentConfig::new("test", "https://1.1.1.1/agent"))
             .await
             .unwrap();
 
@@ -433,7 +433,7 @@ mod tests {
         let gateway = A2AGateway::new();
 
         gateway
-            .register_agent(AgentConfig::new("test", "https://example.com/agent"))
+            .register_agent(AgentConfig::new("test", "https://1.1.1.1/agent"))
             .await
             .unwrap();
 
@@ -457,7 +457,7 @@ mod tests {
         // Cannot use add_agent after construction via struct literal, so
         // build a fresh config with agents included via the HashMap.
         let mut config = config;
-        config.add_agent(AgentConfig::new("agent1", "https://example.com/agent1"));
+        config.add_agent(AgentConfig::new("agent1", "https://1.1.1.1/agent1"));
 
         let gateway = A2AGateway::from_config(config).await.unwrap();
         assert_eq!(gateway.list_agents().await.len(), 1);

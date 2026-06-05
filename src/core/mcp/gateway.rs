@@ -357,7 +357,7 @@ mod tests {
         let gateway = McpGateway::new();
 
         gateway
-            .register_server(McpServerConfig::new("test", "https://example.com/mcp"))
+            .register_server(McpServerConfig::new("test", "https://1.1.1.1/mcp"))
             .await
             .unwrap();
 
@@ -371,7 +371,7 @@ mod tests {
         let gateway = McpGateway::new();
 
         gateway
-            .register_server(McpServerConfig::new("test", "https://example.com/mcp"))
+            .register_server(McpServerConfig::new("test", "https://1.1.1.1/mcp"))
             .await
             .unwrap();
 
@@ -385,7 +385,7 @@ mod tests {
         let gateway = McpGateway::new();
 
         gateway
-            .register_server(McpServerConfig::new("test", "https://example.com/mcp"))
+            .register_server(McpServerConfig::new("test", "https://1.1.1.1/mcp"))
             .await
             .unwrap();
 
@@ -403,7 +403,7 @@ mod tests {
         gateway
             .register_server(McpServerConfig::new(
                 "github_mcp_server",
-                "https://api.github.com/mcp",
+                "https://1.1.1.1/mcp",
             ))
             .await
             .unwrap();
@@ -469,7 +469,7 @@ mod tests {
     #[tokio::test]
     async fn test_from_config() {
         let mut config = McpGatewayConfig::default();
-        config.add_server(McpServerConfig::new("test", "https://example.com/mcp"));
+        config.add_server(McpServerConfig::new("test", "https://1.1.1.1/mcp"));
 
         let gateway = McpGateway::from_config(config).await.unwrap();
         assert_eq!(gateway.list_servers().await.len(), 1);

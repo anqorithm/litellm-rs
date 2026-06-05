@@ -23,15 +23,15 @@
 //! ```
 
 use dashmap::DashMap;
-use reqwest::{Client, ClientBuilder};
+use reqwest::{Client, ClientBuilder, redirect};
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 use tracing::{debug, warn};
 
-use crate::config::validation::is_private_or_internal_ip;
+use crate::core::net::{is_private_or_reserved_ip, validate_outbound_url_without_resolution};
 
-/// DNS resolver that rejects private/internal IP addresses at resolution time.
+/// DNS resolver that rejects private/reserved IP addresses at resolution time.
 ///
 /// This mitigates DNS-rebinding attacks: even if a hostname resolves to a public IP
 /// at config-validation time, every actual request re-validates the resolved address,
@@ -51,14 +51,11 @@ impl reqwest::dns::Resolve for SsrfSafeDnsResolver {
             .map_err(std::io::Error::other)?;
 
             let addrs = addrs?;
-            let safe: Vec<SocketAddr> = addrs
-                .into_iter()
-                .filter(|addr| !is_private_or_internal_ip(&addr.ip()))
-                .collect();
+            let safe = filter_ssrf_safe_addresses(addrs);
 
             if safe.is_empty() {
                 return Err(
-                    "Host resolves to private/internal IP address (SSRF protection)"
+                    "Host resolves to private/reserved IP address (SSRF protection)"
                         .to_string()
                         .into(),
                 );
@@ -67,6 +64,23 @@ impl reqwest::dns::Resolve for SsrfSafeDnsResolver {
             Ok(Box::new(safe.into_iter()) as reqwest::dns::Addrs)
         })
     }
+}
+
+fn filter_ssrf_safe_addresses(addrs: Vec<SocketAddr>) -> Vec<SocketAddr> {
+    addrs
+        .into_iter()
+        .filter(|addr| !is_private_or_reserved_ip(&addr.ip()))
+        .collect()
+}
+
+fn ssrf_safe_redirect_policy() -> redirect::Policy {
+    redirect::Policy::custom(|attempt| {
+        if let Err(error) = validate_outbound_url_without_resolution(attempt.url()) {
+            return attempt.error(format!("Redirect target failed SSRF validation: {error}"));
+        }
+
+        redirect::Policy::limited(10).redirect(attempt)
+    })
 }
 
 /// Configuration for the HTTP client pool
@@ -101,6 +115,9 @@ static SHARED_HTTP_CLIENT: OnceLock<Client> = OnceLock::new();
 
 /// Timeout-specific client cache (keyed by milliseconds)
 static TIMEOUT_CLIENT_CACHE: OnceLock<DashMap<u64, Arc<Client>>> = OnceLock::new();
+
+/// Timeout-specific SSRF-safe client cache (keyed by milliseconds)
+static SSRF_SAFE_TIMEOUT_CLIENT_CACHE: OnceLock<DashMap<u64, Arc<Client>>> = OnceLock::new();
 
 /// Create a reqwest client builder with unified pool/timeout defaults.
 pub fn create_client_builder_with_config(
@@ -223,15 +240,27 @@ pub fn create_streaming_client() -> Result<Client, reqwest::Error> {
 /// Get or create an HTTP client with SSRF-safe DNS resolution for the given timeout.
 ///
 /// Unlike `get_client_with_timeout_fallible`, this client installs `SsrfSafeDnsResolver`
-/// so every request re-validates the resolved IP against private/internal ranges.
+/// so every request re-validates the resolved IP against private/reserved ranges.
 /// Use this for providers whose endpoint URL is user-controlled to prevent DNS-rebinding attacks.
 pub fn get_ssrf_safe_client_with_timeout_fallible(
     timeout: Duration,
 ) -> Result<Arc<Client>, reqwest::Error> {
-    create_client_builder_with_config(timeout, &HttpClientPoolConfig::default())
-        .dns_resolver(Arc::new(SsrfSafeDnsResolver))
-        .build()
-        .map(Arc::new)
+    let cache = SSRF_SAFE_TIMEOUT_CLIENT_CACHE.get_or_init(DashMap::new);
+    let timeout_millis = timeout.as_millis().min(u64::MAX as u128) as u64;
+
+    if let Some(existing) = cache.get(&timeout_millis) {
+        return Ok(existing.clone());
+    }
+
+    let client = Arc::new(
+        create_client_builder_with_config(timeout, &HttpClientPoolConfig::default())
+            .no_proxy()
+            .dns_resolver(Arc::new(SsrfSafeDnsResolver))
+            .redirect(ssrf_safe_redirect_policy())
+            .build()?,
+    );
+    cache.insert(timeout_millis, client.clone());
+    Ok(client)
 }
 
 /// Create a custom HTTP client with specific timeout and default headers
@@ -265,6 +294,8 @@ pub struct HttpClientCacheStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     #[test]
     fn test_shared_client_creation() {
@@ -298,6 +329,83 @@ mod tests {
         let client2 = get_client_with_timeout_fallible(Duration::from_millis(1500)).unwrap();
 
         assert!(Arc::ptr_eq(&client1, &client2));
+    }
+
+    #[test]
+    fn test_ssrf_safe_dns_filter_rejects_private_and_reserved_addresses() {
+        let addrs = vec![
+            SocketAddr::from((Ipv4Addr::new(93, 184, 216, 34), 443)),
+            SocketAddr::from((Ipv4Addr::new(198, 18, 0, 1), 443)),
+            SocketAddr::from((Ipv4Addr::new(224, 0, 0, 1), 443)),
+            SocketAddr::from((Ipv4Addr::new(240, 0, 0, 1), 443)),
+        ];
+
+        let safe = filter_ssrf_safe_addresses(addrs);
+
+        assert_eq!(safe.len(), 1);
+        assert_eq!(safe[0].ip(), IpAddr::V4(Ipv4Addr::new(93, 184, 216, 34)));
+    }
+
+    #[test]
+    fn test_ssrf_safe_client_with_timeout_fallible_caching() {
+        let client1 = match get_ssrf_safe_client_with_timeout_fallible(Duration::from_millis(1500))
+        {
+            Ok(client) => client,
+            Err(error) => panic!("SSRF-safe client should build: {error}"),
+        };
+        let client2 = match get_ssrf_safe_client_with_timeout_fallible(Duration::from_millis(1500))
+        {
+            Ok(client) => client,
+            Err(error) => panic!("SSRF-safe client should build: {error}"),
+        };
+
+        assert!(Arc::ptr_eq(&client1, &client2));
+    }
+
+    #[tokio::test]
+    async fn test_ssrf_safe_redirect_policy_rejects_private_redirect_targets()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+        let address = listener.local_addr()?;
+
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await?;
+            let mut buffer = [0_u8; 1024];
+            let bytes_read = stream.read(&mut buffer).await?;
+            assert!(bytes_read > 0);
+
+            let location = format!("http://127.0.0.1:{}/private", address.port());
+            let body = "redirect";
+            let response = format!(
+                "HTTP/1.1 302 Found\r\nLocation: {location}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            stream.write_all(response.as_bytes()).await?;
+            Ok::<(), std::io::Error>(())
+        });
+
+        let client = ClientBuilder::new()
+            .redirect(ssrf_safe_redirect_policy())
+            .build()?;
+        let result = client
+            .get(format!("http://127.0.0.1:{}/redirect", address.port()))
+            .send()
+            .await;
+
+        let error = match result {
+            Ok(response) => panic!(
+                "private redirect target should be rejected, got status {}",
+                response.status()
+            ),
+            Err(error) => error,
+        };
+        assert!(error.is_redirect(), "{error:?}");
+        assert!(
+            format!("{error:?}").contains("SSRF validation"),
+            "{error:?}"
+        );
+        server.await??;
+        Ok(())
     }
 
     #[test]
