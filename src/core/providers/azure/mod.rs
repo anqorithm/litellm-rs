@@ -161,14 +161,28 @@ impl LLMProvider for AzureOpenAIProvider {
         &[
             "temperature",
             "max_tokens",
+            "max_completion_tokens",
             "top_p",
             "frequency_penalty",
             "presence_penalty",
             "stream",
+            "stream_options",
             "functions",
             "function_call",
             "tools",
             "tool_choice",
+            "response_format",
+            "user",
+            "seed",
+            "n",
+            "logit_bias",
+            "logprobs",
+            "top_logprobs",
+            "reasoning_effort",
+            "store",
+            "metadata",
+            "service_tier",
+            "parallel_tool_calls",
         ]
     }
 

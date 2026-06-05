@@ -190,6 +190,64 @@ fn test_transform_response_finish_reasons() {
 }
 
 #[test]
+fn test_transform_response_preserves_tool_calls() {
+    let response = json!({
+        "id": "chatcmpl-tools",
+        "choices": [{
+            "message": {
+                "role": "assistant",
+                "content": null,
+                "tool_calls": [{
+                    "id": "call_abc",
+                    "type": "function",
+                    "function": {
+                        "name": "get_weather",
+                        "arguments": "{\"location\":\"NYC\"}"
+                    }
+                }]
+            },
+            "finish_reason": "tool_calls"
+        }]
+    });
+
+    let result = AzureAIChatUtils::transform_response(response, "gpt-4").unwrap();
+    let tool_calls = result.choices[0].message.tool_calls.as_ref().unwrap();
+    assert_eq!(tool_calls.len(), 1);
+    assert_eq!(tool_calls[0].id, "call_abc");
+    assert_eq!(tool_calls[0].function.name, "get_weather");
+    assert_eq!(
+        result.choices[0].finish_reason,
+        Some(FinishReason::ToolCalls)
+    );
+}
+
+#[test]
+fn test_transform_response_preserves_function_call() {
+    let response = json!({
+        "id": "chatcmpl-function",
+        "choices": [{
+            "message": {
+                "role": "assistant",
+                "content": null,
+                "function_call": {
+                    "name": "legacy_weather",
+                    "arguments": "{\"location\":\"NYC\"}"
+                }
+            },
+            "finish_reason": "function_call"
+        }]
+    });
+
+    let result = AzureAIChatUtils::transform_response(response, "gpt-4").unwrap();
+    let function_call = result.choices[0].message.function_call.as_ref().unwrap();
+    assert_eq!(function_call.name, "legacy_weather");
+    assert_eq!(
+        result.choices[0].finish_reason,
+        Some(FinishReason::FunctionCall)
+    );
+}
+
+#[test]
 fn test_parse_streaming_chunk_done() {
     let chunk = "data: [DONE]";
     let result = AzureAIChatUtils::parse_streaming_chunk(chunk, "gpt-4");

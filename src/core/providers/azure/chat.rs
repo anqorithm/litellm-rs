@@ -243,6 +243,14 @@ impl AzureChatHandler {
         if request.stream {
             body["stream"] = json!(true);
         }
+        if let Some(stream_options) = &request.stream_options {
+            body["stream_options"] = serde_json::to_value(stream_options).map_err(|e| {
+                ProviderError::serialization(
+                    "azure",
+                    format!("Failed to serialize stream_options: {e}"),
+                )
+            })?;
+        }
 
         // Add tools/functions if present
         if let Some(tools) = &request.tools {
@@ -260,6 +268,43 @@ impl AzureChatHandler {
         // Add user if present
         if let Some(user) = &request.user {
             body["user"] = json!(user);
+        }
+
+        if let Some(seed) = request.seed {
+            body["seed"] = json!(seed);
+        }
+        if let Some(n) = request.n {
+            body["n"] = json!(n);
+        }
+        if let Some(logit_bias) = &request.logit_bias {
+            body["logit_bias"] = json!(logit_bias);
+        }
+        if let Some(logprobs) = request.logprobs {
+            body["logprobs"] = json!(logprobs);
+        }
+        if let Some(top_logprobs) = request.top_logprobs {
+            body["top_logprobs"] = json!(top_logprobs);
+        }
+        if let Some(reasoning_effort) = &request.reasoning_effort {
+            body["reasoning_effort"] = json!(reasoning_effort);
+        }
+        if let Some(store) = request.store {
+            body["store"] = json!(store);
+        }
+        if let Some(metadata) = &request.metadata {
+            body["metadata"] = json!(metadata);
+        }
+        if let Some(service_tier) = &request.service_tier {
+            body["service_tier"] = json!(service_tier);
+        }
+        if let Some(parallel_tool_calls) = request.parallel_tool_calls {
+            body["parallel_tool_calls"] = json!(parallel_tool_calls);
+        }
+
+        if let Some(obj) = body.as_object_mut() {
+            for (key, value) in &request.extra_params {
+                obj.entry(key.clone()).or_insert_with(|| value.clone());
+            }
         }
 
         Ok(body)

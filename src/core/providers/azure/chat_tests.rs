@@ -142,6 +142,50 @@ fn test_transform_request_with_options() {
 }
 
 #[test]
+fn test_transform_request_preserves_stream_controls_and_extra_params() {
+    let config =
+        AzureConfig::new().with_azure_endpoint("https://test.openai.azure.com".to_string());
+    let handler = AzureChatHandler::new(config).unwrap();
+
+    let mut request = create_test_request();
+    request.stream_options = Some(crate::core::types::chat::StreamOptions {
+        include_usage: Some(true),
+    });
+    request.seed = Some(42);
+    request.n = Some(2);
+    request.logit_bias = Some(std::collections::HashMap::from([("123".to_string(), 0.5)]));
+    request.logprobs = Some(true);
+    request.top_logprobs = Some(3);
+    request.reasoning_effort = Some("medium".to_string());
+    request.store = Some(false);
+    request.metadata = Some(std::collections::HashMap::from([(
+        "trace".to_string(),
+        "abc".to_string(),
+    )]));
+    request.service_tier = Some("flex".to_string());
+    request.parallel_tool_calls = Some(false);
+    request
+        .extra_params
+        .insert("provider_knob".to_string(), json!("kept"));
+    request.extra_params.insert("seed".to_string(), json!(99));
+
+    let value = handler.transform_request(&request).unwrap();
+    assert_eq!(value["stream_options"]["include_usage"], true);
+    assert_eq!(value["seed"], 42);
+    assert_eq!(value["n"], 2);
+    assert_eq!(value["logit_bias"]["123"], 0.5);
+    assert_eq!(value["logprobs"], true);
+    assert_eq!(value["top_logprobs"], 3);
+    assert_eq!(value["reasoning_effort"], "medium");
+    assert_eq!(value["store"], false);
+    assert_eq!(value["metadata"]["trace"], "abc");
+    assert_eq!(value["service_tier"], "flex");
+    assert_eq!(value["parallel_tool_calls"], false);
+    assert_eq!(value["provider_knob"], "kept");
+    assert_eq!(value["seed"], 42);
+}
+
+#[test]
 fn test_transform_response() {
     let config =
         AzureConfig::new().with_azure_endpoint("https://test.openai.azure.com".to_string());

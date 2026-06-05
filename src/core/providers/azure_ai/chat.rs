@@ -15,6 +15,7 @@ use crate::core::types::{
     message::MessageContent,
     message::MessageRole,
     responses::{ChatChoice, ChatChunk, ChatResponse, FinishReason, Usage},
+    tools::{FunctionCall, ToolCall},
 };
 
 use super::config::{AzureAIConfig, AzureAIEndpointType};
@@ -419,14 +420,46 @@ impl AzureAIChatUtils {
             MessageContent::Text(String::new())
         };
 
+        let function_call = if let Some(value) = message_data
+            .get("function_call")
+            .filter(|value| !value.is_null())
+        {
+            Some(
+                serde_json::from_value::<FunctionCall>(value.clone()).map_err(|e| {
+                    ProviderError::response_parsing(
+                        "azure_ai",
+                        format!("Invalid function_call format: {e}"),
+                    )
+                })?,
+            )
+        } else {
+            None
+        };
+
+        let tool_calls = if let Some(value) = message_data
+            .get("tool_calls")
+            .filter(|value| !value.is_null())
+        {
+            Some(
+                serde_json::from_value::<Vec<ToolCall>>(value.clone()).map_err(|e| {
+                    ProviderError::response_parsing(
+                        "azure_ai",
+                        format!("Invalid tool_calls format: {e}"),
+                    )
+                })?,
+            )
+        } else {
+            None
+        };
+
         let message = ChatMessage {
             role,
             content: Some(content),
             thinking: None,
             audio: None,
             name: message_data["name"].as_str().map(|s| s.to_string()),
-            function_call: None, // NOTE: function call parsing not yet implemented
-            tool_calls: None,    // NOTE: tool call parsing not yet implemented
+            function_call,
+            tool_calls,
             tool_call_id: message_data["tool_call_id"].as_str().map(|s| s.to_string()),
         };
 
