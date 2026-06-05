@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 use crate::core::providers::base::{
     GlobalPoolManager, HeaderPair, HttpMethod, apply_headers, header, header_owned,
+    read_streaming_error_body, send_streaming_request, streaming_unbounded_client,
 };
 use crate::core::providers::openai::{OpenAIResponseTransformer, models::OpenAIChatResponse};
 use crate::core::traits::error_mapper::trait_def::ErrorMapper;
@@ -159,18 +160,21 @@ impl OpenAILikeProvider {
         openai_request["stream"] = Value::Bool(true);
 
         let url = format!("{}/chat/completions", self.config.get_api_base());
-        let client = self.pool_manager.client();
         let headers = self.get_request_headers();
-        let req = apply_headers(client.post(&url).json(&openai_request), headers);
+        let req = apply_headers(
+            streaming_unbounded_client()
+                .post(&url)
+                .json(&openai_request),
+            headers,
+        );
 
-        let response = req
-            .send()
-            .await
-            .map_err(|e| OpenAILikeError::network(PROVIDER_NAME, e.to_string()))?;
+        let response = send_streaming_request(req, PROVIDER_NAME).await?;
 
         let status = response.status();
         if !status.is_success() {
-            let body = response.text().await.unwrap_or_default();
+            let body = read_streaming_error_body(response)
+                .await
+                .map_err(|e| e.into_provider_error(PROVIDER_NAME))?;
             return Err(self.map_error_response(status.as_u16(), &body));
         }
 

@@ -15,6 +15,8 @@ pub mod error;
 pub mod error_mapper;
 pub mod models;
 pub mod streaming;
+#[cfg(test)]
+mod streaming_request_tests;
 pub mod transformer;
 
 pub use client::OpenAIProvider;
