@@ -358,6 +358,7 @@ impl LLMProvider for BedrockProvider {
             response.bytes_stream(),
             model_config.family.clone(),
             model_config.api_type.clone(),
+            request.model.clone(),
         );
 
         Ok(Box::pin(stream))

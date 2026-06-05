@@ -1,6 +1,8 @@
 use super::*;
 use crate::core::providers::bedrock::model_config::{BedrockApiType, BedrockModelFamily};
 
+const TEST_MODEL_ID: &str = "anthropic.claude-3-haiku-20240307-v1:0";
+
 // ==================== HeaderValue Tests ====================
 
 #[test]
@@ -117,18 +119,24 @@ fn test_parse_event_message_minimal() {
 
 // ==================== Claude Chunk Parsing Tests ====================
 
-fn create_test_stream_claude() -> BedrockStream {
+fn create_test_stream(model_family: BedrockModelFamily, api_type: BedrockApiType) -> BedrockStream {
     let stream = futures::stream::empty::<Result<Bytes, reqwest::Error>>();
-    BedrockStream::new(
-        stream,
-        BedrockModelFamily::Claude,
-        BedrockApiType::InvokeStream,
-    )
+    BedrockStream::new(stream, model_family, api_type, TEST_MODEL_ID)
+}
+
+fn assert_chunk_metadata(stream: &BedrockStream, chunk: &crate::core::types::responses::ChatChunk) {
+    assert_eq!(chunk.id, stream.completion_id);
+    assert!(chunk.id.starts_with("bedrock-"));
+    assert_eq!(chunk.model, stream.request_model_id);
+    assert_eq!(chunk.created, stream.created);
+}
+
+fn create_test_stream_claude() -> BedrockStream {
+    create_test_stream(BedrockModelFamily::Claude, BedrockApiType::InvokeStream)
 }
 
 fn create_test_stream_converse_claude() -> BedrockStream {
-    let stream = futures::stream::empty::<Result<Bytes, reqwest::Error>>();
-    BedrockStream::new(stream, BedrockModelFamily::Claude, BedrockApiType::Converse)
+    create_test_stream(BedrockModelFamily::Claude, BedrockApiType::Converse)
 }
 
 #[test]
@@ -206,12 +214,7 @@ fn test_parse_claude_empty_delta() {
 // ==================== Nova Chunk Parsing Tests ====================
 
 fn create_test_stream_nova() -> BedrockStream {
-    let stream = futures::stream::empty::<Result<Bytes, reqwest::Error>>();
-    BedrockStream::new(
-        stream,
-        BedrockModelFamily::Nova,
-        BedrockApiType::InvokeStream,
-    )
+    create_test_stream(BedrockModelFamily::Nova, BedrockApiType::InvokeStream)
 }
 
 #[test]
@@ -251,12 +254,7 @@ fn test_parse_nova_no_content() {
 // ==================== Titan Chunk Parsing Tests ====================
 
 fn create_test_stream_titan() -> BedrockStream {
-    let stream = futures::stream::empty::<Result<Bytes, reqwest::Error>>();
-    BedrockStream::new(
-        stream,
-        BedrockModelFamily::TitanText,
-        BedrockApiType::InvokeStream,
-    )
+    create_test_stream(BedrockModelFamily::TitanText, BedrockApiType::InvokeStream)
 }
 
 #[test]
@@ -310,12 +308,7 @@ fn test_parse_titan_no_output() {
 // ==================== Generic Chunk Parsing Tests ====================
 
 fn create_test_stream_generic() -> BedrockStream {
-    let stream = futures::stream::empty::<Result<Bytes, reqwest::Error>>();
-    BedrockStream::new(
-        stream,
-        BedrockModelFamily::Mistral,
-        BedrockApiType::InvokeStream,
-    )
+    create_test_stream(BedrockModelFamily::Mistral, BedrockApiType::InvokeStream)
 }
 
 fn event_stream_message(payload: &[u8]) -> Bytes {
@@ -450,6 +443,7 @@ async fn test_stream_drains_buffered_events_on_eof() {
         stream,
         BedrockModelFamily::Mistral,
         BedrockApiType::InvokeStream,
+        TEST_MODEL_ID,
     );
 
     let first = bedrock_stream
@@ -465,6 +459,12 @@ async fn test_stream_drains_buffered_events_on_eof() {
 
     assert_eq!(first.choices[0].delta.content, Some("first".to_string()));
     assert_eq!(second.choices[0].delta.content, Some("second".to_string()));
+    assert_eq!(first.id, second.id);
+    assert_eq!(first.model, second.model);
+    assert_eq!(first.created, second.created);
+    assert_eq!(first.id, bedrock_stream.completion_id);
+    assert!(first.id.starts_with("bedrock-"));
+    assert_eq!(first.model, TEST_MODEL_ID);
     assert!(bedrock_stream.next().await.is_none());
 }
 
@@ -484,6 +484,7 @@ async fn test_stream_surfaces_bedrock_exception_events() {
         stream,
         BedrockModelFamily::Mistral,
         BedrockApiType::InvokeStream,
+        TEST_MODEL_ID,
     );
 
     let err = bedrock_stream
@@ -604,7 +605,10 @@ fn test_parse_chunk_routes_to_claude() {
 
     let result = stream.parse_chunk(payload);
     assert!(result.is_ok());
-    assert!(result.unwrap().is_some());
+    let chunk = result
+        .unwrap_or_else(|err| panic!("Claude chunk should parse: {err}"))
+        .unwrap_or_else(|| panic!("Claude chunk should emit content"));
+    assert_chunk_metadata(&stream, &chunk);
 }
 
 #[test]
@@ -615,12 +619,11 @@ fn test_parse_chunk_routes_converse_claude_to_converse_schema() {
     let result = stream.parse_chunk(payload);
     assert!(result.is_ok());
 
-    let chunk = result.unwrap();
+    let chunk = result.unwrap_or_else(|err| panic!("Converse chunk should parse: {err}"));
     assert!(chunk.is_some());
-    assert_eq!(
-        chunk.unwrap().choices[0].delta.content,
-        Some("test".to_string())
-    );
+    let chunk = chunk.unwrap_or_else(|| panic!("Converse chunk should emit content"));
+    assert_chunk_metadata(&stream, &chunk);
+    assert_eq!(chunk.choices[0].delta.content, Some("test".to_string()));
 }
 
 #[test]
@@ -717,7 +720,10 @@ fn test_parse_chunk_routes_to_nova() {
 
     let result = stream.parse_chunk(payload);
     assert!(result.is_ok());
-    assert!(result.unwrap().is_some());
+    let chunk = result
+        .unwrap_or_else(|err| panic!("Nova chunk should parse: {err}"))
+        .unwrap_or_else(|| panic!("Nova chunk should emit content"));
+    assert_chunk_metadata(&stream, &chunk);
 }
 
 #[test]
@@ -727,7 +733,10 @@ fn test_parse_chunk_routes_to_titan() {
 
     let result = stream.parse_chunk(payload);
     assert!(result.is_ok());
-    assert!(result.unwrap().is_some());
+    let chunk = result
+        .unwrap_or_else(|err| panic!("Titan chunk should parse: {err}"))
+        .unwrap_or_else(|| panic!("Titan chunk should emit content"));
+    assert_chunk_metadata(&stream, &chunk);
 }
 
 #[test]
@@ -748,37 +757,30 @@ fn test_bedrock_stream_creation() {
         stream,
         BedrockModelFamily::Claude,
         BedrockApiType::InvokeStream,
+        TEST_MODEL_ID,
     );
     assert!(bedrock_stream.buffer.is_empty());
+    assert!(bedrock_stream.completion_id.starts_with("bedrock-"));
+    assert_eq!(bedrock_stream.request_model_id, TEST_MODEL_ID);
+}
+
+#[test]
+fn test_bedrock_stream_completion_id_is_generated_per_stream() {
+    let first = create_test_stream_claude();
+    let second = create_test_stream_claude();
+
+    assert_ne!(first.completion_id, second.completion_id);
+    assert!(first.completion_id.starts_with("bedrock-"));
+    assert!(second.completion_id.starts_with("bedrock-"));
 }
 
 #[test]
 fn test_bedrock_stream_different_models() {
-    let stream1 = futures::stream::empty::<Result<Bytes, reqwest::Error>>();
-    let _ = BedrockStream::new(
-        stream1,
-        BedrockModelFamily::Claude,
-        BedrockApiType::InvokeStream,
-    );
-
-    let stream2 = futures::stream::empty::<Result<Bytes, reqwest::Error>>();
-    let _ = BedrockStream::new(
-        stream2,
-        BedrockModelFamily::Nova,
-        BedrockApiType::ConverseStream,
-    );
-
-    let stream3 = futures::stream::empty::<Result<Bytes, reqwest::Error>>();
-    let _ = BedrockStream::new(
-        stream3,
-        BedrockModelFamily::TitanText,
-        BedrockApiType::InvokeStream,
-    );
-
-    let stream4 = futures::stream::empty::<Result<Bytes, reqwest::Error>>();
-    let _ = BedrockStream::new(
-        stream4,
-        BedrockModelFamily::Mistral,
-        BedrockApiType::InvokeStream,
-    );
+    let streams = [
+        create_test_stream_claude(),
+        create_test_stream(BedrockModelFamily::Nova, BedrockApiType::ConverseStream),
+        create_test_stream_titan(),
+        create_test_stream_generic(),
+    ];
+    assert_eq!(streams.len(), 4);
 }
