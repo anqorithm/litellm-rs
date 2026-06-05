@@ -514,6 +514,7 @@ fn parse_runtime_invoke_usage(response: &Value) -> Option<Usage> {
 
     let prompt_tokens = response
         .get("inputTextTokenCount")
+        .or_else(|| response.get("prompt_token_count"))
         .and_then(Value::as_u64)
         .unwrap_or(0) as u32;
     let completion_tokens = response
@@ -522,6 +523,11 @@ fn parse_runtime_invoke_usage(response: &Value) -> Option<Usage> {
         .and_then(|results| results.first())
         .and_then(|result| result.get("tokenCount"))
         .and_then(Value::as_u64)
+        .or_else(|| {
+            response
+                .get("generation_token_count")
+                .and_then(Value::as_u64)
+        })
         .unwrap_or(0) as u32;
 
     if prompt_tokens == 0 && completion_tokens == 0 {
@@ -755,5 +761,29 @@ mod tests {
         assert!(
             matches!(content, MessageContent::Text(text) if text == "hello from native invoke")
         );
+    }
+
+    #[test]
+    fn parses_bedrock_completion_usage_for_runtime_resolved_invoke_arn() {
+        let raw_response = serde_json::json!({
+            "completion": "hello with usage",
+            "prompt_token_count": 13,
+            "generation_token_count": 8
+        });
+        let raw_response = serde_json::to_vec(&raw_response)
+            .unwrap_or_else(|err| panic!("native response should serialize: {err}"));
+
+        let response = transform_chat_response(
+            &raw_response,
+            "arn:aws:bedrock:us-east-1:123456789012:unknown-resource/ABC123",
+        )
+        .unwrap_or_else(|err| panic!("native response should parse: {err}"));
+
+        let usage = response
+            .usage
+            .unwrap_or_else(|| panic!("response should include BedrockCompletion usage"));
+        assert_eq!(usage.prompt_tokens, 13);
+        assert_eq!(usage.completion_tokens, 8);
+        assert_eq!(usage.total_tokens, 21);
     }
 }
