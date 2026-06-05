@@ -9,7 +9,8 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use crate::core::providers::base::{
-    GlobalPoolManager, HeaderPair, HttpMethod, header, header_owned, streaming_client,
+    GlobalPoolManager, HeaderPair, HttpMethod, apply_headers, header, header_owned,
+    read_streaming_error_body, send_streaming_request, streaming_unbounded_client,
 };
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
@@ -152,39 +153,32 @@ impl OpenAIProvider {
         let mut openai_request = self.transform_chat_request(request)?;
         openai_request["stream"] = Value::Bool(true);
 
-        // Get API key
-        let api_key =
-            self.config
-                .base
-                .api_key
-                .as_ref()
-                .ok_or_else(|| ProviderError::Authentication {
-                    provider: "openai",
-                    message: "API key is required".to_string(),
-                })?;
+        if self.config.base.api_key.is_none() {
+            return Err(ProviderError::Authentication {
+                provider: "openai",
+                message: "API key is required".to_string(),
+            });
+        }
 
-        // Execute streaming request using the global connection pool
+        // Execute streaming request without a total response-lifetime timeout.
         let url = format!("{}/chat/completions", self.config.get_api_base());
-        let client = streaming_client();
-        let mut req = client
-            .post(&url)
-            .header("Authorization", format!("Bearer {}", api_key))
-            .json(&openai_request);
+        let headers = self.get_request_headers();
+        let req = apply_headers(
+            streaming_unbounded_client()
+                .post(&url)
+                .json(&openai_request),
+            headers,
+        );
 
-        // Add organization header if present
-        if let Some(org) = &self.config.organization {
-            req = req.header("OpenAI-Organization", org);
+        let response = send_streaming_request(req, "openai").await?;
+        let status = response.status();
+        if !status.is_success() {
+            let body = read_streaming_error_body(response)
+                .await
+                .map_err(|e| e.into_provider_error("openai"))?;
+            let mapper = super::error_mapper::OpenAIErrorMapper;
+            return Err(mapper.map_http_error(status.as_u16(), &body));
         }
-
-        // Add project header if present
-        if let Some(project) = &self.config.project {
-            req = req.header("OpenAI-Project", project);
-        }
-
-        let response = req.send().await.map_err(|e| ProviderError::Network {
-            provider: "openai",
-            message: e.to_string(),
-        })?;
 
         // Create OpenAI-specific stream handler using unified SSE parser
         let stream = response.bytes_stream();
