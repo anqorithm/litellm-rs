@@ -18,6 +18,12 @@ use super::unified_provider::ProviderError;
 use super::{Provider, openai_like, registry as provider_registry};
 use tracing::warn;
 
+fn provider_diagnostic_name(provider_type: &ProviderType) -> &'static str {
+    provider_registry::entry_for_type(provider_type)
+        .map(|entry| entry.canonical_name)
+        .unwrap_or("custom")
+}
+
 /// Create a provider from configuration
 ///
 /// This is the main factory function for creating providers
@@ -97,7 +103,7 @@ pub async fn create_provider(
 
     if !Provider::factory_supported_provider_types().contains(&provider_type_enum) {
         return Err(ProviderError::not_implemented(
-            "unknown",
+            provider_diagnostic_name(&provider_type_enum),
             format!("Factory for {:?} not yet implemented", provider_type_enum),
         ));
     }
@@ -185,6 +191,7 @@ mod tests {
             "Expected NotImplemented error, got {}",
             err
         );
+        assert_eq!(err.provider(), "pydantic_ai");
     }
 
     #[tokio::test]
@@ -204,6 +211,7 @@ mod tests {
             "Expected NotImplemented error, got {}",
             err
         );
+        assert_eq!(err.provider(), "pydantic_ai");
     }
 
     #[tokio::test]

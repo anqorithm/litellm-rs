@@ -153,7 +153,7 @@ impl Provider {
                     Some(d) => d,
                     None => {
                         return Err(ProviderError::not_implemented(
-                            "unknown",
+                            super::provider_diagnostic_name(pt),
                             format!("Catalog definition for '{}' disappeared unexpectedly", name),
                         ));
                     }
@@ -177,7 +177,7 @@ impl Provider {
                 Ok(Provider::OpenAILike(provider))
             }
             _ => Err(ProviderError::not_implemented(
-                "unknown",
+                super::provider_diagnostic_name(&provider_type),
                 format!("Factory for {:?} not yet implemented", provider_type),
             )),
         }
@@ -290,6 +290,11 @@ mod tests {
                 "Expected NotImplemented for {:?}, got {}",
                 provider_type,
                 err
+            );
+            assert_eq!(
+                err.provider(),
+                provider_type.to_string(),
+                "NotImplemented provider name should identify the requested provider"
             );
         }
     }
