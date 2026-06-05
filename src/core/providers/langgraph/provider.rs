@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use crate::core::providers::base::{
     GlobalPoolManager, HeaderPair, HttpMethod, get_pricing_db, header, header_owned,
-    streaming_client,
+    read_streaming_error_body, send_streaming_request, streaming_client,
 };
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::error_mapper::trait_def::ErrorMapper;
@@ -513,21 +513,21 @@ impl LLMProvider for LangGraphProvider {
             .ok_or_else(|| ProviderError::authentication(PROVIDER_NAME, "API key is required"))?;
 
         let client = streaming_client();
-        let response = client
-            .post(&url)
-            .header("x-api-key", api_key)
-            .header("Content-Type", "application/json")
-            .json(&stream_request)
-            .send()
-            .await
-            .map_err(|e| ProviderError::network(PROVIDER_NAME, e.to_string()))?;
+        let response = send_streaming_request(
+            client
+                .post(&url)
+                .header("x-api-key", api_key)
+                .header("Content-Type", "application/json")
+                .json(&stream_request),
+            PROVIDER_NAME,
+        )
+        .await?;
 
         let status = response.status();
         if !status.is_success() {
-            let error_text = response
-                .text()
+            let error_text = read_streaming_error_body(response)
                 .await
-                .unwrap_or_else(|_| "Unknown error".to_string());
+                .map_err(|err| err.into_provider_error(PROVIDER_NAME))?;
             return Err(LangGraphErrorMapper.map_http_error(status.as_u16(), &error_text));
         }
 

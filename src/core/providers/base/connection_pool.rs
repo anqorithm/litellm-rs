@@ -130,10 +130,10 @@ static GLOBAL_CLIENT: LazyLock<Arc<Client>> = LazyLock::new(|| {
 });
 
 static STREAMING_CLIENT: LazyLock<Arc<Client>> = LazyLock::new(|| {
-    let client = match create_streaming_client() {
-        Ok(client) => client,
-        Err(err) => panic!("streaming HTTP client must build: {err}"),
-    };
+    let client = create_streaming_client().unwrap_or_else(|err| {
+        tracing::error!("Failed to create streaming HTTP client: {err}");
+        crate::core::http::outbound::default_outbound_client().clone()
+    });
     Arc::new(client)
 });
 
@@ -242,6 +242,9 @@ pub async fn read_streaming_error_body_with_limits(
             }
 
             body.extend_from_slice(&chunk);
+            if body.len() == max_bytes {
+                break;
+            }
         }
 
         Ok::<_, reqwest::Error>(body)
@@ -249,7 +252,8 @@ pub async fn read_streaming_error_body_with_limits(
     .await
     .map_err(|_| StreamingRequestError::ErrorBodyTimeout { timeout })??;
 
-    Ok(String::from_utf8_lossy(&bytes).into_owned())
+    Ok(String::from_utf8(bytes)
+        .unwrap_or_else(|err| String::from_utf8_lossy(err.as_bytes()).into_owned()))
 }
 
 /// Simplified connection pool without generic complexity
@@ -471,6 +475,52 @@ mod tests {
         Ok(format!("http://{addr}"))
     }
 
+    async fn stalled_error_body_url(
+        body: &'static [u8],
+        content_length: usize,
+    ) -> std::io::Result<String> {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await?;
+        let addr = listener.local_addr()?;
+
+        tokio::spawn(async move {
+            let (mut socket, _) = match listener.accept().await {
+                Ok(connection) => connection,
+                Err(err) => panic!("test server accept failed: {err}"),
+            };
+            let mut buffer = [0_u8; 1024];
+            if let Err(err) = socket.read(&mut buffer).await {
+                panic!("test server failed to read request: {err}");
+            }
+
+            let headers = format!(
+                "HTTP/1.1 500 Internal Server Error\r\nContent-Length: {content_length}\r\nConnection: keep-alive\r\n\r\n"
+            );
+            if let Err(err) = socket.write_all(headers.as_bytes()).await {
+                if !matches!(
+                    err.kind(),
+                    std::io::ErrorKind::BrokenPipe | std::io::ErrorKind::ConnectionReset
+                ) {
+                    panic!("test server failed to write headers: {err}");
+                }
+                return;
+            }
+
+            if let Err(err) = socket.write_all(body).await {
+                if !matches!(
+                    err.kind(),
+                    std::io::ErrorKind::BrokenPipe | std::io::ErrorKind::ConnectionReset
+                ) {
+                    panic!("test server failed to write body: {err}");
+                }
+                return;
+            }
+
+            tokio::time::sleep(Duration::from_millis(150)).await;
+        });
+
+        Ok(format!("http://{addr}"))
+    }
+
     #[tokio::test]
     async fn test_pool_creation() {
         let pool = ConnectionPool::new();
@@ -563,6 +613,28 @@ mod tests {
             err,
             StreamingRequestError::ErrorBodyTimeout { .. }
         ));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_streaming_error_body_returns_when_byte_cap_is_reached()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let url = stalled_error_body_url(b"error", 10).await?;
+
+        let response = send_streaming_request_with_timeout(
+            streaming_client().get(url),
+            Duration::from_secs(1),
+        )
+        .await?;
+        assert_eq!(
+            response.status(),
+            reqwest::StatusCode::INTERNAL_SERVER_ERROR
+        );
+
+        let body =
+            read_streaming_error_body_with_limits(response, Duration::from_millis(25), 5).await?;
+
+        assert_eq!(body, "error");
         Ok(())
     }
 
