@@ -3,7 +3,37 @@ use crate::core::types::chat::ChatMessage;
 use crate::core::types::context::RequestContext;
 use crate::core::types::message::{MessageContent, MessageRole};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::TcpListener;
+use tokio::net::{TcpListener, TcpStream};
+
+async fn read_full_http_request(socket: &mut TcpStream) -> std::io::Result<()> {
+    let mut request_bytes = Vec::new();
+    let mut buffer = [0_u8; 1024];
+
+    loop {
+        let bytes_read = socket.read(&mut buffer).await?;
+        if bytes_read == 0 {
+            return Ok(());
+        }
+
+        request_bytes.extend_from_slice(&buffer[..bytes_read]);
+        if let Some(header_end) = request_bytes.windows(4).position(|w| w == b"\r\n\r\n") {
+            let headers = String::from_utf8_lossy(&request_bytes[..header_end]);
+            let content_length = headers
+                .lines()
+                .find_map(|line| {
+                    let (name, value) = line.split_once(':')?;
+                    name.eq_ignore_ascii_case("content-length")
+                        .then(|| value.trim().parse::<usize>().ok())
+                        .flatten()
+                })
+                .unwrap_or(0);
+
+            if request_bytes.len() >= header_end + 4 + content_length {
+                return Ok(());
+            }
+        }
+    }
+}
 
 async fn openai_like_stream_response_url(status: &str, body: &str) -> std::io::Result<String> {
     let listener = TcpListener::bind(("127.0.0.1", 0)).await?;
@@ -18,8 +48,7 @@ async fn openai_like_stream_response_url(status: &str, body: &str) -> std::io::R
             Ok(connection) => connection,
             Err(err) => panic!("test server failed to accept request: {err}"),
         };
-        let mut buffer = [0_u8; 1024];
-        if let Err(err) = socket.read(&mut buffer).await {
+        if let Err(err) = read_full_http_request(&mut socket).await {
             panic!("test server failed to read request: {err}");
         }
         if let Err(err) = socket.write_all(response.as_bytes()).await {
