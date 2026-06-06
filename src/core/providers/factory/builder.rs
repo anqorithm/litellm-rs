@@ -5,6 +5,8 @@
 
 use super::super::unified_provider::ProviderError;
 use super::super::{anthropic, bedrock, cloudflare, macros, mistral, openai, openai_like};
+#[cfg(feature = "providers-extra")]
+use super::super::{azure, azure_ai};
 use std::env;
 
 // ==================== Config Extraction Helpers ====================
@@ -68,6 +70,84 @@ pub(super) fn merge_string_headers_value(
         return true;
     }
     false
+}
+
+#[cfg(not(feature = "providers-extra"))]
+fn build_azure_openai_like_config_for_factory(
+    config: &serde_json::Value,
+    provider_name: &'static str,
+    endpoint_alias: &'static str,
+) -> Result<openai_like::OpenAILikeConfig, ProviderError> {
+    let api_key = macros::require_config_str(config, "api_key", provider_name)?;
+    let api_base = config_str(config, "base_url")
+        .or_else(|| config_str(config, "api_base"))
+        .or_else(|| config_str(config, "endpoint"))
+        .map(Ok)
+        .or_else(|| {
+            config_str(config, endpoint_alias)
+                .map(|endpoint| validate_openai_like_azure_fallback_base(provider_name, endpoint))
+        })
+        .unwrap_or_else(|| {
+            Err(ProviderError::configuration(
+                provider_name,
+                "base_url (or endpoint) is required",
+            ))
+        })?;
+
+    let mut oai_config = openai_like::OpenAILikeConfig::with_api_key(api_base, api_key);
+    oai_config.provider_name = provider_name.to_string();
+
+    if let Some(api_version) = config_str(config, "api_version") {
+        oai_config.base.api_version = Some(api_version.to_string());
+    }
+    if let Some(timeout) = config_u64(config, "timeout") {
+        oai_config.base.timeout = timeout;
+    }
+    if let Some(max_retries) = config_u32(config, "max_retries") {
+        oai_config.base.max_retries = max_retries;
+    }
+    merge_string_headers(&mut oai_config.base.headers, config, "headers");
+    merge_string_headers(&mut oai_config.custom_headers, config, "custom_headers");
+
+    Ok(oai_config)
+}
+
+#[cfg(not(feature = "providers-extra"))]
+fn validate_openai_like_azure_fallback_base<'a>(
+    provider_name: &'static str,
+    endpoint: &'a str,
+) -> Result<&'a str, ProviderError> {
+    let normalized = endpoint.trim_end_matches('/');
+    let is_openai_like = match provider_name {
+        "azure" => normalized.contains("/openai/deployments/"),
+        "azure_ai" => normalized.ends_with("/models") || normalized.contains("/models/"),
+        _ => true,
+    };
+
+    if is_openai_like {
+        Ok(endpoint)
+    } else {
+        Err(ProviderError::configuration(
+            provider_name,
+            format!(
+                "{provider_name} fallback requires base_url/api_base with an OpenAI-compatible path; enable providers-extra for bare Azure endpoints"
+            ),
+        ))
+    }
+}
+
+#[cfg(not(feature = "providers-extra"))]
+pub(super) fn build_azure_ai_openai_like_config_from_factory(
+    config: &serde_json::Value,
+) -> Result<openai_like::OpenAILikeConfig, ProviderError> {
+    build_azure_openai_like_config_for_factory(config, "azure_ai", "azure_ai_endpoint")
+}
+
+#[cfg(not(feature = "providers-extra"))]
+pub(super) fn build_azure_openai_like_config_from_factory(
+    config: &serde_json::Value,
+) -> Result<openai_like::OpenAILikeConfig, ProviderError> {
+    build_azure_openai_like_config_for_factory(config, "azure", "azure_endpoint")
 }
 
 pub(super) fn apply_tier1_openai_like_overrides(
@@ -360,33 +440,36 @@ pub(super) fn build_v0_config_from_factory(
     Ok(oai_config)
 }
 
+#[cfg(feature = "providers-extra")]
 pub(super) fn build_azure_ai_config_from_factory(
     config: &serde_json::Value,
-) -> Result<openai_like::OpenAILikeConfig, ProviderError> {
+) -> Result<azure_ai::AzureAIConfig, ProviderError> {
     let api_key = macros::require_config_str(config, "api_key", "azure_ai")?;
     let api_base = config_str(config, "base_url")
         .or_else(|| config_str(config, "api_base"))
         .or_else(|| config_str(config, "endpoint"))
+        .or_else(|| config_str(config, "azure_ai_endpoint"))
         .ok_or_else(|| {
             ProviderError::configuration("azure_ai", "base_url (or endpoint) is required")
         })?;
 
-    let mut oai_config = openai_like::OpenAILikeConfig::with_api_key(api_base, api_key);
-    oai_config.provider_name = "azure_ai".to_string();
+    let mut azure_ai_config = azure_ai::AzureAIConfig::new("azure_ai");
+    azure_ai_config.base.api_key = Some(api_key.to_string());
+    azure_ai_config.base.api_base = Some(api_base.to_string());
 
     if let Some(api_version) = config_str(config, "api_version") {
-        oai_config.base.api_version = Some(api_version.to_string());
+        azure_ai_config.base.api_version = Some(api_version.to_string());
     }
     if let Some(timeout) = config_u64(config, "timeout") {
-        oai_config.base.timeout = timeout;
+        azure_ai_config.base.timeout = timeout;
     }
     if let Some(max_retries) = config_u32(config, "max_retries") {
-        oai_config.base.max_retries = max_retries;
+        azure_ai_config.base.max_retries = max_retries;
     }
-    merge_string_headers(&mut oai_config.base.headers, config, "headers");
-    merge_string_headers(&mut oai_config.custom_headers, config, "custom_headers");
+    merge_string_headers(&mut azure_ai_config.base.headers, config, "headers");
+    merge_string_headers(&mut azure_ai_config.base.headers, config, "custom_headers");
 
-    Ok(oai_config)
+    Ok(azure_ai_config)
 }
 
 pub(super) fn build_amazon_nova_config_from_factory(
@@ -435,33 +518,41 @@ pub(super) fn build_fal_ai_config_from_factory(
     Ok(oai_config)
 }
 
+#[cfg(feature = "providers-extra")]
 pub(super) fn build_azure_config_from_factory(
     config: &serde_json::Value,
-) -> Result<openai_like::OpenAILikeConfig, ProviderError> {
+) -> Result<azure::AzureConfig, ProviderError> {
     let api_key = macros::require_config_str(config, "api_key", "azure")?;
     let api_base = config_str(config, "base_url")
         .or_else(|| config_str(config, "api_base"))
         .or_else(|| config_str(config, "endpoint"))
+        .or_else(|| config_str(config, "azure_endpoint"))
         .ok_or_else(|| {
             ProviderError::configuration("azure", "base_url (or endpoint) is required")
         })?;
 
-    let mut oai_config = openai_like::OpenAILikeConfig::with_api_key(api_base, api_key);
-    oai_config.provider_name = "azure".to_string();
+    let mut azure_config = azure::AzureConfig::new()
+        .with_api_key(api_key.to_string())
+        .with_azure_endpoint(api_base.to_string());
 
     if let Some(api_version) = config_str(config, "api_version") {
-        oai_config.base.api_version = Some(api_version.to_string());
+        azure_config.api_version = api_version.to_string();
+    }
+    if let Some(deployment_name) =
+        config_str(config, "deployment_name").or_else(|| config_str(config, "deployment"))
+    {
+        azure_config.deployment_name = Some(deployment_name.to_string());
     }
     if let Some(timeout) = config_u64(config, "timeout") {
-        oai_config.base.timeout = timeout;
+        azure_config.timeout = timeout;
     }
     if let Some(max_retries) = config_u32(config, "max_retries") {
-        oai_config.base.max_retries = max_retries;
+        azure_config.max_retries = max_retries;
     }
-    merge_string_headers(&mut oai_config.base.headers, config, "headers");
-    merge_string_headers(&mut oai_config.custom_headers, config, "custom_headers");
+    merge_string_headers(&mut azure_config.custom_headers, config, "headers");
+    merge_string_headers(&mut azure_config.custom_headers, config, "custom_headers");
 
-    Ok(oai_config)
+    Ok(azure_config)
 }
 
 pub(super) fn build_bedrock_config_from_factory(

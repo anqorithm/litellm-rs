@@ -39,13 +39,13 @@ pub static PROVIDER_MODULE_LIFECYCLE: &[ProviderModuleLifecycleEntry] = &[
         "native module retained; ProviderType::AmazonNova currently uses a generic OpenAI-compatible adapter",
     ),
     wire("anthropic", "native Provider enum variant"),
-    stub(
+    provider_extra_wire(
         "azure",
-        "native Azure module retained; ProviderType::Azure currently uses a generic OpenAI-compatible adapter",
+        "native Provider enum variant when providers-extra is enabled; otherwise unsupported without generic fallback",
     ),
-    stub(
+    provider_extra_wire(
         "azure_ai",
-        "native Azure AI module retained; ProviderType::AzureAI currently uses a generic OpenAI-compatible adapter",
+        "native Provider enum variant when providers-extra is enabled; otherwise unsupported without generic fallback",
     ),
     internal("base", "shared provider infrastructure"),
     stub(
@@ -279,6 +279,18 @@ const fn internal(module_name: &'static str, reason: &'static str) -> ProviderMo
     entry(module_name, ProviderModuleLifecycle::Internal, reason)
 }
 
+const fn provider_extra_wire(
+    module_name: &'static str,
+    reason: &'static str,
+) -> ProviderModuleLifecycleEntry {
+    let lifecycle = if cfg!(feature = "providers-extra") {
+        ProviderModuleLifecycle::Wire
+    } else {
+        ProviderModuleLifecycle::Stub
+    };
+    entry(module_name, lifecycle, reason)
+}
+
 const fn entry(
     module_name: &'static str,
     lifecycle: ProviderModuleLifecycle,
@@ -317,8 +329,22 @@ mod tests {
     fn lifecycle_classifies_phase0_key_provider_modules() {
         assert_eq!(lifecycle_for("bedrock"), ProviderModuleLifecycle::Wire);
         assert_eq!(lifecycle_for("vertex_ai"), ProviderModuleLifecycle::Stub);
-        assert_eq!(lifecycle_for("azure"), ProviderModuleLifecycle::Stub);
-        assert_eq!(lifecycle_for("azure_ai"), ProviderModuleLifecycle::Stub);
+        assert_eq!(
+            lifecycle_for("azure"),
+            if cfg!(feature = "providers-extra") {
+                ProviderModuleLifecycle::Wire
+            } else {
+                ProviderModuleLifecycle::Stub
+            }
+        );
+        assert_eq!(
+            lifecycle_for("azure_ai"),
+            if cfg!(feature = "providers-extra") {
+                ProviderModuleLifecycle::Wire
+            } else {
+                ProviderModuleLifecycle::Stub
+            }
+        );
         assert_eq!(lifecycle_for("cohere"), ProviderModuleLifecycle::Stub);
         assert_eq!(lifecycle_for("gemini"), ProviderModuleLifecycle::Stub);
     }
@@ -332,6 +358,10 @@ mod tests {
             .collect::<BTreeSet<_>>();
         let expected = [
             "anthropic",
+            #[cfg(feature = "providers-extra")]
+            "azure",
+            #[cfg(feature = "providers-extra")]
+            "azure_ai",
             "bedrock",
             "cloudflare",
             "mistral",
