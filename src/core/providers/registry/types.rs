@@ -92,14 +92,14 @@ pub static PROVIDER_TYPE_REGISTRY: &[ProviderRegistryEntry] = &[
         ProviderType::Azure,
         "azure",
         &["azure-openai"],
-        ProviderDispatchKind::ExplicitOpenAiLike,
+        provider_extra_native_dispatch_kind(),
         false,
     ),
     entry(
         ProviderType::AzureAI,
         "azure_ai",
         &["azureai", "azure-ai"],
-        ProviderDispatchKind::ExplicitOpenAiLike,
+        provider_extra_native_dispatch_kind(),
         false,
     ),
     entry(
@@ -327,6 +327,14 @@ const fn entry(
     }
 }
 
+const fn provider_extra_native_dispatch_kind() -> ProviderDispatchKind {
+    if cfg!(feature = "providers-extra") {
+        ProviderDispatchKind::Native
+    } else {
+        ProviderDispatchKind::ExplicitOpenAiLike
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -398,6 +406,12 @@ mod tests {
             ProviderType::Cloudflare,
         ]
         .into_iter()
+        .chain([
+            #[cfg(feature = "providers-extra")]
+            ProviderType::Azure,
+            #[cfg(feature = "providers-extra")]
+            ProviderType::AzureAI,
+        ])
         .collect::<HashSet<_>>();
 
         assert_eq!(native_types, expected);
@@ -415,11 +429,11 @@ mod tests {
         );
         assert_eq!(
             dispatch_kind_for(&ProviderType::Azure),
-            ProviderDispatchKind::ExplicitOpenAiLike
+            provider_extra_native_dispatch_kind()
         );
         assert_eq!(
             dispatch_kind_for(&ProviderType::AzureAI),
-            ProviderDispatchKind::ExplicitOpenAiLike
+            provider_extra_native_dispatch_kind()
         );
         assert_eq!(
             dispatch_kind_for(&ProviderType::OpenAICompatible),

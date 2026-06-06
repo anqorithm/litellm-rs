@@ -233,6 +233,59 @@ mod tests {
         assert!(matches!(provider, Provider::OpenAILike(_)));
     }
 
+    /// Test Azure OpenAI uses the native provider path when providers-extra is enabled.
+    #[cfg(feature = "providers-extra")]
+    #[tokio::test]
+    async fn test_azure_provider_uses_native_dispatch() {
+        let config = json!({
+            "api_key": "azure-test-key",
+            "azure_endpoint": "https://test-resource.openai.azure.com",
+            "deployment_name": "gpt-4o-deployment",
+            "api_version": "2024-02-01"
+        });
+
+        let result = Provider::from_config_async(ProviderType::Azure, config).await;
+        assert!(
+            result.is_ok(),
+            "Failed to create native Azure provider: {:?}",
+            result.err()
+        );
+
+        let provider = match result {
+            Ok(provider) => provider,
+            Err(err) => panic!("native Azure provider should be created: {err}"),
+        };
+        assert_eq!(provider.name(), "azure");
+        assert_eq!(provider.provider_type(), ProviderType::Azure);
+        assert!(matches!(provider, Provider::Azure(_)));
+    }
+
+    /// Test Azure AI uses the native provider path when providers-extra is enabled.
+    #[cfg(feature = "providers-extra")]
+    #[tokio::test]
+    async fn test_azure_ai_provider_uses_native_dispatch() {
+        let config = json!({
+            "api_key": "azure-ai-test-key",
+            "base_url": "https://test-resource.services.ai.azure.com",
+            "api_version": "2024-05-01-preview"
+        });
+
+        let result = Provider::from_config_async(ProviderType::AzureAI, config).await;
+        assert!(
+            result.is_ok(),
+            "Failed to create native Azure AI provider: {:?}",
+            result.err()
+        );
+
+        let provider = match result {
+            Ok(provider) => provider,
+            Err(err) => panic!("native Azure AI provider should be created: {err}"),
+        };
+        assert_eq!(provider.name(), "azure_ai");
+        assert_eq!(provider.provider_type(), ProviderType::AzureAI);
+        assert!(matches!(provider, Provider::AzureAI(_)));
+    }
+
     /// Test provider creation fails with missing api_key
     #[tokio::test]
     async fn test_provider_creation_fails_without_api_key() {
