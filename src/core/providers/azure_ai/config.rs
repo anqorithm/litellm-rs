@@ -48,8 +48,28 @@ impl AzureAIConfig {
         // Ensure base URL ends with '/' and path doesn't start with '/'
         let base = base_url.trim_end_matches('/');
         let endpoint_path = path.trim_start_matches('/');
+        let base = if Self::needs_models_prefix(base, endpoint_path) {
+            format!("{}/models", base)
+        } else {
+            base.to_string()
+        };
 
         Ok(format!("{}/{}", base, endpoint_path))
+    }
+
+    fn needs_models_prefix(base: &str, endpoint_path: &str) -> bool {
+        if endpoint_path == "models" || endpoint_path.starts_with("models/") {
+            return false;
+        }
+
+        let host_and_path = base.split_once("://").map(|(_, rest)| rest).unwrap_or(base);
+        let (host, path) = host_and_path
+            .split_once('/')
+            .map(|(host, path)| (host, path))
+            .unwrap_or((host_and_path, ""));
+
+        host.ends_with(".services.ai.azure.com")
+            && !path.split('/').any(|segment| segment == "models")
     }
 
     /// Default
@@ -69,8 +89,16 @@ impl AzureAIConfig {
         // Settings
         headers.insert("User-Agent".to_string(), "litellm-rust/0.1.0".to_string());
 
-        // Settings
-        headers.insert("api-version".to_string(), "2024-05-01-preview".to_string());
+        let api_version = self
+            .base
+            .api_version
+            .as_deref()
+            .unwrap_or("2024-05-01-preview");
+        headers.insert("api-version".to_string(), api_version.to_string());
+
+        for (key, value) in &self.base.headers {
+            headers.insert(key.clone(), value.clone());
+        }
 
         Ok(headers)
     }
@@ -177,6 +205,30 @@ mod tests {
     }
 
     #[test]
+    fn test_build_endpoint_url_adds_models_for_resource_root() {
+        let mut config = AzureAIConfig::new("azure_ai");
+        config.base.api_base = Some("https://resource.services.ai.azure.com".to_string());
+
+        let url = config.build_endpoint_url("chat/completions").unwrap();
+        assert_eq!(
+            url,
+            "https://resource.services.ai.azure.com/models/chat/completions"
+        );
+    }
+
+    #[test]
+    fn test_build_endpoint_url_does_not_duplicate_models() {
+        let mut config = AzureAIConfig::new("azure_ai");
+        config.base.api_base = Some("https://resource.services.ai.azure.com/models".to_string());
+
+        let url = config.build_endpoint_url("chat/completions").unwrap();
+        assert_eq!(
+            url,
+            "https://resource.services.ai.azure.com/models/chat/completions"
+        );
+    }
+
+    #[test]
     fn test_build_endpoint_url_no_base() {
         // Use Default to get a config without default api_base
         let config = AzureAIConfig::default();
@@ -189,12 +241,45 @@ mod tests {
     fn test_create_default_headers_with_api_key() {
         let mut config = AzureAIConfig::new("azure_ai");
         config.base.api_key = Some("test-api-key".to_string());
+        config.base.api_version = Some("2024-08-01-preview".to_string());
+        config
+            .base
+            .headers
+            .insert("x-routing-tenant".to_string(), "tenant-a".to_string());
 
         let headers = config.create_default_headers().unwrap();
-        assert_eq!(headers.get("Authorization").unwrap(), "Bearer test-api-key");
-        assert_eq!(headers.get("Content-Type").unwrap(), "application/json");
-        assert_eq!(headers.get("User-Agent").unwrap(), "litellm-rust/0.1.0");
-        assert_eq!(headers.get("api-version").unwrap(), "2024-05-01-preview");
+        assert_eq!(
+            headers.get("Authorization").map(String::as_str),
+            Some("Bearer test-api-key")
+        );
+        assert_eq!(
+            headers.get("Content-Type").map(String::as_str),
+            Some("application/json")
+        );
+        assert_eq!(
+            headers.get("User-Agent").map(String::as_str),
+            Some("litellm-rust/0.1.0")
+        );
+        assert_eq!(
+            headers.get("api-version").map(String::as_str),
+            Some("2024-08-01-preview")
+        );
+        assert_eq!(
+            headers.get("x-routing-tenant").map(String::as_str),
+            Some("tenant-a")
+        );
+    }
+
+    #[test]
+    fn test_create_default_headers_uses_default_api_version() {
+        let mut config = AzureAIConfig::new("azure_ai");
+        config.base.api_key = Some("test-api-key".to_string());
+
+        let headers = config.create_default_headers().unwrap();
+        assert_eq!(
+            headers.get("api-version").map(String::as_str),
+            Some("2024-05-01-preview")
+        );
     }
 
     #[test]

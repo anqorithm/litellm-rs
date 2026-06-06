@@ -2,7 +2,7 @@
 //!
 //! Complete chat completion implementation for Azure AI Foundry
 
-use futures::{Stream, StreamExt};
+use futures::Stream;
 use reqwest::header::HeaderMap;
 use serde_json::{Value, json};
 use std::pin::Pin;
@@ -19,6 +19,7 @@ use crate::core::types::{
 
 use super::config::{AzureAIConfig, AzureAIEndpointType};
 use crate::core::providers::base::HttpErrorMapper;
+use crate::core::providers::base::sse::{SSETransformer, UnifiedSSEStream};
 use crate::core::providers::unified_provider::ProviderError;
 use crate::utils::net::http::create_custom_client_with_headers;
 
@@ -149,18 +150,34 @@ impl AzureAIChatHandler {
             ));
         }
 
-        // Create SSE stream
-        let model = request.model.clone();
-        let stream = response.bytes_stream().map(move |chunk_result| {
-            chunk_result
-                .map_err(|e| ProviderError::network("azure_ai", format!("Stream error: {}", e)))
-                .and_then(|chunk| {
-                    let chunk_str = String::from_utf8_lossy(&chunk);
-                    AzureAIChatUtils::parse_streaming_chunk(&chunk_str, &model)
-                })
-        });
-
+        let transformer = AzureAISSETransformer::new(request.model.clone());
+        let stream = UnifiedSSEStream::new(Box::pin(response.bytes_stream()), transformer);
         Ok(Box::pin(stream))
+    }
+}
+
+#[derive(Debug, Clone)]
+struct AzureAISSETransformer {
+    model: String,
+}
+
+impl AzureAISSETransformer {
+    fn new(model: String) -> Self {
+        Self { model }
+    }
+}
+
+impl SSETransformer for AzureAISSETransformer {
+    fn provider_name(&self) -> &'static str {
+        "azure_ai"
+    }
+
+    fn transform_chunk(&self, data: &str) -> Result<Option<ChatChunk>, ProviderError> {
+        let chunk_data: Value = serde_json::from_str(data).map_err(|e| {
+            ProviderError::response_parsing("azure_ai", format!("Failed to parse SSE JSON: {}", e))
+        })?;
+
+        AzureAIChatUtils::transform_streaming_chunk(chunk_data, &self.model).map(Some)
     }
 }
 

@@ -1,4 +1,5 @@
 use super::*;
+use crate::core::providers::base::sse::UnifiedSSEParser;
 
 fn create_test_request() -> ChatRequest {
     ChatRequest {
@@ -200,6 +201,40 @@ fn test_parse_streaming_chunk_empty() {
     assert!(result.is_ok());
     let chat_chunk = result.unwrap();
     assert_eq!(chat_chunk.id, "empty");
+}
+
+#[test]
+fn test_sse_parser_buffers_split_and_multiple_events() {
+    let transformer = AzureAISSETransformer::new("gpt-4".to_string());
+    let mut parser = UnifiedSSEParser::new(transformer);
+
+    let first = match parser
+        .process_bytes(br#"data: {"id":"chunk-1","choices":[{"delta":{"content":"Hel"#)
+    {
+        Ok(chunks) => chunks,
+        Err(error) => panic!("partial SSE bytes should be buffered: {error}"),
+    };
+    assert!(first.is_empty());
+
+    let second = match parser.process_bytes(
+        br#"lo"}}]}
+
+data: {"id":"chunk-2","choices":[{"delta":{"content":" World"}}]}
+
+data: [DONE]
+
+"#,
+    ) {
+        Ok(chunks) => chunks,
+        Err(error) => panic!("complete SSE events should parse: {error}"),
+    };
+
+    assert_eq!(second.len(), 2);
+    assert_eq!(second[0].choices[0].delta.content.as_deref(), Some("Hello"));
+    assert_eq!(
+        second[1].choices[0].delta.content.as_deref(),
+        Some(" World")
+    );
 }
 
 #[test]
