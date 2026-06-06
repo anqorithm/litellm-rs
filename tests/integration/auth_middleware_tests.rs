@@ -15,6 +15,7 @@ mod tests {
     use litellm_rs::server::state::AppState;
     use litellm_rs::utils::auth::crypto::keys::{extract_api_key_prefix, hash_api_key};
     use serde::{Deserialize, Serialize};
+    use std::net::SocketAddr;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -95,9 +96,13 @@ mod tests {
     }
 
     async fn seed_valid_principal(state: &AppState) -> SeededPrincipal {
+        seed_valid_principal_with_suffix(state, "primary").await
+    }
+
+    async fn seed_valid_principal_with_suffix(state: &AppState, suffix: &str) -> SeededPrincipal {
         let mut user = User::new(
-            "auth-mw-user".to_string(),
-            "auth-mw-user@example.com".to_string(),
+            format!("auth-mw-user-{suffix}"),
+            format!("auth-mw-user-{suffix}@example.com"),
             "hashed-password".to_string(),
         );
         user.status = UserStatus::Active;
@@ -109,10 +114,10 @@ mod tests {
             .await
             .expect("failed to insert user for auth middleware integration test");
 
-        let raw_api_key = "gw-valid-auth-middleware-key-123456".to_string();
+        let raw_api_key = format!("gw-valid-auth-middleware-key-{suffix}-123456");
         let api_key = ApiKey {
             metadata: Metadata::new(),
-            name: "auth-middleware-test-key".to_string(),
+            name: format!("auth-middleware-test-key-{suffix}"),
             key_hash: hash_api_key(&raw_api_key, None),
             key_prefix: extract_api_key_prefix(&raw_api_key),
             user_id: Some(user.id()),
@@ -315,6 +320,119 @@ mod tests {
         assert_eq!(
             invalid_error.as_response_error().status_code(),
             StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(hit_counter.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn test_authenticated_requests_keep_identity_rate_limit_keys() {
+        let state = build_test_state_with_rate_limit(true, true, Some(1)).await;
+        let first_principal = seed_valid_principal_with_suffix(&state, "identity-a").await;
+        let second_principal = seed_valid_principal_with_suffix(&state, "identity-b").await;
+        let hit_counter = Arc::new(AtomicUsize::new(0));
+
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(state))
+                .app_data(web::Data::new(hit_counter.clone()))
+                .wrap(RateLimitMiddleware::new(1))
+                .wrap(AuthMiddleware)
+                .route(AUTH_PROBE_PATH, web::get().to(auth_probe)),
+        )
+        .await;
+
+        let first_response = test::call_service(
+            &app,
+            test::TestRequest::get()
+                .uri(AUTH_PROBE_PATH)
+                .peer_addr(SocketAddr::from(([203, 0, 113, 104], 1000)))
+                .insert_header(("x-api-key", first_principal.raw_api_key.clone()))
+                .to_request(),
+        )
+        .await;
+        assert_eq!(first_response.status(), StatusCode::OK);
+
+        let second_response = test::call_service(
+            &app,
+            test::TestRequest::get()
+                .uri(AUTH_PROBE_PATH)
+                .peer_addr(SocketAddr::from(([203, 0, 113, 104], 1001)))
+                .insert_header(("x-api-key", second_principal.raw_api_key.clone()))
+                .to_request(),
+        )
+        .await;
+        assert_eq!(second_response.status(), StatusCode::OK);
+        assert_eq!(hit_counter.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn test_auth_disabled_uses_downstream_rate_limit_without_pre_auth_reservation() {
+        let state = build_test_state_with_rate_limit(false, false, Some(1)).await;
+        let hit_counter = Arc::new(AtomicUsize::new(0));
+
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(state))
+                .app_data(web::Data::new(hit_counter.clone()))
+                .wrap(RateLimitMiddleware::new(1))
+                .wrap(AuthMiddleware)
+                .route(AUTH_PROBE_PATH, web::get().to(auth_probe)),
+        )
+        .await;
+
+        let first = test::TestRequest::get()
+            .uri(AUTH_PROBE_PATH)
+            .peer_addr(SocketAddr::from(([203, 0, 113, 105], 1000)))
+            .to_request();
+        let first_response = test::call_service(&app, first).await;
+        assert_eq!(first_response.status(), StatusCode::OK);
+
+        let second = test::TestRequest::get()
+            .uri(AUTH_PROBE_PATH)
+            .peer_addr(SocketAddr::from(([203, 0, 113, 105], 1001)))
+            .to_request();
+        let second_error = test::try_call_service(&app, second)
+            .await
+            .expect_err("second auth-disabled request should hit downstream gateway rate limit");
+        assert_eq!(
+            second_error.as_response_error().status_code(),
+            StatusCode::TOO_MANY_REQUESTS
+        );
+        assert_eq!(hit_counter.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn test_public_route_uses_downstream_rate_limit_without_pre_auth_reservation() {
+        let state = build_test_state_with_rate_limit(true, true, Some(1)).await;
+        let hit_counter = Arc::new(AtomicUsize::new(0));
+
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(state))
+                .app_data(web::Data::new(hit_counter.clone()))
+                .wrap(RateLimitMiddleware::new(1))
+                .wrap(AuthMiddleware)
+                .route("/health", web::get().to(auth_probe)),
+        )
+        .await;
+
+        let first = test::TestRequest::get()
+            .uri("/health")
+            .peer_addr(SocketAddr::from(([203, 0, 113, 106], 1000)))
+            .to_request();
+        let first_response = test::call_service(&app, first).await;
+        assert_eq!(first_response.status(), StatusCode::OK);
+
+        let second = test::TestRequest::get()
+            .uri("/health")
+            .peer_addr(SocketAddr::from(([203, 0, 113, 106], 1001)))
+            .to_request();
+        let second_error = test::try_call_service(&app, second)
+            .await
+            .expect_err("second public request should hit downstream gateway rate limit");
+        assert_eq!(
+            second_error.as_response_error().status_code(),
+            StatusCode::TOO_MANY_REQUESTS
         );
         assert_eq!(hit_counter.load(Ordering::SeqCst), 1);
     }
