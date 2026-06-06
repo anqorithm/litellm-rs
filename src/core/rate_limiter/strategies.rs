@@ -12,8 +12,8 @@ impl RateLimiter {
         &self,
         key: &str,
         record: bool,
+        now: Instant,
     ) -> RateLimitResult {
-        let now = Instant::now();
         let window_start = now - self.window;
         let limit = self.config.default_rpm;
 
@@ -68,8 +68,12 @@ impl RateLimiter {
 
     /// Token bucket rate limiting implementation
     /// If `record` is true, atomically consumes a token if allowed
-    pub(super) async fn check_token_bucket_impl(&self, key: &str, record: bool) -> RateLimitResult {
-        let now = Instant::now();
+    pub(super) async fn check_token_bucket_impl(
+        &self,
+        key: &str,
+        record: bool,
+        now: Instant,
+    ) -> RateLimitResult {
         let limit = self.config.default_rpm;
         let tokens_per_second = limit as f64 / 60.0;
 
@@ -81,6 +85,11 @@ impl RateLimiter {
                 last_refill: now,
                 timestamps: Vec::new(),
             });
+
+        let reservation_window = self.token_bucket_reservation_window();
+        entry
+            .timestamps
+            .retain(|&ts| now.saturating_duration_since(ts) < reservation_window);
 
         // Refill tokens based on elapsed time
         let elapsed = now.duration_since(entry.last_refill);
@@ -105,6 +114,7 @@ impl RateLimiter {
             // Atomically consume token if allowed and record flag is set
             if record {
                 entry.tokens -= 1.0;
+                entry.timestamps.push(now);
             }
             None
         };
@@ -126,31 +136,29 @@ impl RateLimiter {
 
     /// Fixed window rate limiting implementation
     /// If `record` is true, atomically records the request if allowed
-    pub(super) async fn check_fixed_window_impl(&self, key: &str, record: bool) -> RateLimitResult {
-        let now = Instant::now();
+    pub(super) async fn check_fixed_window_impl(
+        &self,
+        key: &str,
+        record: bool,
+        now: Instant,
+    ) -> RateLimitResult {
         let limit = self.config.default_rpm;
 
         let mut entry = self.entries.entry(key.to_string()).or_default();
 
-        // Check if we need to reset the window
-        let window_start = if let Some(&first) = entry.timestamps.first() {
-            let elapsed = now.duration_since(first);
-            if elapsed >= self.window {
-                entry.timestamps.clear();
-                now
-            } else {
-                first
-            }
-        } else {
-            now
-        };
+        if entry.timestamps.is_empty() {
+            entry.last_refill = now;
+        } else if now.duration_since(entry.last_refill) >= self.window {
+            entry.timestamps.clear();
+            entry.last_refill = now;
+        }
 
         let current_count = entry.timestamps.len() as u32;
         let allowed = current_count < limit;
         let remaining = limit.saturating_sub(current_count);
 
         // Calculate reset time
-        let elapsed = now.duration_since(window_start);
+        let elapsed = now.duration_since(entry.last_refill);
         let reset_after_secs = self.window.saturating_sub(elapsed).as_secs();
 
         let retry_after_secs = if !allowed {
