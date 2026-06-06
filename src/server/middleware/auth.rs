@@ -7,6 +7,10 @@ use crate::server::middleware::auth_rate_limiter::get_auth_rate_limiter;
 use crate::server::middleware::helpers::{
     extract_auth_method_with_api_key_header, is_public_route,
 };
+use crate::server::middleware::rate_limit::{
+    AuthRateLimitReservation, enforce_rate_limit_for_rejected_auth,
+    reserve_rate_limit_for_auth_attempt,
+};
 use crate::server::state::AppState;
 use actix_web::dev::{Service, ServiceRequest, ServiceResponse, Transform, forward_ready};
 use actix_web::{HttpMessage, HttpRequest, web};
@@ -77,6 +81,9 @@ where
             let enable_jwt = cfg.auth().enable_jwt;
             let enable_api_key = cfg.auth().enable_api_key;
             let api_key_header = cfg.auth().api_key_header.clone();
+            let rate_limit_enabled = cfg.gateway.rate_limit.enabled;
+            let rate_limit_rpm = cfg.gateway.rate_limit.default_rpm;
+            let trusted_proxies = cfg.server().trusted_proxies.clone();
 
             let context = build_request_context(&mut req);
             let auth_method =
@@ -96,6 +103,13 @@ where
             }
 
             if let Err(wait_seconds) = rate_limiter.check_allowed(&client_id) {
+                enforce_gateway_rate_limit_for_auth_rejection(
+                    &req,
+                    rate_limit_enabled,
+                    rate_limit_rpm,
+                    &trusted_proxies,
+                )
+                .await?;
                 return Err(actix_web::error::ErrorTooManyRequests(format!(
                     "Too many failed attempts. Try again in {} seconds",
                     wait_seconds
@@ -105,12 +119,26 @@ where
             let auth_method = match auth_method {
                 AuthMethod::Jwt(_) if !enable_jwt => {
                     rate_limiter.record_failure(&client_id);
+                    enforce_gateway_rate_limit_for_auth_rejection(
+                        &req,
+                        rate_limit_enabled,
+                        rate_limit_rpm,
+                        &trusted_proxies,
+                    )
+                    .await?;
                     return Err(actix_web::error::ErrorUnauthorized(
                         "JWT authentication disabled",
                     ));
                 }
                 AuthMethod::ApiKey(_) if !enable_api_key => {
                     rate_limiter.record_failure(&client_id);
+                    enforce_gateway_rate_limit_for_auth_rejection(
+                        &req,
+                        rate_limit_enabled,
+                        rate_limit_rpm,
+                        &trusted_proxies,
+                    )
+                    .await?;
                     return Err(actix_web::error::ErrorUnauthorized(
                         "API key authentication disabled",
                     ));
@@ -120,13 +148,37 @@ where
 
             if matches!(auth_method, AuthMethod::None) {
                 rate_limiter.record_failure(&client_id);
+                enforce_gateway_rate_limit_for_auth_rejection(
+                    &req,
+                    rate_limit_enabled,
+                    rate_limit_rpm,
+                    &trusted_proxies,
+                )
+                .await?;
                 return Err(actix_web::error::ErrorUnauthorized(
                     "Missing authentication",
                 ));
             }
 
+            let mut auth_rate_limit_reservation = if requires_auth_verification(&auth_method) {
+                Some(
+                    reserve_gateway_rate_limit_before_auth(
+                        &req,
+                        rate_limit_enabled,
+                        rate_limit_rpm,
+                        &trusted_proxies,
+                    )
+                    .await?,
+                )
+            } else {
+                None
+            };
+
             match app_state.auth.authenticate(auth_method, context).await {
                 Ok(result) if result.success => {
+                    if let Some(reservation) = auth_rate_limit_reservation.take() {
+                        reservation.release().await;
+                    }
                     rate_limiter.record_success(&client_id);
                     debug!("Authentication succeeded");
 
@@ -149,11 +201,23 @@ where
                             .clone()
                             .unwrap_or_else(|| "unauthorized".to_string())
                     );
+                    if auth_rate_limit_reservation.is_none() {
+                        enforce_gateway_rate_limit_for_auth_rejection(
+                            &req,
+                            rate_limit_enabled,
+                            rate_limit_rpm,
+                            &trusted_proxies,
+                        )
+                        .await?;
+                    }
                     Err(actix_web::error::ErrorUnauthorized(
                         result.error.unwrap_or_else(|| "Unauthorized".to_string()),
                     ))
                 }
                 Err(err) => {
+                    if let Some(reservation) = auth_rate_limit_reservation.take() {
+                        reservation.release().await;
+                    }
                     rate_limiter.record_failure(&client_id);
                     Err(actix_web::error::ErrorInternalServerError(format!(
                         "Authentication error: {}",
@@ -163,6 +227,39 @@ where
             }
         })
     }
+}
+
+async fn enforce_gateway_rate_limit_for_auth_rejection(
+    req: &ServiceRequest,
+    enabled: bool,
+    requests_per_minute: u32,
+    trusted_proxies: &[String],
+) -> Result<(), actix_web::Error> {
+    if !enabled {
+        return Ok(());
+    }
+
+    enforce_rate_limit_for_rejected_auth(req, requests_per_minute, trusted_proxies).await
+}
+
+async fn reserve_gateway_rate_limit_before_auth(
+    req: &ServiceRequest,
+    enabled: bool,
+    requests_per_minute: u32,
+    trusted_proxies: &[String],
+) -> Result<AuthRateLimitReservation, actix_web::Error> {
+    if !enabled {
+        return Ok(AuthRateLimitReservation::noop());
+    }
+
+    reserve_rate_limit_for_auth_attempt(req, requests_per_minute, trusted_proxies).await
+}
+
+fn requires_auth_verification(auth_method: &AuthMethod) -> bool {
+    matches!(
+        auth_method,
+        AuthMethod::Jwt(_) | AuthMethod::ApiKey(_) | AuthMethod::Session(_)
+    )
 }
 
 /// Extract request context from request
@@ -330,5 +427,19 @@ mod tests {
             get_client_identifier(&req_b, &auth_b)
         );
         assert_eq!(get_client_identifier(&req_a, &auth_a), "ip:203.0.113.80");
+    }
+
+    #[test]
+    fn auth_verification_precheck_only_applies_to_present_credentials() {
+        assert!(requires_auth_verification(&AuthMethod::Jwt(
+            "jwt-token".to_string()
+        )));
+        assert!(requires_auth_verification(&AuthMethod::ApiKey(
+            "api-key".to_string()
+        )));
+        assert!(requires_auth_verification(&AuthMethod::Session(
+            "session-id".to_string()
+        )));
+        assert!(!requires_auth_verification(&AuthMethod::None));
     }
 }

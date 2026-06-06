@@ -11,9 +11,10 @@ mod utils;
 mod tests;
 
 // Re-export public types
-pub use limiter::RateLimiter;
 #[cfg(test)]
-pub(crate) use limiter::{RateLimitRecordSource, RateLimitReservation};
+pub(crate) use limiter::RateLimitRecordSource;
+pub(crate) use limiter::RateLimitReservation;
+pub use limiter::RateLimiter;
 pub use types::RateLimitResult;
 
 use crate::config::models::rate_limit::RateLimitConfig;
