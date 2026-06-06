@@ -49,6 +49,35 @@ if remaining < 0 then remaining = 0 end
 return {allowed, current, limit, remaining, ttl}
 "#;
 
+const RELEASE_SCRIPT: &str = r#"
+local reservation_ttl = tonumber(ARGV[1])
+if reservation_ttl == nil or reservation_ttl <= 0 then
+  return 0
+end
+
+local current = tonumber(redis.call("GET", KEYS[1]) or "0")
+if current <= 0 then
+  return 0
+end
+
+local ttl = redis.call("TTL", KEYS[1])
+if ttl < 0 then
+  return current
+end
+
+if ttl > (reservation_ttl + 1) then
+  return current
+end
+
+current = redis.call("DECR", KEYS[1])
+if current <= 0 then
+  redis.call("DEL", KEYS[1])
+  return 0
+end
+
+return current
+"#;
+
 fn redis_rate_limit_key(key: &str) -> String {
     format!("litellm-rs:rate_limit:v1:{}", key)
 }
@@ -163,6 +192,26 @@ impl RedisPool {
             })
         }
     }
+
+    /// Release one previously-recorded request from a distributed fixed window.
+    pub async fn rate_limit_release(&self, key: &str, reservation_ttl_secs: u64) -> Result<()> {
+        if self.noop_mode || reservation_ttl_secs == 0 {
+            return Ok(());
+        }
+
+        let redis_key = redis_rate_limit_key(key);
+        let mut conn = self.get_connection().await?;
+        if let Some(ref mut c) = conn.conn {
+            let _: i64 = redis::Script::new(RELEASE_SCRIPT)
+                .key(redis_key)
+                .arg(reservation_ttl_secs)
+                .invoke_async(c)
+                .await
+                .map_err(GatewayError::from)?;
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -170,6 +219,13 @@ mod tests {
     use super::*;
     use crate::config::models::storage::RedisConfig;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn must<T>(result: Result<T>, context: &str) -> T {
+        match result {
+            Ok(value) => value,
+            Err(err) => panic!("{context}: {err}"),
+        }
+    }
 
     #[test]
     fn parses_redis_rate_limit_result() {
@@ -218,6 +274,44 @@ mod tests {
         assert_eq!(second.remaining, 0);
 
         let _ = pool.delete(&redis_rate_limit_key(&key)).await;
+    }
+
+    #[tokio::test]
+    async fn live_redis_release_skips_newer_window_after_original_expiry() {
+        let Some(pool) = live_redis_pool().await else {
+            return;
+        };
+
+        let key = unique_test_key("rate-limit-release-expired");
+        let first = must(
+            pool.rate_limit_check_and_record(&key, 1, 1).await,
+            "first check should succeed",
+        );
+        assert!(first.allowed);
+
+        tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
+
+        let second = must(
+            pool.rate_limit_check_and_record(&key, 1, 30).await,
+            "second check should succeed in a new window",
+        );
+        assert!(second.allowed);
+
+        must(
+            pool.rate_limit_release(&key, 1).await,
+            "stale release should be handled",
+        );
+
+        let status = must(
+            pool.rate_limit_status(&key, 1, 30).await,
+            "status should succeed",
+        );
+        assert_eq!(status.current_count, 1);
+        assert_eq!(status.remaining, 0);
+
+        if let Err(err) = pool.delete(&redis_rate_limit_key(&key)).await {
+            eprintln!("failed to clean up Redis rate-limit test key {key}: {err}");
+        }
     }
 
     async fn live_redis_pool() -> Option<RedisPool> {
