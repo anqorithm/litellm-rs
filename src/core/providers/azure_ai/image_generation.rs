@@ -91,21 +91,32 @@ impl AzureAIImageHandler {
         }
 
         // Parse response
-        let _response_json: Value = response.json().await.map_err(|e| {
+        let response_json: Value = response.json().await.map_err(|e| {
             ProviderError::serialization("azure_ai", format!("Failed to parse response: {}", e))
         })?;
 
-        // Create response
-        let data = vec![ImageData {
-            url: Some("https://example.com/generated_image.jpg".to_string()),
-            b64_json: None,
-            revised_prompt: None,
-        }];
+        Self::transform_response(response_json)
+    }
 
-        Ok(ImageGenerationResponse {
-            created: chrono::Utc::now().timestamp() as u64,
-            data,
-        })
+    fn transform_response(response: Value) -> Result<ImageGenerationResponse, ProviderError> {
+        let created = response["created"]
+            .as_u64()
+            .unwrap_or_else(|| chrono::Utc::now().timestamp() as u64);
+
+        let data = response["data"]
+            .as_array()
+            .ok_or_else(|| ProviderError::serialization("azure_ai", "Missing data array"))?
+            .iter()
+            .map(|item| ImageData {
+                url: item["url"].as_str().map(|url| url.to_string()),
+                b64_json: item["b64_json"].as_str().map(|b64| b64.to_string()),
+                revised_prompt: item["revised_prompt"]
+                    .as_str()
+                    .map(|prompt| prompt.to_string()),
+            })
+            .collect();
+
+        Ok(ImageGenerationResponse { created, data })
     }
 }
 
@@ -117,5 +128,27 @@ mod tests {
     fn test_handler_creation() {
         let config = AzureAIConfig::new("azure_ai");
         let _result = AzureAIImageHandler::new(config);
+    }
+
+    #[test]
+    fn test_transform_response_preserves_returned_image_url() {
+        let response = json!({
+            "created": 1700000000_u64,
+            "data": [{
+                "url": "https://cdn.example.com/generated.png",
+                "revised_prompt": "a generated image"
+            }]
+        });
+
+        let result = AzureAIImageHandler::transform_response(response).unwrap();
+        assert_eq!(result.created, 1700000000);
+        assert_eq!(
+            result.data[0].url.as_deref(),
+            Some("https://cdn.example.com/generated.png")
+        );
+        assert_ne!(
+            result.data[0].url.as_deref(),
+            Some("https://example.com/generated_image.jpg")
+        );
     }
 }

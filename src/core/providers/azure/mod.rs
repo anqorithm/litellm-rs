@@ -124,6 +124,23 @@ impl AzureOpenAIProvider {
     }
 }
 
+fn build_azure_models_health_url(azure_endpoint: &str, api_version: &str) -> String {
+    let base = azure_endpoint.trim_end_matches('/');
+    let resource_base = base
+        .split_once("/openai/deployments/")
+        .map(|(resource_base, _)| resource_base)
+        .unwrap_or(base);
+
+    if resource_base.ends_with("/openai") {
+        format!("{}/models?api-version={}", resource_base, api_version)
+    } else {
+        format!(
+            "{}/openai/models?api-version={}",
+            resource_base, api_version
+        )
+    }
+}
+
 // Azure error mapper is now re-exported from common_utils
 
 /// Implement the unified LLMProvider trait for AzureOpenAIProvider
@@ -149,10 +166,15 @@ impl LLMProvider for AzureOpenAIProvider {
         &[]
     }
 
+    fn supports_model(&self, model: &str) -> bool {
+        !model.trim().is_empty()
+    }
+
     fn get_supported_openai_params(&self, _model: &str) -> &'static [&'static str] {
         &[
             "temperature",
             "max_tokens",
+            "max_completion_tokens",
             "top_p",
             "frequency_penalty",
             "presence_penalty",
@@ -253,10 +275,30 @@ impl LLMProvider for AzureOpenAIProvider {
     }
 
     async fn health_check(&self) -> HealthStatus {
-        if self.config.api_key.is_some() {
-            HealthStatus::Healthy
-        } else {
-            HealthStatus::Unhealthy
+        let endpoint = match self.config.get_effective_azure_endpoint() {
+            Some(endpoint) => endpoint,
+            None => return HealthStatus::Unhealthy,
+        };
+        if self.config.api_version.is_empty() {
+            return HealthStatus::Unhealthy;
+        }
+
+        let api_key = match self.config.get_effective_api_key().await {
+            Some(api_key) => api_key,
+            None => return HealthStatus::Unhealthy,
+        };
+
+        let url = build_azure_models_health_url(&endpoint, &self.config.api_version);
+        let client = crate::core::http::outbound::default_outbound_client().clone();
+        let mut request = client.get(url).header("api-key", api_key);
+        for (key, value) in &self.config.custom_headers {
+            request = request.header(key.as_str(), value.as_str());
+        }
+
+        match request.send().await {
+            Ok(response) if response.status().is_success() => HealthStatus::Healthy,
+            Ok(_) => HealthStatus::Degraded,
+            Err(_) => HealthStatus::Unhealthy,
         }
     }
 }
@@ -281,5 +323,112 @@ impl AzureProviderFactory {
     /// Create provider from environment variables
     pub fn create_from_env() -> Result<AzureOpenAIProvider, ProviderError> {
         AzureOpenAIProvider::from_env()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::{TcpListener, TcpStream};
+
+    fn test_config(endpoint: String) -> AzureConfig {
+        AzureConfig::new()
+            .with_api_key("test-key".to_string())
+            .with_azure_endpoint(endpoint)
+            .with_api_version("2024-02-01".to_string())
+    }
+
+    async fn read_http_headers(socket: &mut TcpStream) -> std::io::Result<()> {
+        let mut request = Vec::new();
+        let mut buffer = [0_u8; 1024];
+
+        loop {
+            let bytes_read = socket.read(&mut buffer).await?;
+            if bytes_read == 0 {
+                return Ok(());
+            }
+            request.extend_from_slice(&buffer[..bytes_read]);
+            if request.windows(4).any(|window| window == b"\r\n\r\n") {
+                return Ok(());
+            }
+        }
+    }
+
+    async fn health_response_base_url(status: &str) -> std::io::Result<String> {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await?;
+        let addr = listener.local_addr()?;
+        let response = format!(
+            "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{{}}"
+        );
+
+        tokio::spawn(async move {
+            let Ok((mut socket, _)) = listener.accept().await else {
+                return;
+            };
+            if read_http_headers(&mut socket).await.is_err() {
+                return;
+            }
+            if socket.write_all(response.as_bytes()).await.is_err() {
+                return;
+            }
+        });
+
+        Ok(format!("http://{addr}"))
+    }
+
+    #[test]
+    fn test_supports_dynamic_deployment_names() {
+        let provider = match AzureOpenAIProvider::new(test_config(
+            "https://test.openai.azure.com".to_string(),
+        )) {
+            Ok(provider) => provider,
+            Err(error) => panic!("provider should be created: {error}"),
+        };
+
+        assert!(provider.supports_model("customer-gpt4o-prod"));
+        assert!(!provider.supports_model("   "));
+    }
+
+    #[test]
+    fn test_health_url_strips_deployment_base() {
+        let url = build_azure_models_health_url(
+            "https://test.openai.azure.com/openai/deployments/prod",
+            "2024-02-01",
+        );
+
+        assert_eq!(
+            url,
+            "https://test.openai.azure.com/openai/models?api-version=2024-02-01"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_health_check_success_requires_endpoint_success() {
+        let api_base = match health_response_base_url("200 OK").await {
+            Ok(url) => url,
+            Err(error) => panic!("test server should start: {error}"),
+        };
+        let provider = match AzureOpenAIProvider::new(test_config(api_base)) {
+            Ok(provider) => provider,
+            Err(error) => panic!("provider should be created: {error}"),
+        };
+
+        assert_eq!(provider.health_check().await, HealthStatus::Healthy);
+    }
+
+    #[tokio::test]
+    async fn test_health_check_degrades_on_endpoint_failure() {
+        let api_base = match health_response_base_url("500 Internal Server Error").await {
+            Ok(url) => url,
+            Err(error) => panic!("test server should start: {error}"),
+        };
+        let provider = match AzureOpenAIProvider::new(test_config(api_base)) {
+            Ok(provider) => provider,
+            Err(error) => panic!("provider should be created: {error}"),
+        };
+
+        assert_eq!(provider.health_check().await, HealthStatus::Degraded);
     }
 }

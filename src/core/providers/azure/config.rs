@@ -24,6 +24,10 @@ pub struct AzureConfig {
     pub subscription_id: Option<String>,
     /// Custom headers
     pub custom_headers: HashMap<String, String>,
+    /// Request timeout in seconds
+    pub timeout: u64,
+    /// Maximum retry attempts
+    pub max_retries: u32,
 }
 
 impl Default for AzureConfig {
@@ -37,6 +41,8 @@ impl Default for AzureConfig {
             resource_group: None,
             subscription_id: None,
             custom_headers: HashMap::new(),
+            timeout: 60,
+            max_retries: 3,
         }
     }
 }
@@ -135,11 +141,11 @@ impl crate::core::traits::provider::ProviderConfig for AzureConfig {
     }
 
     fn timeout(&self) -> std::time::Duration {
-        std::time::Duration::from_secs(60) // Default 60 seconds timeout
+        std::time::Duration::from_secs(self.timeout)
     }
 
     fn max_retries(&self) -> u32 {
-        3 // Default retry 3 times
+        self.max_retries
     }
 }
 
@@ -165,6 +171,8 @@ mod tests {
         assert!(config.azure_endpoint.is_none());
         assert_eq!(config.api_version, "2024-02-01");
         assert!(config.deployment_name.is_none());
+        assert_eq!(config.timeout, 60);
+        assert_eq!(config.max_retries, 3);
     }
 
     #[test]
@@ -233,6 +241,12 @@ mod tests {
         assert_eq!(config.api_base(), Some("https://test.openai.azure.com"));
         assert_eq!(config.timeout(), std::time::Duration::from_secs(60));
         assert_eq!(config.max_retries(), 3);
+
+        let mut custom_config = config;
+        custom_config.timeout = 12;
+        custom_config.max_retries = 5;
+        assert_eq!(custom_config.timeout(), std::time::Duration::from_secs(12));
+        assert_eq!(custom_config.max_retries(), 5);
     }
 
     #[test]

@@ -53,9 +53,15 @@ impl AzureUtils {
             AzureEndpointType::Models => "models",
         };
 
+        let deployment_base = if base.contains("/openai/deployments/") {
+            base.to_string()
+        } else {
+            format!("{}/openai/deployments/{}", base, deployment_name)
+        };
+
         format!(
-            "{}/openai/deployments/{}/{}?api-version={}",
-            base, deployment_name, endpoint_path, api_version
+            "{}/{}?api-version={}",
+            deployment_base, endpoint_path, api_version
         )
     }
 
@@ -338,6 +344,21 @@ mod tests {
         );
         // Should not have double slashes
         assert!(!url.contains("//openai"));
+    }
+
+    #[test]
+    fn test_build_azure_url_preserves_legacy_deployment_base() {
+        let url = AzureUtils::build_azure_url(
+            "https://test.openai.azure.com/openai/deployments/prod",
+            "ignored-model",
+            "2024-02-01",
+            AzureEndpointType::ChatCompletions,
+        );
+        assert_eq!(
+            url,
+            "https://test.openai.azure.com/openai/deployments/prod/chat/completions?api-version=2024-02-01"
+        );
+        assert!(!url.contains("prod/openai/deployments"));
     }
 
     #[test]

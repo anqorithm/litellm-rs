@@ -146,6 +146,10 @@ impl LLMProvider for AzureAIProvider {
         MODELS.get_or_init(|| self.model_registry.to_model_infos())
     }
 
+    fn supports_model(&self, model: &str) -> bool {
+        !model.trim().is_empty()
+    }
+
     fn get_supported_openai_params(&self, _model: &str) -> &'static [&'static str] {
         &[
             "temperature",
@@ -240,9 +244,26 @@ impl LLMProvider for AzureAIProvider {
             return HealthStatus::Unhealthy;
         }
 
-        // Try a simple ping to the API
-        // For now just return healthy if config is valid
-        HealthStatus::Healthy
+        let url = match self.config.build_endpoint_url("models") {
+            Ok(url) => url,
+            Err(_) => return HealthStatus::Unhealthy,
+        };
+        let headers = match self.config.create_default_headers() {
+            Ok(headers) => headers,
+            Err(_) => return HealthStatus::Unhealthy,
+        };
+
+        let client = crate::core::http::outbound::default_outbound_client().clone();
+        let mut request = client.get(url);
+        for (key, value) in headers {
+            request = request.header(key, value);
+        }
+
+        match request.send().await {
+            Ok(response) if response.status().is_success() => HealthStatus::Healthy,
+            Ok(_) => HealthStatus::Degraded,
+            Err(_) => HealthStatus::Unhealthy,
+        }
     }
 
     async fn calculate_cost(
@@ -292,12 +313,52 @@ impl AzureAIProviderFactory {
 mod tests {
     use super::*;
     use crate::core::types::{chat::ChatMessage, message::MessageContent, message::MessageRole};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::{TcpListener, TcpStream};
 
     fn create_test_config() -> AzureAIConfig {
         let mut config = AzureAIConfig::new("azure_ai");
         config.base.api_key = Some("test_api_key".to_string());
         config.base.api_base = Some("https://test.ai.azure.com".to_string());
         config
+    }
+
+    async fn read_http_headers(socket: &mut TcpStream) -> std::io::Result<()> {
+        let mut request = Vec::new();
+        let mut buffer = [0_u8; 1024];
+
+        loop {
+            let bytes_read = socket.read(&mut buffer).await?;
+            if bytes_read == 0 {
+                return Ok(());
+            }
+            request.extend_from_slice(&buffer[..bytes_read]);
+            if request.windows(4).any(|window| window == b"\r\n\r\n") {
+                return Ok(());
+            }
+        }
+    }
+
+    async fn health_response_base_url(status: &str) -> std::io::Result<String> {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await?;
+        let addr = listener.local_addr()?;
+        let response = format!(
+            "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{{}}"
+        );
+
+        tokio::spawn(async move {
+            let Ok((mut socket, _)) = listener.accept().await else {
+                return;
+            };
+            if read_http_headers(&mut socket).await.is_err() {
+                return;
+            }
+            if socket.write_all(response.as_bytes()).await.is_err() {
+                return;
+            }
+        });
+
+        Ok(format!("http://{addr}"))
     }
 
     // ==================== Provider Creation Tests ====================
@@ -373,6 +434,18 @@ mod tests {
         let config = create_test_config();
         let provider = AzureAIProvider::new(config).unwrap();
         assert!(!provider.models().is_empty());
+    }
+
+    #[test]
+    fn test_supports_dynamic_deployment_names() {
+        let config = create_test_config();
+        let provider = match AzureAIProvider::new(config) {
+            Ok(provider) => provider,
+            Err(error) => panic!("provider should be created: {error}"),
+        };
+
+        assert!(provider.supports_model("customer-gpt4o-prod"));
+        assert!(!provider.supports_model("   "));
     }
 
     #[test]
@@ -518,13 +591,37 @@ mod tests {
     // ==================== Health Check Tests ====================
 
     #[tokio::test]
-    async fn test_health_check_valid_config() {
-        let config = create_test_config();
-        let provider = AzureAIProvider::new(config).unwrap();
+    async fn test_health_check_success_requires_endpoint_success() {
+        let mut config = create_test_config();
+        config.base.api_base = Some(match health_response_base_url("200 OK").await {
+            Ok(url) => url,
+            Err(error) => panic!("test server should start: {error}"),
+        });
+        let provider = match AzureAIProvider::new(config) {
+            Ok(provider) => provider,
+            Err(error) => panic!("provider should be created: {error}"),
+        };
 
         let status = provider.health_check().await;
-        // With valid config, should return Healthy
         assert_eq!(status, HealthStatus::Healthy);
+    }
+
+    #[tokio::test]
+    async fn test_health_check_degrades_on_endpoint_failure() {
+        let mut config = create_test_config();
+        config.base.api_base = Some(
+            match health_response_base_url("500 Internal Server Error").await {
+                Ok(url) => url,
+                Err(error) => panic!("test server should start: {error}"),
+            },
+        );
+        let provider = match AzureAIProvider::new(config) {
+            Ok(provider) => provider,
+            Err(error) => panic!("provider should be created: {error}"),
+        };
+
+        let status = provider.health_check().await;
+        assert_eq!(status, HealthStatus::Degraded);
     }
 
     // ==================== Cost Calculation Tests ====================
