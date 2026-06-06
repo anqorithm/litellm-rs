@@ -26,10 +26,7 @@ impl RateLimiter {
                     !entry.timestamps.is_empty()
                 }
                 RateLimitStrategy::TokenBucket => {
-                    let reservation_window = self.token_bucket_reservation_window();
-                    entry
-                        .timestamps
-                        .retain(|&t| now.saturating_duration_since(t) < reservation_window);
+                    Self::sync_token_bucket_refill(entry, now, self.config.default_rpm);
                     // Keep entry if it has recent timestamps OR has consumed tokens (not full bucket).
                     // A full bucket (tokens == limit) with no timestamps means the key is idle.
                     !entry.timestamps.is_empty() || entry.tokens < limit

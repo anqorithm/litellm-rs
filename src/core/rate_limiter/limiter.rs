@@ -299,7 +299,6 @@ impl RateLimiter {
     fn release_local(&self, key: &str, recorded_at: Option<Instant>) {
         let limit = self.config.default_rpm as f64;
         let strategy = self.config.strategy.clone();
-        let reservation_window = self.token_bucket_reservation_window();
 
         let _removed_entry = self.entries.remove_if_mut(key, |_, entry| {
             match &strategy {
@@ -317,9 +316,7 @@ impl RateLimiter {
                 RateLimitStrategy::TokenBucket => {
                     let should_refund = if let Some(recorded_at) = recorded_at {
                         let now = Instant::now();
-                        entry
-                            .timestamps
-                            .retain(|&ts| now.saturating_duration_since(ts) < reservation_window);
+                        Self::sync_token_bucket_refill(entry, now, limit as u32);
 
                         if let Some(position) =
                             entry.timestamps.iter().position(|&ts| ts == recorded_at)

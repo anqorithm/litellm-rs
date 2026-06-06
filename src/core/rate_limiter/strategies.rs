@@ -6,6 +6,30 @@ use std::time::Instant;
 use tracing::debug;
 
 impl RateLimiter {
+    pub(super) fn sync_token_bucket_refill(entry: &mut RateLimitEntry, now: Instant, limit: u32) {
+        if limit == 0 {
+            entry.tokens = 0.0;
+            entry.timestamps.clear();
+            entry.last_refill = now;
+            return;
+        }
+
+        let previous_available = entry.tokens.floor() as u32;
+        let tokens_per_second = limit as f64 / 60.0;
+        let elapsed = now.saturating_duration_since(entry.last_refill);
+        let new_tokens = elapsed.as_secs_f64() * tokens_per_second;
+
+        entry.tokens = (entry.tokens + new_tokens).min(limit as f64);
+        entry.last_refill = now;
+
+        let available = entry.tokens.floor() as u32;
+        let naturally_refilled = available.saturating_sub(previous_available) as usize;
+        let prune_count = naturally_refilled.min(entry.timestamps.len());
+        if prune_count > 0 {
+            entry.timestamps.drain(0..prune_count);
+        }
+    }
+
     /// Sliding window rate limiting implementation
     /// If `record` is true, atomically records the request if allowed
     pub(super) async fn check_sliding_window_impl(
@@ -86,16 +110,7 @@ impl RateLimiter {
                 timestamps: Vec::new(),
             });
 
-        let reservation_window = self.token_bucket_reservation_window();
-        entry
-            .timestamps
-            .retain(|&ts| now.saturating_duration_since(ts) < reservation_window);
-
-        // Refill tokens based on elapsed time
-        let elapsed = now.duration_since(entry.last_refill);
-        let new_tokens = elapsed.as_secs_f64() * tokens_per_second;
-        entry.tokens = (entry.tokens + new_tokens).min(limit as f64);
-        entry.last_refill = now;
+        Self::sync_token_bucket_refill(&mut entry, now, limit);
 
         let allowed = entry.tokens >= 1.0;
         let current_count = (limit as f64 - entry.tokens) as u32;

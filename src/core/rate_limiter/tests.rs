@@ -303,6 +303,46 @@ async fn test_release_recorded_token_bucket_keeps_burst_reservations_releasable(
 }
 
 #[tokio::test]
+async fn test_release_recorded_token_bucket_keeps_burst_refunds_ordered_after_refill() {
+    let limiter = RateLimiter::new(test_config_with_strategy(
+        true,
+        60,
+        RateLimitStrategy::TokenBucket,
+    ));
+    let key = "auth-ip-token-burst";
+    let base = Instant::now() - Duration::from_secs(2);
+    let timestamps: Vec<_> = (0..60)
+        .map(|offset| base + Duration::from_nanos(offset))
+        .collect();
+
+    limiter.entries.insert(
+        key.to_string(),
+        RateLimitEntry {
+            timestamps: timestamps.clone(),
+            tokens: 0.0,
+            last_refill: base,
+        },
+    );
+
+    for recorded_at in timestamps {
+        limiter
+            .release_recorded(
+                key,
+                RateLimitReservation::for_test(RateLimitRecordSource::Local, recorded_at, 60),
+            )
+            .await;
+    }
+
+    for _ in 0..60 {
+        let result = limiter.check_and_record(key).await;
+        assert!(
+            result.allowed,
+            "burst releases should refund reservations that natural refill has not covered"
+        );
+    }
+}
+
+#[tokio::test]
 async fn test_release_recorded_token_bucket_skips_expired_reservation() {
     let limiter = RateLimiter::new(test_config_with_strategy(
         true,
