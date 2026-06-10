@@ -9,6 +9,8 @@ mod builder;
 #[cfg(test)]
 mod builder_tests;
 #[cfg(feature = "providers-extended")]
+mod cohere_builder;
+#[cfg(feature = "providers-extended")]
 mod gemini_builder;
 mod registry;
 mod resolver;
@@ -229,6 +231,44 @@ mod tests {
             .await
             .expect("Tier 1 provider should succeed");
         assert!(matches!(provider, Provider::OpenAILike(_)));
+    }
+
+    #[tokio::test]
+    async fn test_create_provider_cohere_feature_split() {
+        let mut config = crate::config::models::provider::ProviderConfig {
+            name: "cohere".to_string(),
+            provider_type: "cohere".to_string(),
+            api_key: "test-cohere-key".to_string(),
+            base_url: Some("https://api.cohere.ai".to_string()),
+            api_version: Some("v2".to_string()),
+            timeout: 30,
+            max_retries: 2,
+            ..Default::default()
+        };
+        config.settings.insert(
+            "default_embedding_input_type".to_string(),
+            serde_json::json!("search_query"),
+        );
+
+        let result = create_provider(config).await;
+
+        #[cfg(feature = "providers-extended")]
+        {
+            let provider =
+                result.unwrap_or_else(|err| panic!("cohere should create native provider: {err}"));
+            assert!(matches!(provider, Provider::Cohere(_)));
+            assert_eq!(provider.name(), "cohere");
+        }
+
+        #[cfg(not(feature = "providers-extended"))]
+        {
+            let err = result.expect_err("cohere should be unsupported without providers-extended");
+            assert!(
+                matches!(err, ProviderError::NotImplemented { .. }),
+                "Expected NotImplemented error, got {err}"
+            );
+            assert_eq!(err.provider(), "cohere");
+        }
     }
 
     #[tokio::test]
