@@ -15,12 +15,20 @@
 //! - `GET    /v1/budget/models`            - List all model budgets
 //! - `GET    /v1/budget/models/{name}`     - Get model budget status
 //! - `DELETE /v1/budget/models/{name}`     - Remove model budget
+//!
+//! All mutation endpoints (POST/DELETE/reset) require the Admin role;
+//! read-only endpoints only require authentication.
 
 use crate::core::budget::{
     BudgetStatus, Currency, ModelLimitConfig, ProviderLimitConfig, ResetPeriod, UnifiedBudgetLimits,
 };
+use crate::core::models::{
+    ApiKey,
+    user::types::{User, UserRole},
+};
 use crate::server::routes::ApiResponse;
-use actix_web::{HttpResponse, Result as ActixResult, web};
+use crate::server::state::AppState;
+use actix_web::{HttpMessage, HttpRequest, HttpResponse, Result as ActixResult, web};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{error, info, warn};
@@ -181,13 +189,72 @@ pub struct BudgetSummaryResponse {
     pub total_model_spent: f64,
 }
 
+// ========== Authorization ==========
+
+/// Require the Admin role for budget mutation endpoints.
+///
+/// The global `AuthMiddleware` authenticates every non-public request and
+/// inserts the resolved `User` (and/or `ApiKey`) into the request extensions.
+/// Budget mutations affect global provider/model limits, so only admins
+/// (SuperAdmin passes via the `has_role` hierarchy) may perform them.
+///
+/// When both auth backends are disabled the middleware bypasses all
+/// credential checks, so the role check is skipped too — read explicitly
+/// from config (same as the keys routes' `is_auth_enabled`), never inferred
+/// from a missing identity, so a failed identity injection cannot grant
+/// access. With auth enabled, requests without an identity are rejected.
+///
+/// Returns `Some(403 response)` when the caller must be rejected.
+fn require_admin(
+    req: &HttpRequest,
+    state: Option<&web::Data<AppState>>,
+    action: &str,
+) -> Option<HttpResponse> {
+    if let Some(state) = state {
+        let cfg = state.config.load();
+        if !cfg.auth().enable_jwt && !cfg.auth().enable_api_key {
+            // No-auth mode: handler-level checks are skipped to preserve it.
+            return None;
+        }
+    }
+
+    let extensions = req.extensions();
+
+    if let Some(user) = extensions.get::<User>() {
+        if user.has_role(&UserRole::Admin) {
+            return None;
+        }
+        warn!(
+            "User '{}' attempted to {} without admin role",
+            user.username, action
+        );
+    } else if extensions.get::<ApiKey>().is_some() {
+        // Team-only API key: authenticated but carries no admin user.
+        warn!("Team-scoped API key attempted to {}", action);
+    } else {
+        // Auth is enabled (or state is unavailable) and no identity reached
+        // the handler: fail closed.
+        warn!("Unidentified caller attempted to {}", action);
+    }
+
+    Some(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
+        "Admin role required for budget mutations".to_string(),
+    )))
+}
+
 // ========== Provider Budget Handlers ==========
 
 /// POST /v1/budget/providers - Set a provider budget
 pub async fn set_provider_budget(
+    req: HttpRequest,
+    state: Option<web::Data<AppState>>,
     budget_limits: web::Data<Arc<UnifiedBudgetLimits>>,
     request: web::Json<SetProviderBudgetRequest>,
 ) -> ActixResult<HttpResponse> {
+    if let Some(forbidden) = require_admin(&req, state.as_ref(), "set provider budget") {
+        return Ok(forbidden);
+    }
+
     // Validate request
     if request.provider.trim().is_empty() {
         return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
@@ -336,9 +403,15 @@ pub async fn get_provider_budget(
 
 /// DELETE /v1/budget/providers/{name} - Remove provider budget
 pub async fn delete_provider_budget(
+    req: HttpRequest,
+    state: Option<web::Data<AppState>>,
     budget_limits: web::Data<Arc<UnifiedBudgetLimits>>,
     path: web::Path<String>,
 ) -> ActixResult<HttpResponse> {
+    if let Some(forbidden) = require_admin(&req, state.as_ref(), "delete provider budget") {
+        return Ok(forbidden);
+    }
+
     let provider_name = path.into_inner();
 
     if budget_limits
@@ -364,9 +437,15 @@ pub async fn delete_provider_budget(
 
 /// POST /v1/budget/providers/{name}/reset - Reset provider budget
 pub async fn reset_provider_budget(
+    req: HttpRequest,
+    state: Option<web::Data<AppState>>,
     budget_limits: web::Data<Arc<UnifiedBudgetLimits>>,
     path: web::Path<String>,
 ) -> ActixResult<HttpResponse> {
+    if let Some(forbidden) = require_admin(&req, state.as_ref(), "reset provider budget") {
+        return Ok(forbidden);
+    }
+
     let provider_name = path.into_inner();
 
     if budget_limits
@@ -416,9 +495,15 @@ pub async fn reset_provider_budget(
 
 /// POST /v1/budget/models - Set a model budget
 pub async fn set_model_budget(
+    req: HttpRequest,
+    state: Option<web::Data<AppState>>,
     budget_limits: web::Data<Arc<UnifiedBudgetLimits>>,
     request: web::Json<SetModelBudgetRequest>,
 ) -> ActixResult<HttpResponse> {
+    if let Some(forbidden) = require_admin(&req, state.as_ref(), "set model budget") {
+        return Ok(forbidden);
+    }
+
     // Validate request
     if request.model.trim().is_empty() {
         return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
@@ -559,9 +644,15 @@ pub async fn get_model_budget(
 
 /// DELETE /v1/budget/models/{name} - Remove model budget
 pub async fn delete_model_budget(
+    req: HttpRequest,
+    state: Option<web::Data<AppState>>,
     budget_limits: web::Data<Arc<UnifiedBudgetLimits>>,
     path: web::Path<String>,
 ) -> ActixResult<HttpResponse> {
+    if let Some(forbidden) = require_admin(&req, state.as_ref(), "delete model budget") {
+        return Ok(forbidden);
+    }
+
     let model_name = path.into_inner();
 
     if budget_limits.models.remove_model_limit(&model_name) {
@@ -584,9 +675,15 @@ pub async fn delete_model_budget(
 
 /// POST /v1/budget/models/{name}/reset - Reset model budget
 pub async fn reset_model_budget(
+    req: HttpRequest,
+    state: Option<web::Data<AppState>>,
     budget_limits: web::Data<Arc<UnifiedBudgetLimits>>,
     path: web::Path<String>,
 ) -> ActixResult<HttpResponse> {
+    if let Some(forbidden) = require_admin(&req, state.as_ref(), "reset model budget") {
+        return Ok(forbidden);
+    }
+
     let model_name = path.into_inner();
 
     if budget_limits.models.reset_model_budget(&model_name) {
@@ -697,249 +794,4 @@ pub fn configure_budget_routes(cfg: &mut web::ServiceConfig) {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use actix_web::{App, test};
-
-    #[actix_web::test]
-    async fn test_set_provider_budget() {
-        let budget_limits = Arc::new(UnifiedBudgetLimits::new());
-        let app = test::init_service(
-            App::new()
-                .app_data(web::Data::new(budget_limits))
-                .configure(configure_budget_routes),
-        )
-        .await;
-
-        let request = SetProviderBudgetRequest {
-            provider: "openai".to_string(),
-            max_budget: 1000.0,
-            reset_period: ResetPeriod::Monthly,
-            soft_limit_percentage: 0.8,
-            currency: Currency::USD,
-            enabled: true,
-        };
-
-        let req = test::TestRequest::post()
-            .uri("/v1/budget/providers")
-            .set_json(&request)
-            .to_request();
-
-        let resp: actix_web::dev::ServiceResponse = test::call_service(&app, req).await;
-        assert!(resp.status().is_success());
-    }
-
-    #[actix_web::test]
-    async fn test_set_provider_budget_validation() {
-        let budget_limits = Arc::new(UnifiedBudgetLimits::new());
-        let app = test::init_service(
-            App::new()
-                .app_data(web::Data::new(budget_limits))
-                .configure(configure_budget_routes),
-        )
-        .await;
-
-        // Test empty provider name
-        let request = SetProviderBudgetRequest {
-            provider: "".to_string(),
-            max_budget: 1000.0,
-            reset_period: ResetPeriod::Monthly,
-            soft_limit_percentage: 0.8,
-            currency: Currency::USD,
-            enabled: true,
-        };
-
-        let req = test::TestRequest::post()
-            .uri("/v1/budget/providers")
-            .set_json(&request)
-            .to_request();
-
-        let resp: actix_web::dev::ServiceResponse = test::call_service(&app, req).await;
-        assert_eq!(resp.status(), 400);
-
-        // Test negative budget
-        let request = SetProviderBudgetRequest {
-            provider: "openai".to_string(),
-            max_budget: -100.0,
-            reset_period: ResetPeriod::Monthly,
-            soft_limit_percentage: 0.8,
-            currency: Currency::USD,
-            enabled: true,
-        };
-
-        let req = test::TestRequest::post()
-            .uri("/v1/budget/providers")
-            .set_json(&request)
-            .to_request();
-
-        let resp: actix_web::dev::ServiceResponse = test::call_service(&app, req).await;
-        assert_eq!(resp.status(), 400);
-    }
-
-    #[actix_web::test]
-    async fn test_list_provider_budgets() {
-        let budget_limits = Arc::new(UnifiedBudgetLimits::new());
-        budget_limits.providers.set_provider_limit(
-            "openai",
-            ProviderLimitConfig::new(1000.0, ResetPeriod::Monthly),
-        );
-        budget_limits.providers.set_provider_limit(
-            "anthropic",
-            ProviderLimitConfig::new(500.0, ResetPeriod::Monthly),
-        );
-
-        let app = test::init_service(
-            App::new()
-                .app_data(web::Data::new(budget_limits))
-                .configure(configure_budget_routes),
-        )
-        .await;
-
-        let req = test::TestRequest::get()
-            .uri("/v1/budget/providers")
-            .to_request();
-
-        let resp: actix_web::dev::ServiceResponse = test::call_service(&app, req).await;
-        assert!(resp.status().is_success());
-    }
-
-    #[actix_web::test]
-    async fn test_get_provider_budget() {
-        let budget_limits = Arc::new(UnifiedBudgetLimits::new());
-        budget_limits.providers.set_provider_limit(
-            "openai",
-            ProviderLimitConfig::new(1000.0, ResetPeriod::Monthly),
-        );
-
-        let app = test::init_service(
-            App::new()
-                .app_data(web::Data::new(budget_limits))
-                .configure(configure_budget_routes),
-        )
-        .await;
-
-        let req = test::TestRequest::get()
-            .uri("/v1/budget/providers/openai")
-            .to_request();
-
-        let resp: actix_web::dev::ServiceResponse = test::call_service(&app, req).await;
-        assert!(resp.status().is_success());
-    }
-
-    #[actix_web::test]
-    async fn test_get_provider_budget_not_found() {
-        let budget_limits = Arc::new(UnifiedBudgetLimits::new());
-        let app = test::init_service(
-            App::new()
-                .app_data(web::Data::new(budget_limits))
-                .configure(configure_budget_routes),
-        )
-        .await;
-
-        let req = test::TestRequest::get()
-            .uri("/v1/budget/providers/nonexistent")
-            .to_request();
-
-        let resp: actix_web::dev::ServiceResponse = test::call_service(&app, req).await;
-        assert_eq!(resp.status(), 404);
-    }
-
-    #[actix_web::test]
-    async fn test_delete_provider_budget() {
-        let budget_limits = Arc::new(UnifiedBudgetLimits::new());
-        budget_limits.providers.set_provider_limit(
-            "openai",
-            ProviderLimitConfig::new(1000.0, ResetPeriod::Monthly),
-        );
-
-        let app = test::init_service(
-            App::new()
-                .app_data(web::Data::new(budget_limits))
-                .configure(configure_budget_routes),
-        )
-        .await;
-
-        let req = test::TestRequest::delete()
-            .uri("/v1/budget/providers/openai")
-            .to_request();
-
-        let resp: actix_web::dev::ServiceResponse = test::call_service(&app, req).await;
-        assert!(resp.status().is_success());
-    }
-
-    #[actix_web::test]
-    async fn test_set_model_budget() {
-        let budget_limits = Arc::new(UnifiedBudgetLimits::new());
-        let app = test::init_service(
-            App::new()
-                .app_data(web::Data::new(budget_limits))
-                .configure(configure_budget_routes),
-        )
-        .await;
-
-        let request = SetModelBudgetRequest {
-            model: "gpt-4".to_string(),
-            max_budget: 500.0,
-            reset_period: ResetPeriod::Monthly,
-            soft_limit_percentage: 0.8,
-            currency: Currency::USD,
-            enabled: true,
-        };
-
-        let req = test::TestRequest::post()
-            .uri("/v1/budget/models")
-            .set_json(&request)
-            .to_request();
-
-        let resp: actix_web::dev::ServiceResponse = test::call_service(&app, req).await;
-        assert!(resp.status().is_success());
-    }
-
-    #[actix_web::test]
-    async fn test_list_model_budgets() {
-        let budget_limits = Arc::new(UnifiedBudgetLimits::new());
-        budget_limits
-            .models
-            .set_model_limit("gpt-4", ModelLimitConfig::new(500.0, ResetPeriod::Monthly));
-
-        let app = test::init_service(
-            App::new()
-                .app_data(web::Data::new(budget_limits))
-                .configure(configure_budget_routes),
-        )
-        .await;
-
-        let req = test::TestRequest::get()
-            .uri("/v1/budget/models")
-            .to_request();
-
-        let resp: actix_web::dev::ServiceResponse = test::call_service(&app, req).await;
-        assert!(resp.status().is_success());
-    }
-
-    #[actix_web::test]
-    async fn test_get_budget_summary() {
-        let budget_limits = Arc::new(UnifiedBudgetLimits::new());
-        budget_limits.providers.set_provider_limit(
-            "openai",
-            ProviderLimitConfig::new(1000.0, ResetPeriod::Monthly),
-        );
-        budget_limits
-            .models
-            .set_model_limit("gpt-4", ModelLimitConfig::new(500.0, ResetPeriod::Monthly));
-
-        let app = test::init_service(
-            App::new()
-                .app_data(web::Data::new(budget_limits))
-                .configure(configure_budget_routes),
-        )
-        .await;
-
-        let req = test::TestRequest::get()
-            .uri("/v1/budget/summary")
-            .to_request();
-
-        let resp: actix_web::dev::ServiceResponse = test::call_service(&app, req).await;
-        assert!(resp.status().is_success());
-    }
-}
+mod tests;
