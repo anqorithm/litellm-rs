@@ -544,25 +544,28 @@ impl LLMProvider for WatsonxProvider {
         let payload = self.prepare_payload(&request.model, &request)?;
 
         // Execute streaming request using reqwest directly for SSE
-        let client = crate::core::http::outbound::default_outbound_client().clone();
+        let client = crate::core::http::outbound::streaming_outbound_client().clone();
         let mut req_builder = client.post(&url);
 
         for (key, value) in headers {
             req_builder = req_builder.header(key, value);
         }
 
-        let response = req_builder
-            .json(&payload)
-            .send()
-            .await
-            .map_err(|e| ProviderError::network("watsonx", e.to_string()))?;
+        let response = crate::core::providers::base::connection_pool::send_streaming_request(
+            req_builder.json(&payload),
+            "watsonx",
+        )
+        .await?;
 
         // Check status
         if !response.status().is_success() {
             let status = response.status().as_u16();
-            let body = response.text().await.ok();
+            let body =
+                crate::core::providers::base::connection_pool::read_streaming_error_body(response)
+                    .await
+                    .map_err(|err| err.into_provider_error("watsonx"))?;
             let mapper = WatsonxErrorMapper;
-            return Err(mapper.map_http_error(status, &body.unwrap_or_default()));
+            return Err(mapper.map_http_error(status, &body));
         }
 
         // Create SSE stream

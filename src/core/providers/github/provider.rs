@@ -264,21 +264,24 @@ impl LLMProvider for GitHubProvider {
 
         // Execute streaming request using reqwest directly for SSE
         let url = format!("{}/chat/completions", self.config.get_api_base());
-        let client = crate::core::http::outbound::default_outbound_client().clone();
-        let response = client
-            .post(&url)
-            .header("Authorization", format!("Bearer {}", api_key))
-            .header("Content-Type", "application/json")
-            .json(&stream_request)
-            .send()
-            .await
-            .map_err(|e| ProviderError::network("github", e.to_string()))?;
+        let client = crate::core::http::outbound::streaming_outbound_client().clone();
+        let response = crate::core::providers::base::connection_pool::send_streaming_request(
+            client
+                .post(&url)
+                .header("Authorization", format!("Bearer {}", api_key))
+                .header("Content-Type", "application/json")
+                .json(&stream_request),
+            "github",
+        )
+        .await?;
 
         // Check status
         if !response.status().is_success() {
             let status = response.status().as_u16();
-            let body = response.text().await.ok();
-            let body_str = body.unwrap_or_else(|| "Unknown error".to_string());
+            let body_str =
+                crate::core::providers::base::connection_pool::read_streaming_error_body(response)
+                    .await
+                    .map_err(|err| err.into_provider_error("github"))?;
             return Err(match status {
                 401 => ProviderError::authentication("github", "Invalid API key"),
                 404 => ProviderError::model_not_found("github", body_str.clone()),

@@ -27,13 +27,14 @@ use crate::core::providers::base::{
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::streaming::utils::is_done_marker;
 use crate::core::traits::provider::ProviderConfig;
-use crate::utils::net::http::create_custom_client;
+use crate::utils::net::http::{create_custom_client, create_streaming_client};
 
 /// Azure OpenAI chat handler
 #[derive(Debug, Clone)]
 pub struct AzureChatHandler {
     config: AzureConfig,
     client: reqwest::Client,
+    streaming_client: reqwest::Client,
 }
 
 impl AzureChatHandler {
@@ -41,8 +42,15 @@ impl AzureChatHandler {
     pub fn new(config: AzureConfig) -> Result<Self, ProviderError> {
         let client = create_custom_client(ProviderConfig::timeout(&config))
             .map_err(|e| azure_config_error(format!("Failed to create HTTP client: {}", e)))?;
+        let streaming_client = create_streaming_client().map_err(|e| {
+            azure_config_error(format!("Failed to create streaming HTTP client: {}", e))
+        })?;
 
-        Ok(Self { config, client })
+        Ok(Self {
+            config,
+            client,
+            streaming_client,
+        })
     }
 
     /// Build request headers using the unified HeaderPair pattern.
@@ -106,10 +114,10 @@ impl AzureChatHandler {
         // Check status
         if !response.status().is_success() {
             let status = response.status().as_u16();
-            let error_body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unknown error".to_string());
+            let error_body =
+                crate::core::providers::base::connection_pool::read_streaming_error_body(response)
+                    .await
+                    .map_err(|err| err.into_provider_error("azure"))?;
             return Err(azure_api_error(status, error_body));
         }
 
@@ -154,17 +162,22 @@ impl AzureChatHandler {
         let headers = self.get_request_headers().await?;
 
         // Execute streaming request
-        let response = apply_headers(self.client.post(&url).json(&azure_request), headers)
-            .send()
-            .await?;
+        let response = crate::core::providers::base::connection_pool::send_streaming_request(
+            apply_headers(
+                self.streaming_client.post(&url).json(&azure_request),
+                headers,
+            ),
+            "azure",
+        )
+        .await?;
 
         // Check status
         if !response.status().is_success() {
             let status = response.status().as_u16();
-            let error_body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unknown error".to_string());
+            let error_body =
+                crate::core::providers::base::connection_pool::read_streaming_error_body(response)
+                    .await
+                    .map_err(|err| err.into_provider_error("azure"))?;
             return Err(azure_api_error(status, error_body));
         }
 

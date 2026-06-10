@@ -178,22 +178,23 @@ impl LLMProvider for ExaAiProvider {
             .get_effective_api_key("exa_ai")
             .ok_or_else(|| ProviderError::authentication("exa_ai", "API key is required"))?;
 
-        let client = crate::core::http::outbound::default_outbound_client().clone();
-        let response = client
-            .post(&url)
-            .header("Authorization", format!("Bearer {}", api_key))
-            .header("Content-Type", "application/json")
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| ProviderError::network("exa_ai", e.to_string()))?;
+        let client = crate::core::http::outbound::streaming_outbound_client().clone();
+        let response = crate::core::providers::base::connection_pool::send_streaming_request(
+            client
+                .post(&url)
+                .header("Authorization", format!("Bearer {}", api_key))
+                .header("Content-Type", "application/json")
+                .json(&body),
+            "exa_ai",
+        )
+        .await?;
 
         let status = response.status();
         if !status.is_success() {
-            let error_text = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unknown error".to_string());
+            let error_text =
+                crate::core::providers::base::connection_pool::read_streaming_error_body(response)
+                    .await
+                    .map_err(|err| err.into_provider_error("exa_ai"))?;
             return Err(HttpErrorMapper::map_status_code(
                 "exa_ai",
                 status.as_u16(),

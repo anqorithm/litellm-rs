@@ -561,7 +561,7 @@ impl LLMProvider for OllamaProvider {
 
         // Use reqwest directly for streaming
         let url = self.config.get_chat_endpoint();
-        let mut req = crate::core::http::outbound::default_outbound_client()
+        let mut req = crate::core::http::outbound::streaming_outbound_client()
             .clone()
             .post(&url);
 
@@ -570,40 +570,35 @@ impl LLMProvider for OllamaProvider {
             req = req.header("Authorization", format!("Bearer {}", api_key));
         }
 
-        let response = req
-            .header("Content-Type", "application/json")
-            .json(&request_body)
-            .send()
-            .await
-            .map_err(|e| {
-                let error_msg = e.to_string();
-                if error_msg.contains("Connection refused") || error_msg.contains("connect error") {
-                    ProviderError::network(
-                        "ollama",
-                        format!(
-                            "Failed to connect to Ollama server at {}. Is Ollama running?",
-                            self.config.get_api_base()
-                        ),
-                    )
-                } else if error_msg.contains("timed out") || error_msg.contains("timeout") {
-                    ProviderError::Timeout {
-                        provider: "ollama",
-                        message: error_msg,
-                    }
-                } else {
-                    ProviderError::network("ollama", error_msg)
-                }
-            })?;
+        let response = crate::core::providers::base::connection_pool::send_streaming_request(
+            req.header("Content-Type", "application/json")
+                .json(&request_body),
+            "ollama",
+        )
+        .await
+        .map_err(|error| {
+            let error_msg = error.to_string();
+            if error_msg.contains("Connection refused") || error_msg.contains("connect error") {
+                ProviderError::network(
+                    "ollama",
+                    format!(
+                        "Failed to connect to Ollama server at {}. Is Ollama running?",
+                        self.config.get_api_base()
+                    ),
+                )
+            } else {
+                error
+            }
+        })?;
 
         // Check status
         if !response.status().is_success() {
             let status = response.status().as_u16();
-            let body = response.text().await.ok();
-            return Err(HttpErrorMapper::map_status_code(
-                "ollama",
-                status,
-                &body.unwrap_or_default(),
-            ));
+            let body =
+                crate::core::providers::base::connection_pool::read_streaming_error_body(response)
+                    .await
+                    .map_err(|err| err.into_provider_error("ollama"))?;
+            return Err(HttpErrorMapper::map_status_code("ollama", status, &body));
         }
 
         // Create NDJSON stream

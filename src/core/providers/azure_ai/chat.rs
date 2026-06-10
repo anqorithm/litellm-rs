@@ -21,13 +21,14 @@ use super::config::{AzureAIConfig, AzureAIEndpointType};
 use crate::core::providers::base::HttpErrorMapper;
 use crate::core::providers::base::sse::{SSETransformer, UnifiedSSEStream};
 use crate::core::providers::unified_provider::ProviderError;
-use crate::utils::net::http::create_custom_client_with_headers;
+use crate::utils::net::http::{create_custom_client_with_headers, create_streaming_client};
 
 /// Azure AI chat handler - complete implementation
 #[derive(Debug, Clone)]
 pub struct AzureAIChatHandler {
     config: AzureAIConfig,
     client: reqwest::Client,
+    streaming_client: reqwest::Client,
 }
 
 impl AzureAIChatHandler {
@@ -53,8 +54,18 @@ impl AzureAIChatHandler {
         let client = create_custom_client_with_headers(config.timeout(), headers).map_err(|e| {
             ProviderError::configuration("azure_ai", format!("Failed to create HTTP client: {}", e))
         })?;
+        let streaming_client = create_streaming_client().map_err(|e| {
+            ProviderError::configuration(
+                "azure_ai",
+                format!("Failed to create streaming HTTP client: {}", e),
+            )
+        })?;
 
-        Ok(Self { config, client })
+        Ok(Self {
+            config,
+            client,
+            streaming_client,
+        })
     }
 
     /// Create chat completion
@@ -87,10 +98,10 @@ impl AzureAIChatHandler {
         // Handle error responses
         if !response.status().is_success() {
             let status = response.status().as_u16();
-            let error_body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unknown error".to_string());
+            let error_body =
+                crate::core::providers::base::connection_pool::read_streaming_error_body(response)
+                    .await
+                    .map_err(|err| err.into_provider_error("azure_ai"))?;
             return Err(HttpErrorMapper::map_status_code(
                 "azure_ai",
                 status,
@@ -126,23 +137,29 @@ impl AzureAIChatHandler {
             .config
             .build_endpoint_url(AzureAIEndpointType::ChatCompletions.as_path())
             .map_err(|e| ProviderError::configuration("azure_ai", &e))?;
+        let headers = self
+            .config
+            .create_default_headers()
+            .map_err(|e| ProviderError::configuration("azure_ai", &e))?;
 
         // Execute streaming request
-        let response = self
-            .client
-            .post(&url)
-            .json(&azure_request)
-            .send()
-            .await
-            .map_err(|e| ProviderError::network("azure_ai", format!("Request failed: {}", e)))?;
+        let mut request_builder = self.streaming_client.post(&url).json(&azure_request);
+        for (key, value) in headers {
+            request_builder = request_builder.header(key, value);
+        }
+        let response = crate::core::providers::base::connection_pool::send_streaming_request(
+            request_builder,
+            "azure_ai",
+        )
+        .await?;
 
         // Handle error responses
         if !response.status().is_success() {
             let status = response.status().as_u16();
-            let error_body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unknown error".to_string());
+            let error_body =
+                crate::core::providers::base::connection_pool::read_streaming_error_body(response)
+                    .await
+                    .map_err(|err| err.into_provider_error("azure_ai"))?;
             return Err(HttpErrorMapper::map_status_code(
                 "azure_ai",
                 status,

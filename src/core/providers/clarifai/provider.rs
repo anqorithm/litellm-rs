@@ -269,24 +269,29 @@ impl LLMProvider for ClarifaiProvider {
 
         let url = format!("{}/chat/completions", self.config.get_api_base());
 
-        let client = crate::core::http::outbound::default_outbound_client().clone();
-        let response = client
-            .post(&url)
-            .header("Authorization", format!("Bearer {}", api_key))
-            .header("Content-Type", "application/json")
-            .json(&request)
-            .send()
-            .await
-            .map_err(|e| ClarifaiError::network("clarifai", e.to_string()))?;
+        let client = crate::core::http::outbound::streaming_outbound_client().clone();
+        let response = crate::core::providers::base::connection_pool::send_streaming_request(
+            client
+                .post(&url)
+                .header("Authorization", format!("Bearer {}", api_key))
+                .header("Content-Type", "application/json")
+                .json(&request),
+            "clarifai",
+        )
+        .await?;
 
         if !response.status().is_success() {
             let status = response.status().as_u16();
-            let body = response.text().await.ok();
             return Err(match status {
-                400 => ClarifaiError::invalid_request(
-                    "clarifai",
-                    body.unwrap_or_else(|| "Bad request".to_string()),
-                ),
+                400 => {
+                    let body =
+                        crate::core::providers::base::connection_pool::read_streaming_error_body(
+                            response,
+                        )
+                        .await
+                        .map_err(|err| err.into_provider_error("clarifai"))?;
+                    ClarifaiError::invalid_request("clarifai", body)
+                }
                 401 => ClarifaiError::authentication("clarifai", "Invalid API key"),
                 429 => ClarifaiError::rate_limit("clarifai", None),
                 _ => ClarifaiError::api_error(
