@@ -18,7 +18,7 @@ use crate::core::types::{
     chat::ChatRequest,
     content::ContentPart,
     message::MessageRole,
-    responses::{ChatChoice, ChatResponse, FinishReason, PromptTokensDetails, Usage},
+    responses::{ChatChoice, ChatResponse, FinishReason},
     thinking::ThinkingContent,
 };
 
@@ -250,6 +250,39 @@ impl AnthropicClient {
         let model_spec = registry.get_model_spec(&request.model).ok_or_else(|| {
             anthropic_api_error(400, format!("Unsupported model: {}", request.model))
         })?;
+
+        // The Messages API only returns a single candidate; any n other than 1
+        // (including 0) cannot be honored, so reject it instead of silently
+        // returning the wrong number of choices.
+        if let Some(n) = request.n
+            && n != 1
+        {
+            return Err(ProviderError::invalid_request(
+                "anthropic",
+                format!("anthropic only supports n=1 (got n={})", n),
+            ));
+        }
+
+        // Warn once about OpenAI-style parameters Anthropic has no equivalent for.
+        let mut ignored_params = Vec::new();
+        if request.frequency_penalty.is_some() {
+            ignored_params.push("frequency_penalty");
+        }
+        if request.presence_penalty.is_some() {
+            ignored_params.push("presence_penalty");
+        }
+        if request.seed.is_some() {
+            ignored_params.push("seed");
+        }
+        if request.logit_bias.is_some() {
+            ignored_params.push("logit_bias");
+        }
+        if !ignored_params.is_empty() {
+            tracing::warn!(
+                "Anthropic request ignores unsupported parameters: {}",
+                ignored_params.join(", ")
+            );
+        }
 
         // Separate system messages from user messages
         let (system_message, messages) = self.separate_system_messages(&request.messages)?;
@@ -726,45 +759,7 @@ impl AnthropicClient {
             logprobs: None,
         };
 
-        // Build usage
-        let usage = response.get("usage").map(|usage_data| {
-            let input_tokens = usage_data
-                .get("input_tokens")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0) as u32;
-            let output_tokens = usage_data
-                .get("output_tokens")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0) as u32;
-            let cache_creation_tokens = usage_data
-                .get("cache_creation_input_tokens")
-                .and_then(|v| v.as_u64())
-                .map(|tokens| tokens as u32);
-            let cache_read_tokens = usage_data
-                .get("cache_read_input_tokens")
-                .and_then(|v| v.as_u64())
-                .map(|tokens| tokens as u32);
-
-            Usage {
-                prompt_tokens: input_tokens,
-                completion_tokens: output_tokens,
-                total_tokens: input_tokens + output_tokens,
-                completion_tokens_details: None,
-                prompt_tokens_details: if cache_creation_tokens.is_some()
-                    || cache_read_tokens.is_some()
-                {
-                    Some(PromptTokensDetails {
-                        cached_tokens: cache_read_tokens,
-                        cache_creation_tokens,
-                        cache_read_tokens,
-                        audio_tokens: None,
-                    })
-                } else {
-                    None
-                },
-                thinking_usage: None,
-            }
-        });
+        let usage = response.get("usage").map(usage::build_usage);
 
         Ok(ChatResponse {
             id,
@@ -777,6 +772,8 @@ impl AnthropicClient {
         })
     }
 }
+
+mod usage;
 
 #[cfg(test)]
 mod tests;
