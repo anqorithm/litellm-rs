@@ -80,8 +80,8 @@ fn extended_pricing_uses_exact_mistral_alias_rates() {
     let small_2506 = db.calculate_for_provider("mistral", "mistral-small-2506", &usage);
 
     assert!((large - 0.00125).abs() < 1e-12);
-    assert!((small - 0.00045).abs() < 1e-12);
-    assert!((small_4 - 0.00045).abs() < 1e-12);
+    assert!((small - 0.00025).abs() < 1e-12);
+    assert!((small_4 - 0.00025).abs() < 1e-12);
     assert!((small_2506 - 0.00025).abs() < 1e-12);
 }
 
@@ -106,14 +106,14 @@ fn extended_pricing_has_nova_2_lite_rates_and_magistral_capabilities() {
         Some(true)
     );
 
-    assert!(db.supports_feature("magistral-small-2509", "function_calling"));
-    assert!(db.supports_feature("magistral-small-2509", "vision"));
-    assert!(db.supports_feature("magistral-medium-2509", "function_calling"));
-    assert!(db.supports_feature("magistral-medium-2509", "vision"));
+    assert!(db.supports_feature("magistral-small-latest", "function_calling"));
+    assert!(db.supports_feature("magistral-small-latest", "vision"));
+    assert!(db.supports_feature("magistral-medium-latest", "function_calling"));
+    assert!(db.supports_feature("magistral-medium-latest", "vision"));
 }
 
 #[test]
-fn extended_pricing_has_explicit_cohere_command_a_rates() {
+fn extended_pricing_handles_cohere_command_a_rates() {
     let Ok(db) = PricingDatabase::from_default_source() else {
         panic!("extended pricing source should load");
     };
@@ -124,6 +124,13 @@ fn extended_pricing_has_explicit_cohere_command_a_rates() {
     };
     assert_eq!(command_a_plus.input_cost_per_token, Some(0.0));
     assert_eq!(command_a_plus.output_cost_per_token, Some(0.0));
+    assert_eq!(
+        command_a_plus
+            .extra
+            .get("pricing_status")
+            .and_then(|v| v.as_str()),
+        Some("official_free_until_rate_limits")
+    );
     assert_eq!(
         db.calculate_for_provider("cohere", "command-a-plus-05-2026", &usage),
         0.0
@@ -136,6 +143,160 @@ fn extended_pricing_has_explicit_cohere_command_a_rates() {
     assert_eq!(command_a.output_cost_per_token, Some(1e-05));
     assert!(
         (db.calculate_for_provider("cohere", "command-a-03-2025", &usage) - 0.0075).abs() < 1e-12
+    );
+}
+
+#[test]
+fn xiaomi_mimo_provider_aliases_share_pricing_rows() {
+    let Ok(db) = PricingDatabase::from_default_source() else {
+        panic!("shared pricing source should load");
+    };
+    let usage = Usage::new(1000, 500);
+    let expected = 1000.0 * 0.00000014 + 500.0 * 0.00000028;
+
+    for provider in ["xiaomi_mimo", "mimo", "xiaomi"] {
+        assert!(
+            (db.calculate_for_provider(provider, "mimo-v2.5", &usage) - expected).abs() < 1e-12,
+            "{provider} should resolve Xiaomi MiMo pricing"
+        );
+        assert!(
+            db.get_provider_models(provider)
+                .contains(&"mimo-v2.5".to_string()),
+            "{provider} should list Xiaomi MiMo models"
+        );
+    }
+}
+
+#[test]
+fn extended_pricing_has_current_anthropic_gemini_and_groq_rates() {
+    let Ok(db) = PricingDatabase::from_default_source() else {
+        panic!("shared pricing source should load");
+    };
+    let usage = Usage::new(1000, 500);
+
+    assert!(
+        (db.calculate_for_provider("anthropic", "claude-opus-4-8", &usage) - 0.0175).abs() < 1e-12
+    );
+    assert!(
+        (db.calculate_for_provider("anthropic", "claude-sonnet-4-6", &usage) - 0.0105).abs()
+            < 1e-12
+    );
+    assert!(
+        (db.calculate_for_provider("anthropic", "claude-haiku-4-5-20251001", &usage) - 0.0035)
+            .abs()
+            < 1e-12
+    );
+
+    assert!(
+        (db.calculate_for_provider("vertex_ai", "gemini-3.1-flash-lite", &usage) - 0.001).abs()
+            < 1e-12
+    );
+    assert!(
+        (db.calculate_for_provider("gemini", "gemini-3.1-flash-lite", &usage) - 0.001).abs()
+            < 1e-12
+    );
+    assert!(
+        db.get_provider_models("gemini")
+            .contains(&"gemini/gemini-2.5-flash".to_string()),
+        "gemini provider should list prefixed Gemini 2.5 rows"
+    );
+    assert_eq!(
+        db.calculate_for_provider("vertex_ai", "gemini-3.1-flash", &usage),
+        0.0,
+        "Gemini Flash must not borrow Flash-Lite pricing"
+    );
+
+    let long_usage = Usage::new(300_000, 1_000);
+    let long_context_cost = 300_000.0 * 0.000004 + 1_000.0 * 0.000018;
+    assert!(
+        (db.calculate_for_provider("vertex_ai", "gemini-3.1-pro-preview", &long_usage)
+            - long_context_cost)
+            .abs()
+            < 1e-12
+    );
+
+    assert!(
+        (db.calculate_for_provider("groq", "llama-3.3-70b-versatile", &usage) - 0.000985).abs()
+            < 1e-12
+    );
+    assert!(
+        (db.calculate_for_provider("groq", "openai/gpt-oss-120b", &usage) - 0.00045).abs() < 1e-12
+    );
+    assert!((db.calculate_for_provider("groq", "gpt-oss-120b", &usage) - 0.00045).abs() < 1e-12);
+
+    let Some(whisper) = db.get_model_info("whisper-large-v3-turbo") else {
+        panic!("Groq Whisper Turbo ASR pricing entry should exist");
+    };
+    assert_eq!(whisper.cost_per_second, Some(0.000011111111111111112));
+    assert_eq!(whisper.mode, "audio_transcription");
+}
+
+#[test]
+fn provider_model_listing_does_not_cross_advertise_foreign_prefixed_rows() {
+    let Ok(db) = PricingDatabase::from_default_source() else {
+        panic!("shared pricing source should load");
+    };
+    let usage = Usage::new(1000, 500);
+
+    assert!(
+        !db.get_provider_models("openai")
+            .contains(&"openai/gpt-oss-120b".to_string()),
+        "Groq-hosted OpenAI OSS rows must not be advertised as OpenAI models"
+    );
+    assert!(
+        db.get_provider_models("groq")
+            .contains(&"openai/gpt-oss-120b".to_string()),
+        "Groq provider should still list its OpenAI OSS compatibility rows"
+    );
+    assert_eq!(
+        db.calculate_for_provider("openai", "openai/gpt-oss-120b", &usage),
+        0.0
+    );
+    assert!((db.calculate_for_provider("groq", "gpt-oss-120b", &usage) - 0.00045).abs() < 1e-12);
+}
+
+#[test]
+fn pricing_alias_fallback_preserves_longer_model_aliases() {
+    let Ok(db) = PricingDatabase::from_default_source() else {
+        panic!("shared pricing source should load");
+    };
+    let usage = Usage::new(1000, 500);
+
+    assert_eq!(
+        db.calculate_for_provider("openai", "gpt-4-0613", &usage),
+        db.calculate_for_provider("openai", "gpt-4", &usage)
+    );
+    assert_eq!(
+        db.calculate_for_provider("anthropic", "claude-opus-4-7-latest", &usage),
+        db.calculate_for_provider("anthropic", "claude-opus-4-7", &usage)
+    );
+}
+
+#[test]
+fn provider_aliases_share_normalized_pricing_rows() {
+    let Ok(db) = PricingDatabase::from_default_source() else {
+        panic!("shared pricing source should load");
+    };
+    let usage = Usage::new(1000, 500);
+
+    assert_eq!(
+        db.calculate_for_provider("google", "gemini-1.5-flash", &usage),
+        db.calculate_for_provider("vertex_ai", "gemini-1.5-flash", &usage)
+    );
+    assert!(
+        db.get_provider_models("google")
+            .contains(&"gemini-1.5-flash".to_string()),
+        "google should list Vertex AI pricing rows"
+    );
+
+    assert_eq!(
+        db.calculate_for_provider("zhipuai", "glm-5", &usage),
+        db.calculate_for_provider("zhipu", "glm-5", &usage)
+    );
+    assert!(
+        db.get_provider_models("zhipuai")
+            .contains(&"glm-5".to_string()),
+        "zhipuai should list Zhipu pricing rows"
     );
 }
 
@@ -176,7 +337,7 @@ fn gpt55_shared_pricing_charges_long_context_tiers() {
 #[test]
 fn mistral_medium_2508_shared_pricing_uses_exact_row() {
     let usage = Usage::new(1_000, 500);
-    let expected_cost = 0.0014;
+    let expected_cost = 0.00525;
 
     let Ok(shared_db) = PricingDatabase::from_default_source() else {
         panic!("shared pricing source should load");
@@ -185,6 +346,22 @@ fn mistral_medium_2508_shared_pricing_uses_exact_row() {
     assert!(
         (shared_db.calculate_for_provider("mistral", "mistral-medium-2508", &usage)
             - expected_cost)
+            .abs()
+            < 1e-12
+    );
+}
+
+#[test]
+fn devstral_2_2512_shared_pricing_uses_exact_row() {
+    let usage = Usage::new(1_000, 500);
+    let expected_cost = 0.0014;
+
+    let Ok(shared_db) = PricingDatabase::from_default_source() else {
+        panic!("shared pricing source should load");
+    };
+
+    assert!(
+        (shared_db.calculate_for_provider("mistral", "devstral-2-2512", &usage) - expected_cost)
             .abs()
             < 1e-12
     );

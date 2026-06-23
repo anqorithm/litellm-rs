@@ -1,5 +1,9 @@
 use crate::core::cost::types::{CostError, ModelPricing};
 
+mod regional;
+
+pub(super) use regional::{get_minimax_pricing, get_zhipu_pricing};
+
 pub(super) fn get_openai_pricing(model: &str) -> Result<ModelPricing, CostError> {
     use chrono::Utc;
 
@@ -34,6 +38,15 @@ pub(super) fn get_openai_pricing(model: &str) -> Result<ModelPricing, CostError>
             model: model.to_string(),
             input_cost_per_1k_tokens: 0.030,
             output_cost_per_1k_tokens: 0.180,
+            cache_read_input_token_cost: Some(0.030),
+            tiered_pricing: Some(std::collections::HashMap::from([
+                ("input_cost_per_token_above_272k_tokens".to_string(), 0.060),
+                ("output_cost_per_token_above_272k_tokens".to_string(), 0.270),
+                (
+                    "cache_read_input_token_cost_above_272k_tokens".to_string(),
+                    0.060,
+                ),
+            ])),
             currency: "USD".to_string(),
             updated_at: Utc::now(),
             ..Default::default()
@@ -42,6 +55,7 @@ pub(super) fn get_openai_pricing(model: &str) -> Result<ModelPricing, CostError>
             model: model.to_string(),
             input_cost_per_1k_tokens: 0.00075,
             output_cost_per_1k_tokens: 0.0045,
+            cache_read_input_token_cost: Some(0.000075),
             currency: "USD".to_string(),
             updated_at: Utc::now(),
             ..Default::default()
@@ -50,6 +64,7 @@ pub(super) fn get_openai_pricing(model: &str) -> Result<ModelPricing, CostError>
             model: model.to_string(),
             input_cost_per_1k_tokens: 0.0002,
             output_cost_per_1k_tokens: 0.00125,
+            cache_read_input_token_cost: Some(0.00002),
             currency: "USD".to_string(),
             updated_at: Utc::now(),
             ..Default::default()
@@ -58,6 +73,18 @@ pub(super) fn get_openai_pricing(model: &str) -> Result<ModelPricing, CostError>
             model: model.to_string(),
             input_cost_per_1k_tokens: 0.0025,
             output_cost_per_1k_tokens: 0.015,
+            cache_read_input_token_cost: Some(0.00025),
+            tiered_pricing: Some(std::collections::HashMap::from([
+                ("input_cost_per_token_above_272k_tokens".to_string(), 0.005),
+                (
+                    "output_cost_per_token_above_272k_tokens".to_string(),
+                    0.0225,
+                ),
+                (
+                    "cache_read_input_token_cost_above_272k_tokens".to_string(),
+                    0.0005,
+                ),
+            ])),
             currency: "USD".to_string(),
             updated_at: Utc::now(),
             ..Default::default()
@@ -126,10 +153,22 @@ pub(super) fn get_openai_pricing(model: &str) -> Result<ModelPricing, CostError>
             updated_at: Utc::now(),
             ..Default::default()
         },
+        m if m.contains("gpt-image-2") => ModelPricing {
+            model: model.to_string(),
+            input_cost_per_1k_tokens: 0.005,
+            output_cost_per_1k_tokens: 0.030,
+            image_cost_per_token: Some(0.000008),
+            cache_read_input_token_cost: Some(0.00125),
+            currency: "USD".to_string(),
+            updated_at: Utc::now(),
+            ..Default::default()
+        },
         m if m.contains("gpt-image-1-mini") => ModelPricing {
             model: model.to_string(),
-            input_cost_per_1k_tokens: 0.0025,
-            output_cost_per_1k_tokens: 0.010,
+            input_cost_per_1k_tokens: 0.002,
+            output_cost_per_1k_tokens: 0.008,
+            image_cost_per_token: Some(0.0000025),
+            cache_read_input_token_cost: Some(0.0002),
             currency: "USD".to_string(),
             updated_at: Utc::now(),
             ..Default::default()
@@ -137,7 +176,9 @@ pub(super) fn get_openai_pricing(model: &str) -> Result<ModelPricing, CostError>
         m if m.contains("gpt-image-1.5") || m.contains("chatgpt-image-latest") => ModelPricing {
             model: model.to_string(),
             input_cost_per_1k_tokens: 0.005,
-            output_cost_per_1k_tokens: 0.020,
+            output_cost_per_1k_tokens: 0.032,
+            image_cost_per_token: Some(0.000008),
+            cache_read_input_token_cost: Some(0.00125),
             currency: "USD".to_string(),
             updated_at: Utc::now(),
             ..Default::default()
@@ -293,6 +334,14 @@ pub(super) fn get_anthropic_pricing(model: &str) -> Result<ModelPricing, CostErr
     use chrono::Utc;
 
     let pricing = match model.to_lowercase().as_str() {
+        m if m.contains("claude-opus-4-8") => ModelPricing {
+            model: model.to_string(),
+            input_cost_per_1k_tokens: 0.005,
+            output_cost_per_1k_tokens: 0.025,
+            currency: "USD".to_string(),
+            updated_at: Utc::now(),
+            ..Default::default()
+        },
         m if m.contains("claude-opus-4-7") => ModelPricing {
             model: model.to_string(),
             input_cost_per_1k_tokens: 0.005,
@@ -578,141 +627,6 @@ pub(super) fn get_moonshot_pricing(model: &str) -> Result<ModelPricing, CostErro
         return Err(CostError::ModelNotSupported {
             model: model.to_string(),
             provider: "moonshot".to_string(),
-        });
-    };
-
-    Ok(pricing)
-}
-
-pub(super) fn get_minimax_pricing(model: &str) -> Result<ModelPricing, CostError> {
-    use chrono::Utc;
-
-    let normalized_model = model.to_lowercase();
-
-    let pricing = if normalized_model.contains("m2.5-lightning") {
-        ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.0003,
-            output_cost_per_1k_tokens: 0.0024,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        }
-    } else if normalized_model.contains("m2.5")
-        || normalized_model.contains("m2.1")
-        || normalized_model.contains("minimax-m2")
-    {
-        ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.0003,
-            output_cost_per_1k_tokens: 0.0012,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        }
-    } else {
-        return Err(CostError::ModelNotSupported {
-            model: model.to_string(),
-            provider: "minimax".to_string(),
-        });
-    };
-
-    Ok(pricing)
-}
-
-pub(super) fn get_zhipu_pricing(model: &str) -> Result<ModelPricing, CostError> {
-    use chrono::Utc;
-
-    let normalized_model = model.to_lowercase();
-
-    let pricing = if normalized_model.contains("glm-5-code") {
-        ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.0012,
-            output_cost_per_1k_tokens: 0.005,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        }
-    } else if normalized_model.contains("glm-5.1") || normalized_model.contains("glm-5-1") {
-        ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.0014,
-            output_cost_per_1k_tokens: 0.0044,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        }
-    } else if normalized_model.contains("glm-5-turbo") || normalized_model.contains("glm-5v") {
-        ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.0012,
-            output_cost_per_1k_tokens: 0.004,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        }
-    } else if normalized_model.contains("glm-5") {
-        ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.001,
-            output_cost_per_1k_tokens: 0.0032,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        }
-    } else if (normalized_model.contains("glm-4.7-flash")
-        || normalized_model.contains("glm-4.5-flash")
-        || normalized_model.contains("glm-4.6v-flash"))
-        && !normalized_model.contains("flashx")
-    {
-        // Free tier flash models
-        ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.0,
-            output_cost_per_1k_tokens: 0.0,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        }
-    } else if normalized_model.contains("glm-4.7")
-        || normalized_model.contains("glm-4-7")
-        || normalized_model.contains("glm-4.6")
-        || normalized_model.contains("glm-4.5")
-    {
-        ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.0006,
-            output_cost_per_1k_tokens: 0.0022,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        }
-    } else if normalized_model.contains("glm-4-flash") {
-        ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.00005,
-            output_cost_per_1k_tokens: 0.0001,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        }
-    } else if normalized_model.contains("glm-4-plus")
-        || normalized_model.contains("glm-4-air")
-        || normalized_model.contains("glm-4")
-    {
-        ModelPricing {
-            model: model.to_string(),
-            input_cost_per_1k_tokens: 0.0001,
-            output_cost_per_1k_tokens: 0.0003,
-            currency: "USD".to_string(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        }
-    } else {
-        return Err(CostError::ModelNotSupported {
-            model: model.to_string(),
-            provider: "zhipu".to_string(),
         });
     };
 

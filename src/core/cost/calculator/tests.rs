@@ -219,6 +219,42 @@ fn test_get_vertex_ai_pricing_gemini_35_flash() {
 }
 
 #[test]
+fn test_shared_pricing_does_not_match_flash_lite_for_flash() {
+    let pricing = get_model_pricing("gemini-3.1-flash", "vertex_ai");
+    let Err(CostError::ModelNotSupported { model, provider }) = pricing else {
+        panic!("gemini-3.1-flash must not borrow gemini-3.1-flash-lite shared pricing");
+    };
+    assert_eq!(model, "gemini-3.1-flash");
+    assert_eq!(provider, "vertex_ai");
+}
+
+#[test]
+fn test_runtime_pricing_reaches_groq_and_native_gemini_shared_rows() {
+    let usage = create_usage(1000, 500);
+
+    let gemini = generic_cost_per_token("gemini-3.1-flash-lite", &usage, "gemini")
+        .expect("native Gemini provider should use shared Gemini pricing rows");
+    assert_cost_eq(gemini.total_cost, 0.001);
+
+    let groq = generic_cost_per_token("gpt-oss-120b", &usage, "groq")
+        .expect("Groq provider should match prefixed shared pricing rows by model id");
+    assert_cost_eq(groq.total_cost, 0.00045);
+}
+
+#[test]
+fn test_runtime_pricing_normalizes_provider_prefixed_shared_models() {
+    let usage = create_usage(1000, 500);
+
+    let mimo = generic_cost_per_token("mimo/mimo-v2.5", &usage, "mimo")
+        .expect("Mimo provider-prefixed model should resolve shared pricing");
+    assert_cost_eq(mimo.total_cost, 0.00028);
+
+    let groq = generic_cost_per_token("groq/llama-3.3-70b-versatile", &usage, "groq")
+        .expect("Groq provider-prefixed model should resolve shared pricing");
+    assert_cost_eq(groq.total_cost, 0.000985);
+}
+
+#[test]
 fn test_get_deepseek_pricing() {
     let Ok(flash) = get_model_pricing("deepseek-v4-flash", "deepseek") else {
         panic!("deepseek-v4-flash pricing should be available");
@@ -245,6 +281,64 @@ fn test_get_deepseek_pricing() {
     };
     assert_cost_eq(reasoner_alias.input_cost_per_1k_tokens, 0.00014);
     assert_cost_eq(reasoner_alias.output_cost_per_1k_tokens, 0.00028);
+}
+
+#[test]
+fn test_get_xiaomi_mimo_pricing() {
+    let Ok(pro) = get_model_pricing("mimo-v2.5-pro", "xiaomi_mimo") else {
+        panic!("mimo-v2.5-pro pricing should load from shared pricing data");
+    };
+    assert_cost_eq(pro.input_cost_per_1k_tokens, 0.000435);
+    assert_cost_eq(pro.output_cost_per_1k_tokens, 0.00087);
+    assert_eq!(pro.cache_read_input_token_cost, Some(0.0000036));
+
+    let Ok(base) = get_model_pricing("mimo-v2.5", "mimo") else {
+        panic!("mimo-v2.5 pricing should load through provider aliases");
+    };
+    assert_cost_eq(base.input_cost_per_1k_tokens, 0.00014);
+    assert_cost_eq(base.output_cost_per_1k_tokens, 0.00028);
+    assert_eq!(base.cache_read_input_token_cost, Some(0.0000028));
+}
+
+#[test]
+fn test_get_cohere_pricing_from_shared_catalog() {
+    let Ok(command_r) = get_model_pricing("command-r", "cohere") else {
+        panic!("command-r pricing should load from shared pricing data");
+    };
+    assert_cost_eq(command_r.input_cost_per_1k_tokens, 0.0005);
+    assert_cost_eq(command_r.output_cost_per_1k_tokens, 0.0015);
+
+    let Ok(embed) = get_model_pricing("embed-english-v3.0", "cohere") else {
+        panic!("embed-english-v3.0 pricing should load from shared pricing data");
+    };
+    assert_cost_eq(embed.input_cost_per_1k_tokens, 0.0001);
+    assert_cost_eq(embed.output_cost_per_1k_tokens, 0.0);
+
+    let Ok(command_a_plus) = get_model_pricing("command-a-plus-05-2026", "cohere") else {
+        panic!("command-a-plus-05-2026 free pricing should load from shared pricing data");
+    };
+    assert_cost_eq(command_a_plus.input_cost_per_1k_tokens, 0.0);
+    assert_cost_eq(command_a_plus.output_cost_per_1k_tokens, 0.0);
+
+    let free_usage = UsageTokens::new(1000, 500);
+    let Ok(command_a_plus_cost) =
+        generic_cost_per_token("command-a-plus-05-2026", &free_usage, "cohere")
+    else {
+        panic!("command-a-plus-05-2026 free pricing should calculate");
+    };
+    assert_cost_eq(command_a_plus_cost.total_cost, 0.0);
+
+    let unpriced = get_model_pricing("command-a-reasoning-08-2025", "cohere");
+    assert!(matches!(unpriced, Err(CostError::MissingPricing { .. })));
+}
+
+#[test]
+fn test_get_groq_time_based_pricing_from_shared_catalog() {
+    let Ok(whisper) = get_model_pricing("whisper-large-v3-turbo", "groq") else {
+        panic!("Groq Whisper Turbo pricing should expose cost_per_second");
+    };
+
+    assert_eq!(whisper.cost_per_second, Some(0.000011111111111111112));
 }
 
 #[test]
@@ -299,6 +393,32 @@ fn test_get_minimax_pricing_m2_5() {
     let pricing = pricing.unwrap();
     assert_eq!(pricing.input_cost_per_1k_tokens, 0.0003);
     assert_eq!(pricing.output_cost_per_1k_tokens, 0.0012);
+    assert_eq!(pricing.cache_read_input_token_cost, Some(0.00003));
+    assert_eq!(pricing.cache_creation_input_token_cost, Some(0.000375));
+}
+
+#[test]
+fn test_get_minimax_pricing_m3_and_m2_7_highspeed() {
+    let pricing = get_model_pricing("MiniMax-M3", "minimax");
+    assert!(pricing.is_ok());
+    let pricing = pricing.unwrap();
+    assert_eq!(pricing.input_cost_per_1k_tokens, 0.0003);
+    assert_eq!(pricing.output_cost_per_1k_tokens, 0.0012);
+    assert_eq!(pricing.cache_read_input_token_cost, Some(0.00006));
+    assert_eq!(
+        pricing
+            .tiered_pricing
+            .as_ref()
+            .and_then(|tiered| tiered.get("input_cost_per_token_above_512k_tokens")),
+        Some(&0.0006)
+    );
+
+    let pricing = get_model_pricing("MiniMax-M2.7-highspeed", "minimax");
+    assert!(pricing.is_ok());
+    let pricing = pricing.unwrap();
+    assert_eq!(pricing.input_cost_per_1k_tokens, 0.0006);
+    assert_eq!(pricing.output_cost_per_1k_tokens, 0.0024);
+    assert_eq!(pricing.cache_read_input_token_cost, Some(0.00006));
 }
 
 #[test]
@@ -313,6 +433,15 @@ fn test_get_zhipu_pricing_glm_5() {
 #[test]
 fn test_get_zhipu_pricing_glm_5_1() {
     let pricing = get_model_pricing("glm-5.1", "zhipuai");
+    assert!(pricing.is_ok());
+    let pricing = pricing.unwrap();
+    assert_eq!(pricing.input_cost_per_1k_tokens, 0.0014);
+    assert_eq!(pricing.output_cost_per_1k_tokens, 0.0044);
+}
+
+#[test]
+fn test_get_zhipu_pricing_glm_5_2() {
+    let pricing = get_model_pricing("glm-5.2", "zhipuai");
     assert!(pricing.is_ok());
     let pricing = pricing.unwrap();
     assert_eq!(pricing.input_cost_per_1k_tokens, 0.0014);
@@ -697,6 +826,10 @@ fn test_new_openai_models_have_cost_pricing() {
 
 #[test]
 fn test_new_anthropic_models_have_cost_pricing() {
+    let opus48 = get_model_pricing("claude-opus-4-8", "anthropic").unwrap();
+    assert_eq!(opus48.input_cost_per_1k_tokens, 0.005);
+    assert_eq!(opus48.output_cost_per_1k_tokens, 0.025);
+
     let opus47 = get_model_pricing("claude-opus-4-7", "anthropic").unwrap();
     assert_eq!(opus47.input_cost_per_1k_tokens, 0.005);
     assert_eq!(opus47.output_cost_per_1k_tokens, 0.025);
@@ -720,13 +853,42 @@ fn test_vertex_ai_provider_variants() {
 
     let result1 = generic_cost_per_token("gemini-pro", &usage, "vertex_ai");
     let result2 = generic_cost_per_token("gemini-pro", &usage, "vertexai");
+    let result3 = generic_cost_per_token("gemini-pro", &usage, "google");
 
     assert!(result1.is_ok());
     assert!(result2.is_ok());
+    assert!(result3.is_ok());
 
     let cost1 = result1.unwrap().total_cost;
     let cost2 = result2.unwrap().total_cost;
+    let cost3 = result3.unwrap().total_cost;
     assert!((cost1 - cost2).abs() < 1e-10);
+    assert!((cost1 - cost3).abs() < 1e-10);
+}
+
+#[test]
+fn test_cost_calculator_uses_shared_provider_normalization() {
+    let google = get_model_pricing("gemini-1.5-flash", "google").unwrap();
+    let vertex_ai = get_model_pricing("gemini-1.5-flash", "vertex_ai").unwrap();
+    assert_eq!(
+        google.input_cost_per_1k_tokens,
+        vertex_ai.input_cost_per_1k_tokens
+    );
+    assert_eq!(
+        google.output_cost_per_1k_tokens,
+        vertex_ai.output_cost_per_1k_tokens
+    );
+
+    let glm = get_model_pricing("glm-5", "glm").unwrap();
+    let zhipuai = get_model_pricing("glm-5", "zhipuai").unwrap();
+    assert_eq!(
+        glm.input_cost_per_1k_tokens,
+        zhipuai.input_cost_per_1k_tokens
+    );
+    assert_eq!(
+        glm.output_cost_per_1k_tokens,
+        zhipuai.output_cost_per_1k_tokens
+    );
 }
 
 #[test]

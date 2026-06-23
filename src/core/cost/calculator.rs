@@ -102,17 +102,42 @@ pub fn generic_cost_per_token(
 
 /// Get model pricing information
 pub fn get_model_pricing(model: &str, provider: &str) -> Result<ModelPricing, CostError> {
-    match provider.to_lowercase().as_str() {
+    let normalized_provider = crate::core::pricing::normalize_pricing_provider(provider);
+
+    match normalized_provider.as_str() {
         "openai" => get_pricing_with_shared_source(model, &["openai"], get_openai_pricing),
         "anthropic" => get_pricing_with_shared_source(model, &["anthropic"], get_anthropic_pricing),
         "azure" => get_azure_pricing(model),
-        "vertex_ai" | "vertexai" => {
+        "vertex_ai" => {
             get_pricing_with_shared_source(model, &["vertex_ai", "google"], get_vertex_ai_pricing)
         }
+        "gemini" => {
+            get_pricing_with_shared_source(model, &["gemini", "vertex_ai"], get_vertex_ai_pricing)
+        }
+        "groq" => get_pricing_with_shared_source(model, &["groq"], |model| {
+            Err(CostError::ModelNotSupported {
+                model: model.to_string(),
+                provider: "groq".to_string(),
+            })
+        }),
+        "cohere" => get_pricing_with_shared_source(model, &["cohere"], |model| {
+            Err(CostError::ModelNotSupported {
+                model: model.to_string(),
+                provider: "cohere".to_string(),
+            })
+        }),
         "deepseek" => get_pricing_with_shared_source(model, &["deepseek"], get_deepseek_pricing),
+        "xiaomi_mimo" => {
+            get_pricing_with_shared_source(model, &["xiaomi_mimo", "xiaomi", "mimo"], |model| {
+                Err(CostError::ModelNotSupported {
+                    model: model.to_string(),
+                    provider: "xiaomi_mimo".to_string(),
+                })
+            })
+        }
         "moonshot" => get_pricing_with_shared_source(model, &["moonshot"], get_moonshot_pricing),
         "minimax" => get_pricing_with_shared_source(model, &["minimax"], get_minimax_pricing),
-        "zhipu" | "zhipuai" | "glm" | "zai" => {
+        "zhipuai" => {
             get_pricing_with_shared_source(model, &["zhipuai", "glm", "zai"], get_zhipu_pricing)
         }
         _ => Err(CostError::ProviderNotSupported {
@@ -151,15 +176,22 @@ fn get_shared_model_pricing(
         return Some(litellm_to_cost_pricing(model, info));
     }
 
-    let model_lower = model.to_lowercase();
+    let normalized_model = crate::core::pricing::normalize_model_key(model);
+    if normalized_model != model
+        && let Some(info) = db.get_model_info(normalized_model)
+        && litellm_provider_matches(&info.litellm_provider, provider_aliases)
+    {
+        return Some(litellm_to_cost_pricing(normalized_model, info));
+    }
+
+    let model_lower = normalized_model.to_lowercase();
     for provider in provider_aliases {
         let mut candidates = db.get_provider_models(provider);
         candidates.sort();
 
         for model_id in candidates {
             let model_id_lower = model_id.to_lowercase();
-            let matches = model_id_lower == model_lower || model_id_lower.contains(&model_lower);
-            if matches
+            if is_shared_model_match(&model_id_lower, &model_lower)
                 && let Some(info) = db.get_model_info(&model_id)
                 && litellm_provider_matches(&info.litellm_provider, provider_aliases)
             {
@@ -171,19 +203,49 @@ fn get_shared_model_pricing(
     None
 }
 
-fn litellm_provider_matches(provider: &str, aliases: &[&str]) -> bool {
-    let provider = normalize_pricing_provider(provider);
-    aliases
-        .iter()
-        .any(|alias| normalize_pricing_provider(alias) == provider)
+fn is_shared_model_match(candidate: &str, requested: &str) -> bool {
+    fn model_id_matches(candidate: &str, requested: &str) -> bool {
+        if candidate == requested {
+            return true;
+        }
+
+        candidate
+            .strip_prefix(requested)
+            .and_then(|suffix| suffix.strip_prefix('-'))
+            .is_some_and(alias_suffix_matches)
+    }
+
+    if candidate == requested {
+        return true;
+    }
+
+    model_id_matches(candidate, requested)
+        || model_id_matches(requested, candidate)
+        || candidate
+            .rsplit_once('/')
+            .map(|(_, model_id)| {
+                model_id_matches(model_id, requested) || model_id_matches(requested, model_id)
+            })
+            .unwrap_or(false)
 }
 
-fn normalize_pricing_provider(provider: &str) -> String {
-    match provider.to_lowercase().replace('-', "_").as_str() {
-        "vertexai" | "google" => "vertex_ai".to_string(),
-        "zhipu" | "glm" | "zai" => "zhipuai".to_string(),
-        other => other.to_string(),
+fn alias_suffix_matches(suffix: &str) -> bool {
+    if suffix == "latest" {
+        return true;
     }
+
+    let digit_prefix_len = suffix.chars().take_while(|ch| ch.is_ascii_digit()).count();
+    digit_prefix_len >= 4
+        && suffix
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
+}
+
+fn litellm_provider_matches(provider: &str, aliases: &[&str]) -> bool {
+    let provider = crate::core::pricing::normalize_pricing_provider(provider);
+    aliases
+        .iter()
+        .any(|alias| crate::core::pricing::normalize_pricing_provider(alias) == provider)
 }
 
 fn litellm_to_cost_pricing(
@@ -194,7 +256,10 @@ fn litellm_to_cost_pricing(
 
     // A catalog entry with neither token cost is unpriced data, not a free
     // model: charging $0 would silently under-bill, so surface it instead.
-    if info.input_cost_per_token.is_none() && info.output_cost_per_token.is_none() {
+    if info.input_cost_per_token.is_none()
+        && info.output_cost_per_token.is_none()
+        && !has_non_token_pricing(info)
+    {
         return Err(CostError::MissingPricing {
             model: model.to_string(),
         });
@@ -252,6 +317,13 @@ fn litellm_to_cost_pricing(
 
 fn requires_bidirectional_token_pricing(info: &crate::core::pricing::LiteLLMModelInfo) -> bool {
     matches!(info.mode.as_str(), "chat" | "completion")
+}
+
+fn has_non_token_pricing(info: &crate::core::pricing::LiteLLMModelInfo) -> bool {
+    info.cost_per_second.is_some()
+        || extra_f64(info, "video_cost_per_second").is_some()
+        || extra_f64(info, "audio_cost_per_second").is_some()
+        || extra_f64(info, "image_cost_per_token").is_some()
 }
 
 fn extra_f64(info: &crate::core::pricing::LiteLLMModelInfo, key: &str) -> Option<f64> {
@@ -417,6 +489,8 @@ pub fn compare_model_costs(
 
 #[cfg(test)]
 mod gpt55_tests;
+#[cfg(test)]
+mod openai_current_tests;
 #[cfg(test)]
 mod pricing_regression_tests;
 #[cfg(test)]

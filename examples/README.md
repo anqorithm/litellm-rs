@@ -125,16 +125,16 @@ let response = completion("provider/model", messages, Some(params)).await?;
 - **Docs**: https://azure.microsoft.com/en-us/products/ai-services/openai-service
 
 ### DeepSeek
-- **Models**: deepseek-chat, deepseek-coder
+- **Models**: deepseek-v4-flash, deepseek-v4-pro
 - **Features**: Streaming, Function Calling
 - **Docs**: https://platform.deepseek.com/docs
 
 ### OpenAI (built-in)
-- **Models**: gpt-4o, gpt-4-turbo, gpt-3.5-turbo, text-embedding-3-large
+- **Models**: gpt-5.5, gpt-5.5-pro, gpt-4o, text-embedding-3-large
 - **Features**: Streaming, Function Calling, Vision, Embeddings
 
 ### Anthropic (built-in)
-- **Models**: claude-3-opus, claude-3-sonnet, claude-3-haiku
+- **Models**: claude-opus-4-8, claude-sonnet-4-6, claude-haiku-4-5-20251001
 - **Features**: Streaming, Function Calling, Vision
 
 ## Environment Variables
@@ -146,6 +146,7 @@ Each provider requires specific environment variables:
 | OpenRouter | `OPENROUTER_API_KEY` |
 | Azure AI | `AZURE_AI_API_KEY`, `AZURE_AI_API_BASE` |
 | DeepSeek | `DEEPSEEK_API_KEY` |
+| Xiaomi MiMo | `MIMO_API_KEY` |
 | OpenAI | `OPENAI_API_KEY` |
 | Anthropic | `ANTHROPIC_API_KEY` |
 
