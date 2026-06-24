@@ -14,12 +14,8 @@ use crate::core::providers::base::{
 use crate::core::providers::shared::parse_retry_after_from_body;
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::{
-    chat::ChatMessage,
-    chat::ChatRequest,
-    content::ContentPart,
-    message::MessageRole,
-    responses::{ChatChoice, ChatResponse, FinishReason},
-    thinking::ThinkingContent,
+    chat::ChatMessage, chat::ChatRequest, content::ContentPart, message::MessageRole,
+    responses::ChatResponse,
 };
 
 use super::config::AnthropicConfig;
@@ -58,6 +54,18 @@ impl AnthropicClient {
             config,
             http_client,
         })
+    }
+
+    pub(crate) fn allows_unknown_model(&self, model: &str) -> bool {
+        self.config.allows_unknown_model(model)
+    }
+
+    pub(crate) fn uses_compatible_model_allow_list(&self) -> bool {
+        self.config.uses_compatible_model_allow_list()
+    }
+
+    pub(crate) fn allows_unknown_model_image_input(&self, model: &str) -> bool {
+        self.config.allows_unknown_model_image_input(model)
     }
 
     /// Request
@@ -244,12 +252,67 @@ impl AnthropicClient {
 
     /// Request
     fn transform_chat_request(&self, request: &ChatRequest) -> Result<Value, ProviderError> {
+        if self.config.uses_compatible_model_allow_list()
+            && !self.config.allows_unknown_model(&request.model)
+        {
+            return Err(anthropic_api_error(
+                400,
+                format!("Unsupported model: {}", request.model),
+            ));
+        }
+
         let registry = get_anthropic_registry();
 
         // Check
-        let model_spec = registry.get_model_spec(&request.model).ok_or_else(|| {
-            anthropic_api_error(400, format!("Unsupported model: {}", request.model))
-        })?;
+        let model_spec = if self.config.uses_compatible_model_allow_list() {
+            None
+        } else {
+            registry.get_model_spec(&request.model)
+        };
+        if model_spec.is_none() && !self.config.allows_unknown_model(&request.model) {
+            return Err(anthropic_api_error(
+                400,
+                format!("Unsupported model: {}", request.model),
+            ));
+        }
+        if model_spec.is_none()
+            && (request
+                .tools
+                .as_ref()
+                .is_some_and(|tools| !tools.is_empty())
+                || Self::has_anthropic_tools_extra_param(request)
+                || request.functions.as_ref().is_some_and(|f| !f.is_empty())
+                || request.function_call.is_some())
+        {
+            return Err(ProviderError::not_supported(
+                "anthropic",
+                format!(
+                    "Unknown model {} cannot declare tool calling support",
+                    request.model
+                ),
+            ));
+        }
+        if model_spec.is_none() && Self::has_unsupported_unknown_model_content(request) {
+            return Err(ProviderError::not_supported(
+                "anthropic",
+                format!(
+                    "Unknown model {} only supports text and image content",
+                    request.model
+                ),
+            ));
+        }
+        if model_spec.is_none()
+            && Self::has_image_content(request)
+            && !self.config.allows_unknown_model_image_input(&request.model)
+        {
+            return Err(ProviderError::not_supported(
+                "anthropic",
+                format!(
+                    "Unknown model {} does not support image input",
+                    request.model
+                ),
+            ));
+        }
 
         // The Messages API only returns a single candidate; any n other than 1
         // (including 0) cannot be honored, so reject it instead of silently
@@ -317,8 +380,23 @@ impl AnthropicClient {
 
         // Add tool support
         if let Some(tools) = &request.tools
-            && model_spec.features.contains(&ModelFeature::ToolCalling)
+            && !tools.is_empty()
         {
+            let Some(model_spec) = model_spec else {
+                return Err(ProviderError::not_supported(
+                    "anthropic",
+                    format!(
+                        "Unknown model {} cannot declare tool calling support",
+                        request.model
+                    ),
+                ));
+            };
+            if !model_spec.features.contains(&ModelFeature::ToolCalling) {
+                return Err(ProviderError::not_supported(
+                    "anthropic",
+                    format!("Model {} does not support tool calling", request.model),
+                ));
+            }
             let anthropic_tools = self.transform_tools(tools)?;
             anthropic_request["tools"] = json!(anthropic_tools);
 
@@ -331,8 +409,22 @@ impl AnthropicClient {
         // Add thinking configuration
         if let Some(thinking) = &request.thinking
             && thinking.enabled
-            && model_spec.features.contains(&ModelFeature::ThinkingMode)
         {
+            let Some(model_spec) = model_spec else {
+                return Err(ProviderError::not_supported(
+                    "anthropic",
+                    format!(
+                        "Unknown model {} cannot declare thinking support",
+                        request.model
+                    ),
+                ));
+            };
+            if !model_spec.features.contains(&ModelFeature::ThinkingMode) {
+                return Err(ProviderError::not_supported(
+                    "anthropic",
+                    format!("Model {} does not support thinking", request.model),
+                ));
+            }
             let budget = thinking.budget_tokens.unwrap_or(10_000);
             // Anthropic requires max_tokens > budget_tokens. If the default (4096)
             // is not greater than budget_tokens, raise max_tokens to budget + 1.
@@ -422,7 +514,7 @@ impl AnthropicClient {
     fn transform_messages(
         &self,
         messages: Vec<ChatMessage>,
-        model_spec: &super::models::ModelSpec,
+        model_spec: Option<&super::models::ModelSpec>,
     ) -> Result<Vec<Value>, ProviderError> {
         let mut anthropic_messages = Vec::new();
 
@@ -466,9 +558,9 @@ impl AnthropicClient {
                                     }));
                                 }
                                 ContentPart::ImageUrl { image_url }
-                                    if model_spec
-                                        .features
-                                        .contains(&ModelFeature::MultimodalSupport) =>
+                                    if model_spec.is_none_or(|spec| {
+                                        spec.features.contains(&ModelFeature::MultimodalSupport)
+                                    }) =>
                                 {
                                     // Handle
                                     if image_url.url.starts_with("data:") {
@@ -498,10 +590,24 @@ impl AnthropicClient {
                                         ));
                                     }
                                 }
+                                ContentPart::Image { source, .. }
+                                    if model_spec.is_none_or(|spec| {
+                                        spec.features.contains(&ModelFeature::MultimodalSupport)
+                                    }) =>
+                                {
+                                    anthropic_parts.push(json!({
+                                        "type": "image",
+                                        "source": {
+                                            "type": "base64",
+                                            "media_type": source.media_type,
+                                            "data": source.data
+                                        }
+                                    }));
+                                }
                                 ContentPart::Document { source, .. }
-                                    if model_spec
-                                        .features
-                                        .contains(&ModelFeature::MultimodalSupport) =>
+                                    if model_spec.is_some_and(|spec| {
+                                        spec.features.contains(&ModelFeature::MultimodalSupport)
+                                    }) =>
                                 {
                                     anthropic_parts.push(json!({
                                         "type": "document",
@@ -550,6 +656,61 @@ impl AnthropicClient {
         }
 
         Ok(anthropic_messages)
+    }
+
+    pub(crate) fn has_multimodal_content(request: &ChatRequest) -> bool {
+        request.messages.iter().any(|msg| {
+            if let Some(crate::core::types::message::MessageContent::Parts(parts)) = &msg.content {
+                parts
+                    .iter()
+                    .any(|part| !matches!(part, ContentPart::Text { .. }))
+            } else {
+                false
+            }
+        })
+    }
+
+    pub(crate) fn has_anthropic_tools_extra_param(request: &ChatRequest) -> bool {
+        request
+            .extra_params
+            .get("anthropic_tools")
+            .and_then(|value| value.as_array())
+            .is_some_and(|tools| !tools.is_empty())
+    }
+
+    pub(crate) fn has_unsupported_unknown_model_content(request: &ChatRequest) -> bool {
+        request.messages.iter().any(|message| {
+            matches!(message.role, MessageRole::Tool | MessageRole::Function)
+                || message.thinking.is_some()
+                || message
+                    .tool_calls
+                    .as_ref()
+                    .is_some_and(|calls| !calls.is_empty())
+                || message.function_call.is_some()
+                || matches!(
+                    &message.content,
+                    Some(crate::core::types::message::MessageContent::Parts(parts))
+                        if parts.iter().any(|part| !matches!(
+                            part,
+                            ContentPart::Text { .. }
+                                | ContentPart::ImageUrl { .. }
+                                | ContentPart::Image { .. }
+                        ))
+                )
+        })
+    }
+
+    pub(crate) fn has_image_content(request: &ChatRequest) -> bool {
+        request.messages.iter().any(|message| {
+            matches!(
+                &message.content,
+                Some(crate::core::types::message::MessageContent::Parts(parts))
+                    if parts.iter().any(|part| matches!(
+                        part,
+                        ContentPart::ImageUrl { .. } | ContentPart::Image { .. }
+                    ))
+            )
+        })
     }
 
     fn content_value_to_blocks(content: &Value) -> Vec<Value> {
@@ -603,18 +764,6 @@ impl AnthropicClient {
         Ok(anthropic_tools)
     }
 
-    fn parse_anthropic_stop_reason(reason: &str) -> FinishReason {
-        match reason {
-            "end_turn" => FinishReason::Stop,
-            "max_tokens" => FinishReason::Length,
-            "tool_use" => FinishReason::ToolCalls,
-            "stop_sequence" => FinishReason::StopSequence,
-            "refusal" => FinishReason::Refusal,
-            "pause_turn" => FinishReason::PauseTurn,
-            _ => FinishReason::Stop,
-        }
-    }
-
     /// Transform tool choice
     fn transform_tool_choice(
         &self,
@@ -639,141 +788,12 @@ impl AnthropicClient {
             }
         }
     }
-
-    /// Response
-    fn transform_chat_response(&self, response: Value) -> Result<ChatResponse, ProviderError> {
-        // Extract basic information
-        let id = response
-            .get("id")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-
-        let model = response
-            .get("model")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-
-        let created = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs() as i64;
-
-        // Handle content
-        let content = response
-            .get("content")
-            .and_then(|v| v.as_array())
-            .ok_or_else(|| anthropic_parse_error("Missing or invalid content array"))?;
-
-        let mut message_content = String::new();
-        let mut thinking_parts = Vec::new();
-        let mut thinking_signature = None;
-        let mut has_redacted_thinking = false;
-        let mut tool_calls = Vec::new();
-
-        for item in content {
-            match item.get("type").and_then(|t| t.as_str()) {
-                Some("text") => {
-                    if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
-                        message_content.push_str(text);
-                    }
-                }
-                Some("tool_use") => {
-                    if let (Some(id), Some(name), Some(input)) = (
-                        item.get("id").and_then(|v| v.as_str()),
-                        item.get("name").and_then(|v| v.as_str()),
-                        item.get("input"),
-                    ) {
-                        tool_calls.push(crate::core::types::tools::ToolCall {
-                            id: id.to_string(),
-                            tool_type: "function".to_string(),
-                            function: crate::core::types::tools::FunctionCall {
-                                name: name.to_string(),
-                                arguments: input.to_string(),
-                            },
-                        });
-                    }
-                }
-                Some("thinking") => {
-                    if let Some(thinking) = item.get("thinking").and_then(|t| t.as_str()) {
-                        thinking_parts.push(thinking.to_string());
-                    }
-                    if let Some(signature) = item.get("signature").and_then(|s| s.as_str()) {
-                        thinking_signature = Some(signature.to_string());
-                    }
-                }
-                Some("redacted_thinking") => {
-                    has_redacted_thinking = true;
-                }
-                Some("refusal") => {
-                    if let Some(refusal) = item.get("refusal").and_then(|r| r.as_str()) {
-                        message_content.push_str(refusal);
-                    }
-                }
-                _ => {}
-            }
-        }
-
-        let thinking = if !thinking_parts.is_empty() {
-            Some(ThinkingContent::Text {
-                text: thinking_parts.join(""),
-                signature: thinking_signature,
-            })
-        } else if has_redacted_thinking {
-            Some(ThinkingContent::Redacted { token_count: None })
-        } else {
-            None
-        };
-
-        // Build message
-        let message = ChatMessage {
-            role: MessageRole::Assistant,
-            content: if message_content.is_empty() {
-                None
-            } else {
-                Some(crate::core::types::message::MessageContent::Text(
-                    message_content,
-                ))
-            },
-            thinking,
-            audio: None,
-            name: None,
-            tool_calls: if tool_calls.is_empty() {
-                None
-            } else {
-                Some(tool_calls)
-            },
-            tool_call_id: None,
-            function_call: None,
-        };
-
-        // Build choice
-        let choice = ChatChoice {
-            index: 0,
-            message,
-            finish_reason: response
-                .get("stop_reason")
-                .and_then(|r| r.as_str())
-                .map(Self::parse_anthropic_stop_reason),
-            logprobs: None,
-        };
-
-        let usage = response.get("usage").map(usage::build_usage);
-
-        Ok(ChatResponse {
-            id,
-            object: "chat.completion".to_string(),
-            created,
-            model,
-            choices: vec![choice],
-            usage,
-            system_fingerprint: None,
-        })
-    }
 }
 
+mod response;
 mod usage;
 
+#[cfg(test)]
+mod compatible_tests;
 #[cfg(test)]
 mod tests;

@@ -51,6 +51,7 @@ pub async fn create_provider(
         timeout,
         max_retries,
         settings,
+        models,
         ..
     } = config;
 
@@ -138,6 +139,12 @@ pub async fn create_provider(
     }
     factory_config.insert("timeout".to_string(), Value::Number(timeout.into()));
     factory_config.insert("max_retries".to_string(), Value::Number(max_retries.into()));
+    if !models.is_empty() {
+        factory_config.insert(
+            "models".to_string(),
+            Value::Array(models.into_iter().map(Value::String).collect()),
+        );
+    }
 
     for (key, value) in settings {
         factory_config.entry(key).or_insert(value);

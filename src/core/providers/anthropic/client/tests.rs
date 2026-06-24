@@ -1,6 +1,7 @@
 use super::*;
 use crate::core::providers::anthropic::config::AnthropicConfig;
 use crate::core::types::message::MessageContent;
+use crate::core::types::thinking::ThinkingContent;
 
 // ==================== Client Creation Tests ====================
 
@@ -303,7 +304,9 @@ fn test_anthropic_transform_messages_preserves_assistant_text_with_tool_use() {
         audio: None,
     }];
 
-    let transformed = client.transform_messages(messages, model_spec).unwrap();
+    let transformed = client
+        .transform_messages(messages, Some(model_spec))
+        .unwrap();
     assert_eq!(transformed[0]["role"], "assistant");
     let content = transformed[0]["content"].as_array().unwrap();
     assert_eq!(content[0]["type"], "text");
@@ -333,7 +336,9 @@ fn test_anthropic_transform_messages_tool_role_to_tool_result() {
         audio: None,
     }];
 
-    let transformed = client.transform_messages(messages, model_spec).unwrap();
+    let transformed = client
+        .transform_messages(messages, Some(model_spec))
+        .unwrap();
     assert_eq!(transformed[0]["role"], "user");
     let content = transformed[0]["content"].as_array().unwrap();
     assert_eq!(content[0]["type"], "tool_result");
@@ -699,6 +704,67 @@ fn test_transform_chat_request_allows_n_equal_one_and_ignores_unsupported_params
     // Ignored params must not leak into the Anthropic request body
     assert!(result.get("frequency_penalty").is_none());
     assert!(result.get("seed").is_none());
+}
+
+#[test]
+fn test_transform_chat_request_allows_unknown_model_when_configured() {
+    let config = AnthropicConfig::new_test("test-key")
+        .with_base_url("https://token-plan-sgp.xiaomimimo.com/anthropic")
+        .with_allow_unknown_models(true)
+        .with_configured_models(vec!["mimo-v2.5".to_string()]);
+    let client = match AnthropicClient::new(config) {
+        Ok(client) => client,
+        Err(err) => panic!("client should build: {err}"),
+    };
+
+    let request = ChatRequest::new("mimo-v2.5").add_user_message("Hello");
+
+    let result = match client.transform_chat_request(&request) {
+        Ok(result) => result,
+        Err(err) => panic!("configured compatible model should accept image input: {err}"),
+    };
+    assert_eq!(result["model"], "mimo-v2.5");
+    assert_eq!(result["max_tokens"], 4096);
+}
+
+#[test]
+fn test_transform_chat_request_allows_configured_unknown_model_image_input() {
+    let config = AnthropicConfig::new_test("test-key")
+        .with_base_url("https://token-plan-sgp.xiaomimimo.com/anthropic")
+        .with_allow_unknown_models(true)
+        .with_configured_models(vec!["mimo-v2.5".to_string()])
+        .with_configured_multimodal_models(vec!["mimo-v2.5".to_string()]);
+    let client = AnthropicClient::new(config).unwrap();
+
+    let request = ChatRequest::new("mimo-v2.5").add_message(
+        crate::core::types::message::MessageRole::User,
+        crate::core::types::message::MessageContent::Parts(vec![
+            crate::core::types::content::ContentPart::Text {
+                text: "Describe this image".to_string(),
+            },
+            crate::core::types::content::ContentPart::ImageUrl {
+                image_url: crate::core::types::content::ImageUrl {
+                    url: "data:image/png;base64,ZmFrZQ==".to_string(),
+                    detail: None,
+                },
+            },
+        ]),
+    );
+
+    let result = client.transform_chat_request(&request).unwrap();
+    assert_eq!(result["model"], "mimo-v2.5");
+    assert_eq!(result["messages"][0]["content"][1]["type"], "image");
+}
+
+#[test]
+fn test_transform_chat_request_rejects_unknown_model_by_default() {
+    let config = AnthropicConfig::new_test("test-key");
+    let client = AnthropicClient::new(config).unwrap();
+
+    let request = ChatRequest::new("mimo-v2.5").add_user_message("Hello");
+
+    let error = client.transform_chat_request(&request).unwrap_err();
+    assert!(format!("{error}").contains("Unsupported model: mimo-v2.5"));
 }
 
 #[test]

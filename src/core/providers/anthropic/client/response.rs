@@ -1,0 +1,159 @@
+use serde_json::Value;
+
+use crate::core::providers::unified_provider::ProviderError;
+use crate::core::types::{
+    chat::ChatMessage,
+    message::{MessageContent, MessageRole},
+    responses::{ChatChoice, ChatResponse, FinishReason},
+    thinking::ThinkingContent,
+    tools::{FunctionCall, ToolCall},
+};
+
+use super::{AnthropicClient, anthropic_parse_error, usage};
+
+fn parse_anthropic_stop_reason(reason: &str) -> FinishReason {
+    match reason {
+        "end_turn" => FinishReason::Stop,
+        "max_tokens" => FinishReason::Length,
+        "tool_use" => FinishReason::ToolCalls,
+        "stop_sequence" => FinishReason::StopSequence,
+        "refusal" => FinishReason::Refusal,
+        "pause_turn" => FinishReason::PauseTurn,
+        _ => FinishReason::Stop,
+    }
+}
+
+impl AnthropicClient {
+    /// Response
+    pub(super) fn transform_chat_response(
+        &self,
+        response: Value,
+    ) -> Result<ChatResponse, ProviderError> {
+        // Extract basic information
+        let id = response
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        let model = response
+            .get("model")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        let created = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+
+        // Handle content
+        let content = response
+            .get("content")
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| anthropic_parse_error("Missing or invalid content array"))?;
+
+        let mut message_content = String::new();
+        let mut thinking_parts = Vec::new();
+        let mut thinking_signature = None;
+        let mut has_redacted_thinking = false;
+        let mut tool_calls = Vec::new();
+
+        for item in content {
+            match item.get("type").and_then(|t| t.as_str()) {
+                Some("text") => {
+                    if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
+                        message_content.push_str(text);
+                    }
+                }
+                Some("tool_use") => {
+                    if let (Some(id), Some(name), Some(input)) = (
+                        item.get("id").and_then(|v| v.as_str()),
+                        item.get("name").and_then(|v| v.as_str()),
+                        item.get("input"),
+                    ) {
+                        tool_calls.push(ToolCall {
+                            id: id.to_string(),
+                            tool_type: "function".to_string(),
+                            function: FunctionCall {
+                                name: name.to_string(),
+                                arguments: input.to_string(),
+                            },
+                        });
+                    }
+                }
+                Some("thinking") => {
+                    if let Some(thinking) = item.get("thinking").and_then(|t| t.as_str()) {
+                        thinking_parts.push(thinking.to_string());
+                    }
+                    if let Some(signature) = item.get("signature").and_then(|s| s.as_str()) {
+                        thinking_signature = Some(signature.to_string());
+                    }
+                }
+                Some("redacted_thinking") => {
+                    has_redacted_thinking = true;
+                }
+                Some("refusal") => {
+                    if let Some(refusal) = item.get("refusal").and_then(|r| r.as_str()) {
+                        message_content.push_str(refusal);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        let thinking = if !thinking_parts.is_empty() {
+            Some(ThinkingContent::Text {
+                text: thinking_parts.join(""),
+                signature: thinking_signature,
+            })
+        } else if has_redacted_thinking {
+            Some(ThinkingContent::Redacted { token_count: None })
+        } else {
+            None
+        };
+
+        // Build message
+        let message = ChatMessage {
+            role: MessageRole::Assistant,
+            content: if message_content.is_empty() {
+                None
+            } else {
+                Some(MessageContent::Text(message_content))
+            },
+            thinking,
+            audio: None,
+            name: None,
+            tool_calls: if tool_calls.is_empty() {
+                None
+            } else {
+                Some(tool_calls)
+            },
+            tool_call_id: None,
+            function_call: None,
+        };
+
+        // Build choice
+        let choice = ChatChoice {
+            index: 0,
+            message,
+            finish_reason: response
+                .get("stop_reason")
+                .and_then(|r| r.as_str())
+                .map(parse_anthropic_stop_reason),
+            logprobs: None,
+        };
+
+        let usage = response.get("usage").map(usage::build_usage);
+
+        Ok(ChatResponse {
+            id,
+            object: "chat.completion".to_string(),
+            created,
+            model,
+            choices: vec![choice],
+            usage,
+            system_fingerprint: None,
+        })
+    }
+}

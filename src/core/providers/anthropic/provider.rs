@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 use crate::core::providers::base::GlobalPoolManager;
 use crate::core::providers::unified_provider::ProviderError;
+use crate::core::traits::provider::ProviderConfig as _;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use crate::core::types::{
     chat::ChatRequest,
@@ -25,6 +26,8 @@ use super::config::AnthropicConfig;
 use super::models::{ModelFeature, get_anthropic_registry};
 use super::streaming::AnthropicStream;
 use crate::core::traits::error_mapper::trait_def::ErrorMapper;
+
+const COMPATIBLE_MODEL_MAX_OUTPUT_TOKENS: u32 = 128_000;
 
 /// Anthropic Provider - unified implementation
 #[derive(Debug, Clone)]
@@ -43,12 +46,36 @@ impl AnthropicProvider {
         let _pool_manager = Arc::new(GlobalPoolManager::new()?);
 
         // Get supported models
-        let registry = get_anthropic_registry();
-        let supported_models = registry
-            .list_models()
-            .into_iter()
-            .map(|spec| spec.model_info.clone())
-            .collect();
+        let supported_models = if config.uses_compatible_model_allow_list() {
+            config
+                .configured_models
+                .iter()
+                .map(|model| ModelInfo {
+                    id: model.clone(),
+                    name: model.clone(),
+                    provider: "anthropic".to_string(),
+                    max_context_length: 1_000_000,
+                    max_output_length: Some(COMPATIBLE_MODEL_MAX_OUTPUT_TOKENS),
+                    supports_streaming: true,
+                    supports_tools: false,
+                    supports_multimodal: config.allows_unknown_model_image_input(model),
+                    input_cost_per_1k_tokens: None,
+                    output_cost_per_1k_tokens: None,
+                    currency: "USD".to_string(),
+                    capabilities: vec![ProviderCapability::ChatCompletion],
+                    created_at: None,
+                    updated_at: None,
+                    metadata: HashMap::new(),
+                })
+                .collect()
+        } else {
+            let registry = get_anthropic_registry();
+            registry
+                .list_models()
+                .into_iter()
+                .map(|spec| spec.model_info.clone())
+                .collect()
+        };
 
         Ok(Self {
             client,
@@ -60,12 +87,87 @@ impl AnthropicProvider {
     fn validate_request(&self, request: &ChatRequest) -> Result<(), ProviderError> {
         let registry = get_anthropic_registry();
 
-        let model_spec = registry.get_model_spec(&request.model).ok_or_else(|| {
-            ProviderError::invalid_request(
+        let model_spec = if self.client.uses_compatible_model_allow_list() {
+            if !self.client.allows_unknown_model(&request.model) {
+                return Err(ProviderError::invalid_request(
+                    "anthropic",
+                    format!("Unsupported model: {}", request.model),
+                ));
+            }
+            None
+        } else {
+            registry.get_model_spec(&request.model)
+        };
+
+        let Some(model_spec) = model_spec else {
+            if !self.client.allows_unknown_model(&request.model) {
+                return Err(ProviderError::invalid_request(
+                    "anthropic",
+                    format!("Unsupported model: {}", request.model),
+                ));
+            }
+
+            crate::core::providers::base::validate_chat_request_common(
                 "anthropic",
-                format!("Unsupported model: {}", request.model),
-            )
-        })?;
+                request,
+                COMPATIBLE_MODEL_MAX_OUTPUT_TOKENS,
+            )?;
+
+            if request
+                .tools
+                .as_ref()
+                .is_some_and(|tools| !tools.is_empty())
+                || AnthropicClient::has_anthropic_tools_extra_param(request)
+                || request.functions.as_ref().is_some_and(|f| !f.is_empty())
+                || request.function_call.is_some()
+            {
+                return Err(ProviderError::not_supported(
+                    "anthropic",
+                    format!(
+                        "Unknown model {} cannot declare tool calling support",
+                        request.model
+                    ),
+                ));
+            }
+
+            if AnthropicClient::has_unsupported_unknown_model_content(request) {
+                return Err(ProviderError::not_supported(
+                    "anthropic",
+                    format!(
+                        "Unknown model {} only supports text and image content",
+                        request.model
+                    ),
+                ));
+            }
+
+            if AnthropicClient::has_image_content(request)
+                && !self.client.allows_unknown_model_image_input(&request.model)
+            {
+                return Err(ProviderError::not_supported(
+                    "anthropic",
+                    format!(
+                        "Unknown model {} does not support image input",
+                        request.model
+                    ),
+                ));
+            }
+
+            if request
+                .thinking
+                .as_ref()
+                .is_some_and(|thinking| thinking.enabled)
+            {
+                return Err(ProviderError::not_supported(
+                    "anthropic",
+                    format!(
+                        "Unknown model {} cannot declare thinking support",
+                        request.model
+                    ),
+                ));
+            }
+
+            return Ok(());
+        };
 
         // Common validation: empty messages + max_tokens
         crate::core::providers::base::validate_chat_request_common(
@@ -75,15 +177,7 @@ impl AnthropicProvider {
         )?;
 
         // Check multimodal content
-        let has_multimodal_content = request.messages.iter().any(|msg| {
-            if let Some(crate::core::types::message::MessageContent::Parts(parts)) = &msg.content {
-                parts.iter().any(|part| {
-                    !matches!(part, crate::core::types::content::ContentPart::Text { .. })
-                })
-            } else {
-                false
-            }
-        });
+        let has_multimodal_content = AnthropicClient::has_multimodal_content(request);
 
         if has_multimodal_content
             && !model_spec
@@ -100,7 +194,12 @@ impl AnthropicProvider {
         }
 
         // Check tool calling support
-        if request.tools.is_some() && !model_spec.features.contains(&ModelFeature::ToolCalling) {
+        if request
+            .tools
+            .as_ref()
+            .is_some_and(|tools| !tools.is_empty())
+            && !model_spec.features.contains(&ModelFeature::ToolCalling)
+        {
             return Err(ProviderError::not_supported(
                 "anthropic",
                 format!("Model {} does not support tool calling", request.model),
@@ -130,6 +229,15 @@ impl LLMProvider for AnthropicProvider {
 
     fn models(&self) -> &[ModelInfo] {
         &self.supported_models
+    }
+
+    fn supports_model(&self, model: &str) -> bool {
+        if self.client.uses_compatible_model_allow_list() {
+            return self.client.allows_unknown_model(model);
+        }
+
+        self.supported_models.iter().any(|info| info.id == model)
+            || self.client.allows_unknown_model(model)
     }
 
     fn get_supported_openai_params(&self, _model: &str) -> &'static [&'static str] {
@@ -205,7 +313,9 @@ impl LLMProvider for AnthropicProvider {
             anthropic_request["stream"] = Value::Bool(request.stream);
         }
 
-        if let Some(tools) = request.tools {
+        if let Some(tools) = request.tools
+            && !tools.is_empty()
+        {
             anthropic_request["tools"] = serde_json::to_value(tools)?;
         }
 
@@ -249,13 +359,10 @@ impl LLMProvider for AnthropicProvider {
         self.validate_request(&request)?;
 
         let registry = get_anthropic_registry();
-        let model_spec = registry.get_model_spec(&request.model).ok_or_else(|| {
-            ProviderError::not_supported("anthropic", format!("Unknown model: {}", request.model))
-        })?;
-
-        if !model_spec
-            .features
-            .contains(&ModelFeature::StreamingSupport)
+        if let Some(model_spec) = registry.get_model_spec(&request.model)
+            && !model_spec
+                .features
+                .contains(&ModelFeature::StreamingSupport)
         {
             return Err(ProviderError::not_supported(
                 "anthropic",
@@ -270,8 +377,16 @@ impl LLMProvider for AnthropicProvider {
     }
 
     async fn health_check(&self) -> HealthStatus {
+        let health_check_model = if self.client.uses_compatible_model_allow_list() {
+            self.supported_models.first().map(|model| model.id.clone())
+        } else {
+            Some("claude-3-haiku-20240307".to_string())
+        };
+        let Some(model) = health_check_model else {
+            return HealthStatus::Unhealthy;
+        };
         let test_request = ChatRequest {
-            model: "claude-3-haiku-20240307".to_string(),
+            model,
             messages: vec![crate::core::types::chat::ChatMessage {
                 role: crate::core::types::message::MessageRole::User,
                 content: Some(crate::core::types::message::MessageContent::Text(
@@ -366,6 +481,9 @@ pub fn create_anthropic_provider(
 /// Create
 pub fn create_anthropic_provider_from_env() -> Result<AnthropicProvider, ProviderError> {
     let config = AnthropicConfig::from_env()?;
+    config
+        .validate()
+        .map_err(|e| ProviderError::configuration("anthropic", e))?;
     AnthropicProvider::new(config)
 }
 
@@ -409,5 +527,274 @@ mod tests {
         assert!(provider.supports_model("claude-3-5-sonnet-20241022"));
         assert!(provider.supports_model("claude-3-haiku-20240307"));
         assert!(!provider.supports_model("gpt-4"));
+    }
+
+    #[test]
+    fn configured_unknown_models_are_visible_to_support_checks() {
+        let config = AnthropicConfig::new_test("test-key")
+            .with_base_url("https://token-plan-sgp.xiaomimimo.com/anthropic")
+            .with_allow_unknown_models(true)
+            .with_configured_models(vec!["mimo-v2.5".to_string()])
+            .with_configured_multimodal_models(vec!["mimo-v2.5".to_string()]);
+        let provider = match AnthropicProvider::new(config) {
+            Ok(provider) => provider,
+            Err(err) => panic!("provider should build: {err}"),
+        };
+
+        assert!(provider.supports_model("mimo-v2.5"));
+        assert!(!provider.supports_model("unlisted-compatible-model"));
+        assert!(!provider.supports_model("claude-3-5-sonnet-20241022"));
+        assert_eq!(provider.models().len(), 1);
+        assert_eq!(provider.models()[0].id, "mimo-v2.5");
+    }
+
+    #[tokio::test]
+    async fn unknown_models_are_rejected_by_default() {
+        let config = AnthropicConfig::new_test("test-key");
+        let provider = AnthropicProvider::new(config).unwrap();
+        let request = ChatRequest::new("mimo-v2.5").add_user_message("Hello");
+
+        let err = provider
+            .transform_request(request, RequestContext::new())
+            .await
+            .expect_err("unknown model should be rejected without explicit opt-in");
+
+        assert!(format!("{err}").contains("Unsupported model: mimo-v2.5"));
+    }
+
+    #[tokio::test]
+    async fn allow_unknown_models_accepts_anthropic_compatible_model_ids() {
+        let config = AnthropicConfig::new_test("test-key")
+            .with_base_url("https://token-plan-sgp.xiaomimimo.com/anthropic")
+            .with_allow_unknown_models(true)
+            .with_configured_models(vec!["mimo-v2.5".to_string()])
+            .with_configured_multimodal_models(vec!["mimo-v2.5".to_string()]);
+        let provider = match AnthropicProvider::new(config) {
+            Ok(provider) => provider,
+            Err(err) => panic!("provider should build: {err}"),
+        };
+        let request = ChatRequest::new("mimo-v2.5")
+            .add_user_message("Reply with exactly: anthropic-compatible-ok");
+
+        let transformed = provider
+            .transform_request(request, RequestContext::new())
+            .await
+            .expect("explicit opt-in should allow non-Anthropic model IDs");
+
+        assert_eq!(transformed["model"], "mimo-v2.5");
+    }
+
+    #[tokio::test]
+    async fn compatible_allow_list_rejects_registry_model_ids_not_configured() {
+        let config = AnthropicConfig::new_test("test-key")
+            .with_base_url("https://token-plan-sgp.xiaomimimo.com/anthropic")
+            .with_allow_unknown_models(true)
+            .with_configured_models(vec!["mimo-v2.5".to_string()]);
+        let provider = match AnthropicProvider::new(config) {
+            Ok(provider) => provider,
+            Err(err) => panic!("provider should build: {err}"),
+        };
+        let request = ChatRequest::new("claude-3-haiku-20240307").add_user_message("Hello");
+
+        let err = match provider
+            .transform_request(request, RequestContext::new())
+            .await
+        {
+            Ok(_) => panic!("compatible allow-list must reject unlisted registry model IDs"),
+            Err(err) => err,
+        };
+
+        assert!(format!("{err}").contains("Unsupported model: claude-3-haiku-20240307"));
+    }
+
+    #[tokio::test]
+    async fn compatible_models_enforce_configured_output_limit() {
+        let config = AnthropicConfig::new_test("test-key")
+            .with_base_url("https://token-plan-sgp.xiaomimimo.com/anthropic")
+            .with_allow_unknown_models(true)
+            .with_configured_models(vec!["mimo-v2.5".to_string()]);
+        let provider = match AnthropicProvider::new(config) {
+            Ok(provider) => provider,
+            Err(err) => panic!("provider should build: {err}"),
+        };
+        let request = ChatRequest::new("mimo-v2.5")
+            .add_user_message("Hello")
+            .with_max_tokens(COMPATIBLE_MODEL_MAX_OUTPUT_TOKENS + 1);
+
+        let err = match provider
+            .transform_request(request, RequestContext::new())
+            .await
+        {
+            Ok(_) => panic!("compatible models must enforce max output tokens"),
+            Err(err) => err,
+        };
+
+        assert!(format!("{err}").contains("max_tokens 128001 exceeds model limit of 128000"));
+    }
+
+    #[tokio::test]
+    async fn allow_listed_unknown_models_accept_base64_images() {
+        use crate::core::types::{
+            content::{ContentPart, ImageUrl},
+            message::{MessageContent, MessageRole},
+        };
+
+        let config = AnthropicConfig::new_test("test-key")
+            .with_base_url("https://token-plan-sgp.xiaomimimo.com/anthropic")
+            .with_allow_unknown_models(true)
+            .with_configured_models(vec!["mimo-v2.5".to_string()])
+            .with_configured_multimodal_models(vec!["mimo-v2.5".to_string()]);
+        let provider = match AnthropicProvider::new(config) {
+            Ok(provider) => provider,
+            Err(err) => panic!("provider should build: {err}"),
+        };
+        let request = ChatRequest {
+            model: "mimo-v2.5".to_string(),
+            messages: vec![crate::core::types::chat::ChatMessage {
+                role: MessageRole::User,
+                content: Some(MessageContent::Parts(vec![
+                    ContentPart::Text {
+                        text: "Describe this image".to_string(),
+                    },
+                    ContentPart::ImageUrl {
+                        image_url: ImageUrl {
+                            url: "data:image/png;base64,aGVsbG8=".to_string(),
+                            detail: None,
+                        },
+                    },
+                ])),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let transformed = match provider
+            .transform_request(request, RequestContext::new())
+            .await
+        {
+            Ok(transformed) => transformed,
+            Err(err) => {
+                panic!("explicit compatible model should preserve base64 image input: {err}")
+            }
+        };
+
+        assert_eq!(transformed["model"], "mimo-v2.5");
+        assert_eq!(
+            transformed["messages"][0]["content"][1]["type"],
+            "image_url"
+        );
+    }
+
+    #[tokio::test]
+    async fn text_only_unknown_models_reject_image_input() {
+        use crate::core::types::{
+            content::{ContentPart, ImageUrl},
+            message::{MessageContent, MessageRole},
+        };
+
+        let config = AnthropicConfig::new_test("test-key")
+            .with_base_url("https://token-plan-sgp.xiaomimimo.com/anthropic")
+            .with_allow_unknown_models(true)
+            .with_configured_models(vec!["mimo-v2.5-pro".to_string()]);
+        let provider = match AnthropicProvider::new(config) {
+            Ok(provider) => provider,
+            Err(err) => panic!("provider should build: {err}"),
+        };
+        let request = ChatRequest {
+            model: "mimo-v2.5-pro".to_string(),
+            messages: vec![crate::core::types::chat::ChatMessage {
+                role: MessageRole::User,
+                content: Some(MessageContent::Parts(vec![
+                    ContentPart::Text {
+                        text: "Describe this image".to_string(),
+                    },
+                    ContentPart::ImageUrl {
+                        image_url: ImageUrl {
+                            url: "data:image/png;base64,aGVsbG8=".to_string(),
+                            detail: None,
+                        },
+                    },
+                ])),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let err = match provider
+            .transform_request(request, RequestContext::new())
+            .await
+        {
+            Ok(_) => panic!("text-only compatible model must reject image input"),
+            Err(err) => err,
+        };
+
+        assert!(format!("{err}").contains("does not support image input"));
+    }
+
+    #[tokio::test]
+    async fn unknown_models_reject_anthropic_tools_extra_param() {
+        let config = AnthropicConfig::new_test("test-key")
+            .with_base_url("https://token-plan-sgp.xiaomimimo.com/anthropic")
+            .with_allow_unknown_models(true)
+            .with_configured_models(vec!["mimo-v2.5".to_string()]);
+        let provider = match AnthropicProvider::new(config) {
+            Ok(provider) => provider,
+            Err(err) => panic!("provider should build: {err}"),
+        };
+        let mut request = ChatRequest::new("mimo-v2.5").add_user_message("Hello");
+        request.extra_params.insert(
+            "anthropic_tools".to_string(),
+            serde_json::json!([{"type": "computer_20241022", "name": "computer"}]),
+        );
+
+        let err = match provider
+            .transform_request(request, RequestContext::new())
+            .await
+        {
+            Ok(_) => panic!("unknown models must fail closed for Anthropic built-in tools"),
+            Err(err) => err,
+        };
+
+        assert!(format!("{err}").contains("tool calling support"));
+    }
+
+    #[tokio::test]
+    async fn unknown_models_reject_message_level_tool_blocks() {
+        use crate::core::types::{
+            content::ContentPart,
+            message::{MessageContent, MessageRole},
+        };
+
+        let config = AnthropicConfig::new_test("test-key")
+            .with_base_url("https://token-plan-sgp.xiaomimimo.com/anthropic")
+            .with_allow_unknown_models(true)
+            .with_configured_models(vec!["mimo-v2.5".to_string()]);
+        let provider = match AnthropicProvider::new(config) {
+            Ok(provider) => provider,
+            Err(err) => panic!("provider should build: {err}"),
+        };
+        let request = ChatRequest {
+            model: "mimo-v2.5".to_string(),
+            messages: vec![crate::core::types::chat::ChatMessage {
+                role: MessageRole::User,
+                content: Some(MessageContent::Parts(vec![ContentPart::ToolUse {
+                    id: "toolu_1".to_string(),
+                    name: "computer".to_string(),
+                    input: serde_json::json!({}),
+                }])),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let err = match provider
+            .transform_request(request, RequestContext::new())
+            .await
+        {
+            Ok(_) => panic!("unknown models must reject message-level tool blocks"),
+            Err(err) => err,
+        };
+
+        assert!(format!("{err}").contains("only supports text and image content"));
     }
 }

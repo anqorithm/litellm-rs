@@ -4,6 +4,11 @@ LiteLLM-RS routes Xiaomi MiMo through the OpenAI-compatible provider catalog.
 The official pay-as-you-go OpenAI-compatible API base is
 `https://api.xiaomimimo.com/v1`.
 
+Token Plan uses region-specific bases. For Singapore, use
+`https://token-plan-sgp.xiaomimimo.com/v1` for OpenAI-compatible chat
+completions and `https://token-plan-sgp.xiaomimimo.com/anthropic` for the
+Anthropic-compatible messages API.
+
 ## Models
 
 | Model | Context | Max Output | Pricing per 1M tokens | Notes |
@@ -33,6 +38,41 @@ providers:
     timeout: 30
     max_retries: 3
 ```
+
+For Singapore Token Plan OpenAI-compatible routing, override the base URL:
+
+```yaml
+providers:
+  - name: xiaomi_mimo_token_plan_sgp
+    provider_type: xiaomi_mimo
+    api_key: "${MIMO_API_KEY}"
+    base_url: "https://token-plan-sgp.xiaomimimo.com/v1"
+    models:
+      - "mimo-v2.5"
+      - "mimo-v2.5-pro"
+```
+
+For the Anthropic-compatible Token Plan endpoint, configure the native
+Anthropic provider with an explicit compatible-model opt-in:
+
+```yaml
+providers:
+  - name: xiaomi_mimo_token_plan_sgp_anthropic
+    provider_type: anthropic
+    api_key: "${MIMO_API_KEY}"
+    base_url: "https://token-plan-sgp.xiaomimimo.com/anthropic"
+    settings:
+      allow_unknown_models: true
+      multimodal_models:
+        - "mimo-v2.5"
+    models:
+      - "mimo-v2.5"
+      - "mimo-v2.5-pro"
+```
+
+`allow_unknown_models` is required because MiMo model IDs are not Claude model
+IDs. It keeps first-party Anthropic providers strict by default while allowing
+explicit Anthropic-compatible upstreams.
 
 ## Usage
 

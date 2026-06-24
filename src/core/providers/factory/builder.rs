@@ -9,7 +9,6 @@ use super::super::unified_provider::ProviderError;
 use super::super::{anthropic, bedrock, cloudflare, macros, mistral, openai, openai_like};
 #[cfg(feature = "providers-extra")]
 use super::super::{azure, azure_ai, vertex_ai};
-#[cfg(any(feature = "providers-extra", feature = "providers-extended"))]
 use crate::core::traits::provider::ProviderConfig as _;
 use std::env;
 #[cfg(feature = "providers-extra")]
@@ -338,6 +337,28 @@ pub(super) fn build_anthropic_config_from_factory(
     if let Some(enable_experimental) = config_bool(config, "enable_experimental") {
         anthropic_config.enable_experimental = enable_experimental;
     }
+    if let Some(allow_unknown_models) = config_bool(config, "allow_unknown_models") {
+        anthropic_config.allow_unknown_models = allow_unknown_models;
+    }
+    if let Some(models) = config.get("models").and_then(|value| value.as_array()) {
+        anthropic_config.configured_models = models
+            .iter()
+            .filter_map(|value| value.as_str().map(str::to_string))
+            .collect();
+    }
+    if let Some(models) = config
+        .get("multimodal_models")
+        .and_then(|value| value.as_array())
+    {
+        anthropic_config.configured_multimodal_models = models
+            .iter()
+            .filter_map(|value| value.as_str().map(str::to_string))
+            .collect();
+    }
+
+    anthropic_config
+        .validate()
+        .map_err(|e| ProviderError::configuration("anthropic", e))?;
 
     Ok(anthropic_config)
 }

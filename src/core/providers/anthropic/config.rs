@@ -37,6 +37,12 @@ pub struct AnthropicConfig {
     pub enable_computer_use: bool,
     /// Enable experimental features
     pub enable_experimental: bool,
+    /// Allow Anthropic-compatible upstreams to use non-Anthropic model IDs.
+    pub allow_unknown_models: bool,
+    /// Explicit non-Anthropic model IDs allowed for compatible upstreams.
+    pub configured_models: Vec<String>,
+    /// Explicit compatible model IDs allowed to receive image input.
+    pub configured_multimodal_models: Vec<String>,
 }
 
 impl Default for AnthropicConfig {
@@ -55,6 +61,9 @@ impl Default for AnthropicConfig {
             enable_cache_control: true,
             enable_computer_use: false, // Default disabled
             enable_experimental: false,
+            allow_unknown_models: false,
+            configured_models: Vec::new(),
+            configured_multimodal_models: Vec::new(),
         }
     }
 }
@@ -128,6 +137,24 @@ impl AnthropicConfig {
             config.enable_experimental = experimental.parse().unwrap_or(false);
         }
 
+        if let Ok(allow_unknown_models) = env::var("ANTHROPIC_ALLOW_UNKNOWN_MODELS") {
+            config.allow_unknown_models = allow_unknown_models.parse().unwrap_or(false);
+        }
+        if let Some(models) = env_model_list("ANTHROPIC_MODELS")
+            .or_else(|| env_model_list("ANTHROPIC_CONFIGURED_MODELS"))
+        {
+            config.configured_models = models;
+        }
+        if let Some(models) = env_model_list("ANTHROPIC_MULTIMODAL_MODELS")
+            .or_else(|| env_model_list("ANTHROPIC_CONFIGURED_MULTIMODAL_MODELS"))
+        {
+            config.configured_multimodal_models = models;
+        }
+
+        config
+            .validate()
+            .map_err(|e| ProviderError::configuration("anthropic", e))?;
+
         Ok(config)
     }
 
@@ -191,6 +218,57 @@ impl AnthropicConfig {
         self
     }
 
+    /// Allow Anthropic-compatible upstreams to use non-Anthropic model IDs.
+    pub fn with_allow_unknown_models(mut self, enabled: bool) -> Self {
+        self.allow_unknown_models = enabled;
+        self
+    }
+
+    /// Set explicit model IDs for Anthropic-compatible upstreams.
+    pub fn with_configured_models(mut self, models: Vec<String>) -> Self {
+        self.configured_models = models;
+        self
+    }
+
+    /// Set explicit compatible model IDs that support image input.
+    pub fn with_configured_multimodal_models(mut self, models: Vec<String>) -> Self {
+        self.configured_multimodal_models = models;
+        self
+    }
+
+    /// Check if a non-Anthropic model ID is explicitly allowed.
+    pub fn allows_unknown_model(&self, model: &str) -> bool {
+        self.allow_unknown_models
+            && self.base_url.trim_end_matches('/') != "https://api.anthropic.com"
+            && self
+                .configured_models
+                .iter()
+                .any(|configured| configured == model)
+    }
+
+    pub fn uses_compatible_model_allow_list(&self) -> bool {
+        self.allow_unknown_models
+            && self.base_url.trim_end_matches('/') != "https://api.anthropic.com"
+    }
+
+    pub fn allows_unknown_model_image_input(&self, model: &str) -> bool {
+        self.enable_multimodal
+            && self.allows_unknown_model(model)
+            && self
+                .configured_multimodal_models
+                .iter()
+                .any(|configured| configured == model)
+    }
+
+    pub fn has_unknown_multimodal_model_outside_allow_list(&self) -> bool {
+        self.configured_multimodal_models.iter().any(|model| {
+            !self
+                .configured_models
+                .iter()
+                .any(|configured| configured == model)
+        })
+    }
+
     /// Get
     pub fn get_api_url(&self, endpoint: &str) -> String {
         format!("{}{}", self.base_url.trim_end_matches('/'), endpoint)
@@ -215,13 +293,35 @@ impl ProviderConfig for AnthropicConfig {
             return Err("API key cannot be empty".to_string());
         }
 
-        if !api_key.starts_with("sk-ant-") {
+        let first_party_anthropic =
+            self.base_url.trim_end_matches('/') == "https://api.anthropic.com";
+        let custom_anthropic_base = !first_party_anthropic;
+        let compatible_unknown_models = self.allow_unknown_models && custom_anthropic_base;
+
+        if self.allow_unknown_models && first_party_anthropic {
+            return Err(
+                "allow_unknown_models requires a non-Anthropic compatible base URL".to_string(),
+            );
+        }
+
+        if compatible_unknown_models && self.configured_models.is_empty() {
+            return Err("allow_unknown_models requires an explicit models allow-list".to_string());
+        }
+
+        if compatible_unknown_models && self.has_unknown_multimodal_model_outside_allow_list() {
+            return Err(
+                "multimodal_models must be included in the explicit models allow-list".to_string(),
+            );
+        }
+
+        if !custom_anthropic_base && !api_key.starts_with("sk-ant-") {
             return Err(
                 "Invalid Anthropic API key format. Keys should start with 'sk-ant-'".to_string(),
             );
         }
 
-        if api_key.len() < 20 {
+        let minimum_key_len = if custom_anthropic_base { 8 } else { 20 };
+        if api_key.len() < minimum_key_len {
             return Err("API key appears to be too short".to_string());
         }
 
@@ -265,6 +365,16 @@ impl ProviderConfig for AnthropicConfig {
     fn max_retries(&self) -> u32 {
         self.max_retries
     }
+}
+
+fn env_model_list(name: &str) -> Option<Vec<String>> {
+    env::var(name).ok().map(|raw| {
+        raw.split(',')
+            .map(str::trim)
+            .filter(|model| !model.is_empty())
+            .map(str::to_string)
+            .collect()
+    })
 }
 
 /// Configuration
@@ -315,6 +425,24 @@ impl AnthropicConfigBuilder {
     pub fn experimental(mut self, enabled: bool) -> Self {
         self.config.enable_experimental = enabled;
         self.config.enable_computer_use = enabled; // Computer tools are part of experimental features
+        self
+    }
+
+    /// Allow Anthropic-compatible upstreams to use non-Anthropic model IDs.
+    pub fn allow_unknown_models(mut self, enabled: bool) -> Self {
+        self.config.allow_unknown_models = enabled;
+        self
+    }
+
+    /// Set explicit model IDs for Anthropic-compatible upstreams.
+    pub fn configured_models(mut self, models: Vec<String>) -> Self {
+        self.config.configured_models = models;
+        self
+    }
+
+    /// Set explicit compatible model IDs that support image input.
+    pub fn configured_multimodal_models(mut self, models: Vec<String>) -> Self {
+        self.config.configured_multimodal_models = models;
         self
     }
 
@@ -372,12 +500,186 @@ mod tests {
             .multimodal(false)
             .build();
 
-        assert!(config.is_ok());
-        let config = config.unwrap();
+        let config = match config {
+            Ok(config) => config,
+            Err(err) => panic!("compatible upstream config should build: {err}"),
+        };
         assert_eq!(config.api_key, Some("sk-ant-test1234567890123".to_string()));
         assert_eq!(config.base_url, "https://custom.api.com");
         assert_eq!(config.request_timeout, 60);
         assert!(!config.enable_multimodal);
+    }
+
+    #[test]
+    fn test_config_builder_allows_compatible_upstream_keys() {
+        let config = AnthropicConfigBuilder::new()
+            .api_key("xiaomi-compatible-key")
+            .base_url("https://token-plan-sgp.xiaomimimo.com/anthropic")
+            .allow_unknown_models(true)
+            .configured_models(vec!["mimo-v2.5".to_string()])
+            .build();
+
+        let config = match config {
+            Ok(config) => config,
+            Err(err) => panic!("compatible upstream key should validate: {err}"),
+        };
+        assert_eq!(config.api_key.as_deref(), Some("xiaomi-compatible-key"));
+        assert!(config.allows_unknown_model("mimo-v2.5"));
+        assert!(!config.allows_unknown_model("unlisted-model"));
+    }
+
+    #[test]
+    fn test_config_builder_allows_gateway_keys_on_custom_base_without_unknown_models() {
+        let config = AnthropicConfigBuilder::new()
+            .api_key("gateway-compatible-key")
+            .base_url("https://gateway.example.com/anthropic")
+            .build();
+
+        let config = match config {
+            Ok(config) => config,
+            Err(err) => {
+                panic!("custom Anthropic-compatible base should accept gateway keys: {err}")
+            }
+        };
+        assert_eq!(config.api_key.as_deref(), Some("gateway-compatible-key"));
+        assert!(!config.allow_unknown_models);
+    }
+
+    #[test]
+    fn test_config_builder_requires_compatible_model_allow_list() {
+        let config = AnthropicConfigBuilder::new()
+            .api_key("xiaomi-compatible-key")
+            .base_url("https://token-plan-sgp.xiaomimimo.com/anthropic")
+            .allow_unknown_models(true)
+            .build();
+
+        let Err(err) = config else {
+            panic!("compatible upstreams should require explicit model IDs");
+        };
+        assert!(format!("{err}").contains("explicit models allow-list"));
+    }
+
+    #[test]
+    fn test_config_builder_rejects_multimodal_model_outside_allow_list() {
+        let config = AnthropicConfigBuilder::new()
+            .api_key("xiaomi-compatible-key")
+            .base_url("https://token-plan-sgp.xiaomimimo.com/anthropic")
+            .allow_unknown_models(true)
+            .configured_models(vec!["mimo-v2.5-pro".to_string()])
+            .configured_multimodal_models(vec!["mimo-v2.5".to_string()])
+            .build();
+
+        let Err(err) = config else {
+            panic!("compatible multimodal models should stay inside the model allow-list");
+        };
+        assert!(format!("{err}").contains("multimodal_models"));
+    }
+
+    #[test]
+    fn test_config_builder_rejects_first_party_unknown_model_opt_in() {
+        let config = AnthropicConfigBuilder::new()
+            .api_key("sk-ant-test1234567890123")
+            .allow_unknown_models(true)
+            .configured_models(vec!["mimo-v2.5".to_string()])
+            .build();
+
+        let Err(err) = config else {
+            panic!("first-party Anthropic should not accept unknown-model opt-in");
+        };
+        assert!(format!("{err}").contains("non-Anthropic compatible base URL"));
+    }
+
+    #[test]
+    fn from_env_reads_compatible_model_allow_lists() {
+        const KEYS: &[&str] = &[
+            "ANTHROPIC_API_KEY",
+            "CLAUDE_API_KEY",
+            "ANTHROPIC_BASE_URL",
+            "ANTHROPIC_ALLOW_UNKNOWN_MODELS",
+            "ANTHROPIC_MODELS",
+            "ANTHROPIC_MULTIMODAL_MODELS",
+        ];
+        let previous: Vec<_> = KEYS
+            .iter()
+            .map(|key| (*key, std::env::var(key).ok()))
+            .collect();
+
+        for key in KEYS {
+            unsafe { std::env::remove_var(key) };
+        }
+        unsafe {
+            std::env::set_var("ANTHROPIC_API_KEY", "xiaomi-compatible-key");
+            std::env::set_var(
+                "ANTHROPIC_BASE_URL",
+                "https://token-plan-sgp.xiaomimimo.com/anthropic",
+            );
+            std::env::set_var("ANTHROPIC_ALLOW_UNKNOWN_MODELS", "true");
+            std::env::set_var("ANTHROPIC_MODELS", "mimo-v2.5, mimo-v2.5-pro");
+            std::env::set_var("ANTHROPIC_MULTIMODAL_MODELS", "mimo-v2.5");
+        }
+
+        let config = AnthropicConfig::from_env()
+            .unwrap_or_else(|err| panic!("env config should parse: {err}"));
+        assert!(config.allow_unknown_models);
+        assert_eq!(
+            config.configured_models,
+            vec!["mimo-v2.5".to_string(), "mimo-v2.5-pro".to_string()]
+        );
+        assert_eq!(
+            config.configured_multimodal_models,
+            vec!["mimo-v2.5".to_string()]
+        );
+        assert!(config.validate().is_ok());
+
+        for (key, value) in previous {
+            match value {
+                Some(value) => unsafe { std::env::set_var(key, value) },
+                None => unsafe { std::env::remove_var(key) },
+            }
+        }
+    }
+
+    #[test]
+    fn from_env_rejects_compatible_opt_in_without_model_allow_list() {
+        const KEYS: &[&str] = &[
+            "ANTHROPIC_API_KEY",
+            "CLAUDE_API_KEY",
+            "ANTHROPIC_BASE_URL",
+            "ANTHROPIC_ALLOW_UNKNOWN_MODELS",
+            "ANTHROPIC_MODELS",
+            "ANTHROPIC_CONFIGURED_MODELS",
+            "ANTHROPIC_MULTIMODAL_MODELS",
+            "ANTHROPIC_CONFIGURED_MULTIMODAL_MODELS",
+        ];
+        let previous: Vec<(&str, Option<String>)> = KEYS
+            .iter()
+            .map(|key| (*key, std::env::var(key).ok()))
+            .collect();
+
+        for key in KEYS {
+            unsafe { std::env::remove_var(key) };
+        }
+        unsafe {
+            std::env::set_var("ANTHROPIC_API_KEY", "xiaomi-compatible-key");
+            std::env::set_var(
+                "ANTHROPIC_BASE_URL",
+                "https://token-plan-sgp.xiaomimimo.com/anthropic",
+            );
+            std::env::set_var("ANTHROPIC_ALLOW_UNKNOWN_MODELS", "true");
+        }
+
+        let err = match AnthropicConfig::from_env() {
+            Ok(_) => panic!("compatible env opt-in must require explicit model IDs"),
+            Err(err) => err,
+        };
+        assert!(format!("{err}").contains("explicit models allow-list"));
+
+        for (key, value) in previous {
+            match value {
+                Some(value) => unsafe { std::env::set_var(key, value) },
+                None => unsafe { std::env::remove_var(key) },
+            }
+        }
     }
 
     #[test]

@@ -122,7 +122,10 @@ fn test_build_anthropic_config_from_factory_maps_optional_fields() {
         "enable_multimodal": false,
         "enable_cache_control": false,
         "enable_computer_use": true,
-        "enable_experimental": true
+        "enable_experimental": true,
+        "allow_unknown_models": true,
+        "models": ["mimo-v2.5", "mimo-v2.5-pro"],
+        "multimodal_models": ["mimo-v2.5"]
     });
 
     let anthropic_config = build_anthropic_config_from_factory(&config)
@@ -156,6 +159,31 @@ fn test_build_anthropic_config_from_factory_maps_optional_fields() {
     assert!(!anthropic_config.enable_cache_control);
     assert!(anthropic_config.enable_computer_use);
     assert!(anthropic_config.enable_experimental);
+    assert!(anthropic_config.allow_unknown_models);
+    assert_eq!(
+        anthropic_config.configured_models,
+        vec!["mimo-v2.5".to_string(), "mimo-v2.5-pro".to_string()]
+    );
+    assert_eq!(
+        anthropic_config.configured_multimodal_models,
+        vec!["mimo-v2.5".to_string()]
+    );
+}
+
+#[test]
+fn test_build_anthropic_config_from_factory_validates_compatible_models() {
+    let config = serde_json::json!({
+        "api_key": "xiaomi-compatible-key",
+        "api_base": "https://token-plan-sgp.xiaomimimo.com/anthropic",
+        "allow_unknown_models": true
+    });
+
+    let err = match build_anthropic_config_from_factory(&config) {
+        Ok(_) => panic!("compatible Anthropic config should require models"),
+        Err(err) => err,
+    };
+
+    assert!(format!("{err}").contains("explicit models allow-list"));
 }
 
 #[test]
