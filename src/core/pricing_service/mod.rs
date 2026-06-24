@@ -18,6 +18,9 @@ mod tests;
 /// explicit embedded source so the default does not depend on process cwd.
 pub const DEFAULT_PRICING_SOURCE: &str = "embedded://model_prices_extended";
 
+pub(super) const REMOTE_LITELLM_PRICING_SOURCE: &str =
+    "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json";
+
 // Re-export public types
 pub use service::PricingService;
 pub use types::{

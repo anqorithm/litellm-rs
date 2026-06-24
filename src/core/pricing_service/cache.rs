@@ -2,7 +2,7 @@
 
 use super::service::PricingService;
 use super::types::{PricingEventType, PricingUpdateEvent};
-use crate::utils::error::gateway_error::Result;
+use crate::utils::error::gateway_error::{GatewayError, Result};
 use std::sync::Arc;
 use std::time::SystemTime;
 use tracing::{debug, info, warn};
@@ -36,11 +36,30 @@ impl PricingService {
     pub async fn refresh_pricing_data(&self) -> Result<()> {
         info!("Refreshing pricing data from: {}", self.pricing_url);
 
-        let data = if self.pricing_url == super::DEFAULT_PRICING_SOURCE {
+        let data = if self.pricing_url.is_empty() {
+            return Err(GatewayError::Config(
+                "Pricing source is disabled".to_string(),
+            ));
+        } else if self.pricing_url == super::DEFAULT_PRICING_SOURCE {
             self.load_from_embedded_default()?
         } else if self.pricing_url.starts_with("http") {
-            // Load from URL
-            self.load_from_url().await?
+            match self.load_from_url().await {
+                Ok(data) => data,
+                Err(remote_error) if self.should_fallback_to_embedded_on_remote_error() => {
+                    warn!(
+                        pricing_url = %self.pricing_url,
+                        error = %remote_error,
+                        "Default remote pricing data initial load failed; falling back to embedded pricing"
+                    );
+                    self.load_from_embedded_default().map_err(|embedded_error| {
+                        GatewayError::Config(format!(
+                            "Failed to load pricing data from remote source {}: {}; embedded pricing fallback also failed: {}",
+                            self.pricing_url, remote_error, embedded_error
+                        ))
+                    })?
+                }
+                Err(remote_error) => return Err(remote_error),
+            }
         } else {
             // Load from local file
             self.load_from_file().await?
@@ -73,5 +92,29 @@ impl PricingService {
             .duration_since(data.last_updated)
             .map(|duration| duration > self.cache_ttl)
             .unwrap_or(true)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn none_source_does_not_enable_embedded_fallback() {
+        let service = PricingService::new(None);
+        assert!(!service.should_fallback_to_embedded_on_remote_error());
+    }
+
+    #[test]
+    fn explicit_default_remote_url_disables_embedded_fallback() {
+        let service = PricingService::new(Some(
+            super::super::REMOTE_LITELLM_PRICING_SOURCE.to_string(),
+        ));
+
+        assert_eq!(
+            service.pricing_url,
+            super::super::REMOTE_LITELLM_PRICING_SOURCE
+        );
+        assert!(!service.should_fallback_to_embedded_on_remote_error());
     }
 }

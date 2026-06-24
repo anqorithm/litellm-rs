@@ -38,6 +38,74 @@ fn parse_litellm_pricing_json_rejects_malformed_model_entries() {
 }
 
 #[test]
+fn parse_litellm_pricing_json_accepts_integral_float_token_limits_and_missing_mode() {
+    let content = r#"{
+            "float-token-model": {
+                "max_tokens": 2000000.0,
+                "max_input_tokens": 2000000.0,
+                "max_output_tokens": 8192.0,
+                "input_cost_per_token": 0.000001,
+                "output_cost_per_token": 0.000002,
+                "litellm_provider": "openai"
+            }
+        }"#;
+
+    let parsed = match parse_litellm_pricing_json(content) {
+        Ok(parsed) => parsed,
+        Err(error) => panic!("integral float token limits should parse: {error}"),
+    };
+    let Some(model) = parsed.get("float-token-model") else {
+        panic!("float-token-model should be present");
+    };
+
+    assert_eq!(model.max_tokens, Some(2_000_000));
+    assert_eq!(model.max_input_tokens, Some(2_000_000));
+    assert_eq!(model.max_output_tokens, Some(8_192));
+    assert_eq!(model.mode, "");
+}
+
+#[test]
+fn parse_litellm_pricing_json_rejects_lossy_token_limits() {
+    for (field, value) in [
+        ("max_tokens", "2000000.5"),
+        ("max_input_tokens", "-1"),
+        ("max_output_tokens", "4294967296"),
+    ] {
+        let content = format!(
+            r#"{{
+                "bad-token-model": {{
+                    "{field}": {value},
+                    "input_cost_per_token": 0.000001,
+                    "output_cost_per_token": 0.000002,
+                    "litellm_provider": "openai",
+                    "mode": "chat"
+                }}
+            }}"#
+        );
+
+        assert!(
+            parse_litellm_pricing_json(&content).is_err(),
+            "{field}={value} should be rejected"
+        );
+    }
+}
+
+#[test]
+fn pricing_database_skips_blank_mode_one_sided_token_prices() {
+    let content = r#"{
+            "half-priced-missing-mode": {
+                "input_cost_per_token": 0.000001,
+                "litellm_provider": "openai"
+            }
+        }"#;
+    let models = parse_litellm_pricing_json(content).unwrap();
+    let db = PricingDatabase { models };
+    let usage = Usage::new(1000, 500);
+
+    assert_eq!(db.calculate("half-priced-missing-mode", &usage), 0.0);
+}
+
+#[test]
 fn test_default_pricing() {
     let db = PricingDatabase::default();
 
