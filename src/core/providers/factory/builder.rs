@@ -341,6 +341,12 @@ pub(super) fn build_anthropic_config_from_factory(
     if let Some(allow_unknown_models) = config_bool(config, "allow_unknown_models") {
         anthropic_config.allow_unknown_models = allow_unknown_models;
     }
+    if let Some(models) = config.get("models").and_then(|value| value.as_array()) {
+        anthropic_config.configured_models = models
+            .iter()
+            .filter_map(|value| value.as_str().map(str::to_string))
+            .collect();
+    }
 
     Ok(anthropic_config)
 }

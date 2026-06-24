@@ -61,7 +61,7 @@ impl AnthropicProvider {
         let registry = get_anthropic_registry();
 
         let Some(model_spec) = registry.get_model_spec(&request.model) else {
-            if !self.client.allows_unknown_models() {
+            if !self.client.allows_unknown_model(&request.model) {
                 return Err(ProviderError::invalid_request(
                     "anthropic",
                     format!("Unsupported model: {}", request.model),
@@ -74,7 +74,7 @@ impl AnthropicProvider {
                 u32::MAX,
             )?;
 
-            if Self::has_multimodal_content(request) {
+            if AnthropicClient::has_multimodal_content(request) {
                 return Err(ProviderError::not_supported(
                     "anthropic",
                     format!(
@@ -84,7 +84,8 @@ impl AnthropicProvider {
                 ));
             }
 
-            if request.tools.is_some() {
+            if request.tools.is_some() || AnthropicClient::has_anthropic_tools_extra_param(request)
+            {
                 return Err(ProviderError::not_supported(
                     "anthropic",
                     format!(
@@ -119,7 +120,7 @@ impl AnthropicProvider {
         )?;
 
         // Check multimodal content
-        let has_multimodal_content = Self::has_multimodal_content(request);
+        let has_multimodal_content = AnthropicClient::has_multimodal_content(request);
 
         if has_multimodal_content
             && !model_spec
@@ -145,18 +146,6 @@ impl AnthropicProvider {
 
         Ok(())
     }
-
-    fn has_multimodal_content(request: &ChatRequest) -> bool {
-        request.messages.iter().any(|msg| {
-            if let Some(crate::core::types::message::MessageContent::Parts(parts)) = &msg.content {
-                parts.iter().any(|part| {
-                    !matches!(part, crate::core::types::content::ContentPart::Text { .. })
-                })
-            } else {
-                false
-            }
-        })
-    }
 }
 
 impl LLMProvider for AnthropicProvider {
@@ -178,6 +167,11 @@ impl LLMProvider for AnthropicProvider {
 
     fn models(&self) -> &[ModelInfo] {
         &self.supported_models
+    }
+
+    fn supports_model(&self, model: &str) -> bool {
+        self.supported_models.iter().any(|info| info.id == model)
+            || self.client.allows_unknown_model(model)
     }
 
     fn get_supported_openai_params(&self, _model: &str) -> &'static [&'static str] {
@@ -456,6 +450,20 @@ mod tests {
         assert!(!provider.supports_model("gpt-4"));
     }
 
+    #[test]
+    fn configured_unknown_models_are_visible_to_support_checks() {
+        let config = AnthropicConfig::new_test("test-key")
+            .with_allow_unknown_models(true)
+            .with_configured_models(vec!["mimo-v2.5".to_string()]);
+        let provider = match AnthropicProvider::new(config) {
+            Ok(provider) => provider,
+            Err(err) => panic!("provider should build: {err}"),
+        };
+
+        assert!(provider.supports_model("mimo-v2.5"));
+        assert!(!provider.supports_model("unlisted-compatible-model"));
+    }
+
     #[tokio::test]
     async fn unknown_models_are_rejected_by_default() {
         let config = AnthropicConfig::new_test("test-key");
@@ -483,5 +491,31 @@ mod tests {
             .expect("explicit opt-in should allow non-Anthropic model IDs");
 
         assert_eq!(transformed["model"], "mimo-v2.5");
+    }
+
+    #[tokio::test]
+    async fn unknown_models_reject_anthropic_tools_extra_param() {
+        let config = AnthropicConfig::new_test("test-key")
+            .with_allow_unknown_models(true)
+            .with_configured_models(vec!["mimo-v2.5".to_string()]);
+        let provider = match AnthropicProvider::new(config) {
+            Ok(provider) => provider,
+            Err(err) => panic!("provider should build: {err}"),
+        };
+        let mut request = ChatRequest::new("mimo-v2.5").add_user_message("Hello");
+        request.extra_params.insert(
+            "anthropic_tools".to_string(),
+            serde_json::json!([{"type": "computer_20241022", "name": "computer"}]),
+        );
+
+        let err = match provider
+            .transform_request(request, RequestContext::new())
+            .await
+        {
+            Ok(_) => panic!("unknown models must fail closed for Anthropic built-in tools"),
+            Err(err) => err,
+        };
+
+        assert!(format!("{err}").contains("tool calling support"));
     }
 }

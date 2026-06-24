@@ -56,8 +56,8 @@ impl AnthropicClient {
         })
     }
 
-    pub(crate) fn allows_unknown_models(&self) -> bool {
-        self.config.allow_unknown_models
+    pub(crate) fn allows_unknown_model(&self, model: &str) -> bool {
+        self.config.allows_unknown_model(model)
     }
 
     /// Request
@@ -248,17 +248,26 @@ impl AnthropicClient {
 
         // Check
         let model_spec = registry.get_model_spec(&request.model);
-        if model_spec.is_none() && !self.config.allow_unknown_models {
+        if model_spec.is_none() && !self.config.allows_unknown_model(&request.model) {
             return Err(anthropic_api_error(
                 400,
                 format!("Unsupported model: {}", request.model),
             ));
         }
-        if model_spec.is_none() && self.has_multimodal_content(request) {
+        if model_spec.is_none() && Self::has_multimodal_content(request) {
             return Err(ProviderError::not_supported(
                 "anthropic",
                 format!(
                     "Unknown model {} cannot declare multimodal support",
+                    request.model
+                ),
+            ));
+        }
+        if model_spec.is_none() && Self::has_anthropic_tools_extra_param(request) {
+            return Err(ProviderError::not_supported(
+                "anthropic",
+                format!(
+                    "Unknown model {} cannot declare tool calling support",
                     request.model
                 ),
             ));
@@ -592,7 +601,7 @@ impl AnthropicClient {
         Ok(anthropic_messages)
     }
 
-    fn has_multimodal_content(&self, request: &ChatRequest) -> bool {
+    pub(crate) fn has_multimodal_content(request: &ChatRequest) -> bool {
         request.messages.iter().any(|msg| {
             if let Some(crate::core::types::message::MessageContent::Parts(parts)) = &msg.content {
                 parts
@@ -602,6 +611,14 @@ impl AnthropicClient {
                 false
             }
         })
+    }
+
+    pub(crate) fn has_anthropic_tools_extra_param(request: &ChatRequest) -> bool {
+        request
+            .extra_params
+            .get("anthropic_tools")
+            .and_then(|value| value.as_array())
+            .is_some_and(|tools| !tools.is_empty())
     }
 
     fn content_value_to_blocks(content: &Value) -> Vec<Value> {

@@ -61,8 +61,7 @@ providers:
     provider_type: anthropic
     api_key: "${MIMO_API_KEY}"
     base_url: "https://token-plan-sgp.xiaomimimo.com/anthropic"
-    settings:
-      allow_unknown_models: true
+    allow_unknown_models: true
     models:
       - "mimo-v2.5"
       - "mimo-v2.5-pro"

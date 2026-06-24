@@ -39,6 +39,8 @@ pub struct AnthropicConfig {
     pub enable_experimental: bool,
     /// Allow Anthropic-compatible upstreams to use non-Anthropic model IDs.
     pub allow_unknown_models: bool,
+    /// Explicit non-Anthropic model IDs allowed for compatible upstreams.
+    pub configured_models: Vec<String>,
 }
 
 impl Default for AnthropicConfig {
@@ -58,6 +60,7 @@ impl Default for AnthropicConfig {
             enable_computer_use: false, // Default disabled
             enable_experimental: false,
             allow_unknown_models: false,
+            configured_models: Vec::new(),
         }
     }
 }
@@ -204,6 +207,22 @@ impl AnthropicConfig {
         self
     }
 
+    /// Set explicit model IDs for Anthropic-compatible upstreams.
+    pub fn with_configured_models(mut self, models: Vec<String>) -> Self {
+        self.configured_models = models;
+        self
+    }
+
+    /// Check if a non-Anthropic model ID is explicitly allowed.
+    pub fn allows_unknown_model(&self, model: &str) -> bool {
+        self.allow_unknown_models
+            && (self.configured_models.is_empty()
+                || self
+                    .configured_models
+                    .iter()
+                    .any(|configured| configured == model))
+    }
+
     /// Get
     pub fn get_api_url(&self, endpoint: &str) -> String {
         format!("{}{}", self.base_url.trim_end_matches('/'), endpoint)
@@ -228,13 +247,18 @@ impl ProviderConfig for AnthropicConfig {
             return Err("API key cannot be empty".to_string());
         }
 
-        if !api_key.starts_with("sk-ant-") {
+        let first_party_anthropic =
+            self.base_url.trim_end_matches('/') == "https://api.anthropic.com";
+        let compatible_upstream = self.allow_unknown_models && !first_party_anthropic;
+
+        if !compatible_upstream && !api_key.starts_with("sk-ant-") {
             return Err(
                 "Invalid Anthropic API key format. Keys should start with 'sk-ant-'".to_string(),
             );
         }
 
-        if api_key.len() < 20 {
+        let minimum_key_len = if compatible_upstream { 8 } else { 20 };
+        if api_key.len() < minimum_key_len {
             return Err("API key appears to be too short".to_string());
         }
 
@@ -337,6 +361,12 @@ impl AnthropicConfigBuilder {
         self
     }
 
+    /// Set explicit model IDs for Anthropic-compatible upstreams.
+    pub fn configured_models(mut self, models: Vec<String>) -> Self {
+        self.config.configured_models = models;
+        self
+    }
+
     /// Configuration
     pub fn build(self) -> Result<AnthropicConfig, ProviderError> {
         self.config
@@ -391,12 +421,32 @@ mod tests {
             .multimodal(false)
             .build();
 
-        assert!(config.is_ok());
-        let config = config.unwrap();
+        let config = match config {
+            Ok(config) => config,
+            Err(err) => panic!("compatible upstream config should build: {err}"),
+        };
         assert_eq!(config.api_key, Some("sk-ant-test1234567890123".to_string()));
         assert_eq!(config.base_url, "https://custom.api.com");
         assert_eq!(config.request_timeout, 60);
         assert!(!config.enable_multimodal);
+    }
+
+    #[test]
+    fn test_config_builder_allows_compatible_upstream_keys() {
+        let config = AnthropicConfigBuilder::new()
+            .api_key("xiaomi-compatible-key")
+            .base_url("https://token-plan-sgp.xiaomimimo.com/anthropic")
+            .allow_unknown_models(true)
+            .configured_models(vec!["mimo-v2.5".to_string()])
+            .build();
+
+        let config = match config {
+            Ok(config) => config,
+            Err(err) => panic!("compatible upstream key should validate: {err}"),
+        };
+        assert_eq!(config.api_key.as_deref(), Some("xiaomi-compatible-key"));
+        assert!(config.allows_unknown_model("mimo-v2.5"));
+        assert!(!config.allows_unknown_model("unlisted-model"));
     }
 
     #[test]

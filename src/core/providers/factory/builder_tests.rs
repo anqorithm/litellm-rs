@@ -123,7 +123,8 @@ fn test_build_anthropic_config_from_factory_maps_optional_fields() {
         "enable_cache_control": false,
         "enable_computer_use": true,
         "enable_experimental": true,
-        "allow_unknown_models": true
+        "allow_unknown_models": true,
+        "models": ["mimo-v2.5", "mimo-v2.5-pro"]
     });
 
     let anthropic_config = build_anthropic_config_from_factory(&config)
@@ -158,6 +159,10 @@ fn test_build_anthropic_config_from_factory_maps_optional_fields() {
     assert!(anthropic_config.enable_computer_use);
     assert!(anthropic_config.enable_experimental);
     assert!(anthropic_config.allow_unknown_models);
+    assert_eq!(
+        anthropic_config.configured_models,
+        vec!["mimo-v2.5".to_string(), "mimo-v2.5-pro".to_string()]
+    );
 }
 
 #[test]
