@@ -296,6 +296,12 @@ mod tests {
 
     fn minimal_dispatch_config_for(provider_type: &ProviderType) -> serde_json::Value {
         match provider_type {
+            ProviderType::Anthropic => serde_json::json!({
+                "api_key": "sk-ant-test1234567890123",
+                "api_base": "https://api.anthropic.com",
+                "timeout": 30,
+                "max_retries": 2
+            }),
             ProviderType::VertexAI => serde_json::json!({
                 "project_id": "test-project",
                 "location": "us-central1",

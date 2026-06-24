@@ -1,6 +1,10 @@
 use super::{AnthropicConfig, AnthropicProvider};
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
-use crate::core::types::{chat::ChatRequest, context::RequestContext};
+use crate::core::types::{
+    chat::ChatRequest,
+    context::RequestContext,
+    message::{MessageContent, MessageRole},
+};
 
 fn compatible_provider() -> AnthropicProvider {
     let config = AnthropicConfig::new_test("test-key")
@@ -39,4 +43,23 @@ async fn compatible_models_reject_legacy_functions() {
     };
 
     assert!(format!("{err}").contains("tool calling support"));
+}
+
+#[tokio::test]
+async fn compatible_models_reject_tool_role_messages() {
+    let provider = compatible_provider();
+    let request = ChatRequest::new("mimo-v2.5").add_message(
+        MessageRole::Tool,
+        MessageContent::Text("tool result".to_string()),
+    );
+
+    let err = match provider
+        .transform_request(request, RequestContext::new())
+        .await
+    {
+        Ok(_) => panic!("compatible models must reject tool-role messages"),
+        Err(err) => err,
+    };
+
+    assert!(format!("{err}").contains("only supports text and image content"));
 }

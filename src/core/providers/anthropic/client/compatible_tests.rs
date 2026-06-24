@@ -173,3 +173,26 @@ fn compatible_models_reject_legacy_functions() {
 
     assert!(format!("{err}").contains("tool calling support"));
 }
+
+#[test]
+fn compatible_models_reject_tool_role_messages() {
+    let config = AnthropicConfig::new_test("test-key")
+        .with_base_url("https://token-plan-sgp.xiaomimimo.com/anthropic")
+        .with_allow_unknown_models(true)
+        .with_configured_models(vec!["mimo-v2.5".to_string()]);
+    let client = match AnthropicClient::new(config) {
+        Ok(client) => client,
+        Err(err) => panic!("client should build: {err}"),
+    };
+    let request = ChatRequest::new("mimo-v2.5").add_message(
+        MessageRole::Tool,
+        MessageContent::Text("tool result".to_string()),
+    );
+
+    let err = match client.transform_chat_request(&request) {
+        Ok(_) => panic!("compatible models must reject tool-role messages"),
+        Err(err) => err,
+    };
+
+    assert!(format!("{err}").contains("only supports text and image content"));
+}

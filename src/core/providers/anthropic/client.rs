@@ -680,10 +680,11 @@ impl AnthropicClient {
 
     pub(crate) fn has_unsupported_unknown_model_content(request: &ChatRequest) -> bool {
         request.messages.iter().any(|message| {
-            message
-                .tool_calls
-                .as_ref()
-                .is_some_and(|calls| !calls.is_empty())
+            matches!(message.role, MessageRole::Tool | MessageRole::Function)
+                || message
+                    .tool_calls
+                    .as_ref()
+                    .is_some_and(|calls| !calls.is_empty())
                 || matches!(
                     &message.content,
                     Some(crate::core::types::message::MessageContent::Parts(parts))
