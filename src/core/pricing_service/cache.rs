@@ -36,7 +36,11 @@ impl PricingService {
     pub async fn refresh_pricing_data(&self) -> Result<()> {
         info!("Refreshing pricing data from: {}", self.pricing_url);
 
-        let data = if self.pricing_url == super::DEFAULT_PRICING_SOURCE {
+        let data = if self.pricing_url.is_empty() {
+            return Err(GatewayError::Config(
+                "Pricing source is disabled".to_string(),
+            ));
+        } else if self.pricing_url == super::DEFAULT_PRICING_SOURCE {
             self.load_from_embedded_default()?
         } else if self.pricing_url.starts_with("http") {
             match self.load_from_url().await {
@@ -96,18 +100,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn implicit_default_remote_fallback_stops_after_cache_is_populated() -> Result<()> {
+    fn none_source_does_not_enable_embedded_fallback() {
         let service = PricingService::new(None);
-        assert!(service.should_fallback_to_embedded_on_remote_error());
-
-        let mut embedded = service.load_from_embedded_default()?;
-        let Some((model, info)) = embedded.drain().next() else {
-            panic!("embedded pricing fixture should not be empty");
-        };
-        service.pricing_data.write().models.insert(model, info);
-
         assert!(!service.should_fallback_to_embedded_on_remote_error());
-        Ok(())
     }
 
     #[test]

@@ -48,6 +48,32 @@ fn test_litellm_pricing_errors_when_missing_mode_has_single_missing_side() {
 }
 
 #[test]
+fn test_litellm_pricing_allows_blank_mode_non_token_pricing() {
+    let info = model_info_from_json(serde_json::json!({
+        "litellm_provider": "replicate",
+        "cost_per_second": 0.001
+    }));
+    let pricing = match litellm_to_cost_pricing("time-priced-missing-mode", &info) {
+        Ok(pricing) => pricing,
+        Err(err) => panic!("blank-mode non-token pricing should be accepted: {err}"),
+    };
+    assert_eq!(pricing.cost_per_second, Some(0.001));
+}
+
+#[test]
+fn test_litellm_pricing_allows_missing_mode_with_non_token_pricing() {
+    let info = model_info_from_json(serde_json::json!({
+        "litellm_provider": "openai",
+        "cost_per_second": 0.000_01
+    }));
+    let pricing = match litellm_to_cost_pricing("time-priced-missing-mode", &info) {
+        Ok(pricing) => pricing,
+        Err(err) => panic!("non-token pricing should not require token prices: {err}"),
+    };
+    assert_eq!(pricing.cost_per_second, Some(0.000_01));
+}
+
+#[test]
 fn test_litellm_pricing_allows_single_missing_side_for_embedding() {
     // Embeddings can have only input-side token pricing.
     let info = model_info_from_json(serde_json::json!({

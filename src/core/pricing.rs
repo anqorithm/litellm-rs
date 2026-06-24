@@ -251,6 +251,16 @@ impl PricingDatabase {
     fn calculate_with_pricing(&self, pricing: &ModelPricing, usage: &Usage) -> f64 {
         let mut cost = 0.0;
 
+        if requires_bidirectional_database_token_pricing(pricing)
+            && (pricing.input_cost_per_token.is_none() || pricing.output_cost_per_token.is_none())
+        {
+            warn!(
+                "model pricing row for provider '{}' mode '{}' is missing one side of token pricing; skipping partial billing",
+                pricing.litellm_provider, pricing.mode
+            );
+            return 0.0;
+        }
+
         let input_cost_per_token = tiered_cost_per_token(
             pricing,
             pricing.input_cost_per_token.unwrap_or(0.0),
@@ -345,6 +355,30 @@ impl PricingDatabase {
             })
             .unwrap_or(false)
     }
+}
+
+fn requires_bidirectional_database_token_pricing(pricing: &ModelPricing) -> bool {
+    matches!(pricing.mode.as_str(), "chat" | "completion")
+        || (pricing.mode.is_empty() && !has_non_token_database_pricing(pricing))
+}
+
+fn has_non_token_database_pricing(pricing: &ModelPricing) -> bool {
+    pricing.cost_per_second.is_some()
+        || pricing
+            .extra
+            .get("video_cost_per_second")
+            .and_then(serde_json::Value::as_f64)
+            .is_some()
+        || pricing
+            .extra
+            .get("audio_cost_per_second")
+            .and_then(serde_json::Value::as_f64)
+            .is_some()
+        || pricing
+            .extra
+            .get("image_cost_per_token")
+            .and_then(serde_json::Value::as_f64)
+            .is_some()
 }
 
 fn pricing_matches_provider(_model_key: &str, pricing: &ModelPricing, provider: &str) -> bool {

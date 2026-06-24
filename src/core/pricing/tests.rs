@@ -91,6 +91,21 @@ fn parse_litellm_pricing_json_rejects_lossy_token_limits() {
 }
 
 #[test]
+fn pricing_database_skips_blank_mode_one_sided_token_prices() {
+    let content = r#"{
+            "half-priced-missing-mode": {
+                "input_cost_per_token": 0.000001,
+                "litellm_provider": "openai"
+            }
+        }"#;
+    let models = parse_litellm_pricing_json(content).unwrap();
+    let db = PricingDatabase { models };
+    let usage = Usage::new(1000, 500);
+
+    assert_eq!(db.calculate("half-priced-missing-mode", &usage), 0.0);
+}
+
+#[test]
 fn test_default_pricing() {
     let db = PricingDatabase::default();
 

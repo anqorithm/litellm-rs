@@ -71,7 +71,7 @@ impl PricingService {
     /// Create a new pricing service
     pub fn new(pricing_url: Option<String>) -> Self {
         let (event_sender, _) = broadcast::channel(1000);
-        let use_embedded_fallback_on_remote_error = pricing_url.is_none();
+        let use_embedded_fallback_on_remote_error = false;
 
         let service = Self {
             pricing_data: Arc::new(RwLock::new(PricingData {
@@ -79,8 +79,7 @@ impl PricingService {
                 last_updated: SystemTime::UNIX_EPOCH,
             })),
             http_client: default_outbound_client().clone(),
-            pricing_url: pricing_url
-                .unwrap_or_else(|| super::REMOTE_LITELLM_PRICING_SOURCE.to_string()),
+            pricing_url: pricing_url.unwrap_or_default(),
             use_embedded_fallback_on_remote_error,
             cache_ttl: Duration::from_secs(3600), // 1 hour
             event_sender,
@@ -448,10 +447,7 @@ mod tests {
     #[test]
     fn test_pricing_service_new_default() {
         let service = PricingService::new(None);
-        assert_eq!(
-            service.pricing_url,
-            super::super::REMOTE_LITELLM_PRICING_SOURCE
-        );
+        assert!(service.pricing_url.is_empty());
         assert_eq!(service.cache_ttl, Duration::from_secs(3600));
     }
 
