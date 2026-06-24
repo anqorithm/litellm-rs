@@ -347,6 +347,15 @@ pub(super) fn build_anthropic_config_from_factory(
             .filter_map(|value| value.as_str().map(str::to_string))
             .collect();
     }
+    if let Some(models) = config
+        .get("multimodal_models")
+        .and_then(|value| value.as_array())
+    {
+        anthropic_config.configured_multimodal_models = models
+            .iter()
+            .filter_map(|value| value.as_str().map(str::to_string))
+            .collect();
+    }
 
     Ok(anthropic_config)
 }

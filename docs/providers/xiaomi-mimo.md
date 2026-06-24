@@ -63,6 +63,8 @@ providers:
     base_url: "https://token-plan-sgp.xiaomimimo.com/anthropic"
     settings:
       allow_unknown_models: true
+      multimodal_models:
+        - "mimo-v2.5"
     models:
       - "mimo-v2.5"
       - "mimo-v2.5-pro"

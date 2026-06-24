@@ -732,11 +732,9 @@ fn test_transform_chat_request_allows_configured_unknown_model_image_input() {
     let config = AnthropicConfig::new_test("test-key")
         .with_base_url("https://token-plan-sgp.xiaomimimo.com/anthropic")
         .with_allow_unknown_models(true)
-        .with_configured_models(vec!["mimo-v2.5".to_string()]);
-    let client = match AnthropicClient::new(config) {
-        Ok(client) => client,
-        Err(err) => panic!("client should build: {err}"),
-    };
+        .with_configured_models(vec!["mimo-v2.5".to_string()])
+        .with_configured_multimodal_models(vec!["mimo-v2.5".to_string()]);
+    let client = AnthropicClient::new(config).unwrap();
 
     let request = ChatRequest::new("mimo-v2.5").add_message(
         crate::core::types::message::MessageRole::User,
@@ -753,11 +751,7 @@ fn test_transform_chat_request_allows_configured_unknown_model_image_input() {
         ]),
     );
 
-    let result = match client.transform_chat_request(&request) {
-        Ok(result) => result,
-        Err(err) => panic!("configured compatible model should accept image input: {err}"),
-    };
-
+    let result = client.transform_chat_request(&request).unwrap();
     assert_eq!(result["model"], "mimo-v2.5");
     assert_eq!(result["messages"][0]["content"][1]["type"], "image");
 }

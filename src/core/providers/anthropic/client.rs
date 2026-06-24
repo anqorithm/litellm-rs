@@ -60,6 +60,14 @@ impl AnthropicClient {
         self.config.allows_unknown_model(model)
     }
 
+    pub(crate) fn uses_compatible_model_allow_list(&self) -> bool {
+        self.config.uses_compatible_model_allow_list()
+    }
+
+    pub(crate) fn allows_unknown_model_image_input(&self, model: &str) -> bool {
+        self.config.allows_unknown_model_image_input(model)
+    }
+
     /// Request
     pub async fn chat(&self, request: ChatRequest) -> Result<ChatResponse, ProviderError> {
         let anthropic_request = self.transform_chat_request(&request)?;
@@ -268,6 +276,18 @@ impl AnthropicClient {
                 "anthropic",
                 format!(
                     "Unknown model {} only supports text and image content",
+                    request.model
+                ),
+            ));
+        }
+        if model_spec.is_none()
+            && Self::has_image_content(request)
+            && !self.config.allows_unknown_model_image_input(&request.model)
+        {
+            return Err(ProviderError::not_supported(
+                "anthropic",
+                format!(
+                    "Unknown model {} does not support image input",
                     request.model
                 ),
             ));
@@ -547,6 +567,20 @@ impl AnthropicClient {
                                         ));
                                     }
                                 }
+                                ContentPart::Image { source, .. }
+                                    if model_spec.is_none_or(|spec| {
+                                        spec.features.contains(&ModelFeature::MultimodalSupport)
+                                    }) =>
+                                {
+                                    anthropic_parts.push(json!({
+                                        "type": "image",
+                                        "source": {
+                                            "type": "base64",
+                                            "media_type": source.media_type,
+                                            "data": source.data
+                                        }
+                                    }));
+                                }
                                 ContentPart::Document { source, .. }
                                     if model_spec.is_some_and(|spec| {
                                         spec.features.contains(&ModelFeature::MultimodalSupport)
@@ -640,6 +674,19 @@ impl AnthropicClient {
         })
     }
 
+    pub(crate) fn has_image_content(request: &ChatRequest) -> bool {
+        request.messages.iter().any(|message| {
+            matches!(
+                &message.content,
+                Some(crate::core::types::message::MessageContent::Parts(parts))
+                    if parts.iter().any(|part| matches!(
+                        part,
+                        ContentPart::ImageUrl { .. } | ContentPart::Image { .. }
+                    ))
+            )
+        })
+    }
+
     fn content_value_to_blocks(content: &Value) -> Vec<Value> {
         if let Some(text) = content.as_str() {
             if text.is_empty() {
@@ -720,5 +767,7 @@ impl AnthropicClient {
 mod response;
 mod usage;
 
+#[cfg(test)]
+mod compatible_tests;
 #[cfg(test)]
 mod tests;

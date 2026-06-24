@@ -41,6 +41,8 @@ pub struct AnthropicConfig {
     pub allow_unknown_models: bool,
     /// Explicit non-Anthropic model IDs allowed for compatible upstreams.
     pub configured_models: Vec<String>,
+    /// Explicit compatible model IDs allowed to receive image input.
+    pub configured_multimodal_models: Vec<String>,
 }
 
 impl Default for AnthropicConfig {
@@ -61,6 +63,7 @@ impl Default for AnthropicConfig {
             enable_experimental: false,
             allow_unknown_models: false,
             configured_models: Vec::new(),
+            configured_multimodal_models: Vec::new(),
         }
     }
 }
@@ -213,6 +216,12 @@ impl AnthropicConfig {
         self
     }
 
+    /// Set explicit compatible model IDs that support image input.
+    pub fn with_configured_multimodal_models(mut self, models: Vec<String>) -> Self {
+        self.configured_multimodal_models = models;
+        self
+    }
+
     /// Check if a non-Anthropic model ID is explicitly allowed.
     pub fn allows_unknown_model(&self, model: &str) -> bool {
         self.allow_unknown_models
@@ -221,6 +230,29 @@ impl AnthropicConfig {
                 .configured_models
                 .iter()
                 .any(|configured| configured == model)
+    }
+
+    pub fn uses_compatible_model_allow_list(&self) -> bool {
+        self.allow_unknown_models
+            && self.base_url.trim_end_matches('/') != "https://api.anthropic.com"
+    }
+
+    pub fn allows_unknown_model_image_input(&self, model: &str) -> bool {
+        self.enable_multimodal
+            && self.allows_unknown_model(model)
+            && self
+                .configured_multimodal_models
+                .iter()
+                .any(|configured| configured == model)
+    }
+
+    pub fn has_unknown_multimodal_model_outside_allow_list(&self) -> bool {
+        self.configured_multimodal_models.iter().any(|model| {
+            !self
+                .configured_models
+                .iter()
+                .any(|configured| configured == model)
+        })
     }
 
     /// Get
@@ -259,6 +291,12 @@ impl ProviderConfig for AnthropicConfig {
 
         if compatible_upstream && self.configured_models.is_empty() {
             return Err("allow_unknown_models requires an explicit models allow-list".to_string());
+        }
+
+        if compatible_upstream && self.has_unknown_multimodal_model_outside_allow_list() {
+            return Err(
+                "multimodal_models must be included in the explicit models allow-list".to_string(),
+            );
         }
 
         if !compatible_upstream && !api_key.starts_with("sk-ant-") {
@@ -377,6 +415,12 @@ impl AnthropicConfigBuilder {
         self
     }
 
+    /// Set explicit compatible model IDs that support image input.
+    pub fn configured_multimodal_models(mut self, models: Vec<String>) -> Self {
+        self.config.configured_multimodal_models = models;
+        self
+    }
+
     /// Configuration
     pub fn build(self) -> Result<AnthropicConfig, ProviderError> {
         self.config
@@ -471,6 +515,22 @@ mod tests {
             panic!("compatible upstreams should require explicit model IDs");
         };
         assert!(format!("{err}").contains("explicit models allow-list"));
+    }
+
+    #[test]
+    fn test_config_builder_rejects_multimodal_model_outside_allow_list() {
+        let config = AnthropicConfigBuilder::new()
+            .api_key("xiaomi-compatible-key")
+            .base_url("https://token-plan-sgp.xiaomimimo.com/anthropic")
+            .allow_unknown_models(true)
+            .configured_models(vec!["mimo-v2.5-pro".to_string()])
+            .configured_multimodal_models(vec!["mimo-v2.5".to_string()])
+            .build();
+
+        let Err(err) = config else {
+            panic!("compatible multimodal models should stay inside the model allow-list");
+        };
+        assert!(format!("{err}").contains("multimodal_models"));
     }
 
     #[test]

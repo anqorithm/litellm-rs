@@ -43,12 +43,36 @@ impl AnthropicProvider {
         let _pool_manager = Arc::new(GlobalPoolManager::new()?);
 
         // Get supported models
-        let registry = get_anthropic_registry();
-        let supported_models = registry
-            .list_models()
-            .into_iter()
-            .map(|spec| spec.model_info.clone())
-            .collect();
+        let supported_models = if config.uses_compatible_model_allow_list() {
+            config
+                .configured_models
+                .iter()
+                .map(|model| ModelInfo {
+                    id: model.clone(),
+                    name: model.clone(),
+                    provider: "anthropic".to_string(),
+                    max_context_length: 1_000_000,
+                    max_output_length: Some(128_000),
+                    supports_streaming: true,
+                    supports_tools: false,
+                    supports_multimodal: config.allows_unknown_model_image_input(model),
+                    input_cost_per_1k_tokens: None,
+                    output_cost_per_1k_tokens: None,
+                    currency: "USD".to_string(),
+                    capabilities: vec![ProviderCapability::ChatCompletion],
+                    created_at: None,
+                    updated_at: None,
+                    metadata: HashMap::new(),
+                })
+                .collect()
+        } else {
+            let registry = get_anthropic_registry();
+            registry
+                .list_models()
+                .into_iter()
+                .map(|spec| spec.model_info.clone())
+                .collect()
+        };
 
         Ok(Self {
             client,
@@ -90,6 +114,18 @@ impl AnthropicProvider {
                     "anthropic",
                     format!(
                         "Unknown model {} only supports text and image content",
+                        request.model
+                    ),
+                ));
+            }
+
+            if AnthropicClient::has_image_content(request)
+                && !self.client.allows_unknown_model_image_input(&request.model)
+            {
+                return Err(ProviderError::not_supported(
+                    "anthropic",
+                    format!(
+                        "Unknown model {} does not support image input",
                         request.model
                     ),
                 ));
@@ -170,6 +206,10 @@ impl LLMProvider for AnthropicProvider {
     }
 
     fn supports_model(&self, model: &str) -> bool {
+        if self.client.uses_compatible_model_allow_list() {
+            return self.client.allows_unknown_model(model);
+        }
+
         self.supported_models.iter().any(|info| info.id == model)
             || self.client.allows_unknown_model(model)
     }
@@ -455,7 +495,8 @@ mod tests {
         let config = AnthropicConfig::new_test("test-key")
             .with_base_url("https://token-plan-sgp.xiaomimimo.com/anthropic")
             .with_allow_unknown_models(true)
-            .with_configured_models(vec!["mimo-v2.5".to_string()]);
+            .with_configured_models(vec!["mimo-v2.5".to_string()])
+            .with_configured_multimodal_models(vec!["mimo-v2.5".to_string()]);
         let provider = match AnthropicProvider::new(config) {
             Ok(provider) => provider,
             Err(err) => panic!("provider should build: {err}"),
@@ -463,6 +504,9 @@ mod tests {
 
         assert!(provider.supports_model("mimo-v2.5"));
         assert!(!provider.supports_model("unlisted-compatible-model"));
+        assert!(!provider.supports_model("claude-3-5-sonnet-20241022"));
+        assert_eq!(provider.models().len(), 1);
+        assert_eq!(provider.models()[0].id, "mimo-v2.5");
     }
 
     #[tokio::test]
@@ -484,7 +528,8 @@ mod tests {
         let config = AnthropicConfig::new_test("test-key")
             .with_base_url("https://token-plan-sgp.xiaomimimo.com/anthropic")
             .with_allow_unknown_models(true)
-            .with_configured_models(vec!["mimo-v2.5".to_string()]);
+            .with_configured_models(vec!["mimo-v2.5".to_string()])
+            .with_configured_multimodal_models(vec!["mimo-v2.5".to_string()]);
         let provider = match AnthropicProvider::new(config) {
             Ok(provider) => provider,
             Err(err) => panic!("provider should build: {err}"),
@@ -510,7 +555,8 @@ mod tests {
         let config = AnthropicConfig::new_test("test-key")
             .with_base_url("https://token-plan-sgp.xiaomimimo.com/anthropic")
             .with_allow_unknown_models(true)
-            .with_configured_models(vec!["mimo-v2.5".to_string()]);
+            .with_configured_models(vec!["mimo-v2.5".to_string()])
+            .with_configured_multimodal_models(vec!["mimo-v2.5".to_string()]);
         let provider = match AnthropicProvider::new(config) {
             Ok(provider) => provider,
             Err(err) => panic!("provider should build: {err}"),
@@ -550,6 +596,52 @@ mod tests {
             transformed["messages"][0]["content"][1]["type"],
             "image_url"
         );
+    }
+
+    #[tokio::test]
+    async fn text_only_unknown_models_reject_image_input() {
+        use crate::core::types::{
+            content::{ContentPart, ImageUrl},
+            message::{MessageContent, MessageRole},
+        };
+
+        let config = AnthropicConfig::new_test("test-key")
+            .with_base_url("https://token-plan-sgp.xiaomimimo.com/anthropic")
+            .with_allow_unknown_models(true)
+            .with_configured_models(vec!["mimo-v2.5-pro".to_string()]);
+        let provider = match AnthropicProvider::new(config) {
+            Ok(provider) => provider,
+            Err(err) => panic!("provider should build: {err}"),
+        };
+        let request = ChatRequest {
+            model: "mimo-v2.5-pro".to_string(),
+            messages: vec![crate::core::types::chat::ChatMessage {
+                role: MessageRole::User,
+                content: Some(MessageContent::Parts(vec![
+                    ContentPart::Text {
+                        text: "Describe this image".to_string(),
+                    },
+                    ContentPart::ImageUrl {
+                        image_url: ImageUrl {
+                            url: "data:image/png;base64,aGVsbG8=".to_string(),
+                            detail: None,
+                        },
+                    },
+                ])),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let err = match provider
+            .transform_request(request, RequestContext::new())
+            .await
+        {
+            Ok(_) => panic!("text-only compatible model must reject image input"),
+            Err(err) => err,
+        };
+
+        assert!(format!("{err}").contains("does not support image input"));
     }
 
     #[tokio::test]

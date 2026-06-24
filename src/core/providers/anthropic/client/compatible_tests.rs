@@ -1,0 +1,114 @@
+use super::*;
+use crate::core::providers::anthropic::config::AnthropicConfig;
+use crate::core::types::{
+    content::{ContentPart, ImageSource, ImageUrl},
+    message::{MessageContent, MessageRole},
+};
+
+#[test]
+fn configured_unknown_model_serializes_image_url_parts() {
+    let config = AnthropicConfig::new_test("test-key")
+        .with_base_url("https://token-plan-sgp.xiaomimimo.com/anthropic")
+        .with_allow_unknown_models(true)
+        .with_configured_models(vec!["mimo-v2.5".to_string()])
+        .with_configured_multimodal_models(vec!["mimo-v2.5".to_string()]);
+    let client = match AnthropicClient::new(config) {
+        Ok(client) => client,
+        Err(err) => panic!("client should build: {err}"),
+    };
+    let request = ChatRequest::new("mimo-v2.5").add_message(
+        MessageRole::User,
+        MessageContent::Parts(vec![
+            ContentPart::Text {
+                text: "Describe this image".to_string(),
+            },
+            ContentPart::ImageUrl {
+                image_url: ImageUrl {
+                    url: "data:image/png;base64,ZmFrZQ==".to_string(),
+                    detail: None,
+                },
+            },
+        ]),
+    );
+
+    let result = match client.transform_chat_request(&request) {
+        Ok(result) => result,
+        Err(err) => panic!("configured multimodal model should serialize image input: {err}"),
+    };
+
+    assert_eq!(result["model"], "mimo-v2.5");
+    assert_eq!(result["messages"][0]["content"][1]["type"], "image");
+}
+
+#[test]
+fn configured_unknown_model_serializes_image_parts() {
+    let config = AnthropicConfig::new_test("test-key")
+        .with_base_url("https://token-plan-sgp.xiaomimimo.com/anthropic")
+        .with_allow_unknown_models(true)
+        .with_configured_models(vec!["mimo-v2.5".to_string()])
+        .with_configured_multimodal_models(vec!["mimo-v2.5".to_string()]);
+    let client = match AnthropicClient::new(config) {
+        Ok(client) => client,
+        Err(err) => panic!("client should build: {err}"),
+    };
+    let request = ChatRequest::new("mimo-v2.5").add_message(
+        MessageRole::User,
+        MessageContent::Parts(vec![
+            ContentPart::Text {
+                text: "Describe this image".to_string(),
+            },
+            ContentPart::Image {
+                source: ImageSource {
+                    media_type: "image/png".to_string(),
+                    data: "ZmFrZQ==".to_string(),
+                },
+                detail: None,
+                image_url: None,
+            },
+        ]),
+    );
+
+    let result = match client.transform_chat_request(&request) {
+        Ok(result) => result,
+        Err(err) => panic!("configured multimodal model should serialize image input: {err}"),
+    };
+
+    assert_eq!(result["messages"][0]["content"][1]["type"], "image");
+    assert_eq!(
+        result["messages"][0]["content"][1]["source"]["data"],
+        "ZmFrZQ=="
+    );
+}
+
+#[test]
+fn text_only_configured_unknown_model_rejects_image_input() {
+    let config = AnthropicConfig::new_test("test-key")
+        .with_base_url("https://token-plan-sgp.xiaomimimo.com/anthropic")
+        .with_allow_unknown_models(true)
+        .with_configured_models(vec!["mimo-v2.5-pro".to_string()]);
+    let client = match AnthropicClient::new(config) {
+        Ok(client) => client,
+        Err(err) => panic!("client should build: {err}"),
+    };
+    let request = ChatRequest::new("mimo-v2.5-pro").add_message(
+        MessageRole::User,
+        MessageContent::Parts(vec![
+            ContentPart::Text {
+                text: "Describe this image".to_string(),
+            },
+            ContentPart::ImageUrl {
+                image_url: ImageUrl {
+                    url: "data:image/png;base64,ZmFrZQ==".to_string(),
+                    detail: None,
+                },
+            },
+        ]),
+    );
+
+    let err = match client.transform_chat_request(&request) {
+        Ok(_) => panic!("text-only compatible model must reject image input"),
+        Err(err) => err,
+    };
+
+    assert!(format!("{err}").contains("does not support image input"));
+}
