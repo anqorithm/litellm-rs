@@ -155,13 +155,7 @@ pub fn get_model_pricing(model: &str, provider: &str) -> Result<ModelPricing, Co
 }
 
 fn is_xiaomi_mimo_model(model: &str) -> bool {
-    let normalized_model = crate::core::pricing::normalize_model_key(model);
-    let model_id = normalized_model
-        .rsplit_once('/')
-        .map(|(_, model_id)| model_id)
-        .unwrap_or(normalized_model);
-
-    model_id.starts_with("mimo-")
+    crate::core::pricing::normalize_model_key(model).starts_with("mimo-")
 }
 
 fn get_pricing_with_shared_source<F>(
