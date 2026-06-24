@@ -78,7 +78,11 @@ where
                     res.headers_mut().insert(header_name, header_value);
                     Ok(res.map_into_boxed_body())
                 }
-                Err(err) => Err(err),
+                Err(err) => {
+                    let mut response = err.error_response();
+                    response.headers_mut().insert(header_name, header_value);
+                    Err(actix_web::error::InternalError::from_response(err, response).into())
+                }
             }
         })
     }
@@ -101,6 +105,23 @@ mod tests {
         let res = test::call_service(&app, req).await;
 
         assert_eq!(res.status(), StatusCode::OK);
+        assert!(res.headers().contains_key("x-request-id"));
+    }
+
+    #[actix_web::test]
+    async fn middleware_adds_request_id_to_error_responses() {
+        let app = test::init_service(App::new().wrap(RequestIdMiddleware).route(
+            "/error",
+            web::get().to(|| async {
+                Err::<HttpResponse, _>(actix_web::error::ErrorInternalServerError("test error"))
+            }),
+        ))
+        .await;
+
+        let req = test::TestRequest::get().uri("/error").to_request();
+        let res = test::call_service(&app, req).await;
+
+        assert_eq!(res.status(), StatusCode::INTERNAL_SERVER_ERROR);
         assert!(res.headers().contains_key("x-request-id"));
     }
 }
