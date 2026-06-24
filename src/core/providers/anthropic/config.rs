@@ -151,6 +151,10 @@ impl AnthropicConfig {
             config.configured_multimodal_models = models;
         }
 
+        config
+            .validate()
+            .map_err(|e| ProviderError::configuration("anthropic", e))?;
+
         Ok(config)
     }
 
@@ -626,6 +630,49 @@ mod tests {
             vec!["mimo-v2.5".to_string()]
         );
         assert!(config.validate().is_ok());
+
+        for (key, value) in previous {
+            match value {
+                Some(value) => unsafe { std::env::set_var(key, value) },
+                None => unsafe { std::env::remove_var(key) },
+            }
+        }
+    }
+
+    #[test]
+    fn from_env_rejects_compatible_opt_in_without_model_allow_list() {
+        const KEYS: &[&str] = &[
+            "ANTHROPIC_API_KEY",
+            "CLAUDE_API_KEY",
+            "ANTHROPIC_BASE_URL",
+            "ANTHROPIC_ALLOW_UNKNOWN_MODELS",
+            "ANTHROPIC_MODELS",
+            "ANTHROPIC_CONFIGURED_MODELS",
+            "ANTHROPIC_MULTIMODAL_MODELS",
+            "ANTHROPIC_CONFIGURED_MULTIMODAL_MODELS",
+        ];
+        let previous: Vec<(&str, Option<String>)> = KEYS
+            .iter()
+            .map(|key| (*key, std::env::var(key).ok()))
+            .collect();
+
+        for key in KEYS {
+            unsafe { std::env::remove_var(key) };
+        }
+        unsafe {
+            std::env::set_var("ANTHROPIC_API_KEY", "xiaomi-compatible-key");
+            std::env::set_var(
+                "ANTHROPIC_BASE_URL",
+                "https://token-plan-sgp.xiaomimimo.com/anthropic",
+            );
+            std::env::set_var("ANTHROPIC_ALLOW_UNKNOWN_MODELS", "true");
+        }
+
+        let err = match AnthropicConfig::from_env() {
+            Ok(_) => panic!("compatible env opt-in must require explicit model IDs"),
+            Err(err) => err,
+        };
+        assert!(format!("{err}").contains("explicit models allow-list"));
 
         for (key, value) in previous {
             match value {
