@@ -252,10 +252,23 @@ impl AnthropicClient {
 
     /// Request
     fn transform_chat_request(&self, request: &ChatRequest) -> Result<Value, ProviderError> {
+        if self.config.uses_compatible_model_allow_list()
+            && !self.config.allows_unknown_model(&request.model)
+        {
+            return Err(anthropic_api_error(
+                400,
+                format!("Unsupported model: {}", request.model),
+            ));
+        }
+
         let registry = get_anthropic_registry();
 
         // Check
-        let model_spec = registry.get_model_spec(&request.model);
+        let model_spec = if self.config.uses_compatible_model_allow_list() {
+            None
+        } else {
+            registry.get_model_spec(&request.model)
+        };
         if model_spec.is_none() && !self.config.allows_unknown_model(&request.model) {
             return Err(anthropic_api_error(
                 400,

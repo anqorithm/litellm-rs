@@ -26,6 +26,8 @@ use super::models::{ModelFeature, get_anthropic_registry};
 use super::streaming::AnthropicStream;
 use crate::core::traits::error_mapper::trait_def::ErrorMapper;
 
+const COMPATIBLE_MODEL_MAX_OUTPUT_TOKENS: u32 = 128_000;
+
 /// Anthropic Provider - unified implementation
 #[derive(Debug, Clone)]
 pub struct AnthropicProvider {
@@ -52,7 +54,7 @@ impl AnthropicProvider {
                     name: model.clone(),
                     provider: "anthropic".to_string(),
                     max_context_length: 1_000_000,
-                    max_output_length: Some(128_000),
+                    max_output_length: Some(COMPATIBLE_MODEL_MAX_OUTPUT_TOKENS),
                     supports_streaming: true,
                     supports_tools: false,
                     supports_multimodal: config.allows_unknown_model_image_input(model),
@@ -84,7 +86,19 @@ impl AnthropicProvider {
     fn validate_request(&self, request: &ChatRequest) -> Result<(), ProviderError> {
         let registry = get_anthropic_registry();
 
-        let Some(model_spec) = registry.get_model_spec(&request.model) else {
+        let model_spec = if self.client.uses_compatible_model_allow_list() {
+            if !self.client.allows_unknown_model(&request.model) {
+                return Err(ProviderError::invalid_request(
+                    "anthropic",
+                    format!("Unsupported model: {}", request.model),
+                ));
+            }
+            None
+        } else {
+            registry.get_model_spec(&request.model)
+        };
+
+        let Some(model_spec) = model_spec else {
             if !self.client.allows_unknown_model(&request.model) {
                 return Err(ProviderError::invalid_request(
                     "anthropic",
@@ -95,7 +109,7 @@ impl AnthropicProvider {
             crate::core::providers::base::validate_chat_request_common(
                 "anthropic",
                 request,
-                u32::MAX,
+                COMPATIBLE_MODEL_MAX_OUTPUT_TOKENS,
             )?;
 
             if request.tools.is_some() || AnthropicClient::has_anthropic_tools_extra_param(request)
@@ -543,6 +557,54 @@ mod tests {
             .expect("explicit opt-in should allow non-Anthropic model IDs");
 
         assert_eq!(transformed["model"], "mimo-v2.5");
+    }
+
+    #[tokio::test]
+    async fn compatible_allow_list_rejects_registry_model_ids_not_configured() {
+        let config = AnthropicConfig::new_test("test-key")
+            .with_base_url("https://token-plan-sgp.xiaomimimo.com/anthropic")
+            .with_allow_unknown_models(true)
+            .with_configured_models(vec!["mimo-v2.5".to_string()]);
+        let provider = match AnthropicProvider::new(config) {
+            Ok(provider) => provider,
+            Err(err) => panic!("provider should build: {err}"),
+        };
+        let request = ChatRequest::new("claude-3-haiku-20240307").add_user_message("Hello");
+
+        let err = match provider
+            .transform_request(request, RequestContext::new())
+            .await
+        {
+            Ok(_) => panic!("compatible allow-list must reject unlisted registry model IDs"),
+            Err(err) => err,
+        };
+
+        assert!(format!("{err}").contains("Unsupported model: claude-3-haiku-20240307"));
+    }
+
+    #[tokio::test]
+    async fn compatible_models_enforce_configured_output_limit() {
+        let config = AnthropicConfig::new_test("test-key")
+            .with_base_url("https://token-plan-sgp.xiaomimimo.com/anthropic")
+            .with_allow_unknown_models(true)
+            .with_configured_models(vec!["mimo-v2.5".to_string()]);
+        let provider = match AnthropicProvider::new(config) {
+            Ok(provider) => provider,
+            Err(err) => panic!("provider should build: {err}"),
+        };
+        let request = ChatRequest::new("mimo-v2.5")
+            .add_user_message("Hello")
+            .with_max_tokens(COMPATIBLE_MODEL_MAX_OUTPUT_TOKENS + 1);
+
+        let err = match provider
+            .transform_request(request, RequestContext::new())
+            .await
+        {
+            Ok(_) => panic!("compatible models must enforce max output tokens"),
+            Err(err) => err,
+        };
+
+        assert!(format!("{err}").contains("max_tokens 128001 exceeds model limit of 128000"));
     }
 
     #[tokio::test]

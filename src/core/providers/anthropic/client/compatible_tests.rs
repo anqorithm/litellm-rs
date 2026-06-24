@@ -112,3 +112,23 @@ fn text_only_configured_unknown_model_rejects_image_input() {
 
     assert!(format!("{err}").contains("does not support image input"));
 }
+
+#[test]
+fn compatible_allow_list_rejects_registry_model_ids_not_configured() {
+    let config = AnthropicConfig::new_test("test-key")
+        .with_base_url("https://token-plan-sgp.xiaomimimo.com/anthropic")
+        .with_allow_unknown_models(true)
+        .with_configured_models(vec!["mimo-v2.5".to_string()]);
+    let client = match AnthropicClient::new(config) {
+        Ok(client) => client,
+        Err(err) => panic!("client should build: {err}"),
+    };
+    let request = ChatRequest::new("claude-3-haiku-20240307").add_user_message("Hello");
+
+    let err = match client.transform_chat_request(&request) {
+        Ok(_) => panic!("compatible allow-list must reject unlisted registry model IDs"),
+        Err(err) => err,
+    };
+
+    assert!(format!("{err}").contains("Unsupported model: claude-3-haiku-20240307"));
+}
