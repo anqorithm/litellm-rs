@@ -106,6 +106,14 @@ pub fn get_model_pricing(model: &str, provider: &str) -> Result<ModelPricing, Co
 
     match normalized_provider.as_str() {
         "openai" => get_pricing_with_shared_source(model, &["openai"], get_openai_pricing),
+        "anthropic" if is_xiaomi_mimo_model(model) => {
+            get_pricing_with_shared_source(model, &["xiaomi_mimo", "xiaomi", "mimo"], |model| {
+                Err(CostError::ModelNotSupported {
+                    model: model.to_string(),
+                    provider: "anthropic".to_string(),
+                })
+            })
+        }
         "anthropic" => get_pricing_with_shared_source(model, &["anthropic"], get_anthropic_pricing),
         "azure" => get_azure_pricing(model),
         "vertex_ai" => {
@@ -144,6 +152,10 @@ pub fn get_model_pricing(model: &str, provider: &str) -> Result<ModelPricing, Co
             provider: provider.to_string(),
         }),
     }
+}
+
+fn is_xiaomi_mimo_model(model: &str) -> bool {
+    crate::core::pricing::normalize_model_key(model).starts_with("mimo-")
 }
 
 fn get_pricing_with_shared_source<F>(
@@ -317,6 +329,7 @@ fn litellm_to_cost_pricing(
 
 fn requires_bidirectional_token_pricing(info: &crate::core::pricing::LiteLLMModelInfo) -> bool {
     matches!(info.mode.as_str(), "chat" | "completion")
+        || (info.mode.is_empty() && !has_non_token_pricing(info))
 }
 
 fn has_non_token_pricing(info: &crate::core::pricing::LiteLLMModelInfo) -> bool {

@@ -1,6 +1,6 @@
 //! Shared pricing data types.
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
@@ -13,10 +13,13 @@ const EMBEDDED_MODEL_PRICES: &str = include_str!("../../config/model_prices_exte
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LiteLLMModelInfo {
     /// Maximum total tokens
+    #[serde(default, deserialize_with = "deserialize_option_u32_integral_number")]
     pub max_tokens: Option<u32>,
     /// Maximum input tokens
+    #[serde(default, deserialize_with = "deserialize_option_u32_integral_number")]
     pub max_input_tokens: Option<u32>,
     /// Maximum output tokens
+    #[serde(default, deserialize_with = "deserialize_option_u32_integral_number")]
     pub max_output_tokens: Option<u32>,
     /// Input cost per token
     pub input_cost_per_token: Option<f64>,
@@ -31,6 +34,7 @@ pub struct LiteLLMModelInfo {
     /// LiteLLM provider name
     pub litellm_provider: String,
     /// Model mode (chat, completion, embedding, etc.)
+    #[serde(default)]
     pub mode: String,
     /// Supports function calling
     pub supports_function_calling: Option<bool>,
@@ -45,6 +49,57 @@ pub struct LiteLLMModelInfo {
     /// Additional metadata
     #[serde(flatten)]
     pub extra: HashMap<String, serde_json::Value>,
+}
+
+fn deserialize_option_u32_integral_number<'de, D>(deserializer: D) -> Result<Option<u32>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let Some(value) = Option::<serde_json::Value>::deserialize(deserializer)? else {
+        return Ok(None);
+    };
+
+    match value {
+        serde_json::Value::Null => Ok(None),
+        serde_json::Value::Number(number) => {
+            if let Some(value) = number.as_u64() {
+                return u32::try_from(value)
+                    .map(Some)
+                    .map_err(|_| serde::de::Error::custom("token limit exceeds u32::MAX"));
+            }
+
+            if let Some(value) = number.as_i64()
+                && value < 0
+            {
+                return Err(serde::de::Error::custom("token limit cannot be negative"));
+            }
+
+            let value = number
+                .as_f64()
+                .ok_or_else(|| serde::de::Error::custom("token limit must be a finite number"))?;
+            if !value.is_finite() {
+                return Err(serde::de::Error::custom(
+                    "token limit must be a finite number",
+                ));
+            }
+            if value < 0.0 {
+                return Err(serde::de::Error::custom("token limit cannot be negative"));
+            }
+            if value.fract() != 0.0 {
+                return Err(serde::de::Error::custom(
+                    "token limit float must be integral",
+                ));
+            }
+            if value > u32::MAX as f64 {
+                return Err(serde::de::Error::custom("token limit exceeds u32::MAX"));
+            }
+
+            Ok(Some(value as u32))
+        }
+        _ => Err(serde::de::Error::custom(
+            "token limit must be a JSON number",
+        )),
+    }
 }
 
 /// Compatibility alias for callers that still import provider-base pricing.
@@ -196,6 +251,16 @@ impl PricingDatabase {
     fn calculate_with_pricing(&self, pricing: &ModelPricing, usage: &Usage) -> f64 {
         let mut cost = 0.0;
 
+        if requires_bidirectional_database_token_pricing(pricing)
+            && (pricing.input_cost_per_token.is_none() || pricing.output_cost_per_token.is_none())
+        {
+            warn!(
+                "model pricing row for provider '{}' mode '{}' is missing one side of token pricing; skipping partial billing",
+                pricing.litellm_provider, pricing.mode
+            );
+            return 0.0;
+        }
+
         let input_cost_per_token = tiered_cost_per_token(
             pricing,
             pricing.input_cost_per_token.unwrap_or(0.0),
@@ -290,6 +355,30 @@ impl PricingDatabase {
             })
             .unwrap_or(false)
     }
+}
+
+fn requires_bidirectional_database_token_pricing(pricing: &ModelPricing) -> bool {
+    matches!(pricing.mode.as_str(), "chat" | "completion")
+        || (pricing.mode.is_empty() && !has_non_token_database_pricing(pricing))
+}
+
+fn has_non_token_database_pricing(pricing: &ModelPricing) -> bool {
+    pricing.cost_per_second.is_some()
+        || pricing
+            .extra
+            .get("video_cost_per_second")
+            .and_then(serde_json::Value::as_f64)
+            .is_some()
+        || pricing
+            .extra
+            .get("audio_cost_per_second")
+            .and_then(serde_json::Value::as_f64)
+            .is_some()
+        || pricing
+            .extra
+            .get("image_cost_per_token")
+            .and_then(serde_json::Value::as_f64)
+            .is_some()
 }
 
 fn pricing_matches_provider(_model_key: &str, pricing: &ModelPricing, provider: &str) -> bool {

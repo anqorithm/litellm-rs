@@ -71,6 +71,8 @@ mod tests {
     use super::*;
     use crate::core::pricing_service::DEFAULT_PRICING_SOURCE;
     use std::fs;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
 
     fn pricing_json(model: &str, provider: &str) -> String {
         format!(
@@ -122,6 +124,54 @@ mod tests {
             Some("custom".to_string())
         );
         assert!(service.get_model_info("gpt-4o").is_none());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn explicit_remote_pricing_parse_failure_is_returned() -> Result<()> {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .map_err(GatewayError::Io)?;
+        let addr = listener.local_addr().map_err(GatewayError::Io)?;
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await?;
+            let mut request_buffer = [0_u8; 1024];
+            let bytes_read = stream.read(&mut request_buffer).await?;
+            if bytes_read == 0 {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    "test server received an empty request",
+                ));
+            }
+            let body = r#"{
+                "remote-only-malformed": {
+                    "max_tokens": 2000000.5,
+                    "input_cost_per_token": 0.000001,
+                    "output_cost_per_token": 0.000002,
+                    "litellm_provider": "openai",
+                    "mode": "chat"
+                }
+            }"#;
+            let response = format!(
+                "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            stream.write_all(response.as_bytes()).await?;
+            Ok::<(), std::io::Error>(())
+        });
+
+        let service = PricingService::new(Some(format!("http://{addr}/prices.json")));
+
+        let result = service.initialize().await;
+        server
+            .await
+            .map_err(|error| GatewayError::internal(format!("test server failed: {error}")))?
+            .map_err(GatewayError::Io)?;
+
+        assert!(result.is_err());
+        assert!(service.get_model_info("gpt-4o").is_none());
+        assert!(service.get_model_info("remote-only-malformed").is_none());
         Ok(())
     }
 }
