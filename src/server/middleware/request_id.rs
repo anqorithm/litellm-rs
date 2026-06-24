@@ -67,9 +67,6 @@ where
 
         debug!("Processing request: {}", request_id);
 
-        // Clone the HttpRequest so we can build an error ServiceResponse when the
-        // inner service returns Err — ensuring x-request-id appears on all responses.
-        let http_req = req.request().clone();
         let fut = self.service.call(req);
         Box::pin(async move {
             let header_name = actix_web::http::header::HeaderName::from_static("x-request-id");
@@ -84,9 +81,47 @@ where
                 Err(err) => {
                     let mut response = err.error_response();
                     response.headers_mut().insert(header_name, header_value);
-                    Ok(ServiceResponse::new(http_req, response))
+                    Err(actix_web::error::InternalError::from_response(err, response).into())
                 }
             }
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use actix_web::{App, HttpResponse, http::StatusCode, test, web};
+
+    #[actix_web::test]
+    async fn middleware_does_not_clone_request_before_routing() {
+        let app = test::init_service(App::new().wrap(RequestIdMiddleware).route(
+            "/health",
+            web::get().to(|| async { HttpResponse::Ok().finish() }),
+        ))
+        .await;
+
+        let req = test::TestRequest::get().uri("/health").to_request();
+        let res = test::call_service(&app, req).await;
+
+        assert_eq!(res.status(), StatusCode::OK);
+        assert!(res.headers().contains_key("x-request-id"));
+    }
+
+    #[actix_web::test]
+    async fn middleware_adds_request_id_to_error_responses() {
+        let app = test::init_service(App::new().wrap(RequestIdMiddleware).route(
+            "/error",
+            web::get().to(|| async {
+                Err::<HttpResponse, _>(actix_web::error::ErrorInternalServerError("test error"))
+            }),
+        ))
+        .await;
+
+        let req = test::TestRequest::get().uri("/error").to_request();
+        let res = test::call_service(&app, req).await;
+
+        assert_eq!(res.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert!(res.headers().contains_key("x-request-id"));
     }
 }
