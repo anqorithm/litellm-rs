@@ -35,6 +35,19 @@ fn test_litellm_pricing_errors_when_chat_has_single_missing_side() {
 }
 
 #[test]
+fn test_litellm_pricing_errors_when_missing_mode_has_single_missing_side() {
+    let info = model_info_from_json(serde_json::json!({
+        "litellm_provider": "openai",
+        "input_cost_per_token": 0.000_01
+    }));
+    let result = litellm_to_cost_pricing("half-priced-missing-mode", &info);
+    assert!(matches!(
+        result,
+        Err(CostError::MissingPricing { ref model }) if model == "half-priced-missing-mode"
+    ));
+}
+
+#[test]
 fn test_litellm_pricing_allows_single_missing_side_for_embedding() {
     // Embeddings can have only input-side token pricing.
     let info = model_info_from_json(serde_json::json!({

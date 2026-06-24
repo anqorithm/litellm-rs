@@ -59,6 +59,8 @@ pub struct PricingService {
     pub(super) http_client: reqwest::Client,
     /// Pricing data source URL
     pub(super) pricing_url: String,
+    /// Whether the built-in remote source may fall back to embedded pricing.
+    pub(super) use_embedded_fallback_on_remote_error: bool,
     /// Cache TTL
     pub(super) cache_ttl: Duration,
     /// Event broadcaster for updates
@@ -69,6 +71,7 @@ impl PricingService {
     /// Create a new pricing service
     pub fn new(pricing_url: Option<String>) -> Self {
         let (event_sender, _) = broadcast::channel(1000);
+        let use_embedded_fallback_on_remote_error = pricing_url.is_none();
 
         let service = Self {
             pricing_data: Arc::new(RwLock::new(PricingData {
@@ -78,12 +81,19 @@ impl PricingService {
             http_client: default_outbound_client().clone(),
             pricing_url: pricing_url
                 .unwrap_or_else(|| super::REMOTE_LITELLM_PRICING_SOURCE.to_string()),
+            use_embedded_fallback_on_remote_error,
             cache_ttl: Duration::from_secs(3600), // 1 hour
             event_sender,
         };
 
         info!("Pricing service initialized with LiteLLM data source");
         service
+    }
+
+    pub(super) fn should_fallback_to_embedded_on_remote_error(&self) -> bool {
+        self.use_embedded_fallback_on_remote_error
+            && self.pricing_url == super::REMOTE_LITELLM_PRICING_SOURCE
+            && self.pricing_data.read().models.is_empty()
     }
 
     /// Get model information

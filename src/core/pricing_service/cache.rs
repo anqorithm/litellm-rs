@@ -41,11 +41,11 @@ impl PricingService {
         } else if self.pricing_url.starts_with("http") {
             match self.load_from_url().await {
                 Ok(data) => data,
-                Err(remote_error) if self.pricing_url == super::REMOTE_LITELLM_PRICING_SOURCE => {
+                Err(remote_error) if self.should_fallback_to_embedded_on_remote_error() => {
                     warn!(
                         pricing_url = %self.pricing_url,
                         error = %remote_error,
-                        "Default remote pricing data load failed; falling back to embedded pricing"
+                        "Default remote pricing data initial load failed; falling back to embedded pricing"
                     );
                     self.load_from_embedded_default().map_err(|embedded_error| {
                         GatewayError::Config(format!(
@@ -88,5 +88,38 @@ impl PricingService {
             .duration_since(data.last_updated)
             .map(|duration| duration > self.cache_ttl)
             .unwrap_or(true)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn implicit_default_remote_fallback_stops_after_cache_is_populated() -> Result<()> {
+        let service = PricingService::new(None);
+        assert!(service.should_fallback_to_embedded_on_remote_error());
+
+        let mut embedded = service.load_from_embedded_default()?;
+        let Some((model, info)) = embedded.drain().next() else {
+            panic!("embedded pricing fixture should not be empty");
+        };
+        service.pricing_data.write().models.insert(model, info);
+
+        assert!(!service.should_fallback_to_embedded_on_remote_error());
+        Ok(())
+    }
+
+    #[test]
+    fn explicit_default_remote_url_disables_embedded_fallback() {
+        let service = PricingService::new(Some(
+            super::super::REMOTE_LITELLM_PRICING_SOURCE.to_string(),
+        ));
+
+        assert_eq!(
+            service.pricing_url,
+            super::super::REMOTE_LITELLM_PRICING_SOURCE
+        );
+        assert!(!service.should_fallback_to_embedded_on_remote_error());
     }
 }

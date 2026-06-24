@@ -316,7 +316,7 @@ fn litellm_to_cost_pricing(
 }
 
 fn requires_bidirectional_token_pricing(info: &crate::core::pricing::LiteLLMModelInfo) -> bool {
-    matches!(info.mode.as_str(), "chat" | "completion")
+    matches!(info.mode.as_str(), "" | "chat" | "completion")
 }
 
 fn has_non_token_pricing(info: &crate::core::pricing::LiteLLMModelInfo) -> bool {
