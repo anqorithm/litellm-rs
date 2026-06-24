@@ -31,7 +31,7 @@ mod tests {
     #[tokio::test]
     async fn test_anthropic_provider_from_config() {
         let config = json!({
-            "api_key": "sk-ant-test-key"
+            "api_key": "sk-ant-test1234567890123"
         });
 
         let result = Provider::from_config_async(ProviderType::Anthropic, config).await;

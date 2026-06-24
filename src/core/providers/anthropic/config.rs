@@ -291,7 +291,8 @@ impl ProviderConfig for AnthropicConfig {
 
         let first_party_anthropic =
             self.base_url.trim_end_matches('/') == "https://api.anthropic.com";
-        let compatible_upstream = self.allow_unknown_models && !first_party_anthropic;
+        let custom_anthropic_base = !first_party_anthropic;
+        let compatible_unknown_models = self.allow_unknown_models && custom_anthropic_base;
 
         if self.allow_unknown_models && first_party_anthropic {
             return Err(
@@ -299,23 +300,23 @@ impl ProviderConfig for AnthropicConfig {
             );
         }
 
-        if compatible_upstream && self.configured_models.is_empty() {
+        if compatible_unknown_models && self.configured_models.is_empty() {
             return Err("allow_unknown_models requires an explicit models allow-list".to_string());
         }
 
-        if compatible_upstream && self.has_unknown_multimodal_model_outside_allow_list() {
+        if compatible_unknown_models && self.has_unknown_multimodal_model_outside_allow_list() {
             return Err(
                 "multimodal_models must be included in the explicit models allow-list".to_string(),
             );
         }
 
-        if !compatible_upstream && !api_key.starts_with("sk-ant-") {
+        if !custom_anthropic_base && !api_key.starts_with("sk-ant-") {
             return Err(
                 "Invalid Anthropic API key format. Keys should start with 'sk-ant-'".to_string(),
             );
         }
 
-        let minimum_key_len = if compatible_upstream { 8 } else { 20 };
+        let minimum_key_len = if custom_anthropic_base { 8 } else { 20 };
         if api_key.len() < minimum_key_len {
             return Err("API key appears to be too short".to_string());
         }
@@ -521,6 +522,23 @@ mod tests {
         assert_eq!(config.api_key.as_deref(), Some("xiaomi-compatible-key"));
         assert!(config.allows_unknown_model("mimo-v2.5"));
         assert!(!config.allows_unknown_model("unlisted-model"));
+    }
+
+    #[test]
+    fn test_config_builder_allows_gateway_keys_on_custom_base_without_unknown_models() {
+        let config = AnthropicConfigBuilder::new()
+            .api_key("gateway-compatible-key")
+            .base_url("https://gateway.example.com/anthropic")
+            .build();
+
+        let config = match config {
+            Ok(config) => config,
+            Err(err) => {
+                panic!("custom Anthropic-compatible base should accept gateway keys: {err}")
+            }
+        };
+        assert_eq!(config.api_key.as_deref(), Some("gateway-compatible-key"));
+        assert!(!config.allow_unknown_models);
     }
 
     #[test]
