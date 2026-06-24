@@ -242,6 +242,28 @@ fn test_runtime_pricing_reaches_groq_and_native_gemini_shared_rows() {
 }
 
 #[test]
+fn test_runtime_pricing_uses_xiaomi_for_anthropic_compatible_mimo_models() {
+    let usage = create_usage(1000, 500);
+
+    let breakdown = generic_cost_per_token("mimo-v2.5", &usage, "anthropic")
+        .expect("MiMo Anthropic-compatible routing should use Xiaomi pricing");
+
+    assert_eq!(breakdown.provider, "anthropic");
+    assert_cost_eq(breakdown.total_cost, 0.00028);
+}
+
+#[test]
+fn test_runtime_pricing_keeps_unknown_anthropic_models_strict() {
+    let usage = create_usage(1000, 500);
+    let result = generic_cost_per_token("unknown-compatible-model", &usage, "anthropic");
+
+    assert!(matches!(
+        result,
+        Err(CostError::ModelNotSupported { provider, .. }) if provider == "anthropic"
+    ));
+}
+
+#[test]
 fn test_runtime_pricing_normalizes_provider_prefixed_shared_models() {
     let usage = create_usage(1000, 500);
 
