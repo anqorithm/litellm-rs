@@ -74,16 +74,6 @@ impl AnthropicProvider {
                 u32::MAX,
             )?;
 
-            if AnthropicClient::has_multimodal_content(request) {
-                return Err(ProviderError::not_supported(
-                    "anthropic",
-                    format!(
-                        "Unknown model {} cannot declare multimodal support",
-                        request.model
-                    ),
-                ));
-            }
-
             if request.tools.is_some() || AnthropicClient::has_anthropic_tools_extra_param(request)
             {
                 return Err(ProviderError::not_supported(
@@ -480,8 +470,13 @@ mod tests {
 
     #[tokio::test]
     async fn allow_unknown_models_accepts_anthropic_compatible_model_ids() {
-        let config = AnthropicConfig::new_test("test-key").with_allow_unknown_models(true);
-        let provider = AnthropicProvider::new(config).unwrap();
+        let config = AnthropicConfig::new_test("test-key")
+            .with_allow_unknown_models(true)
+            .with_configured_models(vec!["mimo-v2.5".to_string()]);
+        let provider = match AnthropicProvider::new(config) {
+            Ok(provider) => provider,
+            Err(err) => panic!("provider should build: {err}"),
+        };
         let request = ChatRequest::new("mimo-v2.5")
             .add_user_message("Reply with exactly: anthropic-compatible-ok");
 
@@ -491,6 +486,57 @@ mod tests {
             .expect("explicit opt-in should allow non-Anthropic model IDs");
 
         assert_eq!(transformed["model"], "mimo-v2.5");
+    }
+
+    #[tokio::test]
+    async fn allow_listed_unknown_models_accept_base64_images() {
+        use crate::core::types::{
+            content::{ContentPart, ImageUrl},
+            message::{MessageContent, MessageRole},
+        };
+
+        let config = AnthropicConfig::new_test("test-key")
+            .with_allow_unknown_models(true)
+            .with_configured_models(vec!["mimo-v2.5".to_string()]);
+        let provider = match AnthropicProvider::new(config) {
+            Ok(provider) => provider,
+            Err(err) => panic!("provider should build: {err}"),
+        };
+        let request = ChatRequest {
+            model: "mimo-v2.5".to_string(),
+            messages: vec![crate::core::types::chat::ChatMessage {
+                role: MessageRole::User,
+                content: Some(MessageContent::Parts(vec![
+                    ContentPart::Text {
+                        text: "Describe this image".to_string(),
+                    },
+                    ContentPart::ImageUrl {
+                        image_url: ImageUrl {
+                            url: "data:image/png;base64,aGVsbG8=".to_string(),
+                            detail: None,
+                        },
+                    },
+                ])),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let transformed = match provider
+            .transform_request(request, RequestContext::new())
+            .await
+        {
+            Ok(transformed) => transformed,
+            Err(err) => {
+                panic!("explicit compatible model should preserve base64 image input: {err}")
+            }
+        };
+
+        assert_eq!(transformed["model"], "mimo-v2.5");
+        assert_eq!(
+            transformed["messages"][0]["content"][1]["type"],
+            "image_url"
+        );
     }
 
     #[tokio::test]

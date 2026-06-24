@@ -254,15 +254,6 @@ impl AnthropicClient {
                 format!("Unsupported model: {}", request.model),
             ));
         }
-        if model_spec.is_none() && Self::has_multimodal_content(request) {
-            return Err(ProviderError::not_supported(
-                "anthropic",
-                format!(
-                    "Unknown model {} cannot declare multimodal support",
-                    request.model
-                ),
-            ));
-        }
         if model_spec.is_none() && Self::has_anthropic_tools_extra_param(request) {
             return Err(ProviderError::not_supported(
                 "anthropic",
@@ -515,7 +506,7 @@ impl AnthropicClient {
                                     }));
                                 }
                                 ContentPart::ImageUrl { image_url }
-                                    if model_spec.is_some_and(|spec| {
+                                    if model_spec.is_none_or(|spec| {
                                         spec.features.contains(&ModelFeature::MultimodalSupport)
                                     }) =>
                                 {
@@ -548,7 +539,7 @@ impl AnthropicClient {
                                     }
                                 }
                                 ContentPart::Document { source, .. }
-                                    if model_spec.is_some_and(|spec| {
+                                    if model_spec.is_none_or(|spec| {
                                         spec.features.contains(&ModelFeature::MultimodalSupport)
                                     }) =>
                                 {

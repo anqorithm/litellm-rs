@@ -708,14 +708,50 @@ fn test_transform_chat_request_allows_n_equal_one_and_ignores_unsupported_params
 
 #[test]
 fn test_transform_chat_request_allows_unknown_model_when_configured() {
-    let config = AnthropicConfig::new_test("test-key").with_allow_unknown_models(true);
-    let client = AnthropicClient::new(config).unwrap();
+    let config = AnthropicConfig::new_test("test-key")
+        .with_allow_unknown_models(true)
+        .with_configured_models(vec!["mimo-v2.5".to_string()]);
+    let client = match AnthropicClient::new(config) {
+        Ok(client) => client,
+        Err(err) => panic!("client should build: {err}"),
+    };
 
     let request = ChatRequest::new("mimo-v2.5").add_user_message("Hello");
 
-    let result = client.transform_chat_request(&request).unwrap();
+    let result = match client.transform_chat_request(&request) {
+        Ok(result) => result,
+        Err(err) => panic!("configured compatible model should accept image input: {err}"),
+    };
     assert_eq!(result["model"], "mimo-v2.5");
     assert_eq!(result["max_tokens"], 4096);
+}
+
+#[test]
+fn test_transform_chat_request_allows_configured_unknown_model_image_input() {
+    let config = AnthropicConfig::new_test("test-key")
+        .with_allow_unknown_models(true)
+        .with_configured_models(vec!["mimo-v2.5".to_string()]);
+    let client = AnthropicClient::new(config).unwrap();
+
+    let request = ChatRequest::new("mimo-v2.5").add_message(
+        crate::core::types::message::MessageRole::User,
+        crate::core::types::message::MessageContent::Parts(vec![
+            crate::core::types::content::ContentPart::Text {
+                text: "Describe this image".to_string(),
+            },
+            crate::core::types::content::ContentPart::ImageUrl {
+                image_url: crate::core::types::content::ImageUrl {
+                    url: "data:image/png;base64,ZmFrZQ==".to_string(),
+                    detail: None,
+                },
+            },
+        ]),
+    );
+
+    let result = client.transform_chat_request(&request).unwrap();
+
+    assert_eq!(result["model"], "mimo-v2.5");
+    assert_eq!(result["messages"][0]["content"][1]["type"], "image");
 }
 
 #[test]

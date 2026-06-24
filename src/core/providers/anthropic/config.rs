@@ -216,11 +216,10 @@ impl AnthropicConfig {
     /// Check if a non-Anthropic model ID is explicitly allowed.
     pub fn allows_unknown_model(&self, model: &str) -> bool {
         self.allow_unknown_models
-            && (self.configured_models.is_empty()
-                || self
-                    .configured_models
-                    .iter()
-                    .any(|configured| configured == model))
+            && self
+                .configured_models
+                .iter()
+                .any(|configured| configured == model)
     }
 
     /// Get
@@ -250,6 +249,10 @@ impl ProviderConfig for AnthropicConfig {
         let first_party_anthropic =
             self.base_url.trim_end_matches('/') == "https://api.anthropic.com";
         let compatible_upstream = self.allow_unknown_models && !first_party_anthropic;
+
+        if compatible_upstream && self.configured_models.is_empty() {
+            return Err("allow_unknown_models requires an explicit models allow-list".to_string());
+        }
 
         if !compatible_upstream && !api_key.starts_with("sk-ant-") {
             return Err(
@@ -447,6 +450,20 @@ mod tests {
         assert_eq!(config.api_key.as_deref(), Some("xiaomi-compatible-key"));
         assert!(config.allows_unknown_model("mimo-v2.5"));
         assert!(!config.allows_unknown_model("unlisted-model"));
+    }
+
+    #[test]
+    fn test_config_builder_requires_compatible_model_allow_list() {
+        let config = AnthropicConfigBuilder::new()
+            .api_key("xiaomi-compatible-key")
+            .base_url("https://token-plan-sgp.xiaomimimo.com/anthropic")
+            .allow_unknown_models(true)
+            .build();
+
+        let Err(err) = config else {
+            panic!("compatible upstreams should require explicit model IDs");
+        };
+        assert!(format!("{err}").contains("explicit models allow-list"));
     }
 
     #[test]
