@@ -2,7 +2,7 @@
 
 use super::service::PricingService;
 use super::types::{PricingEventType, PricingUpdateEvent};
-use crate::utils::error::gateway_error::Result;
+use crate::utils::error::gateway_error::{GatewayError, Result};
 use std::sync::Arc;
 use std::time::SystemTime;
 use tracing::{debug, info, warn};
@@ -39,8 +39,23 @@ impl PricingService {
         let data = if self.pricing_url == super::DEFAULT_PRICING_SOURCE {
             self.load_from_embedded_default()?
         } else if self.pricing_url.starts_with("http") {
-            // Load from URL
-            self.load_from_url().await?
+            match self.load_from_url().await {
+                Ok(data) => data,
+                Err(remote_error) if self.pricing_url == super::REMOTE_LITELLM_PRICING_SOURCE => {
+                    warn!(
+                        pricing_url = %self.pricing_url,
+                        error = %remote_error,
+                        "Default remote pricing data load failed; falling back to embedded pricing"
+                    );
+                    self.load_from_embedded_default().map_err(|embedded_error| {
+                        GatewayError::Config(format!(
+                            "Failed to load pricing data from remote source {}: {}; embedded pricing fallback also failed: {}",
+                            self.pricing_url, remote_error, embedded_error
+                        ))
+                    })?
+                }
+                Err(remote_error) => return Err(remote_error),
+            }
         } else {
             // Load from local file
             self.load_from_file().await?

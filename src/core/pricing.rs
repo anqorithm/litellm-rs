@@ -1,6 +1,6 @@
 //! Shared pricing data types.
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
@@ -13,10 +13,13 @@ const EMBEDDED_MODEL_PRICES: &str = include_str!("../../config/model_prices_exte
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LiteLLMModelInfo {
     /// Maximum total tokens
+    #[serde(default, deserialize_with = "deserialize_option_u32_integral_number")]
     pub max_tokens: Option<u32>,
     /// Maximum input tokens
+    #[serde(default, deserialize_with = "deserialize_option_u32_integral_number")]
     pub max_input_tokens: Option<u32>,
     /// Maximum output tokens
+    #[serde(default, deserialize_with = "deserialize_option_u32_integral_number")]
     pub max_output_tokens: Option<u32>,
     /// Input cost per token
     pub input_cost_per_token: Option<f64>,
@@ -31,6 +34,7 @@ pub struct LiteLLMModelInfo {
     /// LiteLLM provider name
     pub litellm_provider: String,
     /// Model mode (chat, completion, embedding, etc.)
+    #[serde(default)]
     pub mode: String,
     /// Supports function calling
     pub supports_function_calling: Option<bool>,
@@ -45,6 +49,57 @@ pub struct LiteLLMModelInfo {
     /// Additional metadata
     #[serde(flatten)]
     pub extra: HashMap<String, serde_json::Value>,
+}
+
+fn deserialize_option_u32_integral_number<'de, D>(deserializer: D) -> Result<Option<u32>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let Some(value) = Option::<serde_json::Value>::deserialize(deserializer)? else {
+        return Ok(None);
+    };
+
+    match value {
+        serde_json::Value::Null => Ok(None),
+        serde_json::Value::Number(number) => {
+            if let Some(value) = number.as_u64() {
+                return u32::try_from(value)
+                    .map(Some)
+                    .map_err(|_| serde::de::Error::custom("token limit exceeds u32::MAX"));
+            }
+
+            if let Some(value) = number.as_i64()
+                && value < 0
+            {
+                return Err(serde::de::Error::custom("token limit cannot be negative"));
+            }
+
+            let value = number
+                .as_f64()
+                .ok_or_else(|| serde::de::Error::custom("token limit must be a finite number"))?;
+            if !value.is_finite() {
+                return Err(serde::de::Error::custom(
+                    "token limit must be a finite number",
+                ));
+            }
+            if value < 0.0 {
+                return Err(serde::de::Error::custom("token limit cannot be negative"));
+            }
+            if value.fract() != 0.0 {
+                return Err(serde::de::Error::custom(
+                    "token limit float must be integral",
+                ));
+            }
+            if value > u32::MAX as f64 {
+                return Err(serde::de::Error::custom("token limit exceeds u32::MAX"));
+            }
+
+            Ok(Some(value as u32))
+        }
+        _ => Err(serde::de::Error::custom(
+            "token limit must be a JSON number",
+        )),
+    }
 }
 
 /// Compatibility alias for callers that still import provider-base pricing.
