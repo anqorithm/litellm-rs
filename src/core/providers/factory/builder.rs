@@ -9,7 +9,6 @@ use super::super::unified_provider::ProviderError;
 use super::super::{anthropic, bedrock, cloudflare, macros, mistral, openai, openai_like};
 #[cfg(feature = "providers-extra")]
 use super::super::{azure, azure_ai, vertex_ai};
-#[cfg(any(feature = "providers-extra", feature = "providers-extended"))]
 use crate::core::traits::provider::ProviderConfig as _;
 use std::env;
 #[cfg(feature = "providers-extra")]
@@ -356,6 +355,10 @@ pub(super) fn build_anthropic_config_from_factory(
             .filter_map(|value| value.as_str().map(str::to_string))
             .collect();
     }
+
+    anthropic_config
+        .validate()
+        .map_err(|e| ProviderError::configuration("anthropic", e))?;
 
     Ok(anthropic_config)
 }

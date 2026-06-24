@@ -171,6 +171,22 @@ fn test_build_anthropic_config_from_factory_maps_optional_fields() {
 }
 
 #[test]
+fn test_build_anthropic_config_from_factory_validates_compatible_models() {
+    let config = serde_json::json!({
+        "api_key": "xiaomi-compatible-key",
+        "api_base": "https://token-plan-sgp.xiaomimimo.com/anthropic",
+        "allow_unknown_models": true
+    });
+
+    let err = match build_anthropic_config_from_factory(&config) {
+        Ok(_) => panic!("compatible Anthropic config should require models"),
+        Err(err) => err,
+    };
+
+    assert!(format!("{err}").contains("explicit models allow-list"));
+}
+
+#[test]
 fn test_build_mistral_config_from_factory_maps_optional_fields() {
     let config = serde_json::json!({
         "api_key": "mistral-key",

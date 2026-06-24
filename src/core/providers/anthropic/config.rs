@@ -140,6 +140,16 @@ impl AnthropicConfig {
         if let Ok(allow_unknown_models) = env::var("ANTHROPIC_ALLOW_UNKNOWN_MODELS") {
             config.allow_unknown_models = allow_unknown_models.parse().unwrap_or(false);
         }
+        if let Some(models) = env_model_list("ANTHROPIC_MODELS")
+            .or_else(|| env_model_list("ANTHROPIC_CONFIGURED_MODELS"))
+        {
+            config.configured_models = models;
+        }
+        if let Some(models) = env_model_list("ANTHROPIC_MULTIMODAL_MODELS")
+            .or_else(|| env_model_list("ANTHROPIC_CONFIGURED_MULTIMODAL_MODELS"))
+        {
+            config.configured_multimodal_models = models;
+        }
 
         Ok(config)
     }
@@ -352,6 +362,16 @@ impl ProviderConfig for AnthropicConfig {
     }
 }
 
+fn env_model_list(name: &str) -> Option<Vec<String>> {
+    env::var(name).ok().map(|raw| {
+        raw.split(',')
+            .map(str::trim)
+            .filter(|model| !model.is_empty())
+            .map(str::to_string)
+            .collect()
+    })
+}
+
 /// Configuration
 pub struct AnthropicConfigBuilder {
     config: AnthropicConfig,
@@ -545,6 +565,56 @@ mod tests {
             panic!("first-party Anthropic should not accept unknown-model opt-in");
         };
         assert!(format!("{err}").contains("non-Anthropic compatible base URL"));
+    }
+
+    #[test]
+    fn from_env_reads_compatible_model_allow_lists() {
+        const KEYS: &[&str] = &[
+            "ANTHROPIC_API_KEY",
+            "CLAUDE_API_KEY",
+            "ANTHROPIC_BASE_URL",
+            "ANTHROPIC_ALLOW_UNKNOWN_MODELS",
+            "ANTHROPIC_MODELS",
+            "ANTHROPIC_MULTIMODAL_MODELS",
+        ];
+        let previous: Vec<_> = KEYS
+            .iter()
+            .map(|key| (*key, std::env::var(key).ok()))
+            .collect();
+
+        for key in KEYS {
+            unsafe { std::env::remove_var(key) };
+        }
+        unsafe {
+            std::env::set_var("ANTHROPIC_API_KEY", "xiaomi-compatible-key");
+            std::env::set_var(
+                "ANTHROPIC_BASE_URL",
+                "https://token-plan-sgp.xiaomimimo.com/anthropic",
+            );
+            std::env::set_var("ANTHROPIC_ALLOW_UNKNOWN_MODELS", "true");
+            std::env::set_var("ANTHROPIC_MODELS", "mimo-v2.5, mimo-v2.5-pro");
+            std::env::set_var("ANTHROPIC_MULTIMODAL_MODELS", "mimo-v2.5");
+        }
+
+        let config = AnthropicConfig::from_env()
+            .unwrap_or_else(|err| panic!("env config should parse: {err}"));
+        assert!(config.allow_unknown_models);
+        assert_eq!(
+            config.configured_models,
+            vec!["mimo-v2.5".to_string(), "mimo-v2.5-pro".to_string()]
+        );
+        assert_eq!(
+            config.configured_multimodal_models,
+            vec!["mimo-v2.5".to_string()]
+        );
+        assert!(config.validate().is_ok());
+
+        for (key, value) in previous {
+            match value {
+                Some(value) => unsafe { std::env::set_var(key, value) },
+                None => unsafe { std::env::remove_var(key) },
+            }
+        }
     }
 
     #[test]

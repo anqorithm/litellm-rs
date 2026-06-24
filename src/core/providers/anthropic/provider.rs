@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 use crate::core::providers::base::GlobalPoolManager;
 use crate::core::providers::unified_provider::ProviderError;
+use crate::core::traits::provider::ProviderConfig as _;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use crate::core::types::{
     chat::ChatRequest,
@@ -112,7 +113,13 @@ impl AnthropicProvider {
                 COMPATIBLE_MODEL_MAX_OUTPUT_TOKENS,
             )?;
 
-            if request.tools.is_some() || AnthropicClient::has_anthropic_tools_extra_param(request)
+            if request
+                .tools
+                .as_ref()
+                .is_some_and(|tools| !tools.is_empty())
+                || AnthropicClient::has_anthropic_tools_extra_param(request)
+                || request.functions.as_ref().is_some_and(|f| !f.is_empty())
+                || request.function_call.is_some()
             {
                 return Err(ProviderError::not_supported(
                     "anthropic",
@@ -187,7 +194,12 @@ impl AnthropicProvider {
         }
 
         // Check tool calling support
-        if request.tools.is_some() && !model_spec.features.contains(&ModelFeature::ToolCalling) {
+        if request
+            .tools
+            .as_ref()
+            .is_some_and(|tools| !tools.is_empty())
+            && !model_spec.features.contains(&ModelFeature::ToolCalling)
+        {
             return Err(ProviderError::not_supported(
                 "anthropic",
                 format!("Model {} does not support tool calling", request.model),
@@ -301,7 +313,9 @@ impl LLMProvider for AnthropicProvider {
             anthropic_request["stream"] = Value::Bool(request.stream);
         }
 
-        if let Some(tools) = request.tools {
+        if let Some(tools) = request.tools
+            && !tools.is_empty()
+        {
             anthropic_request["tools"] = serde_json::to_value(tools)?;
         }
 
@@ -363,8 +377,16 @@ impl LLMProvider for AnthropicProvider {
     }
 
     async fn health_check(&self) -> HealthStatus {
+        let health_check_model = if self.client.uses_compatible_model_allow_list() {
+            self.supported_models.first().map(|model| model.id.clone())
+        } else {
+            Some("claude-3-haiku-20240307".to_string())
+        };
+        let Some(model) = health_check_model else {
+            return HealthStatus::Unhealthy;
+        };
         let test_request = ChatRequest {
-            model: "claude-3-haiku-20240307".to_string(),
+            model,
             messages: vec![crate::core::types::chat::ChatMessage {
                 role: crate::core::types::message::MessageRole::User,
                 content: Some(crate::core::types::message::MessageContent::Text(
@@ -459,6 +481,9 @@ pub fn create_anthropic_provider(
 /// Create
 pub fn create_anthropic_provider_from_env() -> Result<AnthropicProvider, ProviderError> {
     let config = AnthropicConfig::from_env()?;
+    config
+        .validate()
+        .map_err(|e| ProviderError::configuration("anthropic", e))?;
     AnthropicProvider::new(config)
 }
 

@@ -132,3 +132,44 @@ fn compatible_allow_list_rejects_registry_model_ids_not_configured() {
 
     assert!(format!("{err}").contains("Unsupported model: claude-3-haiku-20240307"));
 }
+
+#[test]
+fn compatible_models_allow_empty_tools_without_forwarding_tools() {
+    let config = AnthropicConfig::new_test("test-key")
+        .with_base_url("https://token-plan-sgp.xiaomimimo.com/anthropic")
+        .with_allow_unknown_models(true)
+        .with_configured_models(vec!["mimo-v2.5".to_string()]);
+    let client = match AnthropicClient::new(config) {
+        Ok(client) => client,
+        Err(err) => panic!("client should build: {err}"),
+    };
+    let mut request = ChatRequest::new("mimo-v2.5").add_user_message("Hello");
+    request.tools = Some(vec![]);
+
+    let transformed = client
+        .transform_chat_request(&request)
+        .unwrap_or_else(|err| panic!("empty tools should not declare tool support: {err}"));
+
+    assert!(transformed.get("tools").is_none());
+}
+
+#[test]
+fn compatible_models_reject_legacy_functions() {
+    let config = AnthropicConfig::new_test("test-key")
+        .with_base_url("https://token-plan-sgp.xiaomimimo.com/anthropic")
+        .with_allow_unknown_models(true)
+        .with_configured_models(vec!["mimo-v2.5".to_string()]);
+    let client = match AnthropicClient::new(config) {
+        Ok(client) => client,
+        Err(err) => panic!("client should build: {err}"),
+    };
+    let mut request = ChatRequest::new("mimo-v2.5").add_user_message("Hello");
+    request.functions = Some(vec![serde_json::json!({"name": "lookup"})]);
+
+    let err = match client.transform_chat_request(&request) {
+        Ok(_) => panic!("compatible models must reject legacy function definitions"),
+        Err(err) => err,
+    };
+
+    assert!(format!("{err}").contains("tool calling support"));
+}

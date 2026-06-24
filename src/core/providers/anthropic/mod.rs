@@ -13,6 +13,9 @@ pub mod models;
 pub mod provider;
 pub mod streaming;
 
+#[cfg(test)]
+mod compatible_provider_tests;
+
 // Re-export core components
 pub use client::AnthropicClient;
 pub use config::{AnthropicConfig, AnthropicConfigBuilder};

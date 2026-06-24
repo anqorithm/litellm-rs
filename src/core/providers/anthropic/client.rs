@@ -275,7 +275,15 @@ impl AnthropicClient {
                 format!("Unsupported model: {}", request.model),
             ));
         }
-        if model_spec.is_none() && Self::has_anthropic_tools_extra_param(request) {
+        if model_spec.is_none()
+            && (request
+                .tools
+                .as_ref()
+                .is_some_and(|tools| !tools.is_empty())
+                || Self::has_anthropic_tools_extra_param(request)
+                || request.functions.as_ref().is_some_and(|f| !f.is_empty())
+                || request.function_call.is_some())
+        {
             return Err(ProviderError::not_supported(
                 "anthropic",
                 format!(
@@ -371,7 +379,9 @@ impl AnthropicClient {
         }
 
         // Add tool support
-        if let Some(tools) = &request.tools {
+        if let Some(tools) = &request.tools
+            && !tools.is_empty()
+        {
             let Some(model_spec) = model_spec else {
                 return Err(ProviderError::not_supported(
                     "anthropic",
