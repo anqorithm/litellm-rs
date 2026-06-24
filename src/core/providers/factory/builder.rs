@@ -338,6 +338,9 @@ pub(super) fn build_anthropic_config_from_factory(
     if let Some(enable_experimental) = config_bool(config, "enable_experimental") {
         anthropic_config.enable_experimental = enable_experimental;
     }
+    if let Some(allow_unknown_models) = config_bool(config, "allow_unknown_models") {
+        anthropic_config.allow_unknown_models = allow_unknown_models;
+    }
 
     Ok(anthropic_config)
 }

@@ -37,6 +37,8 @@ pub struct AnthropicConfig {
     pub enable_computer_use: bool,
     /// Enable experimental features
     pub enable_experimental: bool,
+    /// Allow Anthropic-compatible upstreams to use non-Anthropic model IDs.
+    pub allow_unknown_models: bool,
 }
 
 impl Default for AnthropicConfig {
@@ -55,6 +57,7 @@ impl Default for AnthropicConfig {
             enable_cache_control: true,
             enable_computer_use: false, // Default disabled
             enable_experimental: false,
+            allow_unknown_models: false,
         }
     }
 }
@@ -128,6 +131,10 @@ impl AnthropicConfig {
             config.enable_experimental = experimental.parse().unwrap_or(false);
         }
 
+        if let Ok(allow_unknown_models) = env::var("ANTHROPIC_ALLOW_UNKNOWN_MODELS") {
+            config.allow_unknown_models = allow_unknown_models.parse().unwrap_or(false);
+        }
+
         Ok(config)
     }
 
@@ -188,6 +195,12 @@ impl AnthropicConfig {
     /// Enable experimental features
     pub fn with_experimental(mut self, enabled: bool) -> Self {
         self.enable_experimental = enabled;
+        self
+    }
+
+    /// Allow Anthropic-compatible upstreams to use non-Anthropic model IDs.
+    pub fn with_allow_unknown_models(mut self, enabled: bool) -> Self {
+        self.allow_unknown_models = enabled;
         self
     }
 
@@ -315,6 +328,12 @@ impl AnthropicConfigBuilder {
     pub fn experimental(mut self, enabled: bool) -> Self {
         self.config.enable_experimental = enabled;
         self.config.enable_computer_use = enabled; // Computer tools are part of experimental features
+        self
+    }
+
+    /// Allow Anthropic-compatible upstreams to use non-Anthropic model IDs.
+    pub fn allow_unknown_models(mut self, enabled: bool) -> Self {
+        self.config.allow_unknown_models = enabled;
         self
     }
 

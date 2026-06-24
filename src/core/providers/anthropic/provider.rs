@@ -60,12 +60,56 @@ impl AnthropicProvider {
     fn validate_request(&self, request: &ChatRequest) -> Result<(), ProviderError> {
         let registry = get_anthropic_registry();
 
-        let model_spec = registry.get_model_spec(&request.model).ok_or_else(|| {
-            ProviderError::invalid_request(
+        let Some(model_spec) = registry.get_model_spec(&request.model) else {
+            if !self.client.allows_unknown_models() {
+                return Err(ProviderError::invalid_request(
+                    "anthropic",
+                    format!("Unsupported model: {}", request.model),
+                ));
+            }
+
+            crate::core::providers::base::validate_chat_request_common(
                 "anthropic",
-                format!("Unsupported model: {}", request.model),
-            )
-        })?;
+                request,
+                u32::MAX,
+            )?;
+
+            if Self::has_multimodal_content(request) {
+                return Err(ProviderError::not_supported(
+                    "anthropic",
+                    format!(
+                        "Unknown model {} cannot declare multimodal support",
+                        request.model
+                    ),
+                ));
+            }
+
+            if request.tools.is_some() {
+                return Err(ProviderError::not_supported(
+                    "anthropic",
+                    format!(
+                        "Unknown model {} cannot declare tool calling support",
+                        request.model
+                    ),
+                ));
+            }
+
+            if request
+                .thinking
+                .as_ref()
+                .is_some_and(|thinking| thinking.enabled)
+            {
+                return Err(ProviderError::not_supported(
+                    "anthropic",
+                    format!(
+                        "Unknown model {} cannot declare thinking support",
+                        request.model
+                    ),
+                ));
+            }
+
+            return Ok(());
+        };
 
         // Common validation: empty messages + max_tokens
         crate::core::providers::base::validate_chat_request_common(
@@ -75,15 +119,7 @@ impl AnthropicProvider {
         )?;
 
         // Check multimodal content
-        let has_multimodal_content = request.messages.iter().any(|msg| {
-            if let Some(crate::core::types::message::MessageContent::Parts(parts)) = &msg.content {
-                parts.iter().any(|part| {
-                    !matches!(part, crate::core::types::content::ContentPart::Text { .. })
-                })
-            } else {
-                false
-            }
-        });
+        let has_multimodal_content = Self::has_multimodal_content(request);
 
         if has_multimodal_content
             && !model_spec
@@ -108,6 +144,18 @@ impl AnthropicProvider {
         }
 
         Ok(())
+    }
+
+    fn has_multimodal_content(request: &ChatRequest) -> bool {
+        request.messages.iter().any(|msg| {
+            if let Some(crate::core::types::message::MessageContent::Parts(parts)) = &msg.content {
+                parts.iter().any(|part| {
+                    !matches!(part, crate::core::types::content::ContentPart::Text { .. })
+                })
+            } else {
+                false
+            }
+        })
     }
 }
 
@@ -249,13 +297,10 @@ impl LLMProvider for AnthropicProvider {
         self.validate_request(&request)?;
 
         let registry = get_anthropic_registry();
-        let model_spec = registry.get_model_spec(&request.model).ok_or_else(|| {
-            ProviderError::not_supported("anthropic", format!("Unknown model: {}", request.model))
-        })?;
-
-        if !model_spec
-            .features
-            .contains(&ModelFeature::StreamingSupport)
+        if let Some(model_spec) = registry.get_model_spec(&request.model)
+            && !model_spec
+                .features
+                .contains(&ModelFeature::StreamingSupport)
         {
             return Err(ProviderError::not_supported(
                 "anthropic",
@@ -409,5 +454,34 @@ mod tests {
         assert!(provider.supports_model("claude-3-5-sonnet-20241022"));
         assert!(provider.supports_model("claude-3-haiku-20240307"));
         assert!(!provider.supports_model("gpt-4"));
+    }
+
+    #[tokio::test]
+    async fn unknown_models_are_rejected_by_default() {
+        let config = AnthropicConfig::new_test("test-key");
+        let provider = AnthropicProvider::new(config).unwrap();
+        let request = ChatRequest::new("mimo-v2.5").add_user_message("Hello");
+
+        let err = provider
+            .transform_request(request, RequestContext::new())
+            .await
+            .expect_err("unknown model should be rejected without explicit opt-in");
+
+        assert!(format!("{err}").contains("Unsupported model: mimo-v2.5"));
+    }
+
+    #[tokio::test]
+    async fn allow_unknown_models_accepts_anthropic_compatible_model_ids() {
+        let config = AnthropicConfig::new_test("test-key").with_allow_unknown_models(true);
+        let provider = AnthropicProvider::new(config).unwrap();
+        let request = ChatRequest::new("mimo-v2.5")
+            .add_user_message("Reply with exactly: anthropic-compatible-ok");
+
+        let transformed = provider
+            .transform_request(request, RequestContext::new())
+            .await
+            .expect("explicit opt-in should allow non-Anthropic model IDs");
+
+        assert_eq!(transformed["model"], "mimo-v2.5");
     }
 }
