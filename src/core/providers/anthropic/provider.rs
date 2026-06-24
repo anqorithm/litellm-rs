@@ -85,6 +85,16 @@ impl AnthropicProvider {
                 ));
             }
 
+            if AnthropicClient::has_unsupported_unknown_model_content(request) {
+                return Err(ProviderError::not_supported(
+                    "anthropic",
+                    format!(
+                        "Unknown model {} only supports text and image content",
+                        request.model
+                    ),
+                ));
+            }
+
             if request
                 .thinking
                 .as_ref()
@@ -443,6 +453,7 @@ mod tests {
     #[test]
     fn configured_unknown_models_are_visible_to_support_checks() {
         let config = AnthropicConfig::new_test("test-key")
+            .with_base_url("https://token-plan-sgp.xiaomimimo.com/anthropic")
             .with_allow_unknown_models(true)
             .with_configured_models(vec!["mimo-v2.5".to_string()]);
         let provider = match AnthropicProvider::new(config) {
@@ -471,6 +482,7 @@ mod tests {
     #[tokio::test]
     async fn allow_unknown_models_accepts_anthropic_compatible_model_ids() {
         let config = AnthropicConfig::new_test("test-key")
+            .with_base_url("https://token-plan-sgp.xiaomimimo.com/anthropic")
             .with_allow_unknown_models(true)
             .with_configured_models(vec!["mimo-v2.5".to_string()]);
         let provider = match AnthropicProvider::new(config) {
@@ -496,6 +508,7 @@ mod tests {
         };
 
         let config = AnthropicConfig::new_test("test-key")
+            .with_base_url("https://token-plan-sgp.xiaomimimo.com/anthropic")
             .with_allow_unknown_models(true)
             .with_configured_models(vec!["mimo-v2.5".to_string()]);
         let provider = match AnthropicProvider::new(config) {
@@ -542,6 +555,7 @@ mod tests {
     #[tokio::test]
     async fn unknown_models_reject_anthropic_tools_extra_param() {
         let config = AnthropicConfig::new_test("test-key")
+            .with_base_url("https://token-plan-sgp.xiaomimimo.com/anthropic")
             .with_allow_unknown_models(true)
             .with_configured_models(vec!["mimo-v2.5".to_string()]);
         let provider = match AnthropicProvider::new(config) {
@@ -563,5 +577,45 @@ mod tests {
         };
 
         assert!(format!("{err}").contains("tool calling support"));
+    }
+
+    #[tokio::test]
+    async fn unknown_models_reject_message_level_tool_blocks() {
+        use crate::core::types::{
+            content::ContentPart,
+            message::{MessageContent, MessageRole},
+        };
+
+        let config = AnthropicConfig::new_test("test-key")
+            .with_base_url("https://token-plan-sgp.xiaomimimo.com/anthropic")
+            .with_allow_unknown_models(true)
+            .with_configured_models(vec!["mimo-v2.5".to_string()]);
+        let provider = match AnthropicProvider::new(config) {
+            Ok(provider) => provider,
+            Err(err) => panic!("provider should build: {err}"),
+        };
+        let request = ChatRequest {
+            model: "mimo-v2.5".to_string(),
+            messages: vec![crate::core::types::chat::ChatMessage {
+                role: MessageRole::User,
+                content: Some(MessageContent::Parts(vec![ContentPart::ToolUse {
+                    id: "toolu_1".to_string(),
+                    name: "computer".to_string(),
+                    input: serde_json::json!({}),
+                }])),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let err = match provider
+            .transform_request(request, RequestContext::new())
+            .await
+        {
+            Ok(_) => panic!("unknown models must reject message-level tool blocks"),
+            Err(err) => err,
+        };
+
+        assert!(format!("{err}").contains("only supports text and image content"));
     }
 }

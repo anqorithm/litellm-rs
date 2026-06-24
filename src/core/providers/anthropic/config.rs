@@ -216,6 +216,7 @@ impl AnthropicConfig {
     /// Check if a non-Anthropic model ID is explicitly allowed.
     pub fn allows_unknown_model(&self, model: &str) -> bool {
         self.allow_unknown_models
+            && self.base_url.trim_end_matches('/') != "https://api.anthropic.com"
             && self
                 .configured_models
                 .iter()
@@ -249,6 +250,12 @@ impl ProviderConfig for AnthropicConfig {
         let first_party_anthropic =
             self.base_url.trim_end_matches('/') == "https://api.anthropic.com";
         let compatible_upstream = self.allow_unknown_models && !first_party_anthropic;
+
+        if self.allow_unknown_models && first_party_anthropic {
+            return Err(
+                "allow_unknown_models requires a non-Anthropic compatible base URL".to_string(),
+            );
+        }
 
         if compatible_upstream && self.configured_models.is_empty() {
             return Err("allow_unknown_models requires an explicit models allow-list".to_string());
@@ -464,6 +471,20 @@ mod tests {
             panic!("compatible upstreams should require explicit model IDs");
         };
         assert!(format!("{err}").contains("explicit models allow-list"));
+    }
+
+    #[test]
+    fn test_config_builder_rejects_first_party_unknown_model_opt_in() {
+        let config = AnthropicConfigBuilder::new()
+            .api_key("sk-ant-test1234567890123")
+            .allow_unknown_models(true)
+            .configured_models(vec!["mimo-v2.5".to_string()])
+            .build();
+
+        let Err(err) = config else {
+            panic!("first-party Anthropic should not accept unknown-model opt-in");
+        };
+        assert!(format!("{err}").contains("non-Anthropic compatible base URL"));
     }
 
     #[test]

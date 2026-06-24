@@ -263,6 +263,15 @@ impl AnthropicClient {
                 ),
             ));
         }
+        if model_spec.is_none() && Self::has_unsupported_unknown_model_content(request) {
+            return Err(ProviderError::not_supported(
+                "anthropic",
+                format!(
+                    "Unknown model {} only supports text and image content",
+                    request.model
+                ),
+            ));
+        }
 
         // The Messages API only returns a single candidate; any n other than 1
         // (including 0) cannot be honored, so reject it instead of silently
@@ -539,7 +548,7 @@ impl AnthropicClient {
                                     }
                                 }
                                 ContentPart::Document { source, .. }
-                                    if model_spec.is_none_or(|spec| {
+                                    if model_spec.is_some_and(|spec| {
                                         spec.features.contains(&ModelFeature::MultimodalSupport)
                                     }) =>
                                 {
@@ -610,6 +619,25 @@ impl AnthropicClient {
             .get("anthropic_tools")
             .and_then(|value| value.as_array())
             .is_some_and(|tools| !tools.is_empty())
+    }
+
+    pub(crate) fn has_unsupported_unknown_model_content(request: &ChatRequest) -> bool {
+        request.messages.iter().any(|message| {
+            message
+                .tool_calls
+                .as_ref()
+                .is_some_and(|calls| !calls.is_empty())
+                || matches!(
+                    &message.content,
+                    Some(crate::core::types::message::MessageContent::Parts(parts))
+                        if parts.iter().any(|part| !matches!(
+                            part,
+                            ContentPart::Text { .. }
+                                | ContentPart::ImageUrl { .. }
+                                | ContentPart::Image { .. }
+                        ))
+                )
+        })
     }
 
     fn content_value_to_blocks(content: &Value) -> Vec<Value> {
