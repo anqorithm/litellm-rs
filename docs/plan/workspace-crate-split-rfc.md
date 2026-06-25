@@ -188,6 +188,18 @@ The first split should preserve old feature names on the facade crate.
 | `postgres` | Enable Postgres storage adapter | `litellm-storage` |
 | `redis` | Enable Redis storage/cache adapter | `litellm-storage` |
 | `s3` | Enable object storage adapter | `litellm-storage` |
+| `metrics` | Enable system metrics collection (`sysinfo`); `monitoring` is gated behind `gateway` today | `litellm-gateway` |
+| `tracing` | Enable tracing subscriber; observability spans multiple crates | facade + per-crate feature passthrough |
+| `mcp-validation` | Enable JSON Schema validation for MCP tool parameters | `litellm-gateway` |
+| `vector-db` | Enable vector store for semantic caching (implies `storage`) | `litellm-storage` |
+| `websockets` | Enable WebSocket transport surfaces | `litellm-gateway` |
+| `analytics` | Enable analytics pipeline (proposed; confirm against analytics module in Phase 0) | `litellm-storage` (proposed) |
+| `enterprise` | Aggregate `analytics` + `vector-db` bundle | `litellm-rs` facade |
+| `aws-secrets` | Enable AWS Secrets Manager resolution | `litellm-storage` |
+| `gcp-secrets` | Enable GCP Secret Manager resolution | `litellm-storage` |
+| `azure-secrets` | Enable Azure Key Vault resolution | `litellm-storage` |
+| `vault-secrets` | Enable HashiCorp Vault resolution | `litellm-storage` |
+| `cloud-secrets` | Aggregate all cloud secret backends | `litellm-rs` facade |
 | `providers-extra` | Enable grouped additional providers | provider crates |
 | `providers-extended` | Enable heavier native providers | provider crates |
 | `full` | Gateway + storage + all provider/infrastructure features | facade + workspace crates |
@@ -196,6 +208,14 @@ Longer term, `storage` should stop implying `gateway`; the gateway should
 depend on storage when it needs persistence, not the other way around. That
 decoupling should be a separate compatibility PR because it changes how users
 reason about features.
+
+The Target Owner column for the features added beyond the first draft
+(`metrics`, `tracing`, `mcp-validation`, `vector-db`, `websockets`,
+`analytics`, `enterprise`, and the `*-secrets` family) is a proposed assignment
+derived from current module placement, not a frozen decision. Secret
+resolution, analytics persistence, and observability each span more than one
+crate, so Phase 0 boundary inventory must confirm these owners before any of
+them is moved off the facade.
 
 ## Public API And Semver Strategy
 
