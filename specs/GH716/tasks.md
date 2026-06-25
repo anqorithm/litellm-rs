@@ -13,7 +13,7 @@ Status: ready for PR
 - [x] Draft tech spec at `specs/GH716/tech.md`.
 - [x] Draft RFC at `docs/plan/workspace-crate-split-rfc.md`.
 - [x] Run docs and formatting verification.
-- [ ] Open PR linked to #716.
+- [x] Open PR linked to #716 (#718).
 
 ## Verification Log
 
