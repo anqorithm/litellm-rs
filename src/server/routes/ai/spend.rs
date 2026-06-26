@@ -103,7 +103,7 @@ pub(super) fn reserve_chat_completion_budget(
             provider,
             model,
             prompt_tokens,
-            provider_effective_max_output_tokens(provider, request),
+            provider_effective_max_output_tokens(provider, model, request),
             request.n.unwrap_or(1),
         ),
     )
@@ -230,17 +230,37 @@ fn catalog_max_output_tokens(provider: &str, model: &str) -> Option<u32> {
 
 fn provider_effective_max_output_tokens(
     provider: &str,
+    model: &str,
     request: &ChatCompletionRequest,
 ) -> Option<u32> {
     let provider = crate::core::pricing::normalize_pricing_provider(provider);
     match provider.as_str() {
         "openai" | "azure" | "azure_ai" | "openai_like" | "openrouter" | "xai" | "groq"
         | "deepseek" | "moonshot" | "minimax" | "zhipuai" | "xiaomi_mimo" | "amazon_nova"
-        | "bedrock" | "ai21" | "baseten" | "huggingface" | "ollama" | "sagemaker" | "snowflake" => {
+        | "ai21" | "baseten" | "huggingface" | "ollama" | "sagemaker" | "snowflake" => {
             request.max_completion_tokens.or(request.max_tokens)
         }
+        "bedrock" => bedrock_effective_max_output_tokens(model, request),
         "cohere" | "replicate" => request.max_tokens.or(request.max_completion_tokens),
         _ => request.max_tokens,
+    }
+}
+
+fn bedrock_effective_max_output_tokens(
+    model: &str,
+    request: &ChatCompletionRequest,
+) -> Option<u32> {
+    use crate::core::providers::bedrock::BedrockApiType;
+
+    let Ok(config) = crate::core::providers::bedrock::get_model_config_for_model_id(model) else {
+        return request.max_tokens;
+    };
+
+    match config.api_type {
+        BedrockApiType::Converse | BedrockApiType::ConverseStream => {
+            request.max_completion_tokens.or(request.max_tokens)
+        }
+        BedrockApiType::Invoke | BedrockApiType::InvokeStream => request.max_tokens,
     }
 }
 

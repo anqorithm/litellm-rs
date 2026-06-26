@@ -465,6 +465,11 @@ fn catalog_output_limit_matches_anthropic_compatible_mimo_alias() {
 }
 
 #[test]
+fn catalog_output_limit_matches_zhipu_provider_alias() {
+    assert_eq!(catalog_max_output_tokens("zhipuai", "glm-4"), Some(4096));
+}
+
+#[test]
 fn gemini_max_completion_tokens_only_uses_catalog_output_bound() {
     let budget = UnifiedBudgetLimits::new();
     budget.providers.set_provider_limit(
@@ -526,19 +531,36 @@ fn provider_effective_max_output_tokens_tracks_adapter_precedence() {
     request.max_completion_tokens = Some(10);
 
     assert_eq!(
-        provider_effective_max_output_tokens("amazon_nova", &request),
+        provider_effective_max_output_tokens("amazon_nova", "amazon.nova-2-lite-v1:0", &request),
         Some(10)
     );
     assert_eq!(
-        provider_effective_max_output_tokens("bedrock", &request),
+        provider_effective_max_output_tokens("bedrock", "amazon.nova-2-lite-v1:0", &request),
         Some(10)
     );
     assert_eq!(
-        provider_effective_max_output_tokens("cohere", &request),
+        provider_effective_max_output_tokens("cohere", "command-r-plus", &request),
         Some(100)
     );
     assert_eq!(
-        provider_effective_max_output_tokens("gemini", &request),
+        provider_effective_max_output_tokens("gemini", "gemini-3.1-flash-lite", &request),
+        Some(100)
+    );
+}
+
+#[test]
+fn bedrock_invoke_models_ignore_max_completion_tokens_for_reservation_cap() {
+    let mut request = chat_request("amazon.titan-text-express-v1", vec![user_message("hello")]);
+    request.max_completion_tokens = Some(10);
+
+    assert_eq!(
+        provider_effective_max_output_tokens("bedrock", "amazon.titan-text-express-v1", &request),
+        None
+    );
+
+    request.max_tokens = Some(100);
+    assert_eq!(
+        provider_effective_max_output_tokens("bedrock", "amazon.titan-text-express-v1", &request),
         Some(100)
     );
 }
