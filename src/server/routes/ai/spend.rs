@@ -199,7 +199,7 @@ fn reservation_output_tokens(
 
 fn catalog_max_output_tokens(provider: &str, model: &str) -> Option<u32> {
     let db = crate::core::pricing::get_pricing_db();
-    let provider_aliases = pricing_provider_aliases(provider);
+    let provider_aliases = pricing_provider_aliases(provider, model);
     if let Some(tokens) = db
         .get_model_info(model)
         .filter(|info| provider_name_matches(&info.litellm_provider, &provider_aliases))
@@ -234,18 +234,39 @@ fn provider_effective_max_output_tokens(
 ) -> Option<u32> {
     let provider = crate::core::pricing::normalize_pricing_provider(provider);
     match provider.as_str() {
-        "openai" | "azure" => request.max_completion_tokens.or(request.max_tokens),
+        "openai" | "azure" | "azure_ai" | "openai_like" | "openrouter" | "xai" | "groq"
+        | "deepseek" | "moonshot" | "minimax" | "zhipuai" | "xiaomi_mimo" | "amazon_nova"
+        | "bedrock" | "ai21" | "baseten" | "huggingface" | "ollama" | "sagemaker" | "snowflake" => {
+            request.max_completion_tokens.or(request.max_tokens)
+        }
+        "cohere" | "replicate" => request.max_tokens.or(request.max_completion_tokens),
         _ => request.max_tokens,
     }
 }
 
-fn pricing_provider_aliases(provider: &str) -> Vec<String> {
+fn pricing_provider_aliases(provider: &str, model: &str) -> Vec<String> {
     let normalized = crate::core::pricing::normalize_pricing_provider(provider);
-    match normalized.as_str() {
-        "gemini" => vec!["gemini".to_string(), "vertex_ai".to_string()],
-        "vertex_ai" => vec!["vertex_ai".to_string(), "google".to_string()],
-        _ => vec![normalized],
-    }
+    let aliases = match normalized.as_str() {
+        "anthropic" if is_xiaomi_mimo_model(model) => vec!["xiaomi_mimo", "xiaomi", "mimo"],
+        "gemini" => vec!["gemini", "vertex_ai"],
+        "vertex_ai" => vec!["vertex_ai", "google"],
+        "xiaomi_mimo" => vec!["xiaomi_mimo", "xiaomi", "mimo"],
+        "zhipuai" => vec!["zhipuai", "glm", "zai"],
+        _ => return vec![normalized],
+    };
+    aliases
+        .into_iter()
+        .map(crate::core::pricing::normalize_pricing_provider)
+        .fold(Vec::new(), |mut unique, alias| {
+            if !unique.contains(&alias) {
+                unique.push(alias);
+            }
+            unique
+        })
+}
+
+fn is_xiaomi_mimo_model(model: &str) -> bool {
+    crate::core::pricing::normalize_model_key(model).starts_with("mimo-")
 }
 
 fn provider_name_matches(provider: &str, aliases: &[String]) -> bool {

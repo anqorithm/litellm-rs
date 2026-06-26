@@ -457,7 +457,15 @@ fn catalog_output_limit_matches_pricing_provider_alias() {
 }
 
 #[test]
-fn non_openai_max_completion_tokens_only_uses_catalog_output_bound() {
+fn catalog_output_limit_matches_anthropic_compatible_mimo_alias() {
+    assert_eq!(
+        catalog_max_output_tokens("anthropic", "mimo-v2.5-pro"),
+        Some(131_072)
+    );
+}
+
+#[test]
+fn gemini_max_completion_tokens_only_uses_catalog_output_bound() {
     let budget = UnifiedBudgetLimits::new();
     budget.providers.set_provider_limit(
         "gemini",
@@ -480,6 +488,59 @@ fn non_openai_max_completion_tokens_only_uses_catalog_output_bound() {
 
     assert!(reservation.reserved_amount() > ten_output_tokens);
     reservation.cancel();
+}
+
+#[test]
+fn cohere_max_completion_tokens_reserves_provider_effective_output() {
+    let budget = UnifiedBudgetLimits::new();
+    let messages = vec![user_message("hello")];
+    let prompt_tokens =
+        estimate_chat_prompt_tokens("command-r-plus", &messages, None, None, None, None);
+    let ten_output_tokens = estimate_cost("command-r-plus", "cohere", prompt_tokens, Some(10))
+        .unwrap()
+        .max_cost;
+    let catalog_output_tokens =
+        estimate_cost("command-r-plus", "cohere", prompt_tokens, Some(4096))
+            .unwrap()
+            .max_cost;
+    budget.providers.set_provider_limit(
+        "cohere",
+        ProviderLimitConfig::new(ten_output_tokens * 1.1, ResetPeriod::Monthly),
+    );
+
+    let mut request = chat_request("command-r-plus", messages);
+    request.max_completion_tokens = Some(10);
+    let reservation = reserve_chat_completion_budget(&budget, "cohere", "command-r-plus", &request)
+        .unwrap()
+        .unwrap();
+
+    assert!(catalog_output_tokens > ten_output_tokens * 100.0);
+    assert!((reservation.reserved_amount() - ten_output_tokens).abs() < f64::EPSILON);
+    reservation.cancel();
+}
+
+#[test]
+fn provider_effective_max_output_tokens_tracks_adapter_precedence() {
+    let mut request = chat_request("amazon.nova-2-lite-v1:0", vec![user_message("hello")]);
+    request.max_tokens = Some(100);
+    request.max_completion_tokens = Some(10);
+
+    assert_eq!(
+        provider_effective_max_output_tokens("amazon_nova", &request),
+        Some(10)
+    );
+    assert_eq!(
+        provider_effective_max_output_tokens("bedrock", &request),
+        Some(10)
+    );
+    assert_eq!(
+        provider_effective_max_output_tokens("cohere", &request),
+        Some(100)
+    );
+    assert_eq!(
+        provider_effective_max_output_tokens("gemini", &request),
+        Some(100)
+    );
 }
 
 #[tokio::test]
