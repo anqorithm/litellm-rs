@@ -404,3 +404,338 @@ async fn test_budget_without_blocking() {
     assert!(result.allowed);
     assert_eq!(result.status, BudgetStatus::Exceeded);
 }
+
+#[test]
+fn test_provider_budget_manager_creation() {
+    let manager = ProviderBudgetManager::new();
+    assert_eq!(manager.provider_count(), 0);
+    assert!(manager.is_enabled());
+}
+
+#[test]
+fn test_set_provider_limit() {
+    let manager = ProviderBudgetManager::new();
+    manager.set_provider_limit(
+        "openai",
+        ProviderLimitConfig::new(1000.0, ResetPeriod::Monthly),
+    );
+
+    assert!(manager.has_provider_limit("openai"));
+    assert_eq!(manager.provider_count(), 1);
+}
+
+#[test]
+fn test_remove_provider_limit() {
+    let manager = ProviderBudgetManager::new();
+    manager.set_provider_limit(
+        "openai",
+        ProviderLimitConfig::new(1000.0, ResetPeriod::Monthly),
+    );
+
+    assert!(manager.has_provider_limit("openai"));
+    assert!(manager.remove_provider_limit("openai"));
+    assert!(!manager.has_provider_limit("openai"));
+}
+
+#[test]
+fn test_check_provider_budget() {
+    let manager = ProviderBudgetManager::new();
+    manager.set_provider_limit(
+        "openai",
+        ProviderLimitConfig::new(100.0, ResetPeriod::Monthly),
+    );
+
+    assert_eq!(manager.check_provider_budget("openai"), BudgetStatus::Ok);
+    assert_eq!(manager.check_provider_budget("unknown"), BudgetStatus::Ok);
+}
+
+#[test]
+fn test_can_provider_spend() {
+    let manager = ProviderBudgetManager::new();
+    manager.set_provider_limit(
+        "openai",
+        ProviderLimitConfig::new(100.0, ResetPeriod::Monthly),
+    );
+
+    assert!(manager.can_provider_spend("openai", 50.0));
+    assert!(manager.can_provider_spend("openai", 100.0));
+    assert!(!manager.can_provider_spend("openai", 101.0));
+    assert!(manager.can_provider_spend("unknown", 10000.0));
+}
+
+#[test]
+fn test_record_provider_spend() {
+    let manager = ProviderBudgetManager::new();
+    manager.set_provider_limit(
+        "openai",
+        ProviderLimitConfig::new(100.0, ResetPeriod::Monthly),
+    );
+
+    assert_eq!(
+        manager.record_provider_spend("openai", 50.0),
+        Some(BudgetStatus::Ok)
+    );
+    assert_eq!(
+        manager.record_provider_spend("openai", 30.0),
+        Some(BudgetStatus::Warning)
+    );
+    assert_eq!(
+        manager.record_provider_spend("openai", 25.0),
+        Some(BudgetStatus::Exceeded)
+    );
+}
+
+#[test]
+fn test_get_provider_usage() {
+    let manager = ProviderBudgetManager::new();
+    manager.set_provider_limit(
+        "openai",
+        ProviderLimitConfig::new(100.0, ResetPeriod::Monthly),
+    );
+    manager.record_provider_spend("openai", 30.0);
+
+    let usage = manager.get_provider_usage("openai").unwrap();
+    assert_eq!(usage.current_spend, 30.0);
+    assert_eq!(usage.remaining, 70.0);
+    assert_eq!(usage.request_count, 1);
+}
+
+#[test]
+fn test_get_available_and_exceeded_providers() {
+    let manager = ProviderBudgetManager::new();
+    manager.set_provider_limit(
+        "openai",
+        ProviderLimitConfig::new(100.0, ResetPeriod::Monthly),
+    );
+    manager.set_provider_limit(
+        "anthropic",
+        ProviderLimitConfig::new(100.0, ResetPeriod::Monthly),
+    );
+    manager.record_provider_spend("openai", 150.0);
+
+    let available = manager.get_available_providers();
+    assert!(available.contains(&"anthropic".to_string()));
+    assert!(!available.contains(&"openai".to_string()));
+
+    let exceeded = manager.get_exceeded_providers();
+    assert_eq!(exceeded, vec!["openai".to_string()]);
+}
+
+#[test]
+fn test_reset_provider_budget() {
+    let manager = ProviderBudgetManager::new();
+    manager.set_provider_limit(
+        "openai",
+        ProviderLimitConfig::new(100.0, ResetPeriod::Monthly),
+    );
+    manager.record_provider_spend("openai", 75.0);
+
+    assert!(manager.reset_provider_budget("openai"));
+    let usage = manager.get_provider_usage("openai").unwrap();
+    assert_eq!(usage.current_spend, 0.0);
+    assert_eq!(usage.request_count, 0);
+}
+
+#[test]
+fn test_disabled_provider_budget_manager_allows_all() {
+    let manager = ProviderBudgetManager::new();
+    manager.set_provider_limit(
+        "openai",
+        ProviderLimitConfig::new(100.0, ResetPeriod::Monthly),
+    );
+    manager.record_provider_spend("openai", 150.0);
+    assert_eq!(
+        manager.check_provider_budget("openai"),
+        BudgetStatus::Exceeded
+    );
+
+    manager.set_enabled(false);
+    assert_eq!(manager.check_provider_budget("openai"), BudgetStatus::Ok);
+    assert!(manager.can_provider_spend("openai", 1000.0));
+}
+
+#[test]
+fn test_model_budget_manager_basics() {
+    let manager = ModelBudgetManager::new();
+    assert_eq!(manager.model_count(), 0);
+    assert!(manager.is_enabled());
+
+    manager.set_model_limit("gpt-4", ModelLimitConfig::new(100.0, ResetPeriod::Monthly));
+    assert!(manager.has_model_limit("gpt-4"));
+    assert_eq!(manager.check_model_budget("gpt-4"), BudgetStatus::Ok);
+    assert_eq!(
+        manager.record_model_spend("gpt-4", 50.0),
+        Some(BudgetStatus::Ok)
+    );
+    assert_eq!(
+        manager.record_model_spend("gpt-4", 55.0),
+        Some(BudgetStatus::Exceeded)
+    );
+
+    let usage = manager.get_model_usage("gpt-4").unwrap();
+    assert_eq!(usage.current_spend, 105.0);
+    assert_eq!(usage.request_count, 2);
+}
+
+#[test]
+fn test_unified_budget_limits() {
+    let limits = UnifiedBudgetLimits::new();
+    limits.providers.set_provider_limit(
+        "openai",
+        ProviderLimitConfig::new(1000.0, ResetPeriod::Monthly),
+    );
+    limits
+        .models
+        .set_model_limit("gpt-4", ModelLimitConfig::new(500.0, ResetPeriod::Monthly));
+
+    assert!(limits.can_spend("openai", "gpt-4", 100.0));
+    limits.record_spend("openai", "gpt-4", 100.0);
+
+    assert_eq!(
+        limits
+            .providers
+            .get_provider_usage("openai")
+            .unwrap()
+            .current_spend,
+        100.0
+    );
+    assert_eq!(
+        limits
+            .models
+            .get_model_usage("gpt-4")
+            .unwrap()
+            .current_spend,
+        100.0
+    );
+}
+
+#[test]
+fn test_unified_budget_limits_restore_snapshots() {
+    let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+    let limits = UnifiedBudgetLimits::from_snapshots_with_persistence(
+        vec![
+            BudgetLimitSnapshot {
+                kind: BudgetLimitKind::Provider,
+                name: "openai".to_string(),
+                max_budget: 100.0,
+                current_spend: 25.0,
+                soft_limit: 80.0,
+                reset_period: ResetPeriod::Monthly,
+                currency: Currency::USD,
+                enabled: true,
+                last_reset_at: None,
+                request_count: 3,
+            },
+            BudgetLimitSnapshot {
+                kind: BudgetLimitKind::Model,
+                name: "gpt-4".to_string(),
+                max_budget: 50.0,
+                current_spend: 10.0,
+                soft_limit: 40.0,
+                reset_period: ResetPeriod::Daily,
+                currency: Currency::USD,
+                enabled: true,
+                last_reset_at: None,
+                request_count: 2,
+            },
+        ],
+        tx,
+    );
+
+    assert_eq!(
+        limits
+            .providers
+            .get_provider_usage("openai")
+            .unwrap()
+            .request_count,
+        3
+    );
+    assert_eq!(
+        limits
+            .models
+            .get_model_usage("gpt-4")
+            .unwrap()
+            .current_spend,
+        10.0
+    );
+}
+
+#[test]
+fn test_provider_budget_manager_emits_persistence_events() {
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+    let manager = ProviderBudgetManager::new().with_persistence(tx);
+
+    manager.set_provider_limit(
+        "openai",
+        ProviderLimitConfig::new(100.0, ResetPeriod::Monthly),
+    );
+    manager.record_provider_spend("openai", 12.5);
+
+    assert!(matches!(
+        rx.try_recv().expect("set should emit an upsert"),
+        BudgetPersistenceEvent::Upsert(BudgetLimitSnapshot {
+            kind: BudgetLimitKind::Provider,
+            ..
+        })
+    ));
+
+    match rx.try_recv().expect("spend should emit an upsert") {
+        BudgetPersistenceEvent::Upsert(snapshot) => {
+            assert_eq!(snapshot.name, "openai");
+            assert_eq!(snapshot.current_spend, 12.5);
+            assert_eq!(snapshot.request_count, 1);
+        }
+        BudgetPersistenceEvent::Delete { .. } => panic!("expected upsert"),
+    }
+}
+
+#[test]
+fn test_filter_available_providers() {
+    let limits = UnifiedBudgetLimits::new();
+    for provider in ["openai", "anthropic", "google"] {
+        limits.providers.set_provider_limit(
+            provider,
+            ProviderLimitConfig::new(100.0, ResetPeriod::Monthly),
+        );
+    }
+
+    limits.providers.record_provider_spend("openai", 150.0);
+    let available = limits.filter_available_providers(vec![
+        "openai".to_string(),
+        "anthropic".to_string(),
+        "google".to_string(),
+    ]);
+
+    assert_eq!(available.len(), 2);
+    assert!(!available.contains(&"openai".to_string()));
+}
+
+#[test]
+fn test_provider_budget_manager_concurrent_access() {
+    use std::thread;
+
+    let manager = Arc::new(ProviderBudgetManager::new());
+    manager.set_provider_limit(
+        "openai",
+        ProviderLimitConfig::new(10000.0, ResetPeriod::Monthly),
+    );
+
+    let handles: Vec<_> = (0..10)
+        .map(|_| {
+            let manager = Arc::clone(&manager);
+            thread::spawn(move || {
+                for _ in 0..100 {
+                    manager.record_provider_spend("openai", 1.0);
+                }
+            })
+        })
+        .collect();
+
+    for handle in handles {
+        handle.join().unwrap();
+    }
+
+    let usage = manager.get_provider_usage("openai").unwrap();
+    assert_eq!(usage.current_spend, 1000.0);
+    assert_eq!(usage.request_count, 1000);
+}

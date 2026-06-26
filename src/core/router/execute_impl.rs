@@ -5,13 +5,15 @@
 use super::deployment::{Deployment, DeploymentId};
 use super::error::{CooldownReason, RouterError};
 use super::execution::{
-    build_execution_result, calculate_retry_delay, infer_cooldown_reason, is_retryable_error,
-    provider_error_to_router_error, router_error_to_provider_error,
+    BudgetRetryScope, build_execution_result, calculate_retry_delay, infer_cooldown_reason,
+    is_retryable_error, provider_error_to_router_error, retryable_budget_scope,
+    router_error_to_provider_error,
 };
 use super::fallback::{ExecutionResult, FallbackType};
 use super::unified::Router;
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::model::ProviderCapability;
+use std::collections::HashSet;
 use std::sync::Arc;
 
 impl Router {
@@ -70,26 +72,39 @@ impl Router {
     {
         let max_attempts = self.config.num_retries + 1;
         let mut last_error = None;
+        let mut excluded_budget_providers = HashSet::new();
+        let mut excluded_budget_models = HashSet::new();
 
         for attempt in 1..=max_attempts {
             let start = std::time::Instant::now();
 
             // Try to select a deployment
-            let deployment_lease = match self.select_deployment_lease(model_name) {
-                Ok(lease) => lease,
-                Err(router_err) => {
-                    let provider_err = router_error_to_provider_error(router_err);
+            let deployment_lease =
+                match self.select_deployment_lease_matching(model_name, |deployment| {
+                    !excluded_budget_providers.contains(deployment.provider.name())
+                        && !excluded_budget_models.contains(deployment.model.as_str())
+                }) {
+                    Ok(lease) => lease,
+                    Err(router_err) => {
+                        if (!excluded_budget_providers.is_empty()
+                            || !excluded_budget_models.is_empty())
+                            && let Some(err) = last_error.clone()
+                        {
+                            return Err((err, attempt));
+                        }
 
-                    if is_retryable_error(&provider_err) && attempt < max_attempts {
-                        let delay = calculate_retry_delay(&self.config, attempt);
-                        last_error = Some(provider_err);
-                        tokio::time::sleep(delay).await;
-                        continue;
-                    } else {
-                        return Err((provider_err, attempt));
+                        let provider_err = router_error_to_provider_error(router_err);
+
+                        if is_retryable_error(&provider_err) && attempt < max_attempts {
+                            let delay = calculate_retry_delay(&self.config, attempt);
+                            last_error = Some(provider_err);
+                            tokio::time::sleep(delay).await;
+                            continue;
+                        } else {
+                            return Err((provider_err, attempt));
+                        }
                     }
-                }
-            };
+                };
             let selected_deployment = deployment_lease.clone_deployment();
             let deployment_id = selected_deployment.id.clone();
 
@@ -111,24 +126,39 @@ impl Router {
                 }
                 Err(err) => {
                     if is_retryable_error(&err) && attempt < max_attempts {
-                        // Use ConsecutiveFailures so the deployment only enters
-                        // cooldown after exceeding allowed_fails threshold,
-                        // giving retries a chance to succeed.
-                        self.record_failure_with_reason_for_deployment(
-                            deployment_lease.deployment(),
-                            CooldownReason::ConsecutiveFailures,
-                        );
+                        match retryable_budget_scope(&err) {
+                            Some(BudgetRetryScope::Provider) => {
+                                excluded_budget_providers.insert(
+                                    deployment_lease.deployment().provider.name().to_string(),
+                                );
+                            }
+                            Some(BudgetRetryScope::Model) => {
+                                excluded_budget_models
+                                    .insert(deployment_lease.deployment().model.clone());
+                            }
+                            None => {
+                                // Use ConsecutiveFailures so the deployment only enters
+                                // cooldown after exceeding allowed_fails threshold,
+                                // giving retries a chance to succeed.
+                                self.record_failure_with_reason_for_deployment(
+                                    deployment_lease.deployment(),
+                                    CooldownReason::ConsecutiveFailures,
+                                );
+                            }
+                        }
                         drop(deployment_lease);
                         let delay = calculate_retry_delay(&self.config, attempt);
                         last_error = Some(err);
                         tokio::time::sleep(delay).await;
                         continue;
                     } else {
-                        let cooldown_reason = infer_cooldown_reason(&err);
-                        self.record_failure_with_reason_for_deployment(
-                            deployment_lease.deployment(),
-                            cooldown_reason,
-                        );
+                        if retryable_budget_scope(&err).is_none() {
+                            let cooldown_reason = infer_cooldown_reason(&err);
+                            self.record_failure_with_reason_for_deployment(
+                                deployment_lease.deployment(),
+                                cooldown_reason,
+                            );
+                        }
                         drop(deployment_lease);
                         return Err((err, attempt));
                     }
@@ -159,26 +189,40 @@ impl Router {
     {
         let max_attempts = self.config.num_retries + 1;
         let mut last_error = None;
+        let mut excluded_budget_providers = HashSet::new();
+        let mut excluded_budget_models = HashSet::new();
 
         for attempt in 1..=max_attempts {
             let start = std::time::Instant::now();
 
-            let deployment_lease =
-                match self.select_deployment_lease_for_capability(model_name, capability) {
-                    Ok(lease) => lease,
-                    Err(router_err) => {
-                        let provider_err = router_error_to_provider_error(router_err);
-
-                        if is_retryable_error(&provider_err) && attempt < max_attempts {
-                            let delay = calculate_retry_delay(&self.config, attempt);
-                            last_error = Some(provider_err);
-                            tokio::time::sleep(delay).await;
-                            continue;
-                        } else {
-                            return Err((provider_err, attempt));
-                        }
+            let deployment_lease = match self.select_deployment_lease_for_capability_matching(
+                model_name,
+                capability,
+                |deployment| {
+                    !excluded_budget_providers.contains(deployment.provider.name())
+                        && !excluded_budget_models.contains(deployment.model.as_str())
+                },
+            ) {
+                Ok(lease) => lease,
+                Err(router_err) => {
+                    if (!excluded_budget_providers.is_empty() || !excluded_budget_models.is_empty())
+                        && let Some(err) = last_error.clone()
+                    {
+                        return Err((err, attempt));
                     }
-                };
+
+                    let provider_err = router_error_to_provider_error(router_err);
+
+                    if is_retryable_error(&provider_err) && attempt < max_attempts {
+                        let delay = calculate_retry_delay(&self.config, attempt);
+                        last_error = Some(provider_err);
+                        tokio::time::sleep(delay).await;
+                        continue;
+                    } else {
+                        return Err((provider_err, attempt));
+                    }
+                }
+            };
             let selected_deployment = deployment_lease.clone_deployment();
             let deployment_id = selected_deployment.id.clone();
 
@@ -197,21 +241,36 @@ impl Router {
                 }
                 Err(err) => {
                     if is_retryable_error(&err) && attempt < max_attempts {
-                        self.record_failure_with_reason_for_deployment(
-                            deployment_lease.deployment(),
-                            CooldownReason::ConsecutiveFailures,
-                        );
+                        match retryable_budget_scope(&err) {
+                            Some(BudgetRetryScope::Provider) => {
+                                excluded_budget_providers.insert(
+                                    deployment_lease.deployment().provider.name().to_string(),
+                                );
+                            }
+                            Some(BudgetRetryScope::Model) => {
+                                excluded_budget_models
+                                    .insert(deployment_lease.deployment().model.clone());
+                            }
+                            None => {
+                                self.record_failure_with_reason_for_deployment(
+                                    deployment_lease.deployment(),
+                                    CooldownReason::ConsecutiveFailures,
+                                );
+                            }
+                        }
                         drop(deployment_lease);
                         let delay = calculate_retry_delay(&self.config, attempt);
                         last_error = Some(err);
                         tokio::time::sleep(delay).await;
                         continue;
                     } else {
-                        let cooldown_reason = infer_cooldown_reason(&err);
-                        self.record_failure_with_reason_for_deployment(
-                            deployment_lease.deployment(),
-                            cooldown_reason,
-                        );
+                        if retryable_budget_scope(&err).is_none() {
+                            let cooldown_reason = infer_cooldown_reason(&err);
+                            self.record_failure_with_reason_for_deployment(
+                                deployment_lease.deployment(),
+                                cooldown_reason,
+                            );
+                        }
                         drop(deployment_lease);
                         return Err((err, attempt));
                     }

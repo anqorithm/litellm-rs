@@ -14,13 +14,34 @@ use std::time::Duration;
 ///
 /// Determines whether a request should be retried based on the error type.
 pub fn is_retryable_error(error: &ProviderError) -> bool {
-    matches!(
-        error,
+    match error {
         ProviderError::RateLimit { .. }
-            | ProviderError::Timeout { .. }
-            | ProviderError::ProviderUnavailable { .. }
-            | ProviderError::Network { .. }
-    )
+        | ProviderError::Timeout { .. }
+        | ProviderError::ProviderUnavailable { .. }
+        | ProviderError::Network { .. } => true,
+        ProviderError::QuotaExceeded { .. } => retryable_budget_scope(error).is_some(),
+        _ => false,
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BudgetRetryScope {
+    Provider,
+    Model,
+}
+
+pub(crate) fn retryable_budget_scope(error: &ProviderError) -> Option<BudgetRetryScope> {
+    match error {
+        ProviderError::QuotaExceeded {
+            provider: "budget",
+            message,
+        } if message.starts_with("provider ") => Some(BudgetRetryScope::Provider),
+        ProviderError::QuotaExceeded {
+            provider: "budget",
+            message,
+        } if message.starts_with("model ") => Some(BudgetRetryScope::Model),
+        _ => None,
+    }
 }
 
 /// Calculate retry delay using exponential backoff

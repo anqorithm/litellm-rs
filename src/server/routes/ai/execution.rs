@@ -4,11 +4,12 @@ use crate::core::providers::{Provider, ProviderError};
 use crate::core::router::UnifiedRouter;
 use crate::core::router::deployment::Deployment;
 use crate::core::router::execution::{
-    calculate_retry_delay, infer_cooldown_reason, is_retryable_error,
-    router_error_to_provider_error,
+    BudgetRetryScope, calculate_retry_delay, infer_cooldown_reason, is_retryable_error,
+    retryable_budget_scope, router_error_to_provider_error,
 };
 use crate::core::types::model::ProviderCapability;
 use crate::utils::error::gateway_error::GatewayError;
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -74,26 +75,40 @@ where
 {
     let max_attempts = router.config().num_retries + 1;
     let mut last_error = None;
+    let mut excluded_budget_providers = HashSet::new();
+    let mut excluded_budget_models = HashSet::new();
 
     for attempt in 1..=max_attempts {
         let started_at = Instant::now();
 
-        let deployment_lease =
-            match router.select_deployment_lease_for_capability(requested_model, &capability) {
-                Ok(lease) => lease,
-                Err(router_err) => {
-                    let provider_err = router_error_to_provider_error(router_err);
-
-                    if is_retryable_error(&provider_err) && attempt < max_attempts {
-                        let delay = calculate_retry_delay(router.config(), attempt);
-                        last_error = Some(provider_err);
-                        tokio::time::sleep(delay).await;
-                        continue;
-                    }
-
-                    return Err(GatewayError::Provider(provider_err));
+        let deployment_lease = match router.select_deployment_lease_for_capability_matching(
+            requested_model,
+            &capability,
+            |deployment| {
+                !excluded_budget_providers.contains(deployment.provider.name())
+                    && !excluded_budget_models.contains(deployment.model.as_str())
+            },
+        ) {
+            Ok(lease) => lease,
+            Err(router_err) => {
+                if (!excluded_budget_providers.is_empty() || !excluded_budget_models.is_empty())
+                    && let Some(err) = last_error.clone()
+                {
+                    return Err(GatewayError::Provider(err));
                 }
-            };
+
+                let provider_err = router_error_to_provider_error(router_err);
+
+                if is_retryable_error(&provider_err) && attempt < max_attempts {
+                    let delay = calculate_retry_delay(router.config(), attempt);
+                    last_error = Some(provider_err);
+                    tokio::time::sleep(delay).await;
+                    continue;
+                }
+
+                return Err(GatewayError::Provider(provider_err));
+            }
+        };
 
         let provider = deployment_lease.deployment().provider.clone();
         let selected_model = deployment_lease.deployment().model.clone();
@@ -111,10 +126,22 @@ where
             }
             Err(err) => {
                 if is_retryable_error(&err) && attempt < max_attempts {
-                    router.record_failure_with_reason_for_deployment(
-                        deployment_lease.deployment(),
-                        crate::core::router::CooldownReason::ConsecutiveFailures,
-                    );
+                    match retryable_budget_scope(&err) {
+                        Some(BudgetRetryScope::Provider) => {
+                            excluded_budget_providers
+                                .insert(deployment_lease.deployment().provider.name().to_string());
+                        }
+                        Some(BudgetRetryScope::Model) => {
+                            excluded_budget_models
+                                .insert(deployment_lease.deployment().model.clone());
+                        }
+                        None => {
+                            router.record_failure_with_reason_for_deployment(
+                                deployment_lease.deployment(),
+                                crate::core::router::CooldownReason::ConsecutiveFailures,
+                            );
+                        }
+                    }
                     drop(deployment_lease);
                     let delay = calculate_retry_delay(router.config(), attempt);
                     last_error = Some(err);
@@ -122,11 +149,13 @@ where
                     continue;
                 }
 
-                let cooldown_reason = infer_cooldown_reason(&err);
-                router.record_failure_with_reason_for_deployment(
-                    deployment_lease.deployment(),
-                    cooldown_reason,
-                );
+                if retryable_budget_scope(&err).is_none() {
+                    let cooldown_reason = infer_cooldown_reason(&err);
+                    router.record_failure_with_reason_for_deployment(
+                        deployment_lease.deployment(),
+                        cooldown_reason,
+                    );
+                }
                 drop(deployment_lease);
                 return Err(GatewayError::Provider(err));
             }
@@ -158,26 +187,40 @@ where
 {
     let max_attempts = router.config().num_retries + 1;
     let mut last_error = None;
+    let mut excluded_budget_providers = HashSet::new();
+    let mut excluded_budget_models = HashSet::new();
 
     for attempt in 1..=max_attempts {
         let started_at = Instant::now();
 
-        let deployment_lease =
-            match router.select_deployment_lease_for_capability(requested_model, &capability) {
-                Ok(lease) => lease,
-                Err(router_err) => {
-                    let provider_err = router_error_to_provider_error(router_err);
-
-                    if is_retryable_error(&provider_err) && attempt < max_attempts {
-                        let delay = calculate_retry_delay(router.config(), attempt);
-                        last_error = Some(provider_err);
-                        tokio::time::sleep(delay).await;
-                        continue;
-                    }
-
-                    return Err(GatewayError::Provider(provider_err));
+        let deployment_lease = match router.select_deployment_lease_for_capability_matching(
+            requested_model,
+            &capability,
+            |deployment| {
+                !excluded_budget_providers.contains(deployment.provider.name())
+                    && !excluded_budget_models.contains(deployment.model.as_str())
+            },
+        ) {
+            Ok(lease) => lease,
+            Err(router_err) => {
+                if (!excluded_budget_providers.is_empty() || !excluded_budget_models.is_empty())
+                    && let Some(err) = last_error.clone()
+                {
+                    return Err(GatewayError::Provider(err));
                 }
-            };
+
+                let provider_err = router_error_to_provider_error(router_err);
+
+                if is_retryable_error(&provider_err) && attempt < max_attempts {
+                    let delay = calculate_retry_delay(router.config(), attempt);
+                    last_error = Some(provider_err);
+                    tokio::time::sleep(delay).await;
+                    continue;
+                }
+
+                return Err(GatewayError::Provider(provider_err));
+            }
+        };
         let deployment = deployment_lease.clone_deployment();
         let provider = deployment.provider.clone();
         let selected_model = deployment.model.clone();
@@ -190,10 +233,22 @@ where
             }
             Err(err) => {
                 if is_retryable_error(&err) && attempt < max_attempts {
-                    router.record_failure_with_reason_for_deployment(
-                        deployment_lease.deployment(),
-                        crate::core::router::CooldownReason::ConsecutiveFailures,
-                    );
+                    match retryable_budget_scope(&err) {
+                        Some(BudgetRetryScope::Provider) => {
+                            excluded_budget_providers
+                                .insert(deployment_lease.deployment().provider.name().to_string());
+                        }
+                        Some(BudgetRetryScope::Model) => {
+                            excluded_budget_models
+                                .insert(deployment_lease.deployment().model.clone());
+                        }
+                        None => {
+                            router.record_failure_with_reason_for_deployment(
+                                deployment_lease.deployment(),
+                                crate::core::router::CooldownReason::ConsecutiveFailures,
+                            );
+                        }
+                    }
                     drop(deployment_lease);
                     let delay = calculate_retry_delay(router.config(), attempt);
                     last_error = Some(err);
@@ -201,11 +256,13 @@ where
                     continue;
                 }
 
-                let cooldown_reason = infer_cooldown_reason(&err);
-                router.record_failure_with_reason_for_deployment(
-                    deployment_lease.deployment(),
-                    cooldown_reason,
-                );
+                if retryable_budget_scope(&err).is_none() {
+                    let cooldown_reason = infer_cooldown_reason(&err);
+                    router.record_failure_with_reason_for_deployment(
+                        deployment_lease.deployment(),
+                        cooldown_reason,
+                    );
+                }
                 drop(deployment_lease);
                 return Err(GatewayError::Provider(err));
             }
@@ -234,6 +291,7 @@ mod tests {
     use crate::core::types::model::ProviderCapability;
     use crate::utils::error::gateway_error::GatewayError;
     use std::sync::Arc;
+    use std::sync::Mutex;
     use std::sync::atomic::Ordering;
 
     async fn build_test_router() -> UnifiedRouter {
@@ -287,6 +345,50 @@ mod tests {
                 "embedding-capable".to_string(),
                 embedding_provider,
                 "text-embedding-3-small".to_string(),
+                "shared-model".to_string(),
+            )
+            .with_config(DeploymentConfig {
+                priority: 10,
+                ..Default::default()
+            }),
+        );
+
+        router
+    }
+
+    async fn build_provider_budget_fallback_router() -> UnifiedRouter {
+        let router = UnifiedRouter::new(RouterConfig {
+            routing_strategy: UnifiedRoutingStrategy::PriorityBased,
+            num_retries: 1,
+            ..Default::default()
+        });
+        let primary = Provider::Anthropic(
+            AnthropicProvider::new(AnthropicConfig::new("sk-test-key"))
+                .expect("test provider should build"),
+        );
+        let fallback = Provider::OpenAI(
+            OpenAIProvider::with_api_key("sk-test-key")
+                .await
+                .expect("test provider should build"),
+        );
+
+        router.add_deployment(
+            Deployment::new(
+                "primary-budget-exhausted".to_string(),
+                primary,
+                "claude-3-haiku".to_string(),
+                "shared-model".to_string(),
+            )
+            .with_config(DeploymentConfig {
+                priority: 0,
+                ..Default::default()
+            }),
+        );
+        router.add_deployment(
+            Deployment::new(
+                "fallback-provider".to_string(),
+                fallback,
+                "gpt-4o-mini".to_string(),
                 "shared-model".to_string(),
             )
             .with_config(DeploymentConfig {
@@ -399,6 +501,87 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_execute_with_selected_deployment_excludes_provider_budget_failures() {
+        let router = build_provider_budget_fallback_router().await;
+        let attempts = Arc::new(Mutex::new(Vec::new()));
+
+        let result = execute_with_selected_deployment(
+            &router,
+            "shared-model",
+            ProviderCapability::ChatCompletion,
+            {
+                let attempts = attempts.clone();
+                move |provider, model| {
+                    let attempts = attempts.clone();
+                    async move {
+                        let provider_name = provider.name().to_string();
+                        attempts.lock().unwrap().push(provider_name.clone());
+                        if provider_name == "anthropic" {
+                            Err(ProviderError::quota_exceeded(
+                                "budget",
+                                "provider 'anthropic' budget exceeded",
+                            ))
+                        } else {
+                            Ok(((provider_name, model), 0))
+                        }
+                    }
+                }
+            },
+        )
+        .await
+        .expect("fallback provider should be selected after provider budget exhaustion");
+
+        assert_eq!(result.0, "openai");
+        assert_eq!(attempts.lock().unwrap().as_slice(), ["anthropic", "openai"]);
+        let primary = router
+            .get_deployment("primary-budget-exhausted")
+            .expect("primary deployment should exist");
+        assert_eq!(primary.state.fail_requests.load(Ordering::Relaxed), 0);
+    }
+
+    #[tokio::test]
+    async fn test_execute_with_selected_deployment_excludes_model_budget_failures() {
+        let router = build_provider_budget_fallback_router().await;
+        let attempts = Arc::new(Mutex::new(Vec::new()));
+
+        let result = execute_with_selected_deployment(
+            &router,
+            "shared-model",
+            ProviderCapability::ChatCompletion,
+            {
+                let attempts = attempts.clone();
+                move |provider, model| {
+                    let attempts = attempts.clone();
+                    async move {
+                        attempts.lock().unwrap().push(model.clone());
+                        if model == "claude-3-haiku" {
+                            Err(ProviderError::quota_exceeded(
+                                "budget",
+                                "model 'claude-3-haiku' budget exceeded",
+                            ))
+                        } else {
+                            Ok(((provider.name().to_string(), model), 0))
+                        }
+                    }
+                }
+            },
+        )
+        .await
+        .expect("fallback model should be selected after model budget exhaustion");
+
+        assert_eq!(result.0, "openai");
+        assert_eq!(result.1, "gpt-4o-mini");
+        assert_eq!(
+            attempts.lock().unwrap().as_slice(),
+            ["claude-3-haiku", "gpt-4o-mini"]
+        );
+        let primary = router
+            .get_deployment("primary-budget-exhausted")
+            .expect("primary deployment should exist");
+        assert_eq!(primary.state.fail_requests.load(Ordering::Relaxed), 0);
+    }
+
+    #[tokio::test]
     async fn test_execute_stream_holds_deployment_active_until_success() {
         let router = Arc::new(build_test_router().await);
 
@@ -471,6 +654,47 @@ mod tests {
             .expect("deployment should exist");
         assert_eq!(deployment.state.active_requests.load(Ordering::Relaxed), 0);
         assert_eq!(deployment.state.fail_requests.load(Ordering::Relaxed), 1);
+    }
+
+    #[tokio::test]
+    async fn test_execute_stream_excludes_provider_budget_failures() {
+        let router = Arc::new(build_provider_budget_fallback_router().await);
+        let attempts = Arc::new(Mutex::new(Vec::new()));
+
+        let ((provider_name, model), lease) = execute_stream_with_selected_deployment(
+            router.clone(),
+            "shared-model",
+            ProviderCapability::ChatCompletionStream,
+            {
+                let attempts = attempts.clone();
+                move |provider, model| {
+                    let attempts = attempts.clone();
+                    async move {
+                        let provider_name = provider.name().to_string();
+                        attempts.lock().unwrap().push(provider_name.clone());
+                        if provider_name == "anthropic" {
+                            Err(ProviderError::quota_exceeded(
+                                "budget",
+                                "provider 'anthropic' budget exceeded",
+                            ))
+                        } else {
+                            Ok((provider_name, model))
+                        }
+                    }
+                }
+            },
+        )
+        .await
+        .expect("fallback stream provider should be selected after provider budget exhaustion");
+
+        assert_eq!(provider_name, "openai");
+        assert_eq!(model, "gpt-4o-mini");
+        assert_eq!(attempts.lock().unwrap().as_slice(), ["anthropic", "openai"]);
+        let primary = router
+            .get_deployment("primary-budget-exhausted")
+            .expect("primary deployment should exist");
+        assert_eq!(primary.state.fail_requests.load(Ordering::Relaxed), 0);
+        lease.finish_success(0);
     }
 
     #[tokio::test]
