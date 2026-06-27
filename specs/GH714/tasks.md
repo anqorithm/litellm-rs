@@ -15,7 +15,7 @@ GH-714
 - [x] `SP714-T2` Owner: coordinator. Done when: README provider support wording reflects registry/catalog validation rather than unguarded manual claims. Verify: README diff and matrix guard.
 - [x] `SP714-T3` Owner: coordinator. Done when: README Tier 1/Tier 2/experimental provider selectors are checked against registry/catalog declarations. Verify: `cargo test provider_registry --lib`.
 - [x] `SP714-T4` Owner: coordinator. Done when: existing factory/dispatch conformance remains green. Verify: `cargo test test_dispatch_kind_matches_runtime_variant --lib --all-features`.
-- [ ] `SP714-T5` Owner: coordinator. Done when: PR body records SpecRail gates, threads closure audit, CI, and reviewThreads. Verify: PR template checklist is completed with fresh evidence.
+- [x] `SP714-T5` Owner: coordinator. Done when: PR body records SpecRail gates, threads closure audit, CI, and reviewThreads. Verify: PR #722 body includes the merge gate checklist for CI, GraphQL reviewThreads, and SpecRail PR evidence.
 
 ## Parallel Split
 
