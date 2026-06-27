@@ -406,7 +406,7 @@ mod tests {
         let start_index = text
             .find(start)
             .unwrap_or_else(|| panic!("missing README section start: {start}"));
-        let after_start = &text[start_index..];
+        let after_start = &text[start_index + start.len()..];
         let end_index = after_start
             .find(end)
             .unwrap_or_else(|| panic!("missing README section end: {end}"));
@@ -446,10 +446,13 @@ mod tests {
                     && !trimmed.starts_with("|----------")
             })
             .map(|line| {
-                let selector = code_spans(line)
+                let provider_cell = line.split('|').nth(1).unwrap_or("");
+                let selector = code_spans(provider_cell)
                     .into_iter()
                     .next()
-                    .unwrap_or_else(|| panic!("README Tier 2 row is missing selector: {line}"));
+                    .unwrap_or_else(|| {
+                        panic!("README Tier 2 row is missing selector in first column: {line}")
+                    });
                 ReadmeTier2Row {
                     selector,
                     row: line.to_string(),
