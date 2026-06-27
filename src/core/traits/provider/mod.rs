@@ -1,13 +1,13 @@
 //! Core LLM Provider trait definitions
 //!
-//! Defines unified interface for all AI providers
+//! Defines the implementation interfaces for providers wired into this crate.
 //!
 //! # Module Organization
 //!
 //! This module is split into three main components:
 //! - `llm_provider` - The main LLMProvider trait definition
 //! - `config` - ProviderConfig trait for configuration management
-//! - `handle` - ProviderHandle struct for routing system integration
+//! - `handle` - legacy ProviderHandle metadata wrapper
 //!
 //! # Design Principles
 //!

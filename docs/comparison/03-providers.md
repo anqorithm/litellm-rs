@@ -7,7 +7,7 @@
 | **Total Providers** | 16 | 100+ |
 | **Architecture** | Trait-based (compile-time) | Class-based (runtime) |
 | **Type Safety** | Compile-time verification | Runtime checks |
-| **Extensibility** | Implement `LLMProvider` trait | Inherit `BaseConfig` class |
+| **Extensibility** | Implement `LLMProvider` and wire into `Provider` enum/factory | Inherit `BaseConfig` class |
 | **Maturity** | Early stage | Production-ready |
 
 ---
@@ -95,6 +95,10 @@ TOTAL                      16      100+
 ## 2. Provider Implementation Architecture
 
 ### 2.1 Rust: Trait-Based Architecture
+
+In `litellm-rs`, `LLMProvider` is the implementation trait for built-in
+providers. Router deployments use the closed `Provider` enum, so implementing
+the trait alone does not make a third-party provider routeable.
 
 ```rust
 // Core LLMProvider trait definition
@@ -368,6 +372,9 @@ impl LLMProvider for NewProvider {
     // ... implement other required methods
 }
 ```
+
+The provider must also be added to the `Provider` enum, dispatch arms, provider
+type metadata, and factory wiring before router deployments can use it.
 
 **Step 4: Add to Provider Enum**
 ```rust

@@ -1,6 +1,8 @@
-//! Provider handle for routing system
+//! Legacy provider handle metadata wrapper
 //!
-//! Provides a type-erased wrapper for LLMProvider instances used by the router
+//! Router deployments dispatch through the closed `Provider` enum. This wrapper
+//! keeps source compatibility for older type-erased experiments, but it is not a
+//! router dispatch path.
 
 use crate::core::types::health::HealthStatus;
 use crate::core::types::{chat::ChatRequest, context::RequestContext, responses::ChatResponse};
@@ -8,23 +10,24 @@ use crate::utils::error::gateway_error::GatewayError;
 
 use super::llm_provider::trait_definition::LLMProvider;
 
-/// Provider handle for routing system
+/// Legacy provider handle metadata wrapper.
 ///
-/// This struct wraps a concrete provider implementation and provides
-/// a uniform interface for the routing system. It uses type erasure
-/// to allow heterogeneous provider collections.
+/// This struct stores a provider name, weight, and enabled flag alongside an
+/// erased provider value for compatibility with older APIs. It does not
+/// downcast the provider and cannot make an arbitrary `LLMProvider`
+/// implementation routeable. Router deployments currently use the built-in
+/// `Provider` enum and its dispatch arms.
 ///
 /// # Design Principles
-/// - Type erasure for flexible provider management
-/// - Weight-based routing support
-/// - Enable/disable functionality for health management
-/// - Simplified interface for routing decisions
+/// - Preserve source compatibility for legacy metadata usage
+/// - Avoid optimistic capability, health, cost, or success-rate data
+/// - Keep router dispatch explicit in the `Provider` enum
 ///
 /// # Example
 ///
-/// The `ProviderHandle` wraps any type implementing `LLMProvider` with type erasure
-/// for flexible provider management in routing systems. See the routing module
-/// for usage examples.
+/// `ProviderHandle::new` accepts any type implementing `LLMProvider`, but this
+/// only captures metadata. The provider is not automatically available to the
+/// router unless it is also wired into the `Provider` enum.
 pub struct ProviderHandle {
     name: String,
     _provider: std::sync::Arc<dyn std::any::Any + Send + Sync>,
@@ -33,14 +36,15 @@ pub struct ProviderHandle {
 }
 
 impl ProviderHandle {
-    /// Create a new provider handle
+    /// Create a new legacy provider handle.
     ///
     /// # Parameters
     /// * `provider` - The provider instance to wrap
     /// * `weight` - Routing weight (higher values = more traffic)
     ///
     /// # Returns
-    /// A new ProviderHandle with the provider enabled by default
+    /// A new `ProviderHandle` with the provider enabled by default. This does
+    /// not register the provider with the router.
     ///
     /// # Type Parameters
     /// * `P` - Any type implementing LLMProvider
@@ -94,7 +98,7 @@ impl ProviderHandle {
         self.enabled = enabled;
     }
 
-    /// Execute chat completion request
+    /// Execute chat completion request.
     ///
     /// # Parameters
     /// * `request` - Chat completion request
@@ -104,18 +108,14 @@ impl ProviderHandle {
     /// Chat completion response
     ///
     /// # Note
-    /// This is a simplified implementation. In a real system, you would need
-    /// to properly downcast the provider and call its chat_completion method.
+    /// `ProviderHandle` is not a router dispatch path. Use a `Deployment` with
+    /// a built-in `Provider` enum variant for routed chat completion.
     pub async fn chat_completion(
         &self,
         _request: ChatRequest,
         _context: RequestContext,
     ) -> Result<ChatResponse, GatewayError> {
-        // This is a simplified implementation - in a real system,
-        // you'd need to properly downcast and handle the provider
-        Err(GatewayError::Internal(
-            "Provider chat_completion not implemented".to_string(),
-        ))
+        Err(Self::unsupported_contract_error("chat_completion"))
     }
 
     /// Check if model is supported
@@ -124,37 +124,25 @@ impl ProviderHandle {
     /// * `model` - Model name to check
     ///
     /// # Returns
-    /// `true` if the model is supported
-    ///
-    /// # Note
-    /// Simplified implementation - returns true for all models
+    /// `false` because this wrapper has no verified model metadata.
     pub fn supports_model(&self, _model: &str) -> bool {
-        // Simplified implementation
-        true
+        false
     }
 
     /// Check if tools are supported
     ///
     /// # Returns
-    /// `true` if tool calling is supported
-    ///
-    /// # Note
-    /// Simplified implementation - returns true
+    /// `false` because this wrapper has no verified capability metadata.
     pub fn supports_tools(&self) -> bool {
-        // Simplified implementation
-        true
+        false
     }
 
     /// Check provider health status
     ///
     /// # Returns
-    /// Health status of the provider
-    ///
-    /// # Note
-    /// Simplified implementation - always returns Healthy
+    /// `Unknown` because this wrapper cannot call the provider health endpoint.
     pub async fn health_check(&self) -> HealthStatus {
-        // Simplified implementation
-        HealthStatus::Healthy
+        HealthStatus::Unknown
     }
 
     /// Calculate request cost
@@ -165,42 +153,36 @@ impl ProviderHandle {
     /// * `output` - Number of output tokens
     ///
     /// # Returns
-    /// Estimated cost in USD
-    ///
-    /// # Note
-    /// Simplified implementation - returns 0.0
+    /// Explicit error because this wrapper cannot calculate verified cost.
     pub async fn calculate_cost(
         &self,
         _model: &str,
         _input: u32,
         _output: u32,
     ) -> Result<f64, GatewayError> {
-        // Simplified implementation
-        Ok(0.0)
+        Err(Self::unsupported_contract_error("calculate_cost"))
     }
 
     /// Get average response latency
     ///
     /// # Returns
-    /// Average latency for this provider
-    ///
-    /// # Note
-    /// Simplified implementation - returns 100ms
+    /// Explicit error because this wrapper has no verified latency telemetry.
     pub async fn get_average_latency(&self) -> Result<std::time::Duration, GatewayError> {
-        // Simplified implementation
-        Ok(std::time::Duration::from_millis(100))
+        Err(Self::unsupported_contract_error("get_average_latency"))
     }
 
     /// Get success rate
     ///
     /// # Returns
-    /// Success rate between 0.0 and 1.0
-    ///
-    /// # Note
-    /// Simplified implementation - returns 1.0 (100%)
+    /// Explicit error because this wrapper has no verified success telemetry.
     pub async fn get_success_rate(&self) -> Result<f32, GatewayError> {
-        // Simplified implementation
-        Ok(1.0)
+        Err(Self::unsupported_contract_error("get_success_rate"))
+    }
+
+    fn unsupported_contract_error(method: &str) -> GatewayError {
+        GatewayError::Internal(format!(
+            "ProviderHandle::{method} is not a router dispatch path; router deployments use the built-in Provider enum"
+        ))
     }
 }
 
@@ -208,38 +190,49 @@ impl ProviderHandle {
 mod tests {
     use super::*;
 
-    // Test directly on the struct methods that don't require provider creation
-    // Since ProviderHandle::new requires a concrete LLMProvider implementation,
-    // we test the simpler functions that can be tested in isolation
+    fn test_handle() -> ProviderHandle {
+        ProviderHandle {
+            name: "legacy".to_string(),
+            _provider: std::sync::Arc::new(()),
+            weight: 1.0,
+            enabled: true,
+        }
+    }
 
     #[test]
-    fn test_provider_handle_struct_exists() {
-        // Test that ProviderHandle struct is properly defined
-        // and can be referenced (compilation test)
-        let _type_check: fn() -> bool = || {
-            // Just a compilation test to ensure the type exists
-            true
-        };
-        assert!(_type_check());
+    fn test_provider_handle_metadata_accessors() {
+        let mut handle = test_handle();
+
+        assert_eq!(handle.name(), "legacy");
+        assert_eq!(handle.weight(), 1.0);
+        assert!(handle.is_enabled());
+
+        handle.set_enabled(false);
+        assert!(!handle.is_enabled());
     }
 
     #[tokio::test]
-    async fn test_health_status_healthy() {
-        // Test HealthStatus enum
-        let status = HealthStatus::Healthy;
-        assert!(matches!(status, HealthStatus::Healthy));
-    }
+    async fn provider_handle_does_not_report_optimistic_routing_data() {
+        let handle = test_handle();
 
-    #[tokio::test]
-    async fn test_health_status_unhealthy() {
-        let status = HealthStatus::Unhealthy;
-        assert!(matches!(status, HealthStatus::Unhealthy));
-    }
+        assert!(!handle.supports_model("gpt-4"));
+        assert!(!handle.supports_tools());
+        assert_eq!(handle.health_check().await, HealthStatus::Unknown);
 
-    #[tokio::test]
-    async fn test_health_status_degraded() {
-        let status = HealthStatus::Degraded;
-        assert!(matches!(status, HealthStatus::Degraded));
+        let cost = handle.calculate_cost("gpt-4", 1, 1).await;
+        assert!(
+            matches!(cost, Err(GatewayError::Internal(message)) if message.contains("ProviderHandle::calculate_cost"))
+        );
+
+        let latency = handle.get_average_latency().await;
+        assert!(
+            matches!(latency, Err(GatewayError::Internal(message)) if message.contains("ProviderHandle::get_average_latency"))
+        );
+
+        let success_rate = handle.get_success_rate().await;
+        assert!(
+            matches!(success_rate, Err(GatewayError::Internal(message)) if message.contains("ProviderHandle::get_success_rate"))
+        );
     }
 
     #[test]
@@ -261,7 +254,21 @@ mod tests {
         assert!(request.messages.is_empty());
     }
 
-    // Note: Full ProviderHandle tests would require a mock LLMProvider implementation
-    // which is complex due to the trait bounds. These basic tests verify the
-    // foundational types work correctly.
+    #[tokio::test]
+    async fn provider_handle_chat_completion_returns_explicit_contract_error() {
+        let handle = test_handle();
+        let request = ChatRequest {
+            model: "test-model".to_string(),
+            messages: vec![],
+            ..Default::default()
+        };
+
+        let result = handle
+            .chat_completion(request, RequestContext::default())
+            .await;
+
+        assert!(
+            matches!(result, Err(GatewayError::Internal(message)) if message.contains("ProviderHandle::chat_completion"))
+        );
+    }
 }

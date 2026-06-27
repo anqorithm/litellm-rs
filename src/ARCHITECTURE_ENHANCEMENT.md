@@ -32,6 +32,10 @@ pub trait LLMProvider: Send + Sync + Debug + 'static {
 }
 ```
 
+`LLMProvider` is the implementation interface for providers compiled into this
+crate. It is not a standalone router plugin boundary: routed providers must also
+be wired into the closed `Provider` enum and factory/dispatch paths.
+
 ### 2. Error Mapping Mechanism
 
 Implemented a unified error mapping system that supports converting HTTP errors to standardized provider errors:
@@ -173,14 +177,14 @@ impl LLMProvider for MyProvider {
 ### 3. 可扩展架构
 
 ```rust
-// 添加新 provider 只需实现 trait
+// 添加新的 routed provider 需要实现 trait
 pub struct NewProvider { /* ... */ }
 
 impl LLMProvider for NewProvider {
     // 实现所有必需方法
 }
 
-// 自动获得所有框架功能
+// 还必须接入 Provider enum、dispatch 和 factory 后才能进入 router
 ```
 
 ### 4. 完备的测试支持

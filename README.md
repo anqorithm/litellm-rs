@@ -114,6 +114,11 @@ Providers are organised into two tiers (see [CLAUDE.md → Provider Tiers](./CLA
 - **Tier 1 — catalog-only**: OpenAI-compatible endpoints declared as data in [`src/core/providers/registry/catalog.rs`](./src/core/providers/registry/catalog.rs). Routed through `OpenAILikeProvider`. Always available (no cargo feature required). The current crate runtime exposes chat completions and chat streaming for these providers; embeddings, images, audio, and other non-chat endpoints are not forwarded yet.
 - **Tier 2 — code-based**: providers with custom request/response handling, auth signing, or streaming. Wired into the `Provider` enum and the factory. Some Tier 2 builders are feature-gated.
 
+Router deployments use the closed `Provider` enum. Implementing `LLMProvider`
+alone does not make a third-party provider routeable; use the generic
+OpenAI-compatible path for compatible endpoints, or wire a code-based provider
+into the enum, dispatch, registry metadata, and factory.
+
 > The matrix below is **hand-maintained** and reflects the runtime surface today. The source of truth for Tier 1 entries is [`catalog.rs`](./src/core/providers/registry/catalog.rs); Tier 2 wiring lives in [`src/core/providers/factory/registry.rs`](./src/core/providers/factory/registry.rs). Capability columns describe which endpoints this crate exposes for the provider — `passthrough` means an implemented crate endpoint forwards the call to the upstream OpenAI-compatible endpoint without per-provider transformation. A dynamically-generated matrix is tracked as a follow-up.
 
 ### Tier 2 — code-based providers

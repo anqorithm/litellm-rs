@@ -1,6 +1,9 @@
-//! AI Provider implementations using Rust-idiomatic enum-based design
+//! AI Provider implementations using Rust-idiomatic enum-based design.
 //!
-//! This module contains the unified Provider enum and all provider implementations.
+//! This module contains the closed `Provider` enum used by router deployments
+//! plus the built-in provider implementations wired into that enum. Implementing
+//! `LLMProvider` alone does not make a provider routeable; new routed providers
+//! must be added to the enum, dispatch arms, and factory wiring.
 
 // Base infrastructure
 pub mod base;
@@ -387,10 +390,13 @@ macro_rules! dispatch_provider_selective {
     };
 }
 
-/// Unified Provider Enum (Rust-idiomatic design)
+/// Unified built-in Provider enum (Rust-idiomatic design).
 ///
 /// This enum provides zero-cost abstractions and type safety for all providers.
-/// Each variant contains a concrete provider implementation.
+/// Each variant contains a concrete provider implementation. Router
+/// deployments dispatch through this closed enum; third-party `LLMProvider`
+/// implementations are not routeable without crate changes that add enum,
+/// dispatch, and factory support.
 #[derive(Debug, Clone)]
 pub enum Provider {
     OpenAI(openai::OpenAIProvider),
