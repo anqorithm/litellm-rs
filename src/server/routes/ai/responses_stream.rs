@@ -54,16 +54,17 @@ struct StreamBudgetSettlement {
 }
 
 impl StreamBudgetSettlement {
-    async fn record_completion(mut self, usage: Option<&ChatUsage>) {
-        spend::record_completion_spend_with_reservation(
-            self.budget_limits.as_ref(),
-            &self.key_manager,
-            self.api_key_id,
-            &self.provider,
-            &self.model,
+    async fn record_completion(mut self, usage: Option<&ChatUsage>, saw_upstream_output: bool) {
+        spend::record_finished_stream_spend_with_reservation(spend::StreamSpendSettlement {
+            budget_limits: self.budget_limits.as_ref(),
+            key_manager: &self.key_manager,
+            api_key_id: self.api_key_id,
+            provider: &self.provider,
+            model: &self.model,
             usage,
-            self.reservation.take(),
-        )
+            saw_upstream_output,
+            budget_reservation: self.reservation.take(),
+        })
         .await;
     }
 
@@ -619,7 +620,9 @@ pub(crate) async fn handle_streaming_response(
                         thinking_usage: None,
                     })
                 });
-                settlement.record_completion(budget_usage.as_ref()).await;
+                settlement
+                    .record_completion(budget_usage.as_ref(), saw_upstream_output)
+                    .await;
                 if let Some(lease) = lease.take() {
                     let tokens_used = budget_usage
                         .as_ref()

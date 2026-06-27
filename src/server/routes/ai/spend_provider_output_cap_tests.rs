@@ -9,7 +9,7 @@ fn providers_that_ignore_max_completion_tokens_use_max_tokens_only() {
     };
     request.max_completion_tokens = Some(10);
 
-    for provider in ["ollama", "sagemaker", "snowflake"] {
+    for provider in ["ai21", "ollama", "sagemaker", "snowflake"] {
         assert_eq!(
             provider_effective_max_output_tokens(provider, "model", &request),
             None,
@@ -18,7 +18,7 @@ fn providers_that_ignore_max_completion_tokens_use_max_tokens_only() {
     }
 
     request.max_tokens = Some(100);
-    for provider in ["ollama", "sagemaker", "snowflake"] {
+    for provider in ["ai21", "ollama", "sagemaker", "snowflake"] {
         assert_eq!(
             provider_effective_max_output_tokens(provider, "model", &request),
             Some(100),

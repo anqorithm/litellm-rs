@@ -178,3 +178,48 @@ async fn disconnect_after_upstream_output_settles_reserved_budget() {
         reserved
     );
 }
+
+#[tokio::test]
+async fn completed_stream_without_usage_after_output_settles_reserved_budget() {
+    let budget = Arc::new(UnifiedBudgetLimits::new());
+    budget.providers.set_provider_limit(
+        "openai",
+        ProviderLimitConfig::new(1000.0, ResetPeriod::Monthly),
+    );
+    budget.models.set_model_limit(
+        "gpt-4o",
+        ModelLimitConfig::new(1000.0, ResetPeriod::Monthly),
+    );
+    let reservation =
+        spend::reserve_completion_budget(budget.as_ref(), "openai", "gpt-4o", 0, Some(100))
+            .unwrap()
+            .unwrap();
+    let reserved = reservation.reserved_amount();
+    let settlement = StreamBudgetSettlement {
+        budget_limits: Arc::clone(&budget),
+        key_manager: KeyManager::new(InMemoryKeyRepository::new()),
+        api_key_id: None,
+        provider: "openai".to_string(),
+        model: "gpt-4o".to_string(),
+        reservation: Some(reservation),
+    };
+
+    settlement.record_completion(None, true).await;
+
+    assert_eq!(
+        budget
+            .providers
+            .get_provider_usage("openai")
+            .unwrap()
+            .current_spend,
+        reserved
+    );
+    assert_eq!(
+        budget
+            .models
+            .get_model_usage("gpt-4o")
+            .unwrap()
+            .current_spend,
+        reserved
+    );
+}
