@@ -15,7 +15,7 @@ GH-713
 - [x] `SP713-T2` Owner: coordinator. Done when: `LLMProvider`, `Provider`, `Deployment`, and `ProviderHandle` docs no longer imply standalone custom-provider router support. Verify: targeted `rg` for provider-contract wording.
 - [x] `SP713-T3` Owner: coordinator. Done when: `ProviderHandle` stops returning optimistic support, health, cost, latency, and success-rate data. Verify: `cargo test provider_handle --lib`.
 - [x] `SP713-T4` Owner: coordinator. Done when: #713 remains separate from #714 registry/source-of-truth implementation. Verify: git diff contains no registry/catalog/provider matrix rewrite.
-- [ ] `SP713-T5` Owner: coordinator. Done when: PR body records SpecRail readiness/review/merge gates and threads closure audit. Verify: PR template checklist is completed with fresh CI/review evidence.
+- [x] `SP713-T5` Owner: coordinator. Done when: PR body records SpecRail readiness/review/merge gates and threads closure audit. Verify: PR #721 template checklist is completed with fresh CI/review evidence.
 
 ## Parallel Split
 
