@@ -5,10 +5,11 @@
 use super::deployment::{Deployment, DeploymentId};
 use super::error::{CooldownReason, RouterError};
 use super::execution::{
-    build_execution_result, calculate_retry_delay, infer_cooldown_reason, is_retryable_error,
-    provider_error_to_router_error, retryable_budget_scope, router_error_to_provider_error,
+    build_execution_result, infer_cooldown_reason, provider_error_to_router_error,
+    retryable_budget_scope, router_error_to_provider_error,
 };
 use super::fallback::{ExecutionResult, FallbackType};
+use super::retry_policy::{RetryContext, RetryPolicy};
 use super::unified::Router;
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::model::ProviderCapability;
@@ -92,11 +93,17 @@ impl Router {
 
                     let provider_err = router_error_to_provider_error(router_err);
 
-                    if is_retryable_error(&provider_err) && attempt < max_attempts {
-                        let delay = calculate_retry_delay(&self.config, attempt);
+                    let retry_decision = RetryPolicy.decide(
+                        &self.config,
+                        &provider_err,
+                        RetryContext::unary(attempt, max_attempts),
+                    );
+                    if retry_decision.should_retry {
                         last_error = Some(provider_err);
                         attempt += 1;
-                        tokio::time::sleep(delay).await;
+                        if let Some(delay) = retry_decision.delay {
+                            tokio::time::sleep(delay).await;
+                        }
                         continue;
                     } else {
                         return Err((provider_err, attempt));
@@ -130,7 +137,12 @@ impl Router {
                         continue;
                     }
 
-                    if is_retryable_error(&err) && attempt < max_attempts {
+                    let retry_decision = RetryPolicy.decide(
+                        &self.config,
+                        &err,
+                        RetryContext::unary(attempt, max_attempts),
+                    );
+                    if retry_decision.should_retry {
                         // Use ConsecutiveFailures so the deployment only enters
                         // cooldown after exceeding allowed_fails threshold,
                         // giving retries a chance to succeed.
@@ -139,10 +151,11 @@ impl Router {
                             CooldownReason::ConsecutiveFailures,
                         );
                         drop(deployment_lease);
-                        let delay = calculate_retry_delay(&self.config, attempt);
                         last_error = Some(err);
                         attempt += 1;
-                        tokio::time::sleep(delay).await;
+                        if let Some(delay) = retry_decision.delay {
+                            tokio::time::sleep(delay).await;
+                        }
                         continue;
                     } else {
                         let cooldown_reason = infer_cooldown_reason(&err);
@@ -201,11 +214,17 @@ impl Router {
 
                     let provider_err = router_error_to_provider_error(router_err);
 
-                    if is_retryable_error(&provider_err) && attempt < max_attempts {
-                        let delay = calculate_retry_delay(&self.config, attempt);
+                    let retry_decision = RetryPolicy.decide(
+                        &self.config,
+                        &provider_err,
+                        RetryContext::unary(attempt, max_attempts),
+                    );
+                    if retry_decision.should_retry {
                         last_error = Some(provider_err);
                         attempt += 1;
-                        tokio::time::sleep(delay).await;
+                        if let Some(delay) = retry_decision.delay {
+                            tokio::time::sleep(delay).await;
+                        }
                         continue;
                     } else {
                         return Err((provider_err, attempt));
@@ -236,16 +255,22 @@ impl Router {
                         continue;
                     }
 
-                    if is_retryable_error(&err) && attempt < max_attempts {
+                    let retry_decision = RetryPolicy.decide(
+                        &self.config,
+                        &err,
+                        RetryContext::unary(attempt, max_attempts),
+                    );
+                    if retry_decision.should_retry {
                         self.record_failure_with_reason_for_deployment(
                             deployment_lease.deployment(),
                             CooldownReason::ConsecutiveFailures,
                         );
                         drop(deployment_lease);
-                        let delay = calculate_retry_delay(&self.config, attempt);
                         last_error = Some(err);
                         attempt += 1;
-                        tokio::time::sleep(delay).await;
+                        if let Some(delay) = retry_decision.delay {
+                            tokio::time::sleep(delay).await;
+                        }
                         continue;
                     } else {
                         let cooldown_reason = infer_cooldown_reason(&err);

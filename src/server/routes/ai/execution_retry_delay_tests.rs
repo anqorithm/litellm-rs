@@ -22,7 +22,7 @@ fn budget_retry_fallbacks_skip_retry_delay() {
     assert_eq!(retry_delay_for_error(&config, 1, &model_budget), None);
     assert_eq!(
         retry_delay_for_error(&config, 1, &rate_limit),
-        Some(std::time::Duration::from_secs(5))
+        Some(std::time::Duration::from_secs(60))
     );
 }
 

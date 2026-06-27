@@ -193,6 +193,7 @@ pub use factory::{create_provider, is_provider_selector_supported};
 
 // Registry and unified provider
 pub mod contextual_error;
+pub mod failure;
 pub mod provider_error_conversions;
 pub mod provider_registry;
 pub mod registry; // Data-driven Tier 1 provider catalog
@@ -212,6 +213,7 @@ use crate::core::types::{
 };
 use crate::core::types::{context::RequestContext, model::ProviderCapability};
 pub use contextual_error::ContextualError;
+pub use failure::{ProviderFailureFacts, ProviderFailureKind, ProviderRetryHint};
 pub use provider_registry::ProviderRegistry;
 pub use unified_provider::ProviderError;
 

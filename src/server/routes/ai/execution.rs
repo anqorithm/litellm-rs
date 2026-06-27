@@ -4,13 +4,14 @@ use crate::core::providers::{Provider, ProviderError};
 use crate::core::router::UnifiedRouter;
 use crate::core::router::deployment::Deployment;
 use crate::core::router::execution::{
-    calculate_retry_delay, infer_cooldown_reason, is_retryable_error, retryable_budget_scope,
-    router_error_to_provider_error,
+    infer_cooldown_reason, retryable_budget_scope, router_error_to_provider_error,
 };
+use crate::core::router::retry_policy::{RetryContext, RetryPolicy};
 use crate::core::types::model::ProviderCapability;
 use crate::utils::error::gateway_error::GatewayError;
 use std::collections::HashSet;
 use std::sync::Arc;
+#[cfg(test)]
 use std::time::Duration;
 use std::time::Instant;
 
@@ -97,11 +98,17 @@ where
 
                 let provider_err = router_error_to_provider_error(router_err);
 
-                if is_retryable_error(&provider_err) && attempt < max_attempts {
-                    let delay = calculate_retry_delay(router.config(), attempt);
+                let retry_decision = RetryPolicy.decide(
+                    router.config(),
+                    &provider_err,
+                    RetryContext::unary(attempt, max_attempts),
+                );
+                if retry_decision.should_retry {
                     last_error = Some(provider_err);
                     attempt += 1;
-                    tokio::time::sleep(delay).await;
+                    if let Some(delay) = retry_decision.delay {
+                        tokio::time::sleep(delay).await;
+                    }
                     continue;
                 }
 
@@ -131,16 +138,20 @@ where
                     continue;
                 }
 
-                if is_retryable_error(&err) && attempt < max_attempts {
+                let retry_decision = RetryPolicy.decide(
+                    router.config(),
+                    &err,
+                    RetryContext::unary(attempt, max_attempts),
+                );
+                if retry_decision.should_retry {
                     router.record_failure_with_reason_for_deployment(
                         deployment_lease.deployment(),
                         crate::core::router::CooldownReason::ConsecutiveFailures,
                     );
                     drop(deployment_lease);
-                    let retry_delay = retry_delay_for_error(router.config(), attempt, &err);
                     last_error = Some(err);
                     attempt += 1;
-                    if let Some(delay) = retry_delay {
+                    if let Some(delay) = retry_decision.delay {
                         tokio::time::sleep(delay).await;
                     }
                     continue;
@@ -165,14 +176,22 @@ where
     })))
 }
 
+#[cfg(test)]
 fn retry_delay_for_error(
     config: &crate::core::router::config::RouterConfig,
     attempt: u32,
     error: &ProviderError,
 ) -> Option<Duration> {
-    retryable_budget_scope(error)
-        .is_none()
-        .then(|| calculate_retry_delay(config, attempt))
+    if retryable_budget_scope(error).is_some() {
+        return None;
+    }
+
+    let decision = RetryPolicy.decide(config, error, RetryContext::unary(attempt, attempt + 1));
+    if decision.should_retry {
+        decision.delay
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]
@@ -217,11 +236,17 @@ where
 
                 let provider_err = router_error_to_provider_error(router_err);
 
-                if is_retryable_error(&provider_err) && attempt < max_attempts {
-                    let delay = calculate_retry_delay(router.config(), attempt);
+                let retry_decision = RetryPolicy.decide(
+                    router.config(),
+                    &provider_err,
+                    RetryContext::stream_pre_output(attempt, max_attempts),
+                );
+                if retry_decision.should_retry {
                     last_error = Some(provider_err);
                     attempt += 1;
-                    tokio::time::sleep(delay).await;
+                    if let Some(delay) = retry_decision.delay {
+                        tokio::time::sleep(delay).await;
+                    }
                     continue;
                 }
 
@@ -246,16 +271,20 @@ where
                     continue;
                 }
 
-                if is_retryable_error(&err) && attempt < max_attempts {
+                let retry_decision = RetryPolicy.decide(
+                    router.config(),
+                    &err,
+                    RetryContext::stream_pre_output(attempt, max_attempts),
+                );
+                if retry_decision.should_retry {
                     router.record_failure_with_reason_for_deployment(
                         deployment_lease.deployment(),
                         crate::core::router::CooldownReason::ConsecutiveFailures,
                     );
                     drop(deployment_lease);
-                    let retry_delay = retry_delay_for_error(router.config(), attempt, &err);
                     last_error = Some(err);
                     attempt += 1;
-                    if let Some(delay) = retry_delay {
+                    if let Some(delay) = retry_decision.delay {
                         tokio::time::sleep(delay).await;
                     }
                     continue;
