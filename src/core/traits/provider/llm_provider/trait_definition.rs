@@ -21,9 +21,12 @@ use crate::core::types::{
     responses::{ChatChunk, ChatResponse, EmbeddingResponse, ImageGenerationResponse},
 };
 
-/// Unified LLM Provider interface
+/// Unified interface implemented by providers wired into this crate.
 ///
-/// This is the core abstraction of LiteLLM, all AI providers must implement this trait
+/// `LLMProvider` defines the behavior expected from concrete provider
+/// implementations. Implementing this trait alone does not make a provider
+/// routeable: router deployments currently store the built-in `Provider` enum,
+/// so a provider must also be added to that enum and its dispatch/factory wiring.
 ///
 /// # Design Principles
 ///
@@ -36,9 +39,9 @@ use crate::core::types::{
 ///
 /// # Example
 ///
-/// The `LLMProvider` trait is the core abstraction for AI providers. All providers
-/// use `ProviderError` as the unified error type. See existing provider
-/// implementations in `src/core/providers/` for reference.
+/// The `LLMProvider` trait is the implementation interface for providers built
+/// into this crate. All providers use `ProviderError` as the unified error type.
+/// See existing provider implementations in `src/core/providers/` for reference.
 #[allow(async_fn_in_trait)]
 pub trait LLMProvider: Send + Sync + Debug + 'static {
     // ==================== Basic Metadata ====================
@@ -49,7 +52,8 @@ pub trait LLMProvider: Send + Sync + Debug + 'static {
     /// String identifier for the provider, such as "openai", "anthropic", "v0", etc.
     ///
     /// # Note
-    /// This name is used for routing and logging, must be unique across the entire system.
+    /// This name is used by built-in routing and logging, and must be unique
+    /// among provider implementations wired into the crate.
     /// Implementations may return either a static literal or a value borrowed from `self`.
     fn name(&self) -> &str;
 

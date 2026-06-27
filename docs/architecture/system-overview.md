@@ -17,12 +17,13 @@ LiteLLM-RS implements a **Unified Provider Architecture** that combines the best
 - **Exhaustive pattern matching**: Compiler ensures all providers are handled
 
 ### 3. **Developer Experience**
-- **Uniform API**: All providers implement the same `LLMProvider` trait
+- **Uniform API**: Built-in providers implement the same `LLMProvider` trait
 - **Macro-driven dispatch**: No repetitive match statements in user code
 - **Clear error handling**: Unified error conversion with context preservation
 
 ### 4. **Extensibility**
-- **Trait-based interface**: New providers only need to implement `LLMProvider`
+- **Trait-based implementation**: new routed providers must implement `LLMProvider`
+  and be wired into the `Provider` enum, dispatch macros, and factory path
 - **Modular design**: Each provider is self-contained
 - **Configuration flexibility**: Provider-specific config types
 
@@ -132,6 +133,11 @@ pub trait LLMProvider: Send + Sync + Debug + 'static {
 - **Gradual feature adoption**: Optional methods have default "not supported" implementations
 - **Strong typing**: Associated types ensure type safety across provider implementations
 - **Future-proof**: New methods can be added with default implementations
+
+`LLMProvider` is not currently a standalone router plugin boundary. Router
+deployments store the closed `Provider` enum, so a third-party implementation
+must also be added to the enum, dispatch macros, and factory wiring before it can
+serve routed traffic.
 
 ### 3. Dispatch Macros (Boilerplate Elimination)
 
@@ -285,7 +291,7 @@ async fn try_providers(
 
 ## 🔧 Extending the Architecture
 
-### Adding a New Provider
+### Adding a New Routed Provider
 
 1. **Implement the Provider**:
 
