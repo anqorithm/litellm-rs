@@ -11,6 +11,7 @@ use crate::core::types::model::ProviderCapability;
 use crate::utils::error::gateway_error::GatewayError;
 use std::collections::HashSet;
 use std::sync::Arc;
+use std::time::Duration;
 use std::time::Instant;
 
 /// Holds a selected deployment active for the lifetime of a streaming response.
@@ -143,9 +144,11 @@ where
                         }
                     }
                     drop(deployment_lease);
-                    let delay = calculate_retry_delay(router.config(), attempt);
+                    let retry_delay = retry_delay_for_error(router.config(), attempt, &err);
                     last_error = Some(err);
-                    tokio::time::sleep(delay).await;
+                    if let Some(delay) = retry_delay {
+                        tokio::time::sleep(delay).await;
+                    }
                     continue;
                 }
 
@@ -169,6 +172,20 @@ where
         }
     })))
 }
+
+fn retry_delay_for_error(
+    config: &crate::core::router::config::RouterConfig,
+    attempt: u32,
+    error: &ProviderError,
+) -> Option<Duration> {
+    retryable_budget_scope(error)
+        .is_none()
+        .then(|| calculate_retry_delay(config, attempt))
+}
+
+#[cfg(test)]
+#[path = "execution_retry_delay_tests.rs"]
+mod retry_delay_tests;
 
 /// Start a streaming operation while keeping the selected deployment active.
 ///
@@ -250,9 +267,11 @@ where
                         }
                     }
                     drop(deployment_lease);
-                    let delay = calculate_retry_delay(router.config(), attempt);
+                    let retry_delay = retry_delay_for_error(router.config(), attempt, &err);
                     last_error = Some(err);
-                    tokio::time::sleep(delay).await;
+                    if let Some(delay) = retry_delay {
+                        tokio::time::sleep(delay).await;
+                    }
                     continue;
                 }
 

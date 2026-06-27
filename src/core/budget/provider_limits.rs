@@ -154,6 +154,7 @@ impl ProviderBudgetManager {
             provider, config.max_budget, config.reset_period
         );
 
+        self.reserved_spend.remove(provider);
         let snapshot = self.snapshot_for(&budget);
         self.budgets.insert(provider.to_string(), budget);
         self.request_counts.entry(provider.to_string()).or_default();
@@ -492,6 +493,7 @@ impl ModelBudgetManager {
             model, config.max_budget, config.reset_period
         );
 
+        self.reserved_spend.remove(model);
         let snapshot = self.snapshot_for(&budget);
         self.budgets.insert(model.to_string(), budget);
         self.request_counts.entry(model.to_string()).or_default();

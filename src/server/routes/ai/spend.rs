@@ -22,6 +22,8 @@ const IMAGE_PROMPT_BASE_TOKENS: u32 = 85;
 const IMAGE_HIGH_DETAIL_PROMPT_TOKENS: u32 = 1_105;
 const AUDIO_PROMPT_BASE_TOKENS: u32 = 100;
 const DOCUMENT_PROMPT_BASE_TOKENS: u32 = 1_000;
+const TOOL_RESULT_BASE_TOKENS: u32 = 50;
+const TOOL_USE_BASE_TOKENS: u32 = 100;
 
 /// Reject a request before it reaches the upstream provider when the served
 /// provider or model budget is already exhausted.
@@ -237,7 +239,7 @@ fn provider_effective_max_output_tokens(
     match provider.as_str() {
         "openai" | "azure" | "azure_ai" | "openai_like" | "openrouter" | "xai" | "groq"
         | "deepseek" | "moonshot" | "minimax" | "zhipuai" | "xiaomi_mimo" | "amazon_nova"
-        | "ai21" | "baseten" | "huggingface" | "ollama" | "sagemaker" | "snowflake" => {
+        | "ai21" | "baseten" | "huggingface" => {
             request.max_completion_tokens.or(request.max_tokens)
         }
         "bedrock" => bedrock_effective_max_output_tokens(model, request),
@@ -345,10 +347,21 @@ fn conservative_content_part_extra(part: &ContentPart) -> u32 {
         ContentPart::Document { source, .. } => encoded_media_tokens(&source.data)
             .max(DOCUMENT_PROMPT_BASE_TOKENS)
             .saturating_sub(DOCUMENT_PROMPT_BASE_TOKENS),
-        ContentPart::Text { .. } | ContentPart::ToolResult { .. } | ContentPart::ToolUse { .. } => {
-            0
+        ContentPart::ToolResult { .. } => {
+            serialized_content_part_tokens(part).saturating_sub(TOOL_RESULT_BASE_TOKENS)
         }
+        ContentPart::ToolUse { .. } => {
+            serialized_content_part_tokens(part).saturating_sub(TOOL_USE_BASE_TOKENS)
+        }
+        ContentPart::Text { .. } => 0,
     }
+}
+
+fn serialized_content_part_tokens(part: &ContentPart) -> u32 {
+    let Ok(json) = serde_json::to_string(part) else {
+        return u32::MAX;
+    };
+    u32::try_from(json.chars().count().div_ceil(4)).unwrap_or(u32::MAX)
 }
 
 fn image_prompt_floor(detail: Option<&str>) -> u32 {
@@ -539,3 +552,7 @@ mod tests;
 #[cfg(test)]
 #[path = "spend_provider_reservation_tests.rs"]
 mod provider_reservation_tests;
+
+#[cfg(test)]
+#[path = "spend_provider_output_cap_tests.rs"]
+mod provider_output_cap_tests;

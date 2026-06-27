@@ -2,7 +2,7 @@ use super::*;
 use crate::core::budget::{ProviderLimitConfig, ResetPeriod};
 use crate::core::cost::calculator::estimate_cost;
 use crate::core::models::openai::requests::ChatCompletionRequest;
-use crate::core::models::openai::{ChatMessage, MessageContent, MessageRole};
+use crate::core::models::openai::{ChatMessage, ContentPart, MessageContent, MessageRole};
 
 fn reserve_with_provider_limit(
     provider: &str,
@@ -60,4 +60,36 @@ fn openai_like_prefixed_chat_reservation_uses_provider_pricing() {
     let reservation =
         reserve_with_provider_limit("openai_like", "groq/llama-3.3-70b-versatile", 100);
     reservation.cancel();
+}
+
+#[test]
+fn chat_prompt_estimate_accounts_for_serialized_tool_parts() {
+    let payload = "x".repeat(4_000);
+    let messages = vec![ChatMessage {
+        role: MessageRole::User,
+        content: Some(MessageContent::Parts(vec![
+            ContentPart::ToolResult {
+                tool_use_id: "call_1".to_string(),
+                content: serde_json::json!({ "payload": payload }),
+                is_error: None,
+            },
+            ContentPart::ToolUse {
+                id: "call_2".to_string(),
+                name: "lookup".to_string(),
+                input: serde_json::json!({ "payload": "y".repeat(4_000) }),
+            },
+        ])),
+        name: None,
+        function_call: None,
+        tool_calls: None,
+        tool_call_id: None,
+        audio: None,
+    }];
+
+    let prompt_tokens = estimate_chat_prompt_tokens("gpt-4o", &messages, None, None, None, None);
+
+    assert!(
+        prompt_tokens > 1_800,
+        "large tool payloads should add a serialized prompt floor"
+    );
 }

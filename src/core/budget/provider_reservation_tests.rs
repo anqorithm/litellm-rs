@@ -301,6 +301,73 @@ fn overlapping_reservation_persistence_excludes_other_temporary_holds() {
 }
 
 #[test]
+fn replacing_limits_drops_stale_outstanding_holds() {
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+    let limits = UnifiedBudgetLimits::with_persistence(tx);
+    limits.providers.set_provider_limit(
+        "openai",
+        ProviderLimitConfig::new(100.0, ResetPeriod::Monthly),
+    );
+    limits
+        .models
+        .set_model_limit("gpt-4", ModelLimitConfig::new(100.0, ResetPeriod::Monthly));
+    while rx.try_recv().is_ok() {}
+
+    let reservation = limits.reserve_spend("openai", "gpt-4", 10.0).unwrap();
+    limits.providers.set_provider_limit(
+        "openai",
+        ProviderLimitConfig::new(100.0, ResetPeriod::Monthly),
+    );
+    limits
+        .models
+        .set_model_limit("gpt-4", ModelLimitConfig::new(100.0, ResetPeriod::Monthly));
+
+    let mut replacement_snapshots = Vec::new();
+    for _ in 0..2 {
+        match rx
+            .try_recv()
+            .expect("replacing limits should persist new snapshots")
+        {
+            BudgetPersistenceEvent::Upsert(snapshot) => {
+                replacement_snapshots.push((snapshot.kind, snapshot.name, snapshot.current_spend));
+            }
+            BudgetPersistenceEvent::Delete { .. } => panic!("expected upsert"),
+        }
+    }
+    assert!(
+        replacement_snapshots
+            .iter()
+            .any(|(_, name, current_spend)| name == "openai" && *current_spend == 0.0)
+    );
+    assert!(
+        replacement_snapshots
+            .iter()
+            .any(|(_, name, current_spend)| name == "gpt-4" && *current_spend == 0.0)
+    );
+
+    assert_eq!(
+        reservation.settle(4.0).unwrap(),
+        (Some(BudgetStatus::Ok), Some(BudgetStatus::Ok))
+    );
+    assert_eq!(
+        limits
+            .providers
+            .get_provider_usage("openai")
+            .unwrap()
+            .current_spend,
+        4.0
+    );
+    assert_eq!(
+        limits
+            .models
+            .get_model_usage("gpt-4")
+            .unwrap()
+            .current_spend,
+        4.0
+    );
+}
+
+#[test]
 fn unified_reservation_settles_actual_above_reserved_amount() {
     let limits = UnifiedBudgetLimits::new();
     limits.providers.set_provider_limit(
