@@ -130,8 +130,8 @@ into the enum, dispatch, registry metadata, and factory.
 | Mistral (`mistral`) | always | ✅ | ✅ | passthrough | – | – | Native client. |
 | Cloudflare Workers AI (`cloudflare`) | always | ✅ | – | – | – | – | Native client with account-id auth; streaming and embeddings currently return `NotSupported`. |
 | Cohere (`cohere`) | native factory (`providers-extended`) | ✅ | ✅ | ✅ | – | – | Uses native Cohere `/v2/chat` and `/v2/embed`; the concrete provider also exposes a `/v1/rerank` helper. Explicitly unsupported without `providers-extended`. |
-| Azure OpenAI (`azure`) | native factory (`providers-extra`); OpenAILike fallback | ✅ | ✅ | – | – | – | Uses native Azure OpenAI when `providers-extra` is enabled; otherwise the factory path uses OpenAILike chat/stream only. |
-| Azure AI Inference (`azure_ai`) | native factory (`providers-extra`); OpenAILike fallback | ✅ | ✅ | – | – | – | Uses native Azure AI when `providers-extra` is enabled; otherwise the factory path uses OpenAILike chat/stream only. |
+| Azure OpenAI (`azure`) | native factory (`providers-extra`); OpenAILike fallback | ✅ | ✅ | ✅ | ✅ | – | Native Azure supports chat, streaming, embeddings, and image generation with `providers-extra`; otherwise the factory path uses OpenAILike chat/stream only. |
+| Azure AI Inference (`azure_ai`) | native factory (`providers-extra`); OpenAILike fallback | ✅ | ✅ | ✅ | ✅ | – | Native Azure AI supports chat, streaming, embeddings, and image generation with `providers-extra`; otherwise the factory path uses OpenAILike chat/stream only. |
 | AWS Bedrock (`bedrock`) | always | ✅ | ✅ | ✅ | helper API | – | Native AWS Bedrock runtime path with SigV4 signing. Use `openai_compatible` for Bedrock Access Gateway or other OpenAI-compatible proxies. |
 | Google Vertex AI (`vertex_ai`) | native factory (`providers-extra`) | ✅ | ✅ | ✅ | ✅ | – | Uses native Vertex auth and Google-specific URLs when `providers-extra` is enabled; otherwise explicitly unsupported. |
 | Google Gemini (`gemini`) | native factory (`providers-extended`) | ✅ | ✅ | – | – | – | Uses native Google AI Studio Gemini auth; use `vertex_ai` for Vertex AI project/location credentials. |
