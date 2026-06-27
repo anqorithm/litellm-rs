@@ -3,7 +3,9 @@
 //! This module provides budget-aware routing capabilities that filter out
 //! providers and models that have exceeded their budget limits.
 
-use crate::core::budget::{BudgetStatus, UnifiedBudgetLimits};
+use crate::core::budget::{
+    BudgetReservationError, BudgetStatus, UnifiedBudgetLimits, UnifiedBudgetReservation,
+};
 use std::sync::Arc;
 use tracing::{debug, warn};
 
@@ -133,6 +135,17 @@ impl BudgetAwareRouter {
                 None
             },
         }
+    }
+
+    /// Reserve estimated spend for a request before upstream work starts.
+    pub fn reserve_request(
+        &self,
+        provider: &str,
+        model: &str,
+        estimated_cost: f64,
+    ) -> Result<UnifiedBudgetReservation, BudgetReservationError> {
+        self.budget_limits
+            .reserve_spend(provider, model, estimated_cost)
     }
 
     /// Check provider budget
@@ -380,6 +393,47 @@ mod tests {
 
         assert_eq!(provider_usage.current_spend, 25.0);
         assert_eq!(model_usage.current_spend, 25.0);
+    }
+
+    #[test]
+    fn test_reserve_request_settles_estimated_spend() {
+        let limits = Arc::new(UnifiedBudgetLimits::new());
+        limits.providers.set_provider_limit(
+            "openai",
+            ProviderLimitConfig::new(100.0, ResetPeriod::Monthly),
+        );
+        limits
+            .models
+            .set_model_limit("gpt-4", ModelLimitConfig::new(100.0, ResetPeriod::Monthly));
+
+        let router = BudgetAwareRouter::new(limits.clone());
+        let reservation = router.reserve_request("openai", "gpt-4", 10.0).unwrap();
+
+        assert_eq!(
+            limits
+                .providers
+                .get_provider_usage("openai")
+                .unwrap()
+                .current_spend,
+            10.0
+        );
+        reservation.settle(4.0).unwrap();
+        assert_eq!(
+            limits
+                .providers
+                .get_provider_usage("openai")
+                .unwrap()
+                .current_spend,
+            4.0
+        );
+        assert_eq!(
+            limits
+                .models
+                .get_model_usage("gpt-4")
+                .unwrap()
+                .current_spend,
+            4.0
+        );
     }
 
     #[test]

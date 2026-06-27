@@ -64,35 +64,175 @@
 //! ```
 
 mod alerts;
+mod config;
 mod manager;
 #[cfg(feature = "gateway")]
 mod middleware;
 mod provider_limits;
+mod provider_reservations;
 mod tracker;
 mod types;
 
 #[cfg(test)]
+mod manager_tests;
+#[cfg(test)]
+mod provider_reservation_tests;
+#[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tracker_reservation_tests;
+#[cfg(test)]
+mod tracker_tests;
+#[cfg(test)]
+mod types_tests;
 
 // Re-export public types
 pub use alerts::{AlertConfig, AlertStats, BudgetAlertManager, WebhookConfig};
+pub use config::{
+    BudgetConfig, BudgetLimitKind, BudgetLimitSnapshot, BudgetPersistenceEvent,
+    BudgetPersistenceSender, ModelLimitConfig, ProviderLimitConfig,
+};
 pub use manager::{BudgetManager, BudgetManagerConfig, BudgetSummary};
 #[cfg(feature = "gateway")]
 pub use middleware::{
     BudgetCheckMiddleware, BudgetCheckMiddlewareService, BudgetMiddleware, BudgetMiddlewareService,
     BudgetRecorder, BudgetRecorderExt,
 };
-pub use provider_limits::{
-    BudgetLimitKind, BudgetLimitSnapshot, BudgetPersistenceEvent, BudgetPersistenceSender,
-    ModelBudgetManager, ModelLimitConfig, ProviderBudgetManager, ProviderLimitConfig,
-    UnifiedBudgetLimits,
+pub use provider_limits::{ModelBudgetManager, ProviderBudgetManager, UnifiedBudgetLimits};
+pub use provider_reservations::{
+    ModelBudgetReservation, ProviderBudgetReservation, UnifiedBudgetReservation,
 };
-pub use tracker::{BudgetTracker, SpendResult};
+pub use tracker::{BudgetReservation, BudgetReservationError, BudgetTracker, SpendResult};
 pub use types::{
-    AlertSeverity, Budget, BudgetAlert, BudgetAlertType, BudgetCheckResult, BudgetConfig,
-    BudgetScope, BudgetStatus, Currency, ModelBudget, ModelUsageStats, ProviderBudget,
-    ProviderUsageStats, ResetPeriod,
+    AlertSeverity, Budget, BudgetAlert, BudgetAlertType, BudgetCheckResult, BudgetScope,
+    BudgetStatus, Currency, ModelBudget, ModelUsageStats, ProviderBudget, ProviderUsageStats,
+    ResetPeriod,
 };
+
+const BUDGET_AMOUNT_SCALE: f64 = 1_000_000_000.0;
+
+/// Fixed-point amount used for budget authorization math.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct BudgetAmount(i128);
+
+impl BudgetAmount {
+    pub fn zero() -> Self {
+        Self(0)
+    }
+
+    pub fn from_f64(amount: f64) -> Result<Self, BudgetAmountError> {
+        if !amount.is_finite() {
+            return Err(BudgetAmountError::NonFinite);
+        }
+        if amount < 0.0 {
+            return Err(BudgetAmountError::Negative);
+        }
+
+        let scaled = (amount * BUDGET_AMOUNT_SCALE).round();
+        if !scaled.is_finite() || scaled > i128::MAX as f64 {
+            return Err(BudgetAmountError::Overflow);
+        }
+
+        Ok(Self(scaled as i128))
+    }
+
+    pub fn as_f64(self) -> f64 {
+        self.0 as f64 / BUDGET_AMOUNT_SCALE
+    }
+
+    pub fn checked_add(self, other: Self) -> Result<Self, BudgetAmountError> {
+        self.0
+            .checked_add(other.0)
+            .map(Self)
+            .ok_or(BudgetAmountError::Overflow)
+    }
+
+    pub fn checked_sub(self, other: Self) -> Result<Self, BudgetAmountError> {
+        if self < other {
+            return Err(BudgetAmountError::Negative);
+        }
+        self.0
+            .checked_sub(other.0)
+            .map(Self)
+            .ok_or(BudgetAmountError::Negative)
+    }
+
+    pub fn saturating_sub(self, other: Self) -> Self {
+        Self(self.0.saturating_sub(other.0).max(0))
+    }
+}
+
+/// Invalid money value at a budget boundary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BudgetAmountError {
+    NonFinite,
+    Negative,
+    Overflow,
+}
+
+impl std::fmt::Display for BudgetAmountError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NonFinite => write!(f, "budget amount must be finite"),
+            Self::Negative => write!(f, "budget amount must not be negative"),
+            Self::Overflow => write!(f, "budget amount is too large"),
+        }
+    }
+}
+
+impl std::error::Error for BudgetAmountError {}
+
+pub(crate) fn budget_can_spend(
+    current_spend: f64,
+    max_budget: f64,
+    enabled: bool,
+    amount: f64,
+) -> Result<bool, BudgetAmountError> {
+    let amount = BudgetAmount::from_f64(amount)?;
+    if !enabled {
+        return Ok(true);
+    }
+
+    let current = BudgetAmount::from_f64(current_spend)?;
+    let max = BudgetAmount::from_f64(max_budget)?;
+    Ok(current.checked_add(amount)? <= max)
+}
+
+pub(crate) fn add_budget_spend(
+    current_spend: f64,
+    amount: f64,
+) -> Result<BudgetAmount, BudgetAmountError> {
+    let current = BudgetAmount::from_f64(current_spend)?;
+    current.checked_add(BudgetAmount::from_f64(amount)?)
+}
+
+pub(crate) fn settle_budget_spend(
+    current_spend: f64,
+    reserved: BudgetAmount,
+    actual: BudgetAmount,
+    same_reset_epoch: bool,
+) -> Result<BudgetAmount, BudgetAmountError> {
+    let current_spend = BudgetAmount::from_f64(current_spend)?;
+    let settled_base = if same_reset_epoch {
+        current_spend.saturating_sub(reserved)
+    } else {
+        current_spend
+    };
+    settled_base.checked_add(actual)
+}
+
+pub(crate) fn release_budget_spend(
+    current_spend: f64,
+    reserved: BudgetAmount,
+    same_reset_epoch: bool,
+) -> Result<BudgetAmount, BudgetAmountError> {
+    let current_spend = BudgetAmount::from_f64(current_spend)?;
+    if same_reset_epoch {
+        Ok(current_spend.saturating_sub(reserved))
+    } else {
+        Ok(current_spend)
+    }
+}
 
 use std::sync::Arc;
 

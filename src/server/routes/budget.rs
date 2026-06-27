@@ -2,20 +2,6 @@
 //!
 //! Provides REST API endpoints for managing per-provider and per-model budgets.
 //!
-//! ## Endpoints
-//!
-//! ### Provider Budgets
-//! - `POST   /v1/budget/providers`         - Set provider budget
-//! - `GET    /v1/budget/providers`         - List all provider budgets
-//! - `GET    /v1/budget/providers/{name}`  - Get provider budget status
-//! - `DELETE /v1/budget/providers/{name}`  - Remove provider budget
-//!
-//! ### Model Budgets
-//! - `POST   /v1/budget/models`            - Set model budget
-//! - `GET    /v1/budget/models`            - List all model budgets
-//! - `GET    /v1/budget/models/{name}`     - Get model budget status
-//! - `DELETE /v1/budget/models/{name}`     - Remove model budget
-//!
 //! All mutation endpoints (POST/DELETE/reset) require the Admin role;
 //! read-only endpoints only require authentication.
 
@@ -262,15 +248,18 @@ pub async fn set_provider_budget(
         )));
     }
 
-    if request.max_budget <= 0.0 {
+    if !request.max_budget.is_finite() || request.max_budget <= 0.0 {
         return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
-            "max_budget must be greater than 0".to_string(),
+            "max_budget must be finite and greater than 0".to_string(),
         )));
     }
 
-    if request.soft_limit_percentage < 0.0 || request.soft_limit_percentage > 1.0 {
+    if !request.soft_limit_percentage.is_finite()
+        || request.soft_limit_percentage < 0.0
+        || request.soft_limit_percentage > 1.0
+    {
         return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
-            "soft_limit_percentage must be between 0.0 and 1.0".to_string(),
+            "soft_limit_percentage must be finite and between 0.0 and 1.0".to_string(),
         )));
     }
 
@@ -511,15 +500,18 @@ pub async fn set_model_budget(
         )));
     }
 
-    if request.max_budget <= 0.0 {
+    if !request.max_budget.is_finite() || request.max_budget <= 0.0 {
         return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
-            "max_budget must be greater than 0".to_string(),
+            "max_budget must be finite and greater than 0".to_string(),
         )));
     }
 
-    if request.soft_limit_percentage < 0.0 || request.soft_limit_percentage > 1.0 {
+    if !request.soft_limit_percentage.is_finite()
+        || request.soft_limit_percentage < 0.0
+        || request.soft_limit_percentage > 1.0
+    {
         return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
-            "soft_limit_percentage must be between 0.0 and 1.0".to_string(),
+            "soft_limit_percentage must be finite and between 0.0 and 1.0".to_string(),
         )));
     }
 

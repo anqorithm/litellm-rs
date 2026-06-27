@@ -97,6 +97,17 @@ impl Router {
         self.select_deployment_matching(model_name, |_| true, None)
     }
 
+    pub(crate) fn select_deployment_lease_matching<F>(
+        &self,
+        model_name: &str,
+        is_candidate: F,
+    ) -> Result<DeploymentLease, RouterError>
+    where
+        F: Fn(&Deployment) -> bool,
+    {
+        self.select_deployment_matching(model_name, is_candidate, None)
+    }
+
     /// Select the best deployment for a model that supports `capability`.
     ///
     /// This uses the same health, cooldown, concurrency, rate-limit, and
@@ -122,6 +133,20 @@ impl Router {
         model_name: &str,
         capability: &ProviderCapability,
     ) -> Result<DeploymentLease, RouterError> {
+        self.select_deployment_lease_for_capability_matching(model_name, capability, |_| true)
+    }
+
+    /// Select and reserve the best deployment for a model that supports
+    /// `capability` and passes an additional route-level predicate.
+    pub fn select_deployment_lease_for_capability_matching<F>(
+        &self,
+        model_name: &str,
+        capability: &ProviderCapability,
+        is_candidate: F,
+    ) -> Result<DeploymentLease, RouterError>
+    where
+        F: Fn(&Deployment) -> bool,
+    {
         let no_matching_candidate_error = RouterError::UnsupportedCapability {
             model: model_name.to_string(),
             capability: format!("{capability:?}"),
@@ -135,6 +160,7 @@ impl Router {
                     .capabilities()
                     .iter()
                     .any(|cap| cap == capability)
+                    && is_candidate(deployment)
             },
             Some(no_matching_candidate_error),
         )

@@ -277,6 +277,59 @@ fn test_runtime_pricing_normalizes_provider_prefixed_shared_models() {
 }
 
 #[test]
+fn test_runtime_pricing_supports_bedrock_provider_name() {
+    let pricing = get_model_pricing("amazon.titan-text-express-v1", "bedrock")
+        .expect("Bedrock provider should use local model pricing fallback");
+
+    assert_cost_eq(pricing.input_cost_per_1k_tokens, 0.0002);
+    assert_cost_eq(pricing.output_cost_per_1k_tokens, 0.0006);
+}
+
+#[test]
+fn test_runtime_pricing_supports_amazon_nova_provider_name() {
+    let pricing = get_model_pricing("amazon.nova-2-lite-v1:0", "amazon_nova")
+        .expect("Amazon Nova provider should use shared Bedrock catalog pricing");
+
+    assert_cost_eq(pricing.input_cost_per_1k_tokens, 0.0003);
+    assert_cost_eq(pricing.output_cost_per_1k_tokens, 0.0025);
+}
+
+#[cfg(feature = "providers-extended")]
+#[test]
+fn test_runtime_pricing_supports_amazon_nova_short_model_name() {
+    let pricing = get_model_pricing("nova-2-lite", "amazon_nova")
+        .expect("Amazon Nova provider should price short model aliases");
+
+    assert_eq!(pricing.model, "amazon.nova-2-lite-v1:0");
+    assert_cost_eq(pricing.input_cost_per_1k_tokens, 0.0003);
+    assert_cost_eq(pricing.output_cost_per_1k_tokens, 0.0025);
+}
+
+#[test]
+fn test_runtime_pricing_supports_prefixed_openai_like_models() {
+    let usage = create_usage(1000, 500);
+
+    let groq = generic_cost_per_token("groq/llama-3.3-70b-versatile", &usage, "openai_like")
+        .expect("OpenAI-like provider should price explicitly prefixed Groq models");
+    assert_cost_eq(groq.total_cost, 0.000985);
+
+    let xai = generic_cost_per_token("xai/grok-4.3", &usage, "openai_like")
+        .expect("OpenAI-like provider should price explicitly prefixed XAI models");
+    assert_cost_eq(xai.total_cost, 0.0025);
+}
+
+#[test]
+fn test_runtime_pricing_keeps_unprefixed_openai_like_models_strict() {
+    let usage = create_usage(1000, 500);
+    let result = generic_cost_per_token("grok-4.3", &usage, "openai_like");
+
+    assert!(matches!(
+        result,
+        Err(CostError::ModelNotSupported { provider, .. }) if provider == "openai_like"
+    ));
+}
+
+#[test]
 fn test_get_deepseek_pricing() {
     let Ok(flash) = get_model_pricing("deepseek-v4-flash", "deepseek") else {
         panic!("deepseek-v4-flash pricing should be available");

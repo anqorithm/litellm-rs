@@ -4,11 +4,12 @@
 
 use super::router_tests::create_test_deployment;
 use crate::core::providers::unified_provider::ProviderError;
-use crate::core::router::config::RouterConfig;
+use crate::core::router::config::{RouterConfig, RoutingStrategy};
 use crate::core::router::error::RouterError;
 use crate::core::router::execution::is_retryable_error;
 use crate::core::router::fallback::{ExecutionResult, FallbackConfig};
 use crate::core::router::unified::Router;
+use crate::core::types::model::ProviderCapability;
 use std::sync::atomic::Ordering;
 
 #[test]
@@ -40,6 +41,22 @@ fn test_is_retryable_error() {
     assert!(!is_retryable_error(&ProviderError::invalid_request(
         "test",
         "Bad request"
+    )));
+    assert!(is_retryable_error(&ProviderError::quota_exceeded(
+        "budget",
+        "provider 'openai' budget exceeded"
+    )));
+    assert!(!is_retryable_error(&ProviderError::quota_exceeded(
+        "budget",
+        "budget exceeded for provider 'openai' model 'gpt-4o'"
+    )));
+    assert!(is_retryable_error(&ProviderError::quota_exceeded(
+        "budget",
+        "model 'gpt-4o' budget exceeded"
+    )));
+    assert!(!is_retryable_error(&ProviderError::quota_exceeded(
+        "openai",
+        "account quota exceeded"
     )));
 }
 
@@ -178,6 +195,153 @@ async fn test_execute_with_retry_success_second_attempt() {
     assert!(result.is_ok());
     let (_value, _deployment_id, attempts, _latency) = result.unwrap();
     assert_eq!(attempts, 2);
+}
+
+#[tokio::test]
+async fn test_execute_with_retry_excludes_model_budget_failures() {
+    let config = RouterConfig {
+        routing_strategy: RoutingStrategy::PriorityBased,
+        num_retries: 1,
+        retry_after_secs: 0,
+        ..Default::default()
+    };
+    let router = Router::new(config);
+    let mut primary = create_test_deployment("primary-model-budget", "shared").await;
+    primary.model = "model-a".to_string();
+    primary.config.priority = 0;
+    let mut fallback = create_test_deployment("fallback-model-budget", "shared").await;
+    fallback.model = "model-b".to_string();
+    fallback.config.priority = 10;
+    router.add_deployment(primary);
+    router.add_deployment(fallback);
+    let attempts = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+
+    let result = router
+        .execute_with_selected_deployment_retry("shared", {
+            let attempts = attempts.clone();
+            move |deployment| {
+                let attempts = attempts.clone();
+                async move {
+                    attempts.lock().unwrap().push(deployment.model.clone());
+                    if deployment.model == "model-a" {
+                        Err(ProviderError::quota_exceeded(
+                            "budget",
+                            "model 'model-a' budget exceeded",
+                        ))
+                    } else {
+                        Ok((deployment.id.clone(), 0))
+                    }
+                }
+            }
+        })
+        .await
+        .expect("fallback deployment should be selected after model budget miss");
+
+    assert_eq!(result.0, "fallback-model-budget");
+    assert_eq!(attempts.lock().unwrap().as_slice(), ["model-a", "model-b"]);
+    let primary = router
+        .get_deployment("primary-model-budget")
+        .expect("primary deployment should exist");
+    assert_eq!(primary.state.fail_requests.load(Ordering::Relaxed), 0);
+}
+
+async fn build_same_provider_budget_fallback_router(num_retries: u32) -> Router {
+    let config = RouterConfig {
+        routing_strategy: RoutingStrategy::PriorityBased,
+        num_retries,
+        retry_after_secs: 0,
+        ..Default::default()
+    };
+    let router = Router::new(config);
+    let mut primary = create_test_deployment("same-provider-expensive", "shared").await;
+    primary.model = "gpt-expensive".to_string();
+    primary.config.priority = 0;
+    let mut fallback = create_test_deployment("same-provider-cheap", "shared").await;
+    fallback.model = "gpt-cheap".to_string();
+    fallback.config.priority = 10;
+    router.add_deployment(primary);
+    router.add_deployment(fallback);
+    router
+}
+
+#[tokio::test]
+async fn test_execute_with_retry_budget_fallback_ignores_retry_limit_and_provider_scope() {
+    let router = build_same_provider_budget_fallback_router(0).await;
+    let attempts = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+
+    let result = router
+        .execute_with_selected_deployment_retry("shared", {
+            let attempts = attempts.clone();
+            move |deployment| {
+                let attempts = attempts.clone();
+                async move {
+                    attempts.lock().unwrap().push(deployment.model.clone());
+                    if deployment.model == "gpt-expensive" {
+                        Err(ProviderError::quota_exceeded(
+                            "budget",
+                            "provider 'openai' budget exceeded",
+                        ))
+                    } else {
+                        Ok((deployment.id.clone(), 0))
+                    }
+                }
+            }
+        })
+        .await
+        .expect("budget fallback should select another same-provider deployment");
+
+    assert_eq!(result.0, "same-provider-cheap");
+    assert_eq!(
+        attempts.lock().unwrap().as_slice(),
+        ["gpt-expensive", "gpt-cheap"]
+    );
+    assert_eq!(result.2, 1);
+    let primary = router
+        .get_deployment("same-provider-expensive")
+        .expect("primary deployment should exist");
+    assert_eq!(primary.state.fail_requests.load(Ordering::Relaxed), 0);
+}
+
+#[tokio::test]
+async fn test_execute_with_capability_retry_budget_fallback_ignores_retry_limit() {
+    let router = build_same_provider_budget_fallback_router(0).await;
+    let attempts = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+
+    let result = router
+        .execute_with_selected_deployment_capability_retry(
+            "shared",
+            &ProviderCapability::ChatCompletion,
+            {
+                let attempts = attempts.clone();
+                move |deployment| {
+                    let attempts = attempts.clone();
+                    async move {
+                        attempts.lock().unwrap().push(deployment.model.clone());
+                        if deployment.model == "gpt-expensive" {
+                            Err(ProviderError::quota_exceeded(
+                                "budget",
+                                "provider 'openai' budget exceeded",
+                            ))
+                        } else {
+                            Ok((deployment.id.clone(), 0))
+                        }
+                    }
+                }
+            },
+        )
+        .await
+        .expect("capability retry should select another same-provider deployment");
+
+    assert_eq!(result.0, "same-provider-cheap");
+    assert_eq!(
+        attempts.lock().unwrap().as_slice(),
+        ["gpt-expensive", "gpt-cheap"]
+    );
+    assert_eq!(result.2, 1);
+    let primary = router
+        .get_deployment("same-provider-expensive")
+        .expect("primary deployment should exist");
+    assert_eq!(primary.state.fail_requests.load(Ordering::Relaxed), 0);
 }
 
 #[tokio::test]
