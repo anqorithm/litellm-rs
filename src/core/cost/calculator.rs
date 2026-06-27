@@ -122,6 +122,14 @@ pub fn get_model_pricing(model: &str, provider: &str) -> Result<ModelPricing, Co
         "gemini" => {
             get_pricing_with_shared_source(model, &["gemini", "vertex_ai"], get_vertex_ai_pricing)
         }
+        "bedrock" => get_pricing_with_shared_source(model, &["bedrock"], get_bedrock_pricing),
+        "amazon_nova" => get_pricing_with_shared_source(
+            model,
+            &["amazon_nova", "bedrock"],
+            get_amazon_nova_pricing,
+        ),
+        "openai_like" => get_openai_like_pricing(model),
+        "xai" => get_xai_pricing(model),
         "groq" => get_pricing_with_shared_source(model, &["groq"], |model| {
             Err(CostError::ModelNotSupported {
                 model: model.to_string(),
@@ -156,6 +164,87 @@ pub fn get_model_pricing(model: &str, provider: &str) -> Result<ModelPricing, Co
 
 fn is_xiaomi_mimo_model(model: &str) -> bool {
     crate::core::pricing::normalize_model_key(model).starts_with("mimo-")
+}
+
+fn get_bedrock_pricing(model: &str) -> Result<ModelPricing, CostError> {
+    crate::core::providers::bedrock::CostCalculator::get_core_model_pricing(model).ok_or_else(
+        || CostError::ModelNotSupported {
+            model: model.to_string(),
+            provider: "bedrock".to_string(),
+        },
+    )
+}
+
+fn get_amazon_nova_pricing(model: &str) -> Result<ModelPricing, CostError> {
+    #[cfg(feature = "providers-extended")]
+    {
+        let registry = crate::core::providers::amazon_nova::AmazonNovaModelRegistry::new();
+        if let Some(model_info) = registry.get(model) {
+            return Ok(ModelPricing {
+                model: model_info.id.clone(),
+                input_cost_per_1k_tokens: model_info.input_cost_per_1k,
+                output_cost_per_1k_tokens: model_info.output_cost_per_1k,
+                ..Default::default()
+            });
+        }
+    }
+
+    Err(CostError::ModelNotSupported {
+        model: model.to_string(),
+        provider: "amazon_nova".to_string(),
+    })
+}
+
+fn get_openai_like_pricing(model: &str) -> Result<ModelPricing, CostError> {
+    if let Some((provider, stripped_model)) = provider_prefixed_model(model) {
+        let normalized_provider = crate::core::pricing::normalize_pricing_provider(provider);
+        if normalized_provider != "openai_like" {
+            return get_model_pricing(stripped_model, &normalized_provider);
+        }
+    }
+
+    Err(CostError::ModelNotSupported {
+        model: model.to_string(),
+        provider: "openai_like".to_string(),
+    })
+}
+
+fn get_xai_pricing(model: &str) -> Result<ModelPricing, CostError> {
+    if !crate::core::providers::openai_like::models::is_xai_priced_model(model) {
+        return Err(CostError::ModelNotSupported {
+            model: model.to_string(),
+            provider: "xai".to_string(),
+        });
+    }
+
+    let model_info = crate::core::providers::openai_like::models::get_openai_like_registry()
+        .get_model_info(model);
+    let input = model_info
+        .input_cost_per_1k_tokens
+        .ok_or_else(|| CostError::MissingPricing {
+            model: model.to_string(),
+        })?;
+    let output = model_info
+        .output_cost_per_1k_tokens
+        .ok_or_else(|| CostError::MissingPricing {
+            model: model.to_string(),
+        })?;
+
+    Ok(ModelPricing {
+        model: model.to_string(),
+        input_cost_per_1k_tokens: input,
+        output_cost_per_1k_tokens: output,
+        currency: model_info.currency,
+        ..Default::default()
+    })
+}
+
+fn provider_prefixed_model(model: &str) -> Option<(&str, &str)> {
+    let (provider, stripped_model) = model.split_once('/')?;
+    if provider.is_empty() || stripped_model.is_empty() {
+        return None;
+    }
+    Some((provider, stripped_model))
 }
 
 fn get_pricing_with_shared_source<F>(

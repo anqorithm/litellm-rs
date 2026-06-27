@@ -535,3 +535,7 @@ pub(super) async fn record_stream_disconnect_spend_with_reservation(
 #[cfg(test)]
 #[path = "spend_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "spend_provider_reservation_tests.rs"]
+mod provider_reservation_tests;
