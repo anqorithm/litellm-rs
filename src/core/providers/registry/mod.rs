@@ -11,6 +11,9 @@ pub mod definition;
 pub mod lifecycle;
 pub mod types;
 
+#[cfg(test)]
+mod readme_tests;
+
 pub use catalog::{PROVIDER_CATALOG, get_definition, is_tier1_provider};
 pub use definition::{AuthType, ProviderDefinition};
 pub use lifecycle::{
