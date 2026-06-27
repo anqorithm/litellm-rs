@@ -1,6 +1,6 @@
 use super::{
-    PROVIDER_CATALOG, PROVIDER_TYPE_REGISTRY, ProviderDispatchKind, ProviderRegistryEntry,
-    entry_for_name,
+    PROVIDER_CATALOG, PROVIDER_MODULE_LIFECYCLE, PROVIDER_TYPE_REGISTRY, ProviderDispatchKind,
+    ProviderModuleLifecycle, ProviderRegistryEntry, entry_for_name,
 };
 use crate::core::providers::provider_type::ProviderType;
 use std::collections::BTreeSet;
@@ -9,7 +9,13 @@ use std::collections::BTreeSet;
 struct ReadmeTier2Row {
     selector: String,
     feature_cell: String,
+    capability_cells: [String; 5],
     row: String,
+}
+
+struct ExpectedReadmeTier2Row {
+    feature_cell: &'static str,
+    capability_cells: [&'static str; 5],
 }
 
 fn readme_provider_support_section() -> &'static str {
@@ -78,6 +84,13 @@ fn readme_tier2_rows() -> Vec<ReadmeTier2Row> {
                 .get(1)
                 .unwrap_or_else(|| panic!("README Tier 2 row is missing feature cell: {line}"))
                 .clone();
+            let capability_cells = [
+                readme_table_cell(&cells, 2, line, "Chat"),
+                readme_table_cell(&cells, 3, line, "Stream"),
+                readme_table_cell(&cells, 4, line, "Embed"),
+                readme_table_cell(&cells, 5, line, "Image"),
+                readme_table_cell(&cells, 6, line, "Audio"),
+            ];
             let selector = code_spans(provider_cell)
                 .into_iter()
                 .next()
@@ -87,10 +100,18 @@ fn readme_tier2_rows() -> Vec<ReadmeTier2Row> {
             ReadmeTier2Row {
                 selector,
                 feature_cell,
+                capability_cells,
                 row: line.to_string(),
             }
         })
         .collect()
+}
+
+fn readme_table_cell(cells: &[String], index: usize, line: &str, name: &str) -> String {
+    cells
+        .get(index)
+        .unwrap_or_else(|| panic!("README Tier 2 row is missing {name} cell: {line}"))
+        .clone()
 }
 
 fn readme_code_list_selectors(section_start: &str, section_end: &str) -> BTreeSet<String> {
@@ -107,49 +128,82 @@ fn readme_code_list_selectors(section_start: &str, section_end: &str) -> BTreeSe
         .collect()
 }
 
-fn expected_readme_feature_cell(entry: &ProviderRegistryEntry) -> Option<&'static str> {
+fn expected_readme_tier2_row(entry: &ProviderRegistryEntry) -> Option<ExpectedReadmeTier2Row> {
     match entry.provider_type {
-        ProviderType::OpenAI
-        | ProviderType::Anthropic
-        | ProviderType::Mistral
-        | ProviderType::Cloudflare
-        | ProviderType::Bedrock
-        | ProviderType::OpenAICompatible => Some("always"),
-        ProviderType::Azure | ProviderType::AzureAI => {
-            Some("native factory (`providers-extra`); OpenAILike fallback")
-        }
-        ProviderType::VertexAI => Some("native factory (`providers-extra`)"),
-        ProviderType::Cohere
-        | ProviderType::Gemini
-        | ProviderType::FalAI
-        | ProviderType::Replicate
-        | ProviderType::GitHubCopilot => Some("native factory (`providers-extended`)"),
+        ProviderType::OpenAI => Some(expected("always", ["✅", "✅", "✅", "✅", "✅"])),
+        ProviderType::Anthropic => Some(expected("always", ["✅", "✅", "–", "–", "–"])),
+        ProviderType::Mistral => Some(expected("always", ["✅", "✅", "passthrough", "–", "–"])),
+        ProviderType::Cloudflare => Some(expected("always", ["✅", "–", "–", "–", "–"])),
+        ProviderType::Bedrock => Some(expected("always", ["✅", "✅", "✅", "helper API", "–"])),
+        ProviderType::OpenAICompatible => Some(expected("always", ["✅", "✅", "–", "–", "–"])),
+        ProviderType::Azure | ProviderType::AzureAI => Some(expected(
+            "native factory (`providers-extra`); OpenAILike fallback",
+            ["✅", "✅", "✅", "✅", "–"],
+        )),
+        ProviderType::VertexAI => Some(expected(
+            "native factory (`providers-extra`)",
+            ["✅", "✅", "✅", "✅", "–"],
+        )),
+        ProviderType::Cohere => Some(expected(
+            "native factory (`providers-extended`)",
+            ["✅", "✅", "✅", "–", "–"],
+        )),
+        ProviderType::Gemini | ProviderType::GitHubCopilot => Some(expected(
+            "native factory (`providers-extended`)",
+            ["✅", "✅", "–", "–", "–"],
+        )),
+        ProviderType::FalAI => Some(expected(
+            "native factory (`providers-extended`)",
+            ["–", "–", "–", "✅", "–"],
+        )),
+        ProviderType::Replicate => Some(expected(
+            "native factory (`providers-extended`)",
+            ["✅", "✅", "–", "✅", "–"],
+        )),
         ProviderType::MetaLlama
         | ProviderType::V0
         | ProviderType::AmazonNova
-        | ProviderType::GitHub => Some("catalog-only (`OpenAILike`)"),
+        | ProviderType::GitHub => Some(expected(
+            "catalog-only (`OpenAILike`)",
+            ["✅", "✅", "–", "–", "–"],
+        )),
         _ => None,
+    }
+}
+
+fn expected(
+    feature_cell: &'static str,
+    capability_cells: [&'static str; 5],
+) -> ExpectedReadmeTier2Row {
+    ExpectedReadmeTier2Row {
+        feature_cell,
+        capability_cells,
     }
 }
 
 fn expected_readme_tier2_selectors() -> BTreeSet<String> {
     PROVIDER_TYPE_REGISTRY
         .iter()
-        .filter(|entry| expected_readme_feature_cell(entry).is_some())
+        .filter(|entry| expected_readme_tier2_row(entry).is_some())
         .map(|entry| entry.canonical_name.to_string())
         .collect()
 }
 
 fn assert_readme_row_matches_dispatch_kind(row: &ReadmeTier2Row, entry: &ProviderRegistryEntry) {
-    let expected_feature_cell = expected_readme_feature_cell(entry).unwrap_or_else(|| {
+    let expected_row = expected_readme_tier2_row(entry).unwrap_or_else(|| {
         panic!(
             "README Tier 2 matrix should not document unsupported provider {}",
             entry.canonical_name
         )
     });
     assert_eq!(
-        row.feature_cell, expected_feature_cell,
+        row.feature_cell, expected_row.feature_cell,
         "README Tier 2 row for {} should document the exact registry feature gate: {}",
+        row.selector, row.row
+    );
+    assert_eq!(
+        row.capability_cells, expected_row.capability_cells,
+        "README Tier 2 row for {} should document exact Chat/Stream/Embed/Image/Audio capability cells: {}",
         row.selector, row.row
     );
 
@@ -252,6 +306,12 @@ fn provider_registry_readme_provider_support_matrix_matches_registry_and_catalog
     }
 
     for selector in experimental_selectors {
+        let lifecycle_entry = PROVIDER_MODULE_LIFECYCLE
+            .iter()
+            .find(|entry| entry.module_name == selector)
+            .unwrap_or_else(|| {
+                panic!("experimental selector {selector} must exist in provider module lifecycle")
+            });
         assert!(
             !PROVIDER_CATALOG.contains_key(selector.as_str()),
             "experimental selector {selector} must not be a Tier 1 catalog entry"
@@ -263,6 +323,14 @@ fn provider_registry_readme_provider_support_matrix_matches_registry_and_catalog
         assert!(
             entry_for_name(&selector).is_none_or(|entry| !entry.is_dispatchable()),
             "experimental selector {selector} must not be dispatchable under active features"
+        );
+        assert!(
+            matches!(
+                lifecycle_entry.lifecycle,
+                ProviderModuleLifecycle::Stub | ProviderModuleLifecycle::Internal
+            ),
+            "experimental selector {selector} must be a retained stub/internal module, got {:?}",
+            lifecycle_entry.lifecycle
         );
     }
 }
