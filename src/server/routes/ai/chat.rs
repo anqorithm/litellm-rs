@@ -302,14 +302,17 @@ async fn handle_streaming_chat_completion(
                 if tx.send(done_event.to_bytes()).await.is_err() {
                     info!("Client disconnected before [DONE] event could be sent");
                 }
-                super::spend::record_completion_spend_with_reservation(
-                    &budget_limits,
-                    &key_manager,
-                    api_key_id,
-                    &served_provider,
-                    &served_model,
-                    final_usage.as_ref(),
-                    budget_reservation.take(),
+                super::spend::record_finished_stream_spend_with_reservation(
+                    super::spend::StreamSpendSettlement {
+                        budget_limits: &budget_limits,
+                        key_manager: &key_manager,
+                        api_key_id,
+                        provider: &served_provider,
+                        model: &served_model,
+                        usage: final_usage.as_ref(),
+                        saw_upstream_output,
+                        budget_reservation: budget_reservation.take(),
+                    },
                 )
                 .await;
                 if let Some(lease) = lease.take() {

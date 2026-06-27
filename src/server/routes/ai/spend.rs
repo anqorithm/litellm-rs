@@ -242,6 +242,7 @@ fn provider_effective_max_output_tokens(
         | "ai21" | "baseten" | "huggingface" => {
             request.max_completion_tokens.or(request.max_tokens)
         }
+        "anthropic" => Some(request.max_tokens.unwrap_or(4096)),
         "bedrock" => bedrock_effective_max_output_tokens(model, request),
         "cohere" | "replicate" => request.max_tokens.or(request.max_completion_tokens),
         _ => request.max_tokens,
@@ -548,6 +549,57 @@ pub(super) async fn record_stream_disconnect_spend_with_reservation(
     {
         tracing::error!("failed to record disconnect usage for key {key_id}: {error}");
     }
+}
+
+pub(super) struct StreamSpendSettlement<'a> {
+    pub(super) budget_limits: &'a UnifiedBudgetLimits,
+    pub(super) key_manager: &'a KeyManager,
+    pub(super) api_key_id: Option<Uuid>,
+    pub(super) provider: &'a str,
+    pub(super) model: &'a str,
+    pub(super) usage: Option<&'a Usage>,
+    pub(super) saw_upstream_output: bool,
+    pub(super) budget_reservation: Option<UnifiedBudgetReservation>,
+}
+
+pub(super) async fn record_finished_stream_spend_with_reservation(
+    settlement: StreamSpendSettlement<'_>,
+) {
+    let StreamSpendSettlement {
+        budget_limits,
+        key_manager,
+        api_key_id,
+        provider,
+        model,
+        usage,
+        saw_upstream_output,
+        budget_reservation,
+    } = settlement;
+
+    if usage.is_some() || saw_upstream_output {
+        record_stream_disconnect_spend_with_reservation(
+            budget_limits,
+            key_manager,
+            api_key_id,
+            provider,
+            model,
+            usage,
+            budget_reservation,
+        )
+        .await;
+        return;
+    }
+
+    record_completion_spend_with_reservation(
+        budget_limits,
+        key_manager,
+        api_key_id,
+        provider,
+        model,
+        usage,
+        budget_reservation,
+    )
+    .await;
 }
 
 #[cfg(test)]
