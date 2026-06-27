@@ -27,6 +27,7 @@ pub mod execute_impl;
 pub mod execution;
 pub mod fallback;
 pub mod gateway_config;
+pub mod retry_policy;
 pub mod selection;
 pub mod strategy_impl;
 pub mod unified;

@@ -390,6 +390,18 @@ mod tests {
         assert!(body["error"]["retryable"].is_null());
     }
 
+    #[actix_web::test]
+    async fn provider_timeout_http_mapping_lives_at_openai_adapter_boundary() {
+        let error = GatewayError::Provider(ProviderError::timeout("openai", "upstream timed out"));
+
+        let response = gateway_error_response(&error);
+
+        assert_eq!(response.status(), StatusCode::GATEWAY_TIMEOUT);
+        let body = to_json(response).await;
+        assert_eq!(body["error"]["type"], "server_error");
+        assert_eq!(body["error"]["code"], "timeout");
+    }
+
     async fn to_json(response: HttpResponse) -> Value {
         let body = to_bytes(response.into_body()).await.unwrap();
         serde_json::from_slice(&body).unwrap()
