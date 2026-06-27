@@ -391,6 +391,7 @@ mod tests {
     #[derive(Debug)]
     struct ReadmeTier2Row {
         selector: String,
+        feature_cell: String,
         row: String,
     }
 
@@ -429,6 +430,14 @@ mod tests {
         spans
     }
 
+    fn markdown_table_cells(line: &str) -> Vec<String> {
+        line.trim()
+            .trim_matches('|')
+            .split('|')
+            .map(|cell| cell.trim().to_string())
+            .collect()
+    }
+
     fn readme_tier2_rows() -> Vec<ReadmeTier2Row> {
         let tier2 = section_between(
             readme_provider_support_section(),
@@ -446,7 +455,12 @@ mod tests {
                     && !trimmed.starts_with("|----------")
             })
             .map(|line| {
-                let provider_cell = line.split('|').nth(1).unwrap_or("");
+                let cells = markdown_table_cells(line);
+                let provider_cell = cells.first().map(String::as_str).unwrap_or("");
+                let feature_cell = cells
+                    .get(1)
+                    .unwrap_or_else(|| panic!("README Tier 2 row is missing feature cell: {line}"))
+                    .clone();
                 let selector = code_spans(provider_cell)
                     .into_iter()
                     .next()
@@ -455,6 +469,7 @@ mod tests {
                     });
                 ReadmeTier2Row {
                     selector,
+                    feature_cell,
                     row: line.to_string(),
                 }
             })
@@ -479,30 +494,67 @@ mod tests {
         row: &ReadmeTier2Row,
         entry: &ProviderRegistryEntry,
     ) {
+        assert_eq!(
+            row.feature_cell,
+            expected_readme_feature_cell(entry),
+            "README Tier 2 row for {} should document the exact registry feature gate: {}",
+            row.selector,
+            row.row
+        );
+
         match entry.dispatch_kind {
             ProviderDispatchKind::Native => assert!(
-                row.row.contains("native factory") || row.row.contains("always"),
+                row.feature_cell.contains("native factory") || row.feature_cell == "always",
                 "README Tier 2 row for {} should document native dispatch: {}",
                 row.selector,
                 row.row
             ),
             ProviderDispatchKind::ExplicitOpenAiLike => assert!(
-                row.row.contains("OpenAILike") || row.row.contains("OpenAI-compatible"),
+                row.feature_cell == "always" || row.feature_cell.contains("OpenAILike fallback"),
                 "README Tier 2 row for {} should document OpenAILike dispatch: {}",
                 row.selector,
                 row.row
             ),
             ProviderDispatchKind::CatalogOpenAiLike => assert!(
-                row.row.contains("catalog-only"),
+                row.feature_cell.contains("catalog-only"),
                 "README Tier 2 row for {} should document catalog-only dispatch: {}",
                 row.selector,
                 row.row
             ),
             ProviderDispatchKind::UnsupportedEnum => assert!(
-                row.row.contains("providers-extra") || row.row.contains("providers-extended"),
+                row.feature_cell.contains("providers-extra")
+                    || row.feature_cell.contains("providers-extended"),
                 "README Tier 2 row for {} should document the feature gate that makes it constructible: {}",
                 row.selector,
                 row.row
+            ),
+        }
+    }
+
+    fn expected_readme_feature_cell(entry: &ProviderRegistryEntry) -> &'static str {
+        match entry.provider_type {
+            ProviderType::OpenAI
+            | ProviderType::Anthropic
+            | ProviderType::Mistral
+            | ProviderType::Cloudflare
+            | ProviderType::Bedrock
+            | ProviderType::OpenAICompatible => "always",
+            ProviderType::Azure | ProviderType::AzureAI => {
+                "native factory (`providers-extra`); OpenAILike fallback"
+            }
+            ProviderType::VertexAI => "native factory (`providers-extra`)",
+            ProviderType::Cohere
+            | ProviderType::Gemini
+            | ProviderType::FalAI
+            | ProviderType::Replicate
+            | ProviderType::GitHubCopilot => "native factory (`providers-extended`)",
+            ProviderType::MetaLlama
+            | ProviderType::V0
+            | ProviderType::AmazonNova
+            | ProviderType::GitHub => "catalog-only (`OpenAILike`)",
+            _ => panic!(
+                "README Tier 2 matrix should not document unsupported provider {}",
+                entry.canonical_name
             ),
         }
     }
