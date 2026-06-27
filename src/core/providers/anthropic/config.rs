@@ -464,6 +464,9 @@ impl Default for AnthropicConfigBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    static ANTHROPIC_ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_default_config() {
@@ -591,6 +594,9 @@ mod tests {
 
     #[test]
     fn from_env_reads_compatible_model_allow_lists() {
+        let _env_lock = ANTHROPIC_ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         const KEYS: &[&str] = &[
             "ANTHROPIC_API_KEY",
             "CLAUDE_API_KEY",
@@ -641,6 +647,9 @@ mod tests {
 
     #[test]
     fn from_env_rejects_compatible_opt_in_without_model_allow_list() {
+        let _env_lock = ANTHROPIC_ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         const KEYS: &[&str] = &[
             "ANTHROPIC_API_KEY",
             "CLAUDE_API_KEY",
