@@ -26,20 +26,22 @@ Link to `product.md`.
 ## Proposed Design
 
 1. Keep `PROVIDER_TYPE_REGISTRY` as the canonical source for this PR.
-2. Add a README matrix conformance test in `registry/types.rs`:
+2. Add a README matrix conformance test in
+   `src/core/providers/registry/readme_tests.rs`:
    - Parse Tier 2 provider selectors from the first code span of each provider
-     matrix row.
+     matrix row's Provider cell.
+   - Parse the Cargo feature cell and compare it to a cfg-independent expected
+     Tier 2 selector/feature-gate set.
    - Parse Tier 1 catalog selectors from the cloud/local code-list lines.
    - Parse experimental/module-only selectors from the experimental section.
-   - Assert Tier 2 selectors exist in the registry and are either dispatchable
-     under the current feature set or documented with the feature that enables
-     them.
+   - Assert Tier 2 selectors exist in the registry and cannot disappear under
+     default feature tests when they are constructible under optional features.
    - Assert Tier 1 selectors exist in `PROVIDER_CATALOG`.
    - Assert every catalog selector is documented in the README provider support
      section.
    - Assert every dispatchable registry selector is documented.
-   - Assert experimental/module-only selectors are not dispatchable and are not
-     catalog entries.
+   - Assert experimental/module-only selectors are not catalog entries,
+     dispatchable entries, or expected Tier 2 provider-support rows.
 3. Update the README provider support note from "hand-maintained only" to
    "validated against registry/catalog".
 4. Correct any README row that the new guard exposes as inconsistent with the
