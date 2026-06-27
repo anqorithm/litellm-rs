@@ -462,9 +462,15 @@ pub(super) async fn record_completion_spend_with_reservation(
     budget_reservation: Option<UnifiedBudgetReservation>,
 ) {
     let Some(usage) = usage else {
-        tracing::error!(
-            "provider '{provider}' returned no usage for model '{model}'; spend not recorded"
-        );
+        record_reserved_spend_without_usage(
+            key_manager,
+            api_key_id,
+            provider,
+            model,
+            budget_reservation,
+            "provider returned no usage for a successful completion",
+        )
+        .await;
         return;
     };
 
@@ -507,6 +513,31 @@ pub(super) async fn record_completion_spend_with_reservation(
     }
 }
 
+async fn record_reserved_spend_without_usage(
+    key_manager: &KeyManager,
+    api_key_id: Option<Uuid>,
+    provider: &str,
+    model: &str,
+    budget_reservation: Option<UnifiedBudgetReservation>,
+    context: &str,
+) {
+    let Some(reservation) = budget_reservation else {
+        tracing::error!("{context} for provider '{provider}' model '{model}'; spend not recorded");
+        return;
+    };
+    let reserved = reservation.reserved_amount();
+    if let Err(error) = reservation.settle(reserved) {
+        tracing::error!(
+            "failed to settle reserved budget without usage for '{provider}'/'{model}': {error:?}"
+        );
+    }
+    if let Some(key_id) = api_key_id
+        && let Err(error) = key_manager.record_usage(key_id, 0, reserved).await
+    {
+        tracing::error!("failed to record reserved usage for key {key_id}: {error}");
+    }
+}
+
 pub(super) async fn record_stream_disconnect_spend_with_reservation(
     budget_limits: &UnifiedBudgetLimits,
     key_manager: &KeyManager,
@@ -530,23 +561,15 @@ pub(super) async fn record_stream_disconnect_spend_with_reservation(
         return;
     }
 
-    let Some(reservation) = budget_reservation else {
-        tracing::error!(
-            "client disconnected before provider '{provider}' returned usage for model '{model}'; spend not recorded"
-        );
-        return;
-    };
-    let reserved = reservation.reserved_amount();
-    if let Err(error) = reservation.settle(reserved) {
-        tracing::error!(
-            "failed to settle reserved budget after stream disconnect for '{provider}'/'{model}': {error:?}"
-        );
-    }
-    if let Some(key_id) = api_key_id
-        && let Err(error) = key_manager.record_usage(key_id, 0, reserved).await
-    {
-        tracing::error!("failed to record disconnect usage for key {key_id}: {error}");
-    }
+    record_reserved_spend_without_usage(
+        key_manager,
+        api_key_id,
+        provider,
+        model,
+        budget_reservation,
+        "client disconnected before provider returned usage",
+    )
+    .await;
 }
 
 pub(super) struct StreamSpendSettlement<'a> {
@@ -615,3 +638,7 @@ mod provider_output_cap_tests;
 #[cfg(test)]
 #[path = "spend_stream_disconnect_tests.rs"]
 mod stream_disconnect_tests;
+
+#[cfg(test)]
+#[path = "spend_no_usage_tests.rs"]
+mod no_usage_tests;
