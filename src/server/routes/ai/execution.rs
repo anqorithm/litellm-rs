@@ -4,8 +4,8 @@ use crate::core::providers::{Provider, ProviderError};
 use crate::core::router::UnifiedRouter;
 use crate::core::router::deployment::Deployment;
 use crate::core::router::execution::{
-    BudgetRetryScope, calculate_retry_delay, infer_cooldown_reason, is_retryable_error,
-    retryable_budget_scope, router_error_to_provider_error,
+    calculate_retry_delay, infer_cooldown_reason, is_retryable_error, retryable_budget_scope,
+    router_error_to_provider_error,
 };
 use crate::core::types::model::ProviderCapability;
 use crate::utils::error::gateway_error::GatewayError;
@@ -75,24 +75,21 @@ where
     Fut: std::future::Future<Output = Result<(T, u64), ProviderError>>,
 {
     let max_attempts = router.config().num_retries + 1;
+    let mut attempt = 1;
     let mut last_error = None;
-    let mut excluded_budget_providers = HashSet::new();
-    let mut excluded_budget_models = HashSet::new();
+    let mut excluded_budget_deployments = HashSet::new();
 
-    for attempt in 1..=max_attempts {
+    while attempt <= max_attempts {
         let started_at = Instant::now();
 
         let deployment_lease = match router.select_deployment_lease_for_capability_matching(
             requested_model,
             &capability,
-            |deployment| {
-                !excluded_budget_providers.contains(deployment.provider.name())
-                    && !excluded_budget_models.contains(deployment.model.as_str())
-            },
+            |deployment| !excluded_budget_deployments.contains(deployment.id.as_str()),
         ) {
             Ok(lease) => lease,
             Err(router_err) => {
-                if (!excluded_budget_providers.is_empty() || !excluded_budget_models.is_empty())
+                if !excluded_budget_deployments.is_empty()
                     && let Some(err) = last_error.clone()
                 {
                     return Err(GatewayError::Provider(err));
@@ -103,6 +100,7 @@ where
                 if is_retryable_error(&provider_err) && attempt < max_attempts {
                     let delay = calculate_retry_delay(router.config(), attempt);
                     last_error = Some(provider_err);
+                    attempt += 1;
                     tokio::time::sleep(delay).await;
                     continue;
                 }
@@ -126,39 +124,33 @@ where
                 return Ok(value);
             }
             Err(err) => {
+                if retryable_budget_scope(&err).is_some() {
+                    excluded_budget_deployments.insert(deployment_lease.clone_deployment_id());
+                    drop(deployment_lease);
+                    last_error = Some(err);
+                    continue;
+                }
+
                 if is_retryable_error(&err) && attempt < max_attempts {
-                    match retryable_budget_scope(&err) {
-                        Some(BudgetRetryScope::Provider) => {
-                            excluded_budget_providers
-                                .insert(deployment_lease.deployment().provider.name().to_string());
-                        }
-                        Some(BudgetRetryScope::Model) => {
-                            excluded_budget_models
-                                .insert(deployment_lease.deployment().model.clone());
-                        }
-                        None => {
-                            router.record_failure_with_reason_for_deployment(
-                                deployment_lease.deployment(),
-                                crate::core::router::CooldownReason::ConsecutiveFailures,
-                            );
-                        }
-                    }
+                    router.record_failure_with_reason_for_deployment(
+                        deployment_lease.deployment(),
+                        crate::core::router::CooldownReason::ConsecutiveFailures,
+                    );
                     drop(deployment_lease);
                     let retry_delay = retry_delay_for_error(router.config(), attempt, &err);
                     last_error = Some(err);
+                    attempt += 1;
                     if let Some(delay) = retry_delay {
                         tokio::time::sleep(delay).await;
                     }
                     continue;
                 }
 
-                if retryable_budget_scope(&err).is_none() {
-                    let cooldown_reason = infer_cooldown_reason(&err);
-                    router.record_failure_with_reason_for_deployment(
-                        deployment_lease.deployment(),
-                        cooldown_reason,
-                    );
-                }
+                let cooldown_reason = infer_cooldown_reason(&err);
+                router.record_failure_with_reason_for_deployment(
+                    deployment_lease.deployment(),
+                    cooldown_reason,
+                );
                 drop(deployment_lease);
                 return Err(GatewayError::Provider(err));
             }
@@ -203,24 +195,21 @@ where
     Fut: std::future::Future<Output = Result<T, ProviderError>>,
 {
     let max_attempts = router.config().num_retries + 1;
+    let mut attempt = 1;
     let mut last_error = None;
-    let mut excluded_budget_providers = HashSet::new();
-    let mut excluded_budget_models = HashSet::new();
+    let mut excluded_budget_deployments = HashSet::new();
 
-    for attempt in 1..=max_attempts {
+    while attempt <= max_attempts {
         let started_at = Instant::now();
 
         let deployment_lease = match router.select_deployment_lease_for_capability_matching(
             requested_model,
             &capability,
-            |deployment| {
-                !excluded_budget_providers.contains(deployment.provider.name())
-                    && !excluded_budget_models.contains(deployment.model.as_str())
-            },
+            |deployment| !excluded_budget_deployments.contains(deployment.id.as_str()),
         ) {
             Ok(lease) => lease,
             Err(router_err) => {
-                if (!excluded_budget_providers.is_empty() || !excluded_budget_models.is_empty())
+                if !excluded_budget_deployments.is_empty()
                     && let Some(err) = last_error.clone()
                 {
                     return Err(GatewayError::Provider(err));
@@ -231,6 +220,7 @@ where
                 if is_retryable_error(&provider_err) && attempt < max_attempts {
                     let delay = calculate_retry_delay(router.config(), attempt);
                     last_error = Some(provider_err);
+                    attempt += 1;
                     tokio::time::sleep(delay).await;
                     continue;
                 }
@@ -249,39 +239,33 @@ where
                 return Ok((stream, lease));
             }
             Err(err) => {
+                if retryable_budget_scope(&err).is_some() {
+                    excluded_budget_deployments.insert(deployment_lease.clone_deployment_id());
+                    drop(deployment_lease);
+                    last_error = Some(err);
+                    continue;
+                }
+
                 if is_retryable_error(&err) && attempt < max_attempts {
-                    match retryable_budget_scope(&err) {
-                        Some(BudgetRetryScope::Provider) => {
-                            excluded_budget_providers
-                                .insert(deployment_lease.deployment().provider.name().to_string());
-                        }
-                        Some(BudgetRetryScope::Model) => {
-                            excluded_budget_models
-                                .insert(deployment_lease.deployment().model.clone());
-                        }
-                        None => {
-                            router.record_failure_with_reason_for_deployment(
-                                deployment_lease.deployment(),
-                                crate::core::router::CooldownReason::ConsecutiveFailures,
-                            );
-                        }
-                    }
+                    router.record_failure_with_reason_for_deployment(
+                        deployment_lease.deployment(),
+                        crate::core::router::CooldownReason::ConsecutiveFailures,
+                    );
                     drop(deployment_lease);
                     let retry_delay = retry_delay_for_error(router.config(), attempt, &err);
                     last_error = Some(err);
+                    attempt += 1;
                     if let Some(delay) = retry_delay {
                         tokio::time::sleep(delay).await;
                     }
                     continue;
                 }
 
-                if retryable_budget_scope(&err).is_none() {
-                    let cooldown_reason = infer_cooldown_reason(&err);
-                    router.record_failure_with_reason_for_deployment(
-                        deployment_lease.deployment(),
-                        cooldown_reason,
-                    );
-                }
+                let cooldown_reason = infer_cooldown_reason(&err);
+                router.record_failure_with_reason_for_deployment(
+                    deployment_lease.deployment(),
+                    cooldown_reason,
+                );
                 drop(deployment_lease);
                 return Err(GatewayError::Provider(err));
             }

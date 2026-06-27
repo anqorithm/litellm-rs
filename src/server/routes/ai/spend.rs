@@ -543,6 +543,11 @@ pub(super) async fn record_stream_disconnect_spend_with_reservation(
             "failed to settle reserved budget after stream disconnect for '{provider}'/'{model}': {error:?}"
         );
     }
+    if let Some(key_id) = api_key_id
+        && let Err(error) = key_manager.record_usage(key_id, 0, reserved).await
+    {
+        tracing::error!("failed to record disconnect usage for key {key_id}: {error}");
+    }
 }
 
 #[cfg(test)]
@@ -556,3 +561,7 @@ mod provider_reservation_tests;
 #[cfg(test)]
 #[path = "spend_provider_output_cap_tests.rs"]
 mod provider_output_cap_tests;
+
+#[cfg(test)]
+#[path = "spend_stream_disconnect_tests.rs"]
+mod stream_disconnect_tests;
