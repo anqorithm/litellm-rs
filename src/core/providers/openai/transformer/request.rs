@@ -7,6 +7,7 @@ use crate::core::types::{
     tools::ResponseFormat, tools::Tool, tools::ToolChoice,
 };
 use serde_json;
+use std::collections::HashMap;
 
 use super::super::error::OpenAIError;
 use super::super::models::*;
@@ -20,6 +21,7 @@ pub struct OpenAIRequestTransformer;
 impl OpenAIRequestTransformer {
     /// Transform ChatRequest to OpenAIChatRequest
     pub fn transform(request: ChatRequest) -> Result<OpenAIChatRequest, OpenAIError> {
+        let extra_params = retain_openai_extra_params(request.extra_params);
         let messages = request
             .messages
             .into_iter()
@@ -44,6 +46,7 @@ impl OpenAIRequestTransformer {
             top_p: request.top_p,
             n: request.n,
             stream: None, // Set by caller
+            stream_options: request.stream_options,
             stop: request.stop,
             max_tokens: request.max_tokens,
             max_completion_tokens: request.max_completion_tokens,
@@ -62,6 +65,7 @@ impl OpenAIRequestTransformer {
             store: request.store,
             metadata: request.metadata,
             service_tier: request.service_tier,
+            extra_params,
         })
     }
 
@@ -150,6 +154,46 @@ impl OpenAIRequestTransformer {
             json_schema: format.json_schema,
         }
     }
+}
+
+fn retain_openai_extra_params(
+    extra_params: HashMap<String, serde_json::Value>,
+) -> HashMap<String, serde_json::Value> {
+    extra_params
+        .into_iter()
+        .filter(|(key, _)| !is_openai_chat_request_field(key))
+        .collect()
+}
+
+fn is_openai_chat_request_field(key: &str) -> bool {
+    matches!(
+        key,
+        "model"
+            | "messages"
+            | "temperature"
+            | "max_tokens"
+            | "max_completion_tokens"
+            | "top_p"
+            | "frequency_penalty"
+            | "presence_penalty"
+            | "stop"
+            | "stream"
+            | "stream_options"
+            | "tools"
+            | "tool_choice"
+            | "parallel_tool_calls"
+            | "response_format"
+            | "user"
+            | "seed"
+            | "n"
+            | "logit_bias"
+            | "logprobs"
+            | "top_logprobs"
+            | "reasoning_effort"
+            | "store"
+            | "metadata"
+            | "service_tier"
+    )
 }
 
 #[cfg(test)]
@@ -561,6 +605,42 @@ mod tests {
         assert_eq!(result.n, Some(2));
         assert_eq!(result.seed, Some(42));
         assert_eq!(result.user, Some("user123".to_string()));
+    }
+
+    #[test]
+    fn test_transform_request_forwards_extra_params_without_overriding_typed_fields() {
+        let request = ChatRequest {
+            model: "gpt-4".to_string(),
+            messages: vec![ChatMessage {
+                role: MessageRole::User,
+                content: Some(MessageContent::Text("test".to_string())),
+                ..Default::default()
+            }],
+            temperature: Some(0.5),
+            stream_options: Some(crate::core::types::chat::StreamOptions {
+                include_usage: Some(true),
+            }),
+            extra_params: HashMap::from([
+                ("provider_flag".to_string(), serde_json::json!("kept")),
+                ("model".to_string(), serde_json::json!("wrong-model")),
+                ("messages".to_string(), serde_json::json!("wrong-messages")),
+                ("temperature".to_string(), serde_json::json!(1.9)),
+                (
+                    "stream_options".to_string(),
+                    serde_json::json!("wrong-options"),
+                ),
+            ]),
+            ..Default::default()
+        };
+
+        let result = OpenAIRequestTransformer::transform(request).unwrap();
+        let json = serde_json::to_value(result).unwrap();
+
+        assert_eq!(json["provider_flag"], "kept");
+        assert_eq!(json["model"], "gpt-4");
+        assert!(json["messages"].is_array());
+        assert_eq!(json["temperature"], serde_json::json!(0.5_f32));
+        assert_eq!(json["stream_options"]["include_usage"], true);
     }
 
     #[test]

@@ -1,5 +1,8 @@
 use super::*;
-use crate::core::models::openai::{ChatMessage, MessageContent, MessageRole};
+use crate::core::models::openai::{
+    ChatMessage, Function, FunctionCall, MessageContent, MessageRole, ToolChoiceFunction,
+    ToolChoiceFunctionSpec,
+};
 use crate::core::types::responses::{
     ChatChunk, ChatDelta, ChatStreamChoice, LogProbs, TokenLogProb,
 };
@@ -294,9 +297,10 @@ fn test_build_core_chat_request_minimal() {
 }
 
 #[test]
-fn test_build_core_chat_request_preserves_boundary_fields() {
+fn test_build_core_chat_request_preserves_transport_fields() {
     let mut extra_body = std::collections::HashMap::new();
     extra_body.insert("provider_knob".to_string(), serde_json::json!("kept"));
+    extra_body.insert("modalities".to_string(), serde_json::json!("wrong"));
     let request = ChatCompletionRequest {
         model: "gpt-4".to_string(),
         messages: vec![ChatMessage {
@@ -308,6 +312,32 @@ fn test_build_core_chat_request_preserves_boundary_fields() {
             tool_call_id: None,
             audio: None,
         }],
+        stream_options: Some(crate::core::models::openai::StreamOptions {
+            include_usage: Some(true),
+        }),
+        tools: Some(vec![Tool {
+            tool_type: "function".to_string(),
+            function: Function {
+                name: "lookup".to_string(),
+                description: Some("Look up a record".to_string()),
+                parameters: Some(serde_json::json!({"type": "object"})),
+            },
+        }]),
+        tool_choice: Some(ToolChoice::Specific(ToolChoiceFunction {
+            tool_type: "function".to_string(),
+            function: ToolChoiceFunctionSpec {
+                name: "lookup".to_string(),
+            },
+        })),
+        functions: Some(vec![Function {
+            name: "legacy_lookup".to_string(),
+            description: None,
+            parameters: Some(serde_json::json!({"type": "object"})),
+        }]),
+        function_call: Some(FunctionCall {
+            name: "legacy_lookup".to_string(),
+            arguments: "{}".to_string(),
+        }),
         parallel_tool_calls: Some(false),
         response_format: Some(crate::core::models::openai::ResponseFormat {
             format_type: "json_schema".to_string(),
@@ -315,9 +345,20 @@ fn test_build_core_chat_request_preserves_boundary_fields() {
             response_type: Some("json_schema".to_string()),
         }),
         seed: Some(123),
+        modalities: Some(vec!["text".to_string(), "audio".to_string()]),
+        audio: Some(crate::core::models::openai::AudioParams {
+            voice: "alloy".to_string(),
+            format: "wav".to_string(),
+        }),
         prediction: Some(serde_json::json!({"type": "content", "content": "expected"})),
         safety_settings: Some(serde_json::json!([{"category": "test"}])),
         cache_control: Some(serde_json::json!({"type": "ephemeral"})),
+        store: Some(true),
+        metadata: Some(std::collections::HashMap::from([(
+            "trace_id".to_string(),
+            "trace-123".to_string(),
+        )])),
+        service_tier: Some("flex".to_string()),
         extra_body,
         ..Default::default()
     };
@@ -327,12 +368,54 @@ fn test_build_core_chat_request_preserves_boundary_fields() {
     assert_eq!(core_request.seed, Some(123));
     assert_eq!(
         core_request
+            .stream_options
+            .as_ref()
+            .and_then(|options| options.include_usage),
+        Some(true)
+    );
+    assert_eq!(
+        core_request
+            .tools
+            .as_ref()
+            .and_then(|tools| tools.first())
+            .map(|tool| tool.function.name.as_str()),
+        Some("lookup")
+    );
+    match core_request.tool_choice.as_ref().expect("tool choice") {
+        crate::core::types::tools::ToolChoice::Specific {
+            choice_type,
+            function,
+        } => {
+            assert_eq!(choice_type, "function");
+            assert_eq!(function.as_ref().map(|f| f.name.as_str()), Some("lookup"));
+        }
+        _ => panic!("expected specific tool choice"),
+    }
+    assert_eq!(
+        core_request
+            .functions
+            .as_ref()
+            .and_then(|functions| functions.first())
+            .and_then(|function| function.get("name")),
+        Some(&serde_json::json!("legacy_lookup"))
+    );
+    assert_eq!(
+        core_request
+            .function_call
+            .as_ref()
+            .and_then(|call| call.get("name")),
+        Some(&serde_json::json!("legacy_lookup"))
+    );
+    assert_eq!(
+        core_request
             .response_format
             .as_ref()
             .and_then(|format| format.response_type.as_deref()),
         Some("json_schema")
     );
     assert_eq!(core_request.extra_params["provider_knob"], "kept");
+    assert_eq!(core_request.extra_params["modalities"][0], "text");
+    assert_eq!(core_request.extra_params["audio"]["voice"], "alloy");
     assert_eq!(
         core_request.extra_params["prediction"]["content"],
         "expected"
@@ -345,6 +428,15 @@ fn test_build_core_chat_request_preserves_boundary_fields() {
         core_request.extra_params["cache_control"]["type"],
         "ephemeral"
     );
+    assert_eq!(core_request.store, Some(true));
+    assert_eq!(
+        core_request
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get("trace_id")),
+        Some(&"trace-123".to_string())
+    );
+    assert_eq!(core_request.service_tier.as_deref(), Some("flex"));
 }
 
 #[test]

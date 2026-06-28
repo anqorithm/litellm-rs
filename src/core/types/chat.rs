@@ -79,7 +79,11 @@ impl ChatMessage {
     }
 }
 
-/// Chat request
+/// Canonical internal chat request.
+///
+/// Provider traits and provider implementations consume this type. External
+/// wire-compatible request DTOs, such as OpenAI chat completions, must be
+/// converted into this shape at adapter boundaries before routing.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ChatRequest {
     /// Model name
