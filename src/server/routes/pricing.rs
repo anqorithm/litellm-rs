@@ -324,4 +324,36 @@ mod tests {
         };
         assert!((total_cost - 0.0025).abs() < f64::EPSILON);
     }
+
+    #[tokio::test]
+    async fn calculate_cost_route_applies_provider_aware_tiered_pricing() {
+        let state = build_pricing_route_state().await;
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(state))
+                .configure(configure_pricing_routes),
+        )
+        .await;
+
+        let request = test::TestRequest::post()
+            .uri("/v1/pricing/calculate")
+            .set_json(json!({
+                "provider": "azure",
+                "model": "gpt-5.5",
+                "input_tokens": 300000,
+                "output_tokens": 1000
+            }))
+            .to_request();
+        let response = test::call_service(&app, request).await;
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body: Value = test::read_body_json(response).await;
+        assert_eq!(body["model"], "gpt-5.5");
+        assert_eq!(body["provider"], "azure");
+        let total_cost = match body["total_cost"].as_f64() {
+            Some(total_cost) => total_cost,
+            None => panic!("pricing response should include numeric total_cost: {body}"),
+        };
+        assert!((total_cost - 3.045).abs() < 1e-12);
+    }
 }
