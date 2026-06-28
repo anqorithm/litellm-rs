@@ -390,12 +390,7 @@ impl Router {
                 continue;
             }
 
-            if deployment
-                .provider
-                .capabilities()
-                .iter()
-                .any(|cap| cap == capability)
-            {
+            if deployment.provider.supports_capability(capability) {
                 return Some(CapabilityDeployment {
                     deployment_id: id.clone(),
                     provider: deployment.provider.clone(),

@@ -19,13 +19,7 @@ pub fn select_provider_for_model(
     let supports_capability = deployments.iter().any(|deployment_id| {
         router
             .get_deployment(deployment_id)
-            .map(|deployment| {
-                deployment
-                    .provider
-                    .capabilities()
-                    .iter()
-                    .any(|cap| cap == &capability)
-            })
+            .map(|deployment| deployment.provider.supports_capability(&capability))
             .unwrap_or(false)
     });
 

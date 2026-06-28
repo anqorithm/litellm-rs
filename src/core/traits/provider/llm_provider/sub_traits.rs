@@ -1,11 +1,16 @@
-//! LLM Provider sub-traits (deprecated, kept for library API compatibility)
+//! LLM Provider sub-traits (deprecated compatibility adapters)
 //!
-//! These capability traits were drafted as a proposed carve-out of the
-//! monolithic `LLMProvider` trait but were never wired into any call site.
-//! They remain visible at `litellm_rs::core::traits::provider::llm_provider::sub_traits`
-//! to avoid breaking downstream library consumers; new code should accept
-//! `LLMProvider` directly. The traits will be removed in a future major
-//! release once the architecture roadmap (#519) finishes the trait carve-out.
+//! These traits were drafted as a proposed carve-out of the monolithic
+//! `LLMProvider` trait but were never wired into router or gateway call sites.
+//! Runtime dispatch now uses `LLMProvider::supports_capability` and
+//! `ProviderCapability`; this module is not a dispatch contract.
+//!
+//! The traits remain visible at
+//! `litellm_rs::core::traits::provider::llm_provider::sub_traits` to avoid
+//! breaking downstream library consumers. New code should accept `LLMProvider`
+//! directly and use `ProviderCapability` for optional feature routing. These
+//! adapters are scheduled for removal in a future major release after a
+//! migration window.
 
 use futures::Stream;
 use serde_json::Value;
@@ -33,7 +38,7 @@ use super::trait_definition::LLMProvider;
 #[allow(async_fn_in_trait)]
 #[deprecated(
     since = "0.5.1",
-    note = "sub-trait carve-out was never wired; use LLMProvider directly. Tracked under #519 architecture roadmap."
+    note = "legacy adapter only; use LLMProvider plus ProviderCapability for runtime dispatch. Tracked under #729."
 )]
 pub trait LLMChat: Send + Sync {
     /// Execute chat completion request.
@@ -69,7 +74,7 @@ pub trait LLMChat: Send + Sync {
     fn get_supported_openai_params(&self, model: &str) -> &'static [&'static str];
 }
 
-/// Blanket implementation: every `LLMProvider` is automatically an `LLMChat`.
+/// Compatibility adapter: every `LLMProvider` is automatically an `LLMChat`.
 #[allow(deprecated)]
 impl<T: LLMProvider> LLMChat for T {
     async fn chat_completion(
@@ -120,7 +125,7 @@ impl<T: LLMProvider> LLMChat for T {
 #[allow(async_fn_in_trait)]
 #[deprecated(
     since = "0.5.1",
-    note = "sub-trait carve-out was never wired; use LLMProvider directly. Tracked under #519 architecture roadmap."
+    note = "legacy adapter only; use LLMProvider plus ProviderCapability for runtime dispatch. Tracked under #729."
 )]
 pub trait LLMEmbed: Send + Sync {
     /// Generate text embeddings.
@@ -131,7 +136,7 @@ pub trait LLMEmbed: Send + Sync {
     ) -> Result<EmbeddingResponse, ProviderError>;
 }
 
-/// Blanket implementation: every `LLMProvider` is automatically an `LLMEmbed`.
+/// Compatibility adapter: every `LLMProvider` is automatically an `LLMEmbed`.
 #[allow(deprecated)]
 impl<T: LLMProvider> LLMEmbed for T {
     async fn embeddings(
@@ -153,7 +158,7 @@ impl<T: LLMProvider> LLMEmbed for T {
 #[allow(async_fn_in_trait)]
 #[deprecated(
     since = "0.5.1",
-    note = "sub-trait carve-out was never wired; use LLMProvider directly. Tracked under #519 architecture roadmap."
+    note = "legacy adapter only; use LLMProvider plus ProviderCapability for runtime dispatch. Tracked under #729."
 )]
 pub trait LLMStream: Send + Sync {
     /// Execute streaming chat completion request.
@@ -164,7 +169,7 @@ pub trait LLMStream: Send + Sync {
     ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError>;
 }
 
-/// Blanket implementation: every `LLMProvider` is automatically an `LLMStream`.
+/// Compatibility adapter: every `LLMProvider` is automatically an `LLMStream`.
 #[allow(deprecated)]
 impl<T: LLMProvider> LLMStream for T {
     async fn chat_completion_stream(
