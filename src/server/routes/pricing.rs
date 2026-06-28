@@ -142,6 +142,8 @@ pub async fn get_model_pricing(
 pub struct CostCalculationRequest {
     /// Model name to calculate cost for
     pub model: String,
+    /// Optional provider name for provider-aware pricing
+    pub provider: Option<String>,
     /// Number of input tokens
     pub input_tokens: u32,
     /// Number of output tokens
@@ -161,8 +163,14 @@ pub async fn calculate_cost(
 ) -> Result<HttpResponse> {
     let pricing_service = &data.pricing;
 
-    match pricing_service
-        .calculate_completion_cost(
+    let result = if let Some(provider) = payload.provider.as_deref() {
+        if pricing_service.needs_refresh()
+            && let Err(e) = pricing_service.refresh_pricing_data().await
+        {
+            warn!("Failed to refresh pricing data: {}", e);
+        }
+        pricing_service.calculate_loaded_completion_cost_for_provider(
+            provider,
             &payload.model,
             payload.input_tokens,
             payload.output_tokens,
@@ -170,8 +178,20 @@ pub async fn calculate_cost(
             payload.completion.as_deref(),
             payload.duration_seconds,
         )
-        .await
-    {
+    } else {
+        pricing_service
+            .calculate_completion_cost(
+                &payload.model,
+                payload.input_tokens,
+                payload.output_tokens,
+                payload.prompt.as_deref(),
+                payload.completion.as_deref(),
+                payload.duration_seconds,
+            )
+            .await
+    };
+
+    match result {
         Ok(cost_result) => Ok(HttpResponse::Ok().json(cost_result)),
         Err(e) => Ok(HttpResponse::BadRequest().json(serde_json::json!({
             "error": "Cost calculation failed",
@@ -189,4 +209,151 @@ pub fn configure_pricing_routes(cfg: &mut web::ServiceConfig) {
             .route("/model/{model_name}", web::get().to(get_model_pricing))
             .route("/calculate", web::post().to(calculate_cost)),
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Config;
+    use crate::core::pricing_service::LiteLLMModelInfo;
+    use crate::server::HttpServer as GatewayHttpServer;
+    use actix_web::http::StatusCode;
+    use actix_web::{App, test};
+    use serde_json::{Value, json};
+    use std::collections::HashMap;
+
+    fn runtime_model_info(provider: &str) -> LiteLLMModelInfo {
+        LiteLLMModelInfo {
+            max_tokens: Some(8192),
+            max_input_tokens: Some(8192),
+            max_output_tokens: Some(2048),
+            input_cost_per_token: Some(0.00001),
+            output_cost_per_token: Some(0.00003),
+            input_cost_per_character: None,
+            output_cost_per_character: None,
+            cost_per_second: None,
+            litellm_provider: provider.to_string(),
+            mode: "chat".to_string(),
+            supports_function_calling: Some(true),
+            supports_vision: Some(false),
+            supports_streaming: Some(true),
+            supports_parallel_function_calling: Some(true),
+            supports_system_message: Some(true),
+            extra: HashMap::new(),
+        }
+    }
+
+    async fn build_pricing_route_state() -> AppState {
+        let mut config = Config::default();
+        config.gateway.storage.database.enabled = false;
+        config.gateway.storage.redis.enabled = false;
+
+        let server = match GatewayHttpServer::new(&config).await {
+            Ok(server) => server,
+            Err(error) => {
+                panic!("gateway server should initialize for pricing route tests: {error}")
+            }
+        };
+        server.state().clone()
+    }
+
+    #[tokio::test]
+    async fn calculate_cost_route_uses_provider_aware_runtime_pricing() {
+        let state = build_pricing_route_state().await;
+        state.pricing.add_custom_model(
+            "runtime-route-priced-model".to_string(),
+            runtime_model_info("runtime_provider"),
+        );
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(state))
+                .configure(configure_pricing_routes),
+        )
+        .await;
+
+        let request = test::TestRequest::post()
+            .uri("/v1/pricing/calculate")
+            .set_json(json!({
+                "provider": "runtime_provider",
+                "model": "runtime-route-priced-model",
+                "input_tokens": 1000,
+                "output_tokens": 500
+            }))
+            .to_request();
+        let response = test::call_service(&app, request).await;
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body: Value = test::read_body_json(response).await;
+        assert_eq!(body["model"], "runtime-route-priced-model");
+        assert_eq!(body["provider"], "runtime_provider");
+        let total_cost = match body["total_cost"].as_f64() {
+            Some(total_cost) => total_cost,
+            None => panic!("pricing response should include numeric total_cost: {body}"),
+        };
+        assert!((total_cost - 0.025).abs() < f64::EPSILON);
+    }
+
+    #[tokio::test]
+    async fn calculate_cost_route_resolves_xai_openai_like_prefix() {
+        let state = build_pricing_route_state().await;
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(state))
+                .configure(configure_pricing_routes),
+        )
+        .await;
+
+        let request = test::TestRequest::post()
+            .uri("/v1/pricing/calculate")
+            .set_json(json!({
+                "provider": "openai_like",
+                "model": "xai/grok-4.3",
+                "input_tokens": 1000,
+                "output_tokens": 500
+            }))
+            .to_request();
+        let response = test::call_service(&app, request).await;
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body: Value = test::read_body_json(response).await;
+        assert_eq!(body["model"], "grok-4.3");
+        assert_eq!(body["provider"], "xai");
+        let total_cost = match body["total_cost"].as_f64() {
+            Some(total_cost) => total_cost,
+            None => panic!("pricing response should include numeric total_cost: {body}"),
+        };
+        assert!((total_cost - 0.0025).abs() < f64::EPSILON);
+    }
+
+    #[tokio::test]
+    async fn calculate_cost_route_applies_provider_aware_tiered_pricing() {
+        let state = build_pricing_route_state().await;
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(state))
+                .configure(configure_pricing_routes),
+        )
+        .await;
+
+        let request = test::TestRequest::post()
+            .uri("/v1/pricing/calculate")
+            .set_json(json!({
+                "provider": "azure",
+                "model": "gpt-5.5",
+                "input_tokens": 300000,
+                "output_tokens": 1000
+            }))
+            .to_request();
+        let response = test::call_service(&app, request).await;
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body: Value = test::read_body_json(response).await;
+        assert_eq!(body["model"], "gpt-5.5");
+        assert_eq!(body["provider"], "azure");
+        let total_cost = match body["total_cost"].as_f64() {
+            Some(total_cost) => total_cost,
+            None => panic!("pricing response should include numeric total_cost: {body}"),
+        };
+        assert!((total_cost - 3.045).abs() < 1e-12);
+    }
 }

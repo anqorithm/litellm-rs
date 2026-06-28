@@ -95,7 +95,7 @@ async fn handle_streaming_chat_completion(
 
     let requested_model = core_request.model.clone();
     let context_for_execution = context.clone();
-    let budget_limits = state.budget_limits.clone();
+    let (budget_limits, pricing_service) = (state.budget_limits.clone(), state.pricing.clone());
     let api_key_id = context.api_key_id();
     match execute_stream_with_selected_deployment(
         state.unified_router.clone(),
@@ -104,7 +104,7 @@ async fn handle_streaming_chat_completion(
         move |provider, selected_model| {
             let core_request = core_request.clone();
             let context = context_for_execution.clone();
-            let budget_limits = budget_limits.clone();
+            let (budget_limits, pricing_service) = (budget_limits.clone(), pricing_service.clone());
             let request_for_budget = request_for_budget.clone();
             async move {
                 super::spend::ensure_budget_available(
@@ -112,7 +112,8 @@ async fn handle_streaming_chat_completion(
                     provider.name(),
                     &selected_model,
                 )?;
-                let budget_reservation = super::spend::reserve_chat_completion_budget(
+                let budget_reservation = super::spend::reserve_chat_completion_budget_with_pricing(
+                    pricing_service.as_ref(),
                     &budget_limits,
                     provider.name(),
                     &selected_model,
@@ -139,7 +140,7 @@ async fn handle_streaming_chat_completion(
 
             let idle_timeout_secs = state.config.load().gateway.server.stream_idle_timeout;
             let budget_limits = state.budget_limits.clone();
-            let key_manager = state.key_manager.clone();
+            let (key_manager, pricing_service) = (state.key_manager.clone(), state.pricing.clone());
 
             tokio::spawn(async move {
                 let mut lease = Some(lease);
@@ -149,8 +150,8 @@ async fn handle_streaming_chat_completion(
                 macro_rules! settle_after_upstream_output {
                     () => {
                         if final_usage.is_some() || saw_upstream_output {
-                            super::spend::record_stream_disconnect_spend_with_reservation(
-                                &budget_limits,
+                            super::spend::record_stream_disconnect_spend_with_reservation_with_pricing(
+                                pricing_service.as_ref(), &budget_limits,
                                 &key_manager,
                                 api_key_id,
                                 &served_provider,
@@ -283,7 +284,8 @@ async fn handle_streaming_chat_completion(
 
                     if tx.send(bytes).await.is_err() {
                         info!("Client disconnected during streaming, cancelling upstream");
-                        super::spend::record_stream_disconnect_spend_with_reservation(
+                        super::spend::record_stream_disconnect_spend_with_reservation_with_pricing(
+                            pricing_service.as_ref(),
                             &budget_limits,
                             &key_manager,
                             api_key_id,
@@ -302,7 +304,8 @@ async fn handle_streaming_chat_completion(
                 if tx.send(done_event.to_bytes()).await.is_err() {
                     info!("Client disconnected before [DONE] event could be sent");
                 }
-                super::spend::record_finished_stream_spend_with_reservation(
+                super::spend::record_finished_stream_spend_with_reservation_with_pricing(
+                    pricing_service.as_ref(),
                     super::spend::StreamSpendSettlement {
                         budget_limits: &budget_limits,
                         key_manager: &key_manager,
@@ -360,7 +363,7 @@ async fn handle_chat_completion_internal(
 
     // Owned handles captured into the (retryable) execution closure so that the
     // successful attempt records budget spend and per-key usage.
-    let budget_limits = state.budget_limits.clone();
+    let (budget_limits, pricing_service) = (state.budget_limits.clone(), state.pricing.clone());
     let key_manager = state.key_manager.clone();
     let api_key_id = context.api_key_id();
 
@@ -371,7 +374,7 @@ async fn handle_chat_completion_internal(
         move |provider, selected_model| {
             let core_request = core_request.clone();
             let context = context_for_execution.clone();
-            let budget_limits = budget_limits.clone();
+            let (budget_limits, pricing_service) = (budget_limits.clone(), pricing_service.clone());
             let key_manager = key_manager.clone();
             let request_for_budget = request_for_budget.clone();
             async move {
@@ -382,7 +385,8 @@ async fn handle_chat_completion_internal(
                     provider.name(),
                     &selected_model,
                 )?;
-                let budget_reservation = super::spend::reserve_chat_completion_budget(
+                let budget_reservation = super::spend::reserve_chat_completion_budget_with_pricing(
+                    pricing_service.as_ref(),
                     &budget_limits,
                     provider.name(),
                     &selected_model,
@@ -398,7 +402,8 @@ async fn handle_chat_completion_internal(
                     .as_ref()
                     .map(|usage| u64::from(usage.total_tokens))
                     .unwrap_or_default();
-                super::spend::record_completion_spend_with_reservation(
+                super::spend::record_completion_spend_with_reservation_with_pricing(
+                    pricing_service.as_ref(),
                     &budget_limits,
                     &key_manager,
                     api_key_id,

@@ -4,13 +4,16 @@
 //! This eliminates code duplication and ensures consistent behavior.
 
 use async_trait::async_trait;
+use std::sync::LazyLock;
 
 use crate::core::cost::types::{
     CostBreakdown, CostError, CostEstimate, ModelCostComparison, ModelPricing, UsageTokens,
 };
 use crate::core::cost::utils::select_tiered_pricing;
+use crate::core::pricing_service::{PricingCostBreakdown, PricingService, PricingUsage};
+use crate::utils::error::gateway_error::GatewayError;
 
-mod pricing;
+pub(crate) mod pricing;
 
 use self::pricing::{
     get_anthropic_pricing, get_azure_pricing, get_deepseek_pricing, get_minimax_pricing,
@@ -54,54 +57,52 @@ pub fn generic_cost_per_token(
     usage: &UsageTokens,
     provider: &str,
 ) -> Result<CostBreakdown, CostError> {
-    // Get model pricing information
-    let pricing = get_model_pricing(model, provider)?;
-
-    // Initialize cost breakdown
-    let mut breakdown = CostBreakdown::new(model.to_string(), provider.to_string(), usage.clone());
-
-    // Calculate tiered pricing if applicable
-    let (input_cost_per_1k, output_cost_per_1k, cache_creation_cost_per_1k, cache_read_cost_per_1k) =
-        select_tiered_pricing(&pricing, usage);
-
-    // Calculate input cost
-    breakdown.input_cost = calculate_input_cost(usage, input_cost_per_1k);
-
-    // Calculate output cost
-    breakdown.output_cost = calculate_output_cost(usage, output_cost_per_1k);
-
-    // Calculate cache costs if applicable
-    if let Some(cached_tokens) = usage.cached_tokens {
-        breakdown.cache_cost = calculate_cache_cost(
-            cached_tokens,
-            cache_creation_cost_per_1k,
-            cache_read_cost_per_1k,
-        );
+    let pricing_usage = pricing_usage_from_cost_usage(usage);
+    match default_pricing_authority().calculate_loaded_usage_cost_for_provider(
+        provider,
+        model,
+        &pricing_usage,
+    ) {
+        Ok(breakdown) => {
+            return Ok(pricing_breakdown_to_cost_breakdown(
+                model, provider, usage, breakdown,
+            ));
+        }
+        Err(error) if !is_not_found(&error) => {
+            return Err(gateway_error_to_cost_error(error, model, provider));
+        }
+        Err(_) => {
+            // Fall through to legacy provider catalogs for models that are not in
+            // the shared pricing source but were already supported before GH-726.
+        }
     }
 
-    // Calculate audio costs if applicable
-    if let Some(audio_tokens) = usage.audio_tokens {
-        breakdown.audio_cost = calculate_audio_cost(&pricing, audio_tokens);
-    }
-
-    // Calculate image costs if applicable
-    if let Some(image_tokens) = usage.image_tokens {
-        breakdown.image_cost = calculate_image_cost(&pricing, image_tokens);
-    }
-
-    // Calculate reasoning tokens cost if applicable (for o1 models)
-    if let Some(reasoning_tokens) = usage.reasoning_tokens {
-        breakdown.reasoning_cost = calculate_reasoning_cost(&pricing, reasoning_tokens);
-    }
-
-    // Calculate total
-    breakdown.calculate_total();
-
-    Ok(breakdown)
+    let pricing = get_fallback_model_pricing(model, provider)?;
+    calculate_with_model_pricing(model, provider, usage, pricing)
 }
 
 /// Get model pricing information
 pub fn get_model_pricing(model: &str, provider: &str) -> Result<ModelPricing, CostError> {
+    if let Some((resolved_model, info)) =
+        default_pricing_authority().get_model_info_for_provider(provider, model)
+    {
+        return litellm_to_cost_pricing(&resolved_model, &info);
+    }
+
+    get_fallback_model_pricing(model, provider)
+}
+
+fn default_pricing_authority() -> &'static PricingService {
+    static DEFAULT_PRICING_AUTHORITY: LazyLock<PricingService> = LazyLock::new(|| {
+        PricingService::with_embedded_default().unwrap_or_else(|error| {
+            tracing::error!("failed to initialize embedded PricingService authority: {error}");
+            PricingService::new(None)
+        })
+    });
+    &DEFAULT_PRICING_AUTHORITY
+}
+
+fn get_fallback_model_pricing(model: &str, provider: &str) -> Result<ModelPricing, CostError> {
     let normalized_provider = crate::core::pricing::normalize_pricing_provider(provider);
 
     match normalized_provider.as_str() {
@@ -160,6 +161,123 @@ pub fn get_model_pricing(model: &str, provider: &str) -> Result<ModelPricing, Co
             provider: provider.to_string(),
         }),
     }
+}
+
+fn pricing_usage_from_cost_usage(usage: &UsageTokens) -> PricingUsage {
+    PricingUsage {
+        prompt_tokens: usage.prompt_tokens,
+        completion_tokens: usage.completion_tokens,
+        total_tokens: usage.total_tokens,
+        cached_tokens: usage.cached_tokens,
+        audio_tokens: usage.audio_tokens,
+        image_tokens: usage.image_tokens,
+        reasoning_tokens: usage.reasoning_tokens,
+    }
+}
+
+fn pricing_breakdown_to_cost_breakdown(
+    model: &str,
+    provider: &str,
+    usage: &UsageTokens,
+    pricing: PricingCostBreakdown,
+) -> CostBreakdown {
+    CostBreakdown {
+        total_cost: pricing.total_cost,
+        input_cost: pricing.input_cost,
+        output_cost: pricing.output_cost,
+        cache_cost: pricing.cache_cost,
+        audio_cost: pricing.audio_cost,
+        image_cost: pricing.image_cost,
+        reasoning_cost: pricing.reasoning_cost,
+        usage: usage.clone(),
+        currency: pricing.currency,
+        model: model.to_string(),
+        provider: provider.to_string(),
+    }
+}
+
+fn calculate_with_model_pricing(
+    model: &str,
+    provider: &str,
+    usage: &UsageTokens,
+    pricing: ModelPricing,
+) -> Result<CostBreakdown, CostError> {
+    let mut breakdown = CostBreakdown::new(model.to_string(), provider.to_string(), usage.clone());
+    let (_, _, cache_creation_cost_per_1k, cache_read_cost_per_1k) =
+        select_tiered_pricing(&pricing, usage);
+    let (input_cost_per_1k, output_cost_per_1k, _, _) = select_tiered_pricing(&pricing, usage);
+
+    breakdown.input_cost = calculate_input_cost(usage, input_cost_per_1k);
+    breakdown.output_cost = calculate_output_cost(usage, output_cost_per_1k);
+
+    if let Some(cached_tokens) = usage.cached_tokens {
+        breakdown.cache_cost = calculate_cache_cost(
+            cached_tokens,
+            cache_creation_cost_per_1k,
+            cache_read_cost_per_1k,
+        );
+    }
+    if let Some(audio_tokens) = usage.audio_tokens {
+        breakdown.audio_cost = calculate_audio_cost(&pricing, audio_tokens);
+    }
+    if let Some(image_tokens) = usage.image_tokens {
+        breakdown.image_cost = calculate_image_cost(&pricing, image_tokens);
+    }
+    if let Some(reasoning_tokens) = usage.reasoning_tokens {
+        breakdown.reasoning_cost = calculate_reasoning_cost(&pricing, reasoning_tokens);
+    }
+
+    breakdown.calculate_total();
+    Ok(breakdown)
+}
+
+fn gateway_error_to_cost_error(error: GatewayError, model: &str, provider: &str) -> CostError {
+    match error {
+        GatewayError::NotFound(_) if provider_is_supported(provider) => {
+            CostError::ModelNotSupported {
+                model: model.to_string(),
+                provider: provider.to_string(),
+            }
+        }
+        GatewayError::NotFound(_) => CostError::ProviderNotSupported {
+            provider: provider.to_string(),
+        },
+        GatewayError::Config(message) if message.contains("Missing") => CostError::MissingPricing {
+            model: model.to_string(),
+        },
+        GatewayError::Validation(message) => CostError::InvalidUsage { message },
+        GatewayError::Config(message) => CostError::ConfigError { message },
+        other => CostError::CalculationError {
+            message: other.to_string(),
+        },
+    }
+}
+
+fn is_not_found(error: &GatewayError) -> bool {
+    matches!(error, GatewayError::NotFound(_))
+}
+
+fn provider_is_supported(provider: &str) -> bool {
+    matches!(
+        crate::core::pricing::normalize_pricing_provider(provider).as_str(),
+        "openai"
+            | "anthropic"
+            | "azure"
+            | "azure_ai"
+            | "vertex_ai"
+            | "gemini"
+            | "bedrock"
+            | "amazon_nova"
+            | "openai_like"
+            | "xai"
+            | "groq"
+            | "cohere"
+            | "deepseek"
+            | "xiaomi_mimo"
+            | "moonshot"
+            | "minimax"
+            | "zhipuai"
+    )
 }
 
 fn is_xiaomi_mimo_model(model: &str) -> bool {
@@ -529,6 +647,30 @@ pub fn estimate_cost(
     input_tokens: u32,
     max_output_tokens: Option<u32>,
 ) -> Result<CostEstimate, CostError> {
+    match default_pricing_authority().estimate_loaded_completion_cost_for_provider(
+        provider,
+        model,
+        input_tokens,
+        max_output_tokens,
+    ) {
+        Ok(estimate) => {
+            return Ok(CostEstimate {
+                min_cost: estimate.min_cost,
+                max_cost: estimate.max_cost,
+                input_cost: estimate.input_cost,
+                estimated_output_cost: estimate.estimated_output_cost,
+                currency: estimate.currency,
+            });
+        }
+        Err(error) if !is_not_found(&error) => {
+            return Err(gateway_error_to_cost_error(error, model, provider));
+        }
+        Err(_) => {
+            // Fall through to legacy provider catalogs for compatibility models
+            // absent from the shared pricing authority.
+        }
+    }
+
     let pricing = get_model_pricing(model, provider)?;
     let estimated_output_tokens = max_output_tokens.unwrap_or(100); // Default estimate
     let usage = UsageTokens::new(input_tokens, estimated_output_tokens);

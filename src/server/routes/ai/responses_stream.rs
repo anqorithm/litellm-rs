@@ -11,6 +11,7 @@ use crate::core::models::openai::responses_api::{
     ResponseOutputMessage, ResponseOutputTokensDetails, ResponseReasoningItem, ResponseStreamEvent,
     ResponseUsage, ResponsesApiRequest, ResponsesApiResponse,
 };
+use crate::core::pricing_service::PricingService;
 use crate::core::providers::ProviderError;
 use crate::core::streaming::types::Event;
 use crate::core::types::responses::Usage as ChatUsage;
@@ -45,6 +46,7 @@ struct ToolCallAccum {
 }
 
 struct StreamBudgetSettlement {
+    pricing_service: Arc<PricingService>,
     budget_limits: Arc<UnifiedBudgetLimits>,
     key_manager: KeyManager,
     api_key_id: Option<Uuid>,
@@ -55,21 +57,25 @@ struct StreamBudgetSettlement {
 
 impl StreamBudgetSettlement {
     async fn record_completion(mut self, usage: Option<&ChatUsage>, saw_upstream_output: bool) {
-        spend::record_finished_stream_spend_with_reservation(spend::StreamSpendSettlement {
-            budget_limits: self.budget_limits.as_ref(),
-            key_manager: &self.key_manager,
-            api_key_id: self.api_key_id,
-            provider: &self.provider,
-            model: &self.model,
-            usage,
-            saw_upstream_output,
-            budget_reservation: self.reservation.take(),
-        })
+        spend::record_finished_stream_spend_with_reservation_with_pricing(
+            self.pricing_service.as_ref(),
+            spend::StreamSpendSettlement {
+                budget_limits: self.budget_limits.as_ref(),
+                key_manager: &self.key_manager,
+                api_key_id: self.api_key_id,
+                provider: &self.provider,
+                model: &self.model,
+                usage,
+                saw_upstream_output,
+                budget_reservation: self.reservation.take(),
+            },
+        )
         .await;
     }
 
     async fn record_disconnect(&mut self, usage: Option<&ChatUsage>) {
-        spend::record_stream_disconnect_spend_with_reservation(
+        spend::record_stream_disconnect_spend_with_reservation_with_pricing(
+            self.pricing_service.as_ref(),
             self.budget_limits.as_ref(),
             &self.key_manager,
             self.api_key_id,
@@ -113,6 +119,7 @@ pub(crate) async fn handle_streaming_response(
     let requested_model = core_request.model.clone();
     let context_clone = context.clone();
     let budget_limits = state.budget_limits.clone();
+    let pricing_service = state.pricing.clone();
     let api_key_id = context.api_key_id();
 
     match execute_stream_with_selected_deployment(
@@ -123,10 +130,12 @@ pub(crate) async fn handle_streaming_response(
             let core_request = core_request.clone();
             let ctx = context_clone.clone();
             let budget_limits = budget_limits.clone();
+            let pricing_service = pricing_service.clone();
             let request_for_budget = request_for_budget.clone();
             async move {
                 spend::ensure_budget_available(&budget_limits, provider.name(), &selected_model)?;
-                let budget_reservation = spend::reserve_chat_completion_budget(
+                let budget_reservation = spend::reserve_chat_completion_budget_with_pricing(
+                    pricing_service.as_ref(),
                     &budget_limits,
                     provider.name(),
                     &selected_model,
@@ -146,6 +155,7 @@ pub(crate) async fn handle_streaming_response(
             let (tx, rx) = mpsc::channel::<Bytes>(8);
             let idle_timeout = state.config.load().gateway.server.stream_idle_timeout;
             let settlement = StreamBudgetSettlement {
+                pricing_service: state.pricing.clone(),
                 budget_limits: state.budget_limits.clone(),
                 key_manager: state.key_manager.clone(),
                 api_key_id,

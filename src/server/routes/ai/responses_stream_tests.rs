@@ -3,7 +3,15 @@ use crate::core::budget::{
     ModelLimitConfig, ProviderLimitConfig, ResetPeriod, UnifiedBudgetLimits,
 };
 use crate::core::keys::{InMemoryKeyRepository, KeyManager};
+use crate::core::pricing_service::PricingService;
 use std::sync::Arc;
+
+fn test_pricing_service() -> Arc<PricingService> {
+    match PricingService::with_embedded_default() {
+        Ok(service) => Arc::new(service),
+        Err(error) => panic!("embedded pricing service should initialize for tests: {error}"),
+    }
+}
 
 #[test]
 fn test_sse_error_contains_done() {
@@ -151,6 +159,7 @@ async fn disconnect_after_upstream_output_settles_reserved_budget() {
             .unwrap();
     let reserved = reservation.reserved_amount();
     let mut settlement = StreamBudgetSettlement {
+        pricing_service: test_pricing_service(),
         budget_limits: Arc::clone(&budget),
         key_manager: KeyManager::new(InMemoryKeyRepository::new()),
         api_key_id: None,
@@ -196,6 +205,7 @@ async fn completed_stream_without_usage_after_output_settles_reserved_budget() {
             .unwrap();
     let reserved = reservation.reserved_amount();
     let settlement = StreamBudgetSettlement {
+        pricing_service: test_pricing_service(),
         budget_limits: Arc::clone(&budget),
         key_manager: KeyManager::new(InMemoryKeyRepository::new()),
         api_key_id: None,

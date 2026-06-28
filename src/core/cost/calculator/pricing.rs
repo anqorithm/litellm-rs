@@ -473,7 +473,7 @@ pub(super) fn get_anthropic_pricing(model: &str) -> Result<ModelPricing, CostErr
     Ok(pricing)
 }
 
-pub(super) fn get_azure_pricing(model: &str) -> Result<ModelPricing, CostError> {
+pub(crate) fn get_azure_pricing(model: &str) -> Result<ModelPricing, CostError> {
     // Azure pricing is typically the same as OpenAI but may have regional differences
     get_openai_pricing(model).map(|mut pricing| {
         pricing.model = model.to_string();

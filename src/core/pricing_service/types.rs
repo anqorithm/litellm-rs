@@ -71,6 +71,82 @@ pub struct CostResult {
     pub cost_type: CostType,
 }
 
+/// Usage information for authority-backed pricing calculations.
+#[derive(Debug, Clone, Default)]
+pub struct PricingUsage {
+    pub prompt_tokens: u32,
+    pub completion_tokens: u32,
+    pub total_tokens: u32,
+    pub cached_tokens: Option<u32>,
+    pub audio_tokens: Option<u32>,
+    pub image_tokens: Option<u32>,
+    pub reasoning_tokens: Option<u32>,
+}
+
+impl PricingUsage {
+    pub fn new(prompt_tokens: u32, completion_tokens: u32) -> Self {
+        Self {
+            prompt_tokens,
+            completion_tokens,
+            total_tokens: prompt_tokens.saturating_add(completion_tokens),
+            cached_tokens: None,
+            audio_tokens: None,
+            image_tokens: None,
+            reasoning_tokens: None,
+        }
+    }
+}
+
+impl From<&crate::core::types::responses::Usage> for PricingUsage {
+    fn from(usage: &crate::core::types::responses::Usage) -> Self {
+        Self {
+            prompt_tokens: usage.prompt_tokens,
+            completion_tokens: usage.completion_tokens,
+            total_tokens: usage.total_tokens,
+            cached_tokens: usage
+                .prompt_tokens_details
+                .as_ref()
+                .and_then(|details| details.cached_tokens),
+            audio_tokens: usage
+                .prompt_tokens_details
+                .as_ref()
+                .and_then(|details| details.audio_tokens),
+            image_tokens: None,
+            reasoning_tokens: usage
+                .completion_tokens_details
+                .as_ref()
+                .and_then(|details| details.reasoning_tokens),
+        }
+    }
+}
+
+/// Detailed cost calculation result used by spend and legacy cost adapters.
+#[derive(Debug, Clone)]
+pub struct PricingCostBreakdown {
+    pub total_cost: f64,
+    pub input_cost: f64,
+    pub output_cost: f64,
+    pub cache_cost: f64,
+    pub audio_cost: f64,
+    pub image_cost: f64,
+    pub reasoning_cost: f64,
+    pub usage: PricingUsage,
+    pub currency: String,
+    pub model: String,
+    pub provider: String,
+    pub cost_type: CostType,
+}
+
+/// Reservation estimate from the same authority used for completed spend.
+#[derive(Debug, Clone)]
+pub struct PricingCostEstimate {
+    pub min_cost: f64,
+    pub max_cost: f64,
+    pub input_cost: f64,
+    pub estimated_output_cost: f64,
+    pub currency: String,
+}
+
 /// Type of cost calculation method
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub enum CostType {

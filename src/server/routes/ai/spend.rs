@@ -7,16 +7,17 @@
 use uuid::Uuid;
 
 use crate::core::budget::{BudgetReservationError, UnifiedBudgetLimits, UnifiedBudgetReservation};
-use crate::core::cost::calculator::{estimate_cost, generic_cost_per_token};
-use crate::core::cost::types::UsageTokens;
 use crate::core::keys::KeyManager;
 use crate::core::models::openai::requests::ChatCompletionRequest;
 use crate::core::models::openai::{
     ChatMessage, ContentPart, Function, FunctionCall, MessageContent, ResponseFormat, Tool,
 };
+use crate::core::pricing_service::{PricingService, PricingUsage};
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::responses::Usage;
 use crate::utils::ai::counter::token_counter::TokenCounter;
+#[cfg(test)]
+use std::sync::LazyLock;
 
 const IMAGE_PROMPT_BASE_TOKENS: u32 = 85;
 const IMAGE_HIGH_DETAIL_PROMPT_TOKENS: u32 = 1_105;
@@ -51,6 +52,7 @@ pub(super) fn ensure_budget_available(
     Ok(())
 }
 
+#[cfg(test)]
 pub(super) fn reserve_completion_budget(
     budget_limits: &UnifiedBudgetLimits,
     provider: &str,
@@ -58,14 +60,44 @@ pub(super) fn reserve_completion_budget(
     estimated_prompt_tokens: u32,
     max_output_tokens: Option<u32>,
 ) -> Result<Option<UnifiedBudgetReservation>, ProviderError> {
-    let estimate = match estimate_cost(model, provider, estimated_prompt_tokens, max_output_tokens)
-    {
+    reserve_completion_budget_with_pricing(
+        default_spend_pricing_service(),
+        budget_limits,
+        provider,
+        model,
+        estimated_prompt_tokens,
+        max_output_tokens,
+    )
+}
+
+pub(super) fn reserve_completion_budget_with_pricing(
+    pricing_service: &PricingService,
+    budget_limits: &UnifiedBudgetLimits,
+    provider: &str,
+    model: &str,
+    estimated_prompt_tokens: u32,
+    max_output_tokens: Option<u32>,
+) -> Result<Option<UnifiedBudgetReservation>, ProviderError> {
+    let estimate = match pricing_service.estimate_loaded_completion_cost_for_provider(
+        provider,
+        model,
+        estimated_prompt_tokens,
+        max_output_tokens,
+    ) {
         Ok(estimate) => estimate,
         Err(e) => {
             tracing::error!(
                 "cost estimation failed for '{provider}'/'{model}': {e}; \
                  checking exhausted status without reservation"
             );
+            if pricing_required_for_budget(budget_limits, provider, model) {
+                return Err(ProviderError::invalid_request(
+                    "pricing",
+                    format!(
+                        "pricing is required for budget reservation for '{provider}'/'{model}': {e}"
+                    ),
+                ));
+            }
             ensure_budget_available(budget_limits, provider, model)?;
             return Ok(None);
         }
@@ -82,7 +114,24 @@ pub(super) fn reserve_completion_budget(
         .map_err(|error| reservation_error_to_provider_error(error, provider, model))
 }
 
+#[cfg(test)]
 pub(super) fn reserve_chat_completion_budget(
+    budget_limits: &UnifiedBudgetLimits,
+    provider: &str,
+    model: &str,
+    request: &ChatCompletionRequest,
+) -> Result<Option<UnifiedBudgetReservation>, ProviderError> {
+    reserve_chat_completion_budget_with_pricing(
+        default_spend_pricing_service(),
+        budget_limits,
+        provider,
+        model,
+        request,
+    )
+}
+
+pub(super) fn reserve_chat_completion_budget_with_pricing(
+    pricing_service: &PricingService,
     budget_limits: &UnifiedBudgetLimits,
     provider: &str,
     model: &str,
@@ -96,12 +145,14 @@ pub(super) fn reserve_chat_completion_budget(
         request.function_call.as_ref(),
         request.response_format.as_ref(),
     );
-    reserve_completion_budget(
+    reserve_completion_budget_with_pricing(
+        pricing_service,
         budget_limits,
         provider,
         model,
         prompt_tokens,
         reservation_output_tokens(
+            pricing_service,
             provider,
             model,
             prompt_tokens,
@@ -178,6 +229,7 @@ pub(super) fn estimate_chat_prompt_tokens(
 }
 
 fn reservation_output_tokens(
+    pricing_service: &PricingService,
     provider: &str,
     model: &str,
     prompt_tokens: u32,
@@ -189,7 +241,7 @@ fn reservation_output_tokens(
     let output_tokens = if let Some(requested) = requested_max_output_tokens {
         Some(requested)
     } else {
-        catalog_max_output_tokens(provider, model).or_else(|| {
+        catalog_max_output_tokens_with_pricing(pricing_service, provider, model).or_else(|| {
             counter
                 .estimate_output_tokens(None, prompt_tokens, model)
                 .ok()
@@ -199,35 +251,17 @@ fn reservation_output_tokens(
     output_tokens.map(|tokens| tokens.saturating_mul(choice_count))
 }
 
+#[cfg(test)]
 fn catalog_max_output_tokens(provider: &str, model: &str) -> Option<u32> {
-    let db = crate::core::pricing::get_pricing_db();
-    let provider_aliases = pricing_provider_aliases(provider, model);
-    if let Some(tokens) = db
-        .get_model_info(model)
-        .filter(|info| provider_name_matches(&info.litellm_provider, &provider_aliases))
-        .and_then(|info| info.max_output_tokens)
-    {
-        return Some(tokens);
-    }
+    catalog_max_output_tokens_with_pricing(default_spend_pricing_service(), provider, model)
+}
 
-    let normalized_model = crate::core::pricing::normalize_model_key(model);
-    if normalized_model != model
-        && let Some(tokens) = db
-            .get_model_info(normalized_model)
-            .filter(|info| provider_name_matches(&info.litellm_provider, &provider_aliases))
-            .and_then(|info| info.max_output_tokens)
-    {
-        return Some(tokens);
-    }
-
-    provider_aliases
-        .iter()
-        .flat_map(|provider| db.get_provider_models(provider))
-        .filter(|candidate| model_id_matches(&candidate.to_lowercase(), normalized_model))
-        .filter_map(|candidate| db.get_model_info(&candidate))
-        .filter(|info| provider_name_matches(&info.litellm_provider, &provider_aliases))
-        .filter_map(|info| info.max_output_tokens)
-        .max()
+fn catalog_max_output_tokens_with_pricing(
+    pricing_service: &PricingService,
+    provider: &str,
+    model: &str,
+) -> Option<u32> {
+    pricing_service.max_output_tokens_for_provider(provider, model)
 }
 
 fn provider_effective_max_output_tokens(
@@ -263,51 +297,6 @@ fn bedrock_effective_max_output_tokens(
         }
         BedrockApiType::Invoke | BedrockApiType::InvokeStream => request.max_tokens,
     }
-}
-
-fn pricing_provider_aliases(provider: &str, model: &str) -> Vec<String> {
-    let normalized = crate::core::pricing::normalize_pricing_provider(provider);
-    let aliases = match normalized.as_str() {
-        "anthropic" if is_xiaomi_mimo_model(model) => vec!["xiaomi_mimo", "xiaomi", "mimo"],
-        "gemini" => vec!["gemini", "vertex_ai"],
-        "vertex_ai" => vec!["vertex_ai", "google"],
-        "xiaomi_mimo" => vec!["xiaomi_mimo", "xiaomi", "mimo"],
-        "zhipuai" => vec!["zhipuai", "glm", "zai"],
-        _ => return vec![normalized],
-    };
-    aliases
-        .into_iter()
-        .map(crate::core::pricing::normalize_pricing_provider)
-        .fold(Vec::new(), |mut unique, alias| {
-            if !unique.contains(&alias) {
-                unique.push(alias);
-            }
-            unique
-        })
-}
-
-fn is_xiaomi_mimo_model(model: &str) -> bool {
-    crate::core::pricing::normalize_model_key(model).starts_with("mimo-")
-}
-
-fn provider_name_matches(provider: &str, aliases: &[String]) -> bool {
-    let provider = crate::core::pricing::normalize_pricing_provider(provider);
-    aliases
-        .iter()
-        .any(|alias| crate::core::pricing::normalize_pricing_provider(alias) == provider)
-}
-
-fn model_id_matches(candidate: &str, requested: &str) -> bool {
-    candidate == requested
-        || has_dash_suffix(candidate, requested)
-        || has_dash_suffix(requested, candidate)
-}
-
-fn has_dash_suffix(value: &str, prefix: &str) -> bool {
-    value
-        .strip_prefix(prefix)
-        .and_then(|suffix| suffix.strip_prefix('-'))
-        .is_some()
 }
 
 fn conservative_multimodal_prompt_extra(messages: &[ChatMessage]) -> u32 {
@@ -452,7 +441,32 @@ fn reservation_error_to_provider_error(
 /// response. When the cost cannot be priced, token usage is still recorded but
 /// budget spend is skipped rather than booked at $0 — under-counting a budget is
 /// worse than leaving it unchanged with a loud error.
+#[cfg(test)]
 pub(super) async fn record_completion_spend_with_reservation(
+    budget_limits: &UnifiedBudgetLimits,
+    key_manager: &KeyManager,
+    api_key_id: Option<Uuid>,
+    provider: &str,
+    model: &str,
+    usage: Option<&Usage>,
+    budget_reservation: Option<UnifiedBudgetReservation>,
+) {
+    record_completion_spend_with_reservation_with_pricing(
+        default_spend_pricing_service(),
+        budget_limits,
+        key_manager,
+        api_key_id,
+        provider,
+        model,
+        usage,
+        budget_reservation,
+    )
+    .await;
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) async fn record_completion_spend_with_reservation_with_pricing(
+    pricing_service: &PricingService,
     budget_limits: &UnifiedBudgetLimits,
     key_manager: &KeyManager,
     api_key_id: Option<Uuid>,
@@ -475,9 +489,13 @@ pub(super) async fn record_completion_spend_with_reservation(
     };
 
     let total_tokens = u64::from(usage.total_tokens);
-    let usage_tokens: UsageTokens = usage.clone().into();
+    let usage_tokens = PricingUsage::from(usage);
 
-    let cost = match generic_cost_per_token(model, &usage_tokens, provider) {
+    let cost = match pricing_service.calculate_loaded_usage_cost_for_provider(
+        provider,
+        model,
+        &usage_tokens,
+    ) {
         Ok(breakdown) => Some(breakdown.total_cost),
         Err(e) => {
             tracing::error!(
@@ -538,6 +556,7 @@ async fn record_reserved_spend_without_usage(
     }
 }
 
+#[cfg(test)]
 pub(super) async fn record_stream_disconnect_spend_with_reservation(
     budget_limits: &UnifiedBudgetLimits,
     key_manager: &KeyManager,
@@ -547,8 +566,33 @@ pub(super) async fn record_stream_disconnect_spend_with_reservation(
     usage: Option<&Usage>,
     budget_reservation: Option<UnifiedBudgetReservation>,
 ) {
+    record_stream_disconnect_spend_with_reservation_with_pricing(
+        default_spend_pricing_service(),
+        budget_limits,
+        key_manager,
+        api_key_id,
+        provider,
+        model,
+        usage,
+        budget_reservation,
+    )
+    .await;
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) async fn record_stream_disconnect_spend_with_reservation_with_pricing(
+    pricing_service: &PricingService,
+    budget_limits: &UnifiedBudgetLimits,
+    key_manager: &KeyManager,
+    api_key_id: Option<Uuid>,
+    provider: &str,
+    model: &str,
+    usage: Option<&Usage>,
+    budget_reservation: Option<UnifiedBudgetReservation>,
+) {
     if let Some(usage) = usage {
-        record_completion_spend_with_reservation(
+        record_completion_spend_with_reservation_with_pricing(
+            pricing_service,
             budget_limits,
             key_manager,
             api_key_id,
@@ -583,7 +627,19 @@ pub(super) struct StreamSpendSettlement<'a> {
     pub(super) budget_reservation: Option<UnifiedBudgetReservation>,
 }
 
+#[cfg(test)]
 pub(super) async fn record_finished_stream_spend_with_reservation(
+    settlement: StreamSpendSettlement<'_>,
+) {
+    record_finished_stream_spend_with_reservation_with_pricing(
+        default_spend_pricing_service(),
+        settlement,
+    )
+    .await;
+}
+
+pub(super) async fn record_finished_stream_spend_with_reservation_with_pricing(
+    pricing_service: &PricingService,
     settlement: StreamSpendSettlement<'_>,
 ) {
     let StreamSpendSettlement {
@@ -598,7 +654,8 @@ pub(super) async fn record_finished_stream_spend_with_reservation(
     } = settlement;
 
     if usage.is_some() || saw_upstream_output {
-        record_stream_disconnect_spend_with_reservation(
+        record_stream_disconnect_spend_with_reservation_with_pricing(
+            pricing_service,
             budget_limits,
             key_manager,
             api_key_id,
@@ -611,7 +668,8 @@ pub(super) async fn record_finished_stream_spend_with_reservation(
         return;
     }
 
-    record_completion_spend_with_reservation(
+    record_completion_spend_with_reservation_with_pricing(
+        pricing_service,
         budget_limits,
         key_manager,
         api_key_id,
@@ -621,6 +679,38 @@ pub(super) async fn record_finished_stream_spend_with_reservation(
         budget_reservation,
     )
     .await;
+}
+
+fn pricing_required_for_budget(
+    budget_limits: &UnifiedBudgetLimits,
+    provider: &str,
+    model: &str,
+) -> bool {
+    let provider_limit_enabled = budget_limits.providers.is_enabled()
+        && budget_limits
+            .providers
+            .list_provider_budgets()
+            .into_iter()
+            .any(|budget| budget.provider_name == provider && budget.enabled);
+    let model_limit_enabled = budget_limits.models.is_enabled()
+        && budget_limits
+            .models
+            .list_model_budgets()
+            .into_iter()
+            .any(|budget| budget.model_name == model && budget.enabled);
+
+    provider_limit_enabled || model_limit_enabled
+}
+
+#[cfg(test)]
+fn default_spend_pricing_service() -> &'static PricingService {
+    static DEFAULT_SPEND_PRICING_SERVICE: LazyLock<PricingService> = LazyLock::new(|| {
+        PricingService::with_embedded_default().unwrap_or_else(|error| {
+            tracing::error!("failed to initialize embedded spend PricingService: {error}");
+            PricingService::new(None)
+        })
+    });
+    &DEFAULT_SPEND_PRICING_SERVICE
 }
 
 #[cfg(test)]
@@ -642,3 +732,7 @@ mod stream_disconnect_tests;
 #[cfg(test)]
 #[path = "spend_no_usage_tests.rs"]
 mod no_usage_tests;
+
+#[cfg(test)]
+#[path = "spend_runtime_pricing_tests.rs"]
+mod runtime_pricing_tests;

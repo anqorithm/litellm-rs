@@ -13,7 +13,7 @@ use std::time::{Duration, SystemTime};
 use tokio::sync::broadcast;
 use tracing::{info, warn};
 
-fn require_pricing_field(
+pub(super) fn require_pricing_field(
     value: Option<f64>,
     model: &str,
     pricing_type: &str,
@@ -34,7 +34,10 @@ fn require_pricing_field(
     Ok(value)
 }
 
-fn require_total_time_seconds(model: &str, total_time_seconds: Option<f64>) -> Result<f64> {
+pub(super) fn require_total_time_seconds(
+    model: &str,
+    total_time_seconds: Option<f64>,
+) -> Result<f64> {
     let total_time_seconds = total_time_seconds.ok_or_else(|| {
         GatewayError::validation(format!(
             "Missing total_time_seconds for time-based pricing model {}",
@@ -190,7 +193,7 @@ impl PricingService {
     }
 
     /// Calculate Google/Vertex AI cost (character or token based)
-    fn calculate_google_cost(
+    pub(super) fn calculate_google_cost(
         &self,
         model: &str,
         model_info: &LiteLLMModelInfo,
@@ -239,7 +242,7 @@ impl PricingService {
     }
 
     /// Calculate time-based cost (for deployment providers)
-    fn calculate_time_based_cost(
+    pub(super) fn calculate_time_based_cost(
         &self,
         model: &str,
         model_info: &LiteLLMModelInfo,
