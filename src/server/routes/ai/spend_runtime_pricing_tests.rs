@@ -116,6 +116,37 @@ fn reserve_completion_budget_prices_xai_openai_like_prefix() {
     reservation.cancel();
 }
 
+#[cfg(feature = "providers-extended")]
+#[test]
+fn reserve_completion_budget_prices_amazon_nova_short_alias() {
+    let pricing = default_spend_pricing_service();
+    let budget = UnifiedBudgetLimits::new();
+    budget.providers.set_provider_limit(
+        "amazon_nova",
+        ProviderLimitConfig::new(1000.0, ResetPeriod::Monthly),
+    );
+    budget.models.set_model_limit(
+        "nova-2-lite",
+        ModelLimitConfig::new(1000.0, ResetPeriod::Monthly),
+    );
+
+    let reservation = match reserve_completion_budget_with_pricing(
+        pricing,
+        &budget,
+        "amazon_nova",
+        "nova-2-lite",
+        1000,
+        Some(500),
+    ) {
+        Ok(Some(reservation)) => reservation,
+        Ok(None) => panic!("priced Amazon Nova short alias should create a budget reservation"),
+        Err(error) => panic!("Amazon Nova short alias reservation should succeed: {error}"),
+    };
+
+    assert!((reservation.reserved_amount() - 0.00155).abs() < f64::EPSILON);
+    reservation.cancel();
+}
+
 #[tokio::test]
 async fn record_completion_spend_uses_runtime_pricing_service() {
     let pricing = runtime_test_pricing_service("runtime_provider");
@@ -230,4 +261,59 @@ fn reserve_completion_budget_rejects_missing_pricing_when_budget_requires_cost()
             .unwrap_or(0.0),
         0.0
     );
+}
+
+#[test]
+fn reserve_completion_budget_allows_missing_pricing_when_limits_are_disabled() {
+    let pricing = PricingService::new(None);
+    let budget = UnifiedBudgetLimits::new();
+    let mut provider_config = ProviderLimitConfig::new(1000.0, ResetPeriod::Monthly);
+    provider_config.enabled = false;
+    budget
+        .providers
+        .set_provider_limit("runtime_provider", provider_config);
+    let mut model_config = ModelLimitConfig::new(1000.0, ResetPeriod::Monthly);
+    model_config.enabled = false;
+    budget
+        .models
+        .set_model_limit("missing-priced-model", model_config);
+
+    let reservation = match reserve_completion_budget_with_pricing(
+        &pricing,
+        &budget,
+        "runtime_provider",
+        "missing-priced-model",
+        1000,
+        Some(500),
+    ) {
+        Ok(reservation) => reservation,
+        Err(error) => panic!("disabled budget limits should not require pricing: {error}"),
+    };
+
+    assert!(reservation.is_none());
+}
+
+#[test]
+fn reserve_completion_budget_allows_missing_pricing_when_budget_manager_disabled() {
+    let pricing = PricingService::new(None);
+    let budget = UnifiedBudgetLimits::new();
+    budget.providers.set_provider_limit(
+        "runtime_provider",
+        ProviderLimitConfig::new(1000.0, ResetPeriod::Monthly),
+    );
+    budget.providers.set_enabled(false);
+
+    let reservation = match reserve_completion_budget_with_pricing(
+        &pricing,
+        &budget,
+        "runtime_provider",
+        "missing-priced-model",
+        1000,
+        Some(500),
+    ) {
+        Ok(reservation) => reservation,
+        Err(error) => panic!("disabled budget manager should not require pricing: {error}"),
+    };
+
+    assert!(reservation.is_none());
 }

@@ -686,8 +686,20 @@ fn pricing_required_for_budget(
     provider: &str,
     model: &str,
 ) -> bool {
-    budget_limits.providers.has_provider_limit(provider)
-        || budget_limits.models.has_model_limit(model)
+    let provider_limit_enabled = budget_limits.providers.is_enabled()
+        && budget_limits
+            .providers
+            .list_provider_budgets()
+            .into_iter()
+            .any(|budget| budget.provider_name == provider && budget.enabled);
+    let model_limit_enabled = budget_limits.models.is_enabled()
+        && budget_limits
+            .models
+            .list_model_budgets()
+            .into_iter()
+            .any(|budget| budget.model_name == model && budget.enabled);
+
+    provider_limit_enabled || model_limit_enabled
 }
 
 #[cfg(test)]

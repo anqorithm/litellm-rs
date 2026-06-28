@@ -37,8 +37,9 @@ without requiring a server `AppState`:
 
 Provider-specific hardcoded fallbacks may remain only inside the PricingService authority where the
 shared catalog cannot resolve a model and the existing behavior already used a provider catalog, such as
-Azure and Bedrock compatibility pricing. Unknown or incomplete shared catalog rows must not fall through
-to $0 billing.
+Azure, Bedrock, Amazon Nova, and xAI compatibility pricing. Authority adapters must preserve tiered
+pricing metadata when converting legacy provider catalog rows. Unknown or incomplete shared catalog rows
+must not fall through to $0 billing.
 
 ## Product-to-Test Mapping
 

@@ -136,14 +136,17 @@ fn resolve_model_info_for_provider(
     model: &str,
 ) -> Option<(String, LiteLLMModelInfo)> {
     let normalized_provider = crate::core::pricing::normalize_pricing_provider(provider);
-    if normalized_provider == "openai_like" {
-        let (prefixed_provider, stripped_model) = provider_prefixed_model(model)?;
+    if normalized_provider == "openai_like"
+        && let Some((prefixed_provider, stripped_model)) = provider_prefixed_model(model)
+    {
         let prefixed_provider = crate::core::pricing::normalize_pricing_provider(prefixed_provider);
-        if prefixed_provider == "openai_like" {
-            return None;
+        if prefixed_provider != "openai_like"
+            && let Some(resolved) =
+                resolve_model_info_for_provider(models, &prefixed_provider, stripped_model)
+                    .or_else(|| resolve_model_info_for_provider(models, &prefixed_provider, model))
+        {
+            return Some(resolved);
         }
-        return resolve_model_info_for_provider(models, &prefixed_provider, stripped_model)
-            .or_else(|| resolve_model_info_for_provider(models, &prefixed_provider, model));
     }
 
     let provider_aliases = pricing_provider_aliases(provider, model);
@@ -196,9 +199,44 @@ fn provider_catalog_model_info(
                     core_pricing_to_litellm_model_info("bedrock", pricing),
                 )
             }),
+        "amazon_nova" => amazon_nova_pricing_model_info(model),
         "xai" => xai_pricing_model_info(model),
         _ => None,
     }
+}
+
+#[cfg(feature = "providers-extended")]
+fn amazon_nova_pricing_model_info(model: &str) -> Option<(String, LiteLLMModelInfo)> {
+    let registry = crate::core::providers::amazon_nova::AmazonNovaModelRegistry::new();
+    let model = registry.get(model)?;
+    let resolved_model = model.id.clone();
+
+    Some((
+        resolved_model,
+        LiteLLMModelInfo {
+            max_tokens: Some(model.context_length),
+            max_input_tokens: Some(model.context_length),
+            max_output_tokens: Some(model.max_output_tokens),
+            input_cost_per_token: Some(model.input_cost_per_1k / 1000.0),
+            output_cost_per_token: Some(model.output_cost_per_1k / 1000.0),
+            input_cost_per_character: None,
+            output_cost_per_character: None,
+            cost_per_second: None,
+            litellm_provider: "amazon_nova".to_string(),
+            mode: "chat".to_string(),
+            supports_function_calling: Some(model.supports_tools),
+            supports_vision: Some(model.supports_vision),
+            supports_streaming: Some(model.supports_streaming),
+            supports_parallel_function_calling: Some(model.supports_tools),
+            supports_system_message: Some(true),
+            extra: HashMap::new(),
+        },
+    ))
+}
+
+#[cfg(not(feature = "providers-extended"))]
+fn amazon_nova_pricing_model_info(_model: &str) -> Option<(String, LiteLLMModelInfo)> {
+    None
 }
 
 fn xai_pricing_model_info(model: &str) -> Option<(String, LiteLLMModelInfo)> {
@@ -282,6 +320,7 @@ fn core_pricing_to_litellm_model_info(
         "output_cost_per_reasoning_token",
         pricing.reasoning_cost_per_token,
     );
+    insert_tiered_pricing(&mut extra, pricing.tiered_pricing.as_ref());
 
     LiteLLMModelInfo {
         max_tokens: None,
@@ -300,6 +339,19 @@ fn core_pricing_to_litellm_model_info(
         supports_parallel_function_calling: None,
         supports_system_message: None,
         extra,
+    }
+}
+
+fn insert_tiered_pricing(
+    extra: &mut HashMap<String, serde_json::Value>,
+    tiered_pricing: Option<&HashMap<String, f64>>,
+) {
+    let Some(tiered_pricing) = tiered_pricing else {
+        return;
+    };
+
+    for (key, cost_per_1k_tokens) in tiered_pricing {
+        insert_optional_cost(extra, key, Some(cost_per_1k_tokens / 1000.0));
     }
 }
 
@@ -594,6 +646,28 @@ mod tests {
     }
 
     #[test]
+    fn provider_aware_authority_resolves_loaded_openai_like_model_without_prefix() {
+        let service = PricingService::new(None);
+        service.add_custom_model(
+            "runtime-openai-like-model".to_string(),
+            test_model_info("openai_like"),
+        );
+
+        let cost = match service.calculate_loaded_usage_cost_for_provider(
+            "openai_like",
+            "runtime-openai-like-model",
+            &PricingUsage::new(1000, 500),
+        ) {
+            Ok(cost) => cost,
+            Err(error) => panic!("loaded OpenAI-like pricing should calculate cost: {error}"),
+        };
+
+        assert_eq!(cost.model, "runtime-openai-like-model");
+        assert_eq!(cost.provider, "openai_like");
+        assert!((cost.total_cost - 0.025).abs() < f64::EPSILON);
+    }
+
+    #[test]
     fn provider_aware_authority_resolves_xai_openai_like_prefix() {
         let service = match PricingService::with_embedded_default() {
             Ok(service) => service,
@@ -612,6 +686,63 @@ mod tests {
         assert_eq!(cost.model, "grok-4.3");
         assert_eq!(cost.provider, "openai_like");
         assert!((cost.total_cost - 0.0025).abs() < f64::EPSILON);
+    }
+
+    #[cfg(feature = "providers-extended")]
+    #[test]
+    fn provider_aware_authority_resolves_amazon_nova_short_alias() {
+        let service = match PricingService::with_embedded_default() {
+            Ok(service) => service,
+            Err(error) => panic!("embedded pricing service should initialize for tests: {error}"),
+        };
+
+        let cost = match service.calculate_loaded_usage_cost_for_provider(
+            "amazon_nova",
+            "nova-2-lite",
+            &PricingUsage::new(1000, 500),
+        ) {
+            Ok(cost) => cost,
+            Err(error) => panic!("Amazon Nova short alias should resolve: {error}"),
+        };
+
+        assert_eq!(cost.model, "amazon.nova-2-lite-v1:0");
+        assert_eq!(cost.provider, "amazon_nova");
+        assert!((cost.total_cost - 0.00155).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn provider_aware_authority_preserves_core_pricing_tiers() {
+        let service = match PricingService::with_embedded_default() {
+            Ok(service) => service,
+            Err(error) => panic!("embedded pricing service should initialize for tests: {error}"),
+        };
+
+        let cost = match service.calculate_loaded_usage_cost_for_provider(
+            "azure",
+            "gpt-5.5",
+            &PricingUsage::new(300_000, 1_000),
+        ) {
+            Ok(cost) => cost,
+            Err(error) => panic!("Azure tiered fallback pricing should resolve: {error}"),
+        };
+
+        assert_eq!(cost.model, "gpt-5.5");
+        assert_eq!(cost.provider, "azure");
+        assert!(
+            (cost.input_cost - 3.0).abs() < 1e-12,
+            "unexpected input cost: {}",
+            cost.input_cost
+        );
+        assert!(
+            (cost.output_cost - 0.045).abs() < 1e-12,
+            "unexpected output cost: {}",
+            cost.output_cost
+        );
+        assert!(
+            (cost.total_cost - 3.045).abs() < 1e-12,
+            "unexpected total cost: {}",
+            cost.total_cost
+        );
     }
 
     #[test]
