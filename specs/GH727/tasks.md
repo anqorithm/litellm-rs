@@ -11,7 +11,7 @@ GH-727 / #727
 
 ## 实现任务
 
-- [x] `SP727-T1` Owner: coordinator. Done when: `specs/GH727/product.md`, `tech.md`, and `tasks.md` exist and pass SpecRail packet validation. Verify: `python3 /Users/apple/Desktop/code/AI/tool/specrail/checks/check_workflow.py --repo /Users/apple/Desktop/code/AI/tool/specrail --spec-dir /tmp/litellm-rs-issue727/specs/GH727`.
+- [x] `SP727-T1` Owner: coordinator. Done when: `specs/GH727/product.md`, `tech.md`, and `tasks.md` exist and pass SpecRail packet validation. Verify: from this repository with a local SpecRail checkout, `SPEC_RAIL=/path/to/specrail; python3 "$SPEC_RAIL/checks/check_workflow.py" --repo "$SPEC_RAIL" --spec-dir "$PWD/specs/GH727"`.
 - [x] `SP727-T2` Owner: coordinator. Done when: `src/core/providers/thinking/tests.rs` is split into `tests/mod.rs` and provider-specific child modules. Verify: `git diff --stat`; `wc -l src/core/providers/thinking/tests/*.rs`.
 - [x] `SP727-T3` Owner: coordinator. Done when: moved tests compile and pass with unchanged assertions. Verify: `cargo test core::providers::thinking --lib`.
 - [ ] `SP727-T4` Owner: verification owner. Done when: formatting, all-features check, PR CI, and review-thread gate pass. Verify: `cargo fmt --all -- --check`; `cargo check --all-features --locked`; GitHub PR CI and review-thread query.
