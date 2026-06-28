@@ -14,6 +14,13 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
 
+/// Canonical internal model information.
+///
+/// The model-info authority lives under `core::types::model`. This re-export
+/// keeps the historical `core::models::ModelInfo` path from defining a second
+/// internal shape.
+pub use crate::core::types::model::ModelInfo;
+
 /// Common metadata for all models
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Metadata {
@@ -130,17 +137,20 @@ pub struct UsageStats {
     pub last_reset: chrono::DateTime<chrono::Utc>,
 }
 
-/// Model information
+/// Legacy gateway/admin model summary.
+///
+/// This is intentionally not named `ModelInfo`: the internal provider-facing
+/// model-info authority is `crate::core::types::model::ModelInfo`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ModelInfo {
+pub struct LegacyModelSummary {
     /// Model ID
     pub id: String,
     /// Model name
     pub name: String,
     /// Provider
     pub provider: String,
-    /// Model type (chat, completion, embedding, etc.)
-    pub model_type: ModelType,
+    /// Legacy model category (chat, completion, embedding, etc.)
+    pub model_type: LegacyModelType,
     /// Context window size
     pub context_window: Option<u32>,
     /// Maximum output tokens
@@ -157,10 +167,10 @@ pub struct ModelInfo {
     pub is_available: bool,
 }
 
-/// Model types
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Legacy model categories used by `LegacyModelSummary`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum ModelType {
+pub enum LegacyModelType {
     /// Chat completion models
     Chat,
     /// Text completion models
@@ -180,6 +190,11 @@ pub enum ModelType {
     /// Document reranking models
     Rerank,
 }
+
+#[deprecated(
+    note = "use LegacyModelType for legacy summaries or core::types::model::ProviderCapability for internal model capabilities"
+)]
+pub type ModelType = LegacyModelType;
 
 /// Canonical request context type used across the gateway.
 pub type RequestContext = crate::core::types::context::RequestContext;
@@ -282,5 +297,34 @@ mod tests {
         assert_eq!(context.team_id(), Some(team_id));
         assert_eq!(context.client_ip, Some("127.0.0.1".to_string()));
         assert_eq!(context.headers.get("X-Custom"), Some(&"value".to_string()));
+    }
+
+    #[test]
+    fn test_core_models_model_info_uses_canonical_shape() {
+        let info = ModelInfo::default();
+        assert_eq!(info.max_context_length, 4096);
+        assert_eq!(info.currency, "USD");
+        assert!(info.capabilities.is_empty());
+    }
+
+    #[test]
+    fn test_legacy_model_summary_structure() {
+        let summary = LegacyModelSummary {
+            id: "gpt-4".to_string(),
+            name: "GPT-4".to_string(),
+            provider: "openai".to_string(),
+            model_type: LegacyModelType::Chat,
+            context_window: Some(128000),
+            max_output_tokens: Some(4096),
+            input_cost_per_token: Some(0.00003),
+            output_cost_per_token: Some(0.00006),
+            features: vec!["tools".to_string()],
+            description: Some("legacy admin summary".to_string()),
+            is_available: true,
+        };
+
+        assert_eq!(summary.model_type, LegacyModelType::Chat);
+        assert_eq!(summary.context_window, Some(128000));
+        assert!(summary.is_available);
     }
 }

@@ -422,6 +422,9 @@ pub(crate) fn build_core_chat_request(
     model: String,
     stream: bool,
 ) -> Result<CoreChatRequest, GatewayError> {
+    // This is the OpenAI transport DTO -> internal provider request boundary.
+    // Keep field forwarding explicit so new OpenAI-compatible parameters cannot
+    // disappear silently while routing through the canonical ChatRequest tree.
     let tools = match request.tools {
         Some(tools) => {
             let mut converted = Vec::with_capacity(tools.len());

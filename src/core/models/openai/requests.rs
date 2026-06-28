@@ -10,7 +10,11 @@ use super::audio::AudioParams;
 use super::messages::ChatMessage;
 use super::tools::{Function, FunctionCall, Tool, ToolChoice};
 
-/// Chat completion request (OpenAI compatible)
+/// OpenAI-compatible chat completion transport request.
+///
+/// This DTO preserves OpenAI wire compatibility for HTTP/API boundaries. It is
+/// not the provider-facing internal request; route adapters convert it into
+/// `crate::core::types::chat::ChatRequest` before provider execution.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatCompletionRequest {
     /// Model to use for completion

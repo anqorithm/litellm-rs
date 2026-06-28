@@ -56,6 +56,9 @@ pub struct OpenAIChatRequest {
     /// Service tier for the request ("default" or "flex")
     #[serde(skip_serializing_if = "Option::is_none")]
     pub service_tier: Option<String>,
+    /// Provider-specific request fields that are not modeled explicitly.
+    #[serde(default, flatten, skip_serializing_if = "HashMap::is_empty")]
+    pub extra_params: HashMap<String, serde_json::Value>,
 }
 
 /// OpenAI Message
