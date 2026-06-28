@@ -1,12 +1,33 @@
 // Router trait implementation for DefaultRouter.
 
 use super::*;
+use crate::core::providers::registry::{
+    ProviderRouteSurface, canonical_selector, provider_surface_matrix,
+};
 
 fn bedrock_execution_model_id(model: &str) -> String {
     crate::core::providers::bedrock::parse_bedrock_model_id(model).execution_model_id
 }
 
 impl DefaultRouter {
+    fn unsupported_explicit_completion_selector(
+        model: &str,
+        surface: ProviderRouteSurface,
+        has_custom_api_base: bool,
+    ) -> Option<&'static str> {
+        if has_custom_api_base {
+            return None;
+        }
+
+        let (selector, _) = model.split_once('/')?;
+        let canonical = canonical_selector(selector);
+        provider_surface_matrix()
+            .iter()
+            .find(|entry| entry.selector == canonical)
+            .filter(|entry| !entry.support_for(surface).is_available_in_current_build())
+            .map(|entry| entry.selector)
+    }
+
     fn select_static_provider<'a>(
         providers: &'a [&'a Provider],
         model: &str,
@@ -107,6 +128,17 @@ impl Router for DefaultRouter {
         let chat_messages = convert_messages_to_chat_messages(messages);
         let chat_request =
             convert_to_chat_completion_request(model, chat_messages, options.clone())?;
+
+        if let Some(selector) = Self::unsupported_explicit_completion_selector(
+            model,
+            ProviderRouteSurface::CompletionChat,
+            options.api_base.is_some(),
+        ) {
+            return Err(GatewayError::invalid_request(format!(
+                "completion() chat is not supported for provider route '{}'",
+                selector
+            )));
+        }
 
         // Create request context with override parameters from options
         let mut context = RequestContext::new();
@@ -267,6 +299,17 @@ impl Router for DefaultRouter {
             convert_to_chat_completion_request(model, chat_messages, options.clone())?;
         chat_request.stream = true;
 
+        if let Some(selector) = Self::unsupported_explicit_completion_selector(
+            model,
+            ProviderRouteSurface::CompletionChatStream,
+            options.api_base.is_some(),
+        ) {
+            return Err(GatewayError::invalid_request(format!(
+                "completion() streaming is not supported for provider route '{}'",
+                selector
+            )));
+        }
+
         // Create request context
         let context = RequestContext::new();
 
@@ -309,6 +352,58 @@ impl Router for DefaultRouter {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unsupported_completion_prefixes_are_explicit() {
+        assert_eq!(
+            DefaultRouter::unsupported_explicit_completion_selector(
+                "google/gemini-pro",
+                ProviderRouteSurface::CompletionChat,
+                false
+            ),
+            Some("google")
+        );
+        assert_eq!(
+            DefaultRouter::unsupported_explicit_completion_selector(
+                "gemini/gemini-pro",
+                ProviderRouteSurface::CompletionChatStream,
+                false
+            ),
+            Some("gemini")
+        );
+        assert_eq!(
+            DefaultRouter::unsupported_explicit_completion_selector(
+                "google/gemini-pro",
+                ProviderRouteSurface::CompletionChat,
+                true
+            ),
+            None
+        );
+        assert_eq!(
+            DefaultRouter::unsupported_explicit_completion_selector(
+                "azure/gpt-4",
+                ProviderRouteSurface::CompletionChat,
+                false
+            ),
+            None
+        );
+        assert_eq!(
+            DefaultRouter::unsupported_explicit_completion_selector(
+                "openrouter/deepseek-chat",
+                ProviderRouteSurface::CompletionChat,
+                false
+            ),
+            None
+        );
+        assert_eq!(
+            DefaultRouter::unsupported_explicit_completion_selector(
+                "together/meta-llama",
+                ProviderRouteSurface::CompletionChat,
+                false
+            ),
+            None
+        );
+    }
 
     async fn tier1_provider(name: &str) -> Result<Provider> {
         let Some(def) = crate::core::providers::registry::get_definition(name) else {

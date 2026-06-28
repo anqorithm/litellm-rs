@@ -9,16 +9,24 @@
 pub mod catalog;
 pub mod definition;
 pub mod lifecycle;
+pub mod support_matrix;
 pub mod types;
 
 #[cfg(test)]
 mod readme_tests;
+#[cfg(test)]
+mod support_matrix_tests;
 
 pub use catalog::{PROVIDER_CATALOG, get_definition, is_tier1_provider};
 pub use definition::{AuthType, ProviderDefinition};
 pub use lifecycle::{
     PROVIDER_MODULE_LIFECYCLE, ProviderModuleLifecycle, ProviderModuleLifecycleEntry,
     provider_module_lifecycle,
+};
+pub use support_matrix::{
+    ProviderRouteSurface, ProviderSurfaceSupport, SurfaceSupport, canonical_selector,
+    provider_surface_matrix, selector_has_matrix_entry, support_state_for_surface,
+    supports_provider_surface,
 };
 pub use types::{
     DEFAULT_CATALOG_RUNTIME_PROVIDERS, PROVIDER_TYPE_REGISTRY, ProviderDispatchKind,
