@@ -227,19 +227,20 @@ impl Provider {
                     ))
                 }
             }
-            // Catalog-covered provider types: delegate to the Tier 1 registry after
-            // all explicit branches, so catalog metadata cannot shadow provider-specific builders.
-            ref pt if provider_registry::get_definition(&pt.to_string()).is_some() => {
-                let name = pt.to_string();
-                // Safety: guard guarantees the definition exists
-                let def = match provider_registry::get_definition(&name) {
-                    Some(d) => d,
-                    None => {
-                        return Err(ProviderError::not_implemented(
+            ref pt if provider_registry::catalog_dispatch_entry_for_type(pt).is_some() => {
+                let entry =
+                    provider_registry::catalog_dispatch_entry_for_type(pt).ok_or_else(|| {
+                        ProviderError::not_implemented(
                             super::provider_diagnostic_name(pt),
-                            format!("Catalog definition for '{}' disappeared unexpectedly", name),
-                        ));
-                    }
+                            "Catalog dispatch entry disappeared",
+                        )
+                    })?;
+                let name = entry.canonical_name;
+                let Some(def) = provider_registry::get_definition(name) else {
+                    return Err(ProviderError::not_implemented(
+                        name,
+                        format!("Catalog definition for '{}' disappeared unexpectedly", name),
+                    ));
                 };
                 let api_key = config_str(&config, "api_key")
                     .map(|s| s.to_string())
@@ -258,7 +259,7 @@ impl Provider {
                 }
                 let provider = openai_like::OpenAILikeProvider::new(oai_config)
                     .await
-                    .map_err(|e| ProviderError::initialization(def.name, e.to_string()))?;
+                    .map_err(|e| ProviderError::initialization(name, e.to_string()))?;
                 Ok(Provider::OpenAILike(provider))
             }
             _ => Err(ProviderError::not_implemented(
@@ -416,6 +417,9 @@ mod tests {
                     "{:?} is not dispatchable and should have been skipped",
                     entry.provider_type
                 ),
+            }
+            if entry.dispatch_kind == ProviderDispatchKind::CatalogOpenAiLike {
+                assert_eq!(provider.name(), entry.canonical_name);
             }
         }
     }

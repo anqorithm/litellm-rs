@@ -118,6 +118,16 @@ impl std::fmt::Debug for ProviderRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::providers::anthropic::{AnthropicConfig, AnthropicProvider};
+    use crate::core::providers::registry::entry_for_type;
+
+    fn test_anthropic_provider() -> Provider {
+        let provider = match AnthropicProvider::new(AnthropicConfig::new_test("test-key")) {
+            Ok(provider) => provider,
+            Err(err) => panic!("test Anthropic provider should be constructible: {err}"),
+        };
+        Provider::Anthropic(provider)
+    }
 
     // ==================== Creation Tests ====================
 
@@ -346,5 +356,36 @@ mod tests {
         assert!(registry.get("provider-with-dash").is_none());
         assert!(registry.get("provider_with_underscore").is_none());
         assert!(registry.get("provider.with.dots").is_none());
+    }
+
+    #[test]
+    fn test_register_uses_provider_canonical_name() {
+        let mut registry = ProviderRegistry::new();
+        let entry = match entry_for_type(&ProviderType::Anthropic) {
+            Some(entry) => entry,
+            None => panic!("anthropic registry entry should exist"),
+        };
+
+        registry.register(test_anthropic_provider());
+
+        assert!(registry.contains(entry.canonical_name));
+        assert!(registry.get("anthropic").is_some());
+        let typed = registry.get_by_type(ProviderType::Anthropic);
+        assert_eq!(typed.len(), 1);
+        assert_eq!(typed[0].name(), entry.canonical_name);
+    }
+
+    #[test]
+    fn test_register_with_key_preserves_logical_key_and_provider_identity() {
+        let mut registry = ProviderRegistry::new();
+
+        registry.register_with_key("anthropic-primary", test_anthropic_provider());
+
+        assert!(registry.contains("anthropic-primary"));
+        assert!(!registry.contains("anthropic"));
+        let typed = registry.get_by_type(ProviderType::Anthropic);
+        assert_eq!(typed.len(), 1);
+        assert_eq!(typed[0].provider_type(), ProviderType::Anthropic);
+        assert_eq!(typed[0].name(), "anthropic");
     }
 }

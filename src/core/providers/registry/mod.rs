@@ -21,7 +21,8 @@ pub use lifecycle::{
     provider_module_lifecycle,
 };
 pub use types::{
-    PROVIDER_TYPE_REGISTRY, ProviderDispatchKind, ProviderRegistryEntry,
-    dispatchable_provider_types, dispatchable_provider_types_slice, entry_for_name, entry_for_type,
-    provider_type_registry,
+    DEFAULT_CATALOG_RUNTIME_PROVIDERS, PROVIDER_TYPE_REGISTRY, ProviderDispatchKind,
+    ProviderRegistryEntry, catalog_dispatch_entries, catalog_dispatch_entry_for_type,
+    default_catalog_runtime_provider_names, dispatchable_provider_types,
+    dispatchable_provider_types_slice, entry_for_name, entry_for_type, provider_type_registry,
 };
