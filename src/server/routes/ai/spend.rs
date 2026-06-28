@@ -464,6 +464,7 @@ pub(super) async fn record_completion_spend_with_reservation(
     .await;
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) async fn record_completion_spend_with_reservation_with_pricing(
     pricing_service: &PricingService,
     budget_limits: &UnifiedBudgetLimits,
@@ -578,6 +579,7 @@ pub(super) async fn record_stream_disconnect_spend_with_reservation(
     .await;
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) async fn record_stream_disconnect_spend_with_reservation_with_pricing(
     pricing_service: &PricingService,
     budget_limits: &UnifiedBudgetLimits,

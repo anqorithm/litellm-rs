@@ -79,6 +79,43 @@ fn reserve_completion_budget_uses_runtime_pricing_service() {
     reservation.cancel();
 }
 
+#[test]
+fn reserve_completion_budget_prices_xai_openai_like_prefix() {
+    let pricing = default_spend_pricing_service();
+    let budget = UnifiedBudgetLimits::new();
+    budget.providers.set_provider_limit(
+        "openai_like",
+        ProviderLimitConfig::new(1000.0, ResetPeriod::Monthly),
+    );
+    budget.models.set_model_limit(
+        "xai/grok-4.3",
+        ModelLimitConfig::new(1000.0, ResetPeriod::Monthly),
+    );
+
+    let reservation = match reserve_completion_budget_with_pricing(
+        pricing,
+        &budget,
+        "openai_like",
+        "xai/grok-4.3",
+        1000,
+        Some(500),
+    ) {
+        Ok(Some(reservation)) => reservation,
+        Ok(None) => panic!("priced xAI OpenAI-like model should create a budget reservation"),
+        Err(error) => panic!("xAI OpenAI-like budget reservation should succeed: {error}"),
+    };
+
+    assert!((reservation.reserved_amount() - 0.0025).abs() < f64::EPSILON);
+    assert_eq!(
+        budget
+            .providers
+            .get_provider_usage("openai_like")
+            .map(|usage| usage.current_spend),
+        Some(0.0025)
+    );
+    reservation.cancel();
+}
+
 #[tokio::test]
 async fn record_completion_spend_uses_runtime_pricing_service() {
     let pricing = runtime_test_pricing_service("runtime_provider");
@@ -118,6 +155,48 @@ async fn record_completion_spend_uses_runtime_pricing_service() {
             .get_model_usage("runtime-only-priced-model")
             .map(|usage| usage.current_spend),
         Some(0.025)
+    );
+}
+
+#[tokio::test]
+async fn record_completion_spend_prices_xai_openai_like_prefix() {
+    let pricing = default_spend_pricing_service();
+    let budget = UnifiedBudgetLimits::new();
+    budget.providers.set_provider_limit(
+        "openai_like",
+        ProviderLimitConfig::new(1000.0, ResetPeriod::Monthly),
+    );
+    budget.models.set_model_limit(
+        "xai/grok-4.3",
+        ModelLimitConfig::new(1000.0, ResetPeriod::Monthly),
+    );
+    let keys = KeyManager::new(InMemoryKeyRepository::new());
+
+    record_completion_spend_with_reservation_with_pricing(
+        pricing,
+        &budget,
+        &keys,
+        None,
+        "openai_like",
+        "xai/grok-4.3",
+        Some(&response_usage(1000, 500)),
+        None,
+    )
+    .await;
+
+    assert_eq!(
+        budget
+            .providers
+            .get_provider_usage("openai_like")
+            .map(|usage| usage.current_spend),
+        Some(0.0025)
+    );
+    assert_eq!(
+        budget
+            .models
+            .get_model_usage("xai/grok-4.3")
+            .map(|usage| usage.current_spend),
+        Some(0.0025)
     );
 }
 

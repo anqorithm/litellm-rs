@@ -292,4 +292,36 @@ mod tests {
         };
         assert!((total_cost - 0.025).abs() < f64::EPSILON);
     }
+
+    #[tokio::test]
+    async fn calculate_cost_route_resolves_xai_openai_like_prefix() {
+        let state = build_pricing_route_state().await;
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(state))
+                .configure(configure_pricing_routes),
+        )
+        .await;
+
+        let request = test::TestRequest::post()
+            .uri("/v1/pricing/calculate")
+            .set_json(json!({
+                "provider": "openai_like",
+                "model": "xai/grok-4.3",
+                "input_tokens": 1000,
+                "output_tokens": 500
+            }))
+            .to_request();
+        let response = test::call_service(&app, request).await;
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body: Value = test::read_body_json(response).await;
+        assert_eq!(body["model"], "grok-4.3");
+        assert_eq!(body["provider"], "xai");
+        let total_cost = match body["total_cost"].as_f64() {
+            Some(total_cost) => total_cost,
+            None => panic!("pricing response should include numeric total_cost: {body}"),
+        };
+        assert!((total_cost - 0.0025).abs() < f64::EPSILON);
+    }
 }

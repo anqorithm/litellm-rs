@@ -39,6 +39,7 @@ impl PricingService {
     ///
     /// This method does not refresh pricing data, so it is safe for live spend
     /// reservation and settlement paths that must not perform network I/O.
+    #[allow(clippy::too_many_arguments)]
     pub fn calculate_loaded_completion_cost_for_provider(
         &self,
         provider: &str,
@@ -195,7 +196,54 @@ fn provider_catalog_model_info(
                     core_pricing_to_litellm_model_info("bedrock", pricing),
                 )
             }),
+        "xai" => xai_pricing_model_info(model),
         _ => None,
+    }
+}
+
+fn xai_pricing_model_info(model: &str) -> Option<(String, LiteLLMModelInfo)> {
+    let models = crate::core::providers::openai_like::models::get_openai_like_registry();
+    if !crate::core::providers::openai_like::models::is_xai_priced_model(model) {
+        return None;
+    }
+
+    let info = models.get_model_info(model);
+    if info.input_cost_per_1k_tokens.is_none() || info.output_cost_per_1k_tokens.is_none() {
+        return None;
+    }
+    let resolved_model = info.id.clone();
+
+    Some((
+        resolved_model,
+        model_info_to_litellm_model_info("xai", info),
+    ))
+}
+
+fn model_info_to_litellm_model_info(
+    provider: &str,
+    info: crate::core::types::model::ModelInfo,
+) -> LiteLLMModelInfo {
+    LiteLLMModelInfo {
+        max_tokens: Some(info.max_context_length),
+        max_input_tokens: Some(info.max_context_length),
+        max_output_tokens: info.max_output_length,
+        input_cost_per_token: info
+            .input_cost_per_1k_tokens
+            .map(|cost_per_1k| cost_per_1k / 1000.0),
+        output_cost_per_token: info
+            .output_cost_per_1k_tokens
+            .map(|cost_per_1k| cost_per_1k / 1000.0),
+        input_cost_per_character: None,
+        output_cost_per_character: None,
+        cost_per_second: None,
+        litellm_provider: provider.to_string(),
+        mode: "chat".to_string(),
+        supports_function_calling: Some(info.supports_tools),
+        supports_vision: Some(info.supports_multimodal),
+        supports_streaming: Some(info.supports_streaming),
+        supports_parallel_function_calling: Some(info.supports_tools),
+        supports_system_message: Some(true),
+        extra: info.metadata,
     }
 }
 
@@ -543,6 +591,27 @@ mod tests {
         assert_eq!(cost.model, "mimo-v2.5-pro");
         assert_eq!(cost.provider, "anthropic");
         assert!(cost.total_cost > 0.0);
+    }
+
+    #[test]
+    fn provider_aware_authority_resolves_xai_openai_like_prefix() {
+        let service = match PricingService::with_embedded_default() {
+            Ok(service) => service,
+            Err(error) => panic!("embedded pricing service should initialize for tests: {error}"),
+        };
+
+        let cost = match service.calculate_loaded_usage_cost_for_provider(
+            "openai_like",
+            "xai/grok-4.3",
+            &PricingUsage::new(1000, 500),
+        ) {
+            Ok(cost) => cost,
+            Err(error) => panic!("xAI OpenAI-like prefixed model should resolve: {error}"),
+        };
+
+        assert_eq!(cost.model, "grok-4.3");
+        assert_eq!(cost.provider, "openai_like");
+        assert!((cost.total_cost - 0.0025).abs() < f64::EPSILON);
     }
 
     #[test]
