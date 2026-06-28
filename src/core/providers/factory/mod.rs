@@ -32,6 +32,23 @@ fn provider_diagnostic_name(provider_type: &ProviderType) -> &'static str {
         .unwrap_or("custom")
 }
 
+fn catalog_definition_for_supported_selector(
+    selector: &str,
+) -> Option<&'static provider_registry::ProviderDefinition> {
+    let normalized = selector.trim().to_ascii_lowercase();
+    let def = provider_registry::get_definition(&normalized)?;
+    match provider_registry::entry_for_name(&normalized) {
+        Some(entry)
+            if entry.dispatch_kind
+                == provider_registry::ProviderDispatchKind::CatalogOpenAiLike =>
+        {
+            Some(def)
+        }
+        Some(_) => None,
+        None => Some(def),
+    }
+}
+
 /// Create a provider from configuration
 ///
 /// This is the main factory function for creating providers
@@ -60,9 +77,7 @@ pub async fn create_provider(
     } else {
         provider_type.as_str()
     };
-    // --- Tier 1: check the data-driven catalog first ---
-    let provider_name_lower = provider_selector.to_lowercase();
-    if let Some(def) = provider_registry::get_definition(&provider_name_lower) {
+    if let Some(def) = catalog_definition_for_supported_selector(provider_selector) {
         let effective_key = if api_key.is_empty() {
             def.resolve_api_key(None)
         } else {
@@ -164,6 +179,31 @@ pub async fn create_provider(
 mod tests {
     use super::*;
     use crate::core::providers::registry as provider_registry;
+
+    #[test]
+    fn test_catalog_factory_shortcut_is_registry_dispatch_gated_for_enum_selectors() {
+        for name in provider_registry::PROVIDER_CATALOG.keys() {
+            let shortcut = catalog_definition_for_supported_selector(name);
+            if let Some(entry) = provider_registry::entry_for_name(name) {
+                assert_eq!(
+                    shortcut.is_some(),
+                    entry.dispatch_kind
+                        == provider_registry::ProviderDispatchKind::CatalogOpenAiLike,
+                    "{name} must not use the catalog factory shortcut unless registry dispatch says CatalogOpenAiLike"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_catalog_factory_shortcut_keeps_pure_catalog_only_selectors() {
+        let selector = "together";
+        assert!(
+            provider_registry::entry_for_name(selector).is_none(),
+            "{selector} should remain a pure catalog-only selector for this guard"
+        );
+        assert!(catalog_definition_for_supported_selector(selector).is_some());
+    }
 
     #[tokio::test]
     async fn test_catalog_entries_are_creatable_via_factory() {
