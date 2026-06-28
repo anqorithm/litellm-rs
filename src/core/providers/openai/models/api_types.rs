@@ -24,6 +24,9 @@ pub struct OpenAIChatRequest {
     pub stop: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stream: Option<bool>,
+    /// Stream options, such as final usage inclusion for streaming responses.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stream_options: Option<crate::core::types::chat::StreamOptions>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tools: Option<Vec<OpenAITool>>,
     #[serde(skip_serializing_if = "Option::is_none")]

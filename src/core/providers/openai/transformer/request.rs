@@ -46,6 +46,7 @@ impl OpenAIRequestTransformer {
             top_p: request.top_p,
             n: request.n,
             stream: None, // Set by caller
+            stream_options: request.stream_options,
             stop: request.stop,
             max_tokens: request.max_tokens,
             max_completion_tokens: request.max_completion_tokens,
@@ -177,6 +178,7 @@ fn is_openai_chat_request_field(key: &str) -> bool {
             | "presence_penalty"
             | "stop"
             | "stream"
+            | "stream_options"
             | "tools"
             | "tool_choice"
             | "parallel_tool_calls"
@@ -615,11 +617,18 @@ mod tests {
                 ..Default::default()
             }],
             temperature: Some(0.5),
+            stream_options: Some(crate::core::types::chat::StreamOptions {
+                include_usage: Some(true),
+            }),
             extra_params: HashMap::from([
                 ("provider_flag".to_string(), serde_json::json!("kept")),
                 ("model".to_string(), serde_json::json!("wrong-model")),
                 ("messages".to_string(), serde_json::json!("wrong-messages")),
                 ("temperature".to_string(), serde_json::json!(1.9)),
+                (
+                    "stream_options".to_string(),
+                    serde_json::json!("wrong-options"),
+                ),
             ]),
             ..Default::default()
         };
@@ -631,6 +640,7 @@ mod tests {
         assert_eq!(json["model"], "gpt-4");
         assert!(json["messages"].is_array());
         assert_eq!(json["temperature"], serde_json::json!(0.5_f32));
+        assert_eq!(json["stream_options"]["include_usage"], true);
     }
 
     #[test]
