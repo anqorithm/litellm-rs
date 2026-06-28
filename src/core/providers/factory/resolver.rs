@@ -4,12 +4,11 @@
 
 use crate::core::providers::Provider;
 use crate::core::providers::provider_type::ProviderType;
-use crate::core::providers::registry;
 
 /// Returns true if a provider selector can be instantiated by the current runtime.
 ///
 /// The selector is resolved using the same precedence as `create_provider`:
-/// 1. Tier-1 data-driven catalog names
+/// 1. Registry-gated Tier-1 data-driven catalog names
 /// 2. Built-in factory provider types
 pub fn is_provider_selector_supported(selector: &str) -> bool {
     let normalized = selector.trim().to_lowercase();
@@ -17,11 +16,10 @@ pub fn is_provider_selector_supported(selector: &str) -> bool {
         return false;
     }
 
-    if registry::get_definition(&normalized).is_some() {
+    if super::catalog_definition_for_supported_selector(&normalized).is_some() {
         return true;
     }
 
-    // Catalog selectors are already handled above; use strict FromStr for enum variants.
     match normalized.parse::<ProviderType>() {
         Ok(t) => Provider::factory_supported_provider_types().contains(&t),
         Err(_) => false,
@@ -44,9 +42,13 @@ mod tests {
     #[test]
     fn test_catalog_entries_are_supported_selectors() {
         for name in registry::PROVIDER_CATALOG.keys() {
-            assert!(
+            let expected = registry::entry_for_name(name)
+                .map(|entry| entry.dispatch_kind.is_dispatchable())
+                .unwrap_or(true);
+            assert_eq!(
                 is_provider_selector_supported(name),
-                "Catalog provider '{}' must be a supported selector",
+                expected,
+                "Catalog provider '{}' support must follow registry dispatchability",
                 name
             );
         }

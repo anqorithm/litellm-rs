@@ -227,20 +227,14 @@ impl Provider {
                     ))
                 }
             }
-            // Catalog-covered provider types: delegate to the Tier 1 registry after
-            // all explicit branches, so catalog metadata cannot shadow provider-specific builders.
-            ref pt if provider_registry::get_definition(&pt.to_string()).is_some() => {
-                let name = pt.to_string();
-                // Safety: guard guarantees the definition exists
-                let def = match provider_registry::get_definition(&name) {
-                    Some(d) => d,
-                    None => {
-                        return Err(ProviderError::not_implemented(
-                            super::provider_diagnostic_name(pt),
-                            format!("Catalog definition for '{}' disappeared unexpectedly", name),
-                        ));
-                    }
+            pt => {
+                let Some(def) = provider_registry::catalog_definition_for_provider_type(&pt) else {
+                    return Err(ProviderError::not_implemented(
+                        super::provider_diagnostic_name(&pt),
+                        format!("Factory for {:?} not yet implemented", pt),
+                    ));
                 };
+                let name = def.name;
                 let api_key = config_str(&config, "api_key")
                     .map(|s| s.to_string())
                     .or_else(|| def.resolve_api_key(None));
@@ -258,13 +252,9 @@ impl Provider {
                 }
                 let provider = openai_like::OpenAILikeProvider::new(oai_config)
                     .await
-                    .map_err(|e| ProviderError::initialization(def.name, e.to_string()))?;
+                    .map_err(|e| ProviderError::initialization(name, e.to_string()))?;
                 Ok(Provider::OpenAILike(provider))
             }
-            _ => Err(ProviderError::not_implemented(
-                super::provider_diagnostic_name(&provider_type),
-                format!("Factory for {:?} not yet implemented", provider_type),
-            )),
         }
     }
 }
@@ -416,6 +406,9 @@ mod tests {
                     "{:?} is not dispatchable and should have been skipped",
                     entry.provider_type
                 ),
+            }
+            if entry.dispatch_kind == ProviderDispatchKind::CatalogOpenAiLike {
+                assert_eq!(provider.name(), entry.canonical_name);
             }
         }
     }
@@ -773,6 +766,7 @@ mod tests {
             ProviderType::V0,
             ProviderType::AmazonNova,
             ProviderType::GitHub,
+            ProviderType::Custom("together".to_string()),
         ] {
             let provider = Provider::from_config_async(
                 provider_type.clone(),

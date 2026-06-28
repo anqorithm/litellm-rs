@@ -293,6 +293,22 @@ pub static PROVIDER_TYPE_REGISTRY: &[ProviderRegistryEntry] = &[
     ),
 ];
 
+/// Catalog providers registered by the default router when their configured
+/// environment credentials are available.
+///
+/// Keep this list in registry metadata instead of router startup code so runtime
+/// registration and catalog definitions drift together.
+pub static DEFAULT_CATALOG_RUNTIME_PROVIDERS: &[&str] = &[
+    "openrouter",
+    "deepseek",
+    "moonshot",
+    "minimax",
+    "zhipu",
+    "groq",
+    "xiaomi_mimo",
+    "xai",
+];
+
 static DISPATCHABLE_PROVIDER_TYPES: LazyLock<Vec<ProviderType>> = LazyLock::new(|| {
     PROVIDER_TYPE_REGISTRY
         .iter()
@@ -311,6 +327,19 @@ pub fn entry_for_type(provider_type: &ProviderType) -> Option<&'static ProviderR
         .find(|entry| &entry.provider_type == provider_type)
 }
 
+pub fn catalog_dispatch_entry_for_type(
+    provider_type: &ProviderType,
+) -> Option<&'static ProviderRegistryEntry> {
+    entry_for_type(provider_type)
+        .filter(|entry| entry.dispatch_kind == ProviderDispatchKind::CatalogOpenAiLike)
+}
+
+pub fn catalog_dispatch_entries() -> impl Iterator<Item = &'static ProviderRegistryEntry> {
+    PROVIDER_TYPE_REGISTRY
+        .iter()
+        .filter(|entry| entry.dispatch_kind == ProviderDispatchKind::CatalogOpenAiLike)
+}
+
 pub fn entry_for_name(name: &str) -> Option<&'static ProviderRegistryEntry> {
     PROVIDER_TYPE_REGISTRY
         .iter()
@@ -323,6 +352,10 @@ pub fn dispatchable_provider_types() -> Vec<ProviderType> {
 
 pub fn dispatchable_provider_types_slice() -> &'static [ProviderType] {
     DISPATCHABLE_PROVIDER_TYPES.as_slice()
+}
+
+pub fn default_catalog_runtime_provider_names() -> &'static [&'static str] {
+    DEFAULT_CATALOG_RUNTIME_PROVIDERS
 }
 
 const fn entry(
@@ -536,6 +569,40 @@ mod tests {
                 "{} catalog flag drifted",
                 entry.canonical_name
             );
+        }
+    }
+
+    #[test]
+    fn provider_registry_catalog_dispatch_entries_have_catalog_definitions() {
+        for entry in catalog_dispatch_entries() {
+            assert!(
+                entry.catalog_backed,
+                "{} catalog dispatch entry must be marked catalog-backed",
+                entry.canonical_name
+            );
+            assert!(
+                super::super::catalog::get_definition(entry.canonical_name).is_some(),
+                "{} catalog dispatch entry must have a provider definition",
+                entry.canonical_name
+            );
+        }
+    }
+
+    #[test]
+    fn provider_registry_default_runtime_catalog_providers_are_known_catalog_names() {
+        for provider_name in default_catalog_runtime_provider_names() {
+            assert!(
+                super::super::catalog::get_definition(provider_name).is_some(),
+                "{provider_name} default runtime provider must exist in the catalog"
+            );
+
+            if let Some(entry) = entry_for_name(provider_name) {
+                assert_eq!(
+                    entry.dispatch_kind,
+                    ProviderDispatchKind::CatalogOpenAiLike,
+                    "{provider_name} default runtime ProviderType entry must be catalog dispatchable"
+                );
+            }
         }
     }
 
