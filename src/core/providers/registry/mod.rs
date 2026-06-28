@@ -26,3 +26,13 @@ pub use types::{
     default_catalog_runtime_provider_names, dispatchable_provider_types,
     dispatchable_provider_types_slice, entry_for_name, entry_for_type, provider_type_registry,
 };
+
+pub fn catalog_definition_for_provider_type(
+    provider_type: &super::provider_type::ProviderType,
+) -> Option<&'static ProviderDefinition> {
+    match provider_type {
+        super::provider_type::ProviderType::Custom(name) => get_definition(name),
+        _ => catalog_dispatch_entry_for_type(provider_type)
+            .and_then(|entry| get_definition(entry.canonical_name)),
+    }
+}

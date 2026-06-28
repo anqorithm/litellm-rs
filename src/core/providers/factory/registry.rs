@@ -227,21 +227,14 @@ impl Provider {
                     ))
                 }
             }
-            ref pt if provider_registry::catalog_dispatch_entry_for_type(pt).is_some() => {
-                let entry =
-                    provider_registry::catalog_dispatch_entry_for_type(pt).ok_or_else(|| {
-                        ProviderError::not_implemented(
-                            super::provider_diagnostic_name(pt),
-                            "Catalog dispatch entry disappeared",
-                        )
-                    })?;
-                let name = entry.canonical_name;
-                let Some(def) = provider_registry::get_definition(name) else {
+            pt => {
+                let Some(def) = provider_registry::catalog_definition_for_provider_type(&pt) else {
                     return Err(ProviderError::not_implemented(
-                        name,
-                        format!("Catalog definition for '{}' disappeared unexpectedly", name),
+                        super::provider_diagnostic_name(&pt),
+                        format!("Factory for {:?} not yet implemented", pt),
                     ));
                 };
+                let name = def.name;
                 let api_key = config_str(&config, "api_key")
                     .map(|s| s.to_string())
                     .or_else(|| def.resolve_api_key(None));
@@ -262,10 +255,6 @@ impl Provider {
                     .map_err(|e| ProviderError::initialization(name, e.to_string()))?;
                 Ok(Provider::OpenAILike(provider))
             }
-            _ => Err(ProviderError::not_implemented(
-                super::provider_diagnostic_name(&provider_type),
-                format!("Factory for {:?} not yet implemented", provider_type),
-            )),
         }
     }
 }
@@ -777,6 +766,7 @@ mod tests {
             ProviderType::V0,
             ProviderType::AmazonNova,
             ProviderType::GitHub,
+            ProviderType::Custom("together".to_string()),
         ] {
             let provider = Provider::from_config_async(
                 provider_type.clone(),
