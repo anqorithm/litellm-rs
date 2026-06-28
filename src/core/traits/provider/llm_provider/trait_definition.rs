@@ -76,6 +76,16 @@ pub trait LLMProvider: Send + Sync + Debug + 'static {
     /// - UI display: Show provider feature characteristics
     fn capabilities(&self) -> &'static [ProviderCapability];
 
+    /// Check if this provider declares a runtime capability.
+    ///
+    /// `ProviderCapability` is the current dispatch contract for router and
+    /// gateway execution. Optional methods such as streaming, embeddings, and
+    /// image generation are callable through `LLMProvider`, but route selection
+    /// must first confirm the corresponding capability here.
+    fn supports_capability(&self, capability: &ProviderCapability) -> bool {
+        self.capabilities().contains(capability)
+    }
+
     /// Get supported model list
     ///
     /// # Returns
@@ -111,8 +121,7 @@ pub trait LLMProvider: Send + Sync + Debug + 'static {
     /// # Default Implementation
     /// Checks if capabilities contain ToolCalling
     fn supports_tools(&self) -> bool {
-        self.capabilities()
-            .contains(&ProviderCapability::ToolCalling)
+        self.supports_capability(&ProviderCapability::ToolCalling)
     }
 
     /// Check if streaming is supported
@@ -123,8 +132,7 @@ pub trait LLMProvider: Send + Sync + Debug + 'static {
     /// # Default Implementation
     /// Checks if capabilities contain ChatCompletionStream
     fn supports_streaming(&self) -> bool {
-        self.capabilities()
-            .contains(&ProviderCapability::ChatCompletionStream)
+        self.supports_capability(&ProviderCapability::ChatCompletionStream)
     }
 
     /// Check if image generation is supported
@@ -132,8 +140,7 @@ pub trait LLMProvider: Send + Sync + Debug + 'static {
     /// # Returns
     /// True if image generation (like DALL-E) is supported
     fn supports_image_generation(&self) -> bool {
-        self.capabilities()
-            .contains(&ProviderCapability::ImageGeneration)
+        self.supports_capability(&ProviderCapability::ImageGeneration)
     }
 
     /// Check if embeddings are supported
@@ -141,8 +148,7 @@ pub trait LLMProvider: Send + Sync + Debug + 'static {
     /// # Returns
     /// True if text embedding generation is supported
     fn supports_embeddings(&self) -> bool {
-        self.capabilities()
-            .contains(&ProviderCapability::Embeddings)
+        self.supports_capability(&ProviderCapability::Embeddings)
     }
 
     /// Check if vision capabilities are supported
@@ -480,5 +486,124 @@ pub trait LLMProvider: Send + Sync + Debug + 'static {
         // Simple estimation: 4 characters approximately equals 1 token
         // Subclasses should implement more accurate tokenization
         Ok((text.len() as f64 / 4.0).ceil() as u32)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::traits::error_mapper::DefaultErrorMapper;
+    use crate::core::types::health::HealthStatus;
+
+    #[derive(Debug)]
+    struct CapabilityProvider {
+        capabilities: &'static [ProviderCapability],
+    }
+
+    #[allow(async_fn_in_trait)]
+    impl LLMProvider for CapabilityProvider {
+        fn name(&self) -> &'static str {
+            "capability-test"
+        }
+
+        fn capabilities(&self) -> &'static [ProviderCapability] {
+            self.capabilities
+        }
+
+        fn models(&self) -> &[ModelInfo] {
+            &[]
+        }
+
+        fn get_supported_openai_params(&self, _model: &str) -> &'static [&'static str] {
+            &[]
+        }
+
+        async fn map_openai_params(
+            &self,
+            params: HashMap<String, Value>,
+            _model: &str,
+        ) -> Result<HashMap<String, Value>, ProviderError> {
+            Ok(params)
+        }
+
+        async fn transform_request(
+            &self,
+            _request: ChatRequest,
+            _context: RequestContext,
+        ) -> Result<Value, ProviderError> {
+            Ok(Value::Null)
+        }
+
+        async fn transform_response(
+            &self,
+            _raw_response: &[u8],
+            _model: &str,
+            _request_id: &str,
+        ) -> Result<ChatResponse, ProviderError> {
+            Err(ProviderError::not_supported(
+                "capability-test",
+                "transform_response",
+            ))
+        }
+
+        fn get_error_mapper(&self) -> Box<dyn ErrorMapper<ProviderError>> {
+            Box::new(DefaultErrorMapper)
+        }
+
+        async fn chat_completion(
+            &self,
+            _request: ChatRequest,
+            _context: RequestContext,
+        ) -> Result<ChatResponse, ProviderError> {
+            Err(ProviderError::not_supported(
+                "capability-test",
+                "chat_completion",
+            ))
+        }
+
+        async fn health_check(&self) -> HealthStatus {
+            HealthStatus::Healthy
+        }
+
+        async fn calculate_cost(
+            &self,
+            _model: &str,
+            _input_tokens: u32,
+            _output_tokens: u32,
+        ) -> Result<f64, ProviderError> {
+            Ok(0.0)
+        }
+    }
+
+    #[test]
+    fn test_supports_capability_for_chat_only_provider() {
+        static CHAT_ONLY: &[ProviderCapability] = &[ProviderCapability::ChatCompletion];
+        let provider = CapabilityProvider {
+            capabilities: CHAT_ONLY,
+        };
+
+        assert!(provider.supports_capability(&ProviderCapability::ChatCompletion));
+        assert!(!provider.supports_capability(&ProviderCapability::Embeddings));
+        assert!(!provider.supports_embeddings());
+        assert!(!provider.supports_streaming());
+        assert!(!provider.supports_image_generation());
+    }
+
+    #[test]
+    fn test_optional_helpers_delegate_to_provider_capability() {
+        static OPTIONAL: &[ProviderCapability] = &[
+            ProviderCapability::ChatCompletion,
+            ProviderCapability::ChatCompletionStream,
+            ProviderCapability::Embeddings,
+            ProviderCapability::ImageGeneration,
+        ];
+        let provider = CapabilityProvider {
+            capabilities: OPTIONAL,
+        };
+
+        assert!(provider.supports_streaming());
+        assert!(provider.supports_embeddings());
+        assert!(provider.supports_image_generation());
+        assert!(!provider.supports_tools());
     }
 }

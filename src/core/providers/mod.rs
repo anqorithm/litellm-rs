@@ -502,6 +502,12 @@ impl Provider {
         dispatch_provider!(sync, self, capabilities)
     }
 
+    /// Check if this provider declares a runtime capability.
+    pub fn supports_capability(&self, capability: &ProviderCapability) -> bool {
+        use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
+        dispatch_provider!(value, self, supports_capability, capability)
+    }
+
     /// Execute chat completion
     pub async fn chat_completion(
         &self,
@@ -550,7 +556,10 @@ impl Provider {
             .unwrap_or(model)
     }
 
-    /// Execute streaming chat completion
+    /// Execute streaming chat completion.
+    ///
+    /// Route selection must confirm `ProviderCapability::ChatCompletionStream`
+    /// before calling this optional dispatch method.
     pub async fn chat_completion_stream(
         &self,
         request: ChatRequest,
@@ -565,7 +574,10 @@ impl Provider {
         dispatch_provider!(async_err, self, chat_completion_stream, request, context)
     }
 
-    /// Create embeddings
+    /// Create embeddings.
+    ///
+    /// Route selection must confirm `ProviderCapability::Embeddings` before
+    /// calling this optional dispatch method.
     pub async fn create_embeddings(
         &self,
         request: EmbeddingRequest,
@@ -575,7 +587,10 @@ impl Provider {
         dispatch_provider!(async_err, self, embeddings, request, context)
     }
 
-    /// Create images
+    /// Create images.
+    ///
+    /// Route selection must confirm `ProviderCapability::ImageGeneration`
+    /// before calling this optional dispatch method.
     pub async fn create_images(
         &self,
         request: ImageGenerationRequest,
@@ -618,6 +633,8 @@ mod tests {
             anthropic::AnthropicProvider::new(anthropic::AnthropicConfig::new_test("test-key"))
                 .unwrap(),
         );
+
+        assert!(!provider.supports_capability(&ProviderCapability::Embeddings));
 
         let err = provider
             .create_embeddings(
@@ -706,6 +723,8 @@ mod tests {
                 .unwrap(),
         );
 
+        assert!(!provider.supports_capability(&ProviderCapability::ImageGeneration));
+
         let err = provider
             .create_images(
                 crate::core::types::image::ImageGenerationRequest {
@@ -733,5 +752,20 @@ mod tests {
             ),
             "expected provider-specific NotSupported, got {err}"
         );
+    }
+
+    #[tokio::test]
+    async fn test_provider_supports_capability_for_optional_provider() {
+        let mut config = openai::OpenAIConfig::default();
+        config.base.api_key = Some("sk-test123456789012345678901234567890123456".to_string());
+        let Ok(openai_provider) = openai::OpenAIProvider::new(config).await else {
+            panic!("OpenAI provider should initialize with a test API key");
+        };
+        let provider = Provider::OpenAI(openai_provider);
+
+        assert!(provider.supports_capability(&ProviderCapability::ChatCompletion));
+        assert!(provider.supports_capability(&ProviderCapability::ChatCompletionStream));
+        assert!(provider.supports_capability(&ProviderCapability::Embeddings));
+        assert!(!provider.supports_capability(&ProviderCapability::TextToSpeech));
     }
 }
