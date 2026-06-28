@@ -3,6 +3,7 @@
 //! This service loads pricing data from LiteLLM's JSON format and provides
 //! unified cost calculation for all AI providers.
 
+mod authority;
 mod cache;
 mod events;
 mod loader;
@@ -24,6 +25,6 @@ pub(super) const REMOTE_LITELLM_PRICING_SOURCE: &str =
 // Re-export public types
 pub use service::PricingService;
 pub use types::{
-    CostRange, CostResult, CostType, LiteLLMModelInfo, PricingEventType, PricingStatistics,
-    PricingUpdateEvent,
+    CostRange, CostResult, CostType, LiteLLMModelInfo, PricingCostBreakdown, PricingCostEstimate,
+    PricingEventType, PricingStatistics, PricingUpdateEvent, PricingUsage,
 };
