@@ -119,7 +119,23 @@ alone does not make a third-party provider routeable; use the generic
 OpenAI-compatible path for compatible endpoints, or wire a code-based provider
 into the enum, dispatch, registry metadata, and factory.
 
-> The matrix below is validated against the provider registry and Tier 1 catalog. The source of truth for Tier 1 entries is [`catalog.rs`](./src/core/providers/registry/catalog.rs); Tier 2 identity and dispatch metadata lives in [`src/core/providers/registry/types.rs`](./src/core/providers/registry/types.rs), with construction branches in [`src/core/providers/factory/registry.rs`](./src/core/providers/factory/registry.rs). Capability columns describe which endpoints this crate exposes for the provider — `passthrough` means an implemented crate endpoint forwards the call to the upstream OpenAI-compatible endpoint without per-provider transformation. A generated matrix is tracked as a follow-up.
+> The provider and route-surface matrices below are validated against the provider registry and Tier 1 catalog. The source of truth for Tier 1 entries is [`catalog.rs`](./src/core/providers/registry/catalog.rs); Tier 2 identity and dispatch metadata lives in [`src/core/providers/registry/types.rs`](./src/core/providers/registry/types.rs), with construction branches in [`src/core/providers/factory/registry.rs`](./src/core/providers/factory/registry.rs). Cross-surface support lives in [`src/core/providers/registry/support_matrix.rs`](./src/core/providers/registry/support_matrix.rs). Capability columns describe which endpoints this crate exposes for the provider — `passthrough` means an implemented crate endpoint forwards the call to the upstream OpenAI-compatible endpoint without per-provider transformation.
+
+### Route-surface matrix
+
+| Selector class | HTTP chat / stream | HTTP embeddings / image | SDK chat / stream / embeddings | `completion()` chat / stream | Notes |
+|----------------|--------------------|--------------------------|--------------------------------|-------------------------------|-------|
+| `openai` | ✅ / ✅ | ✅ / ✅ | ✅ / ✅ / ✅ | ✅ / ✅ | Reference provider across all current surfaces. |
+| `anthropic` | ✅ / ✅ | – / – | ✅ / ✅ / – | ✅ / ✅ | Native chat and streaming only. |
+| `azure` | passthrough / passthrough | `providers-extra` / `providers-extra` | – / – / ✅ | passthrough / passthrough | SDK exposes Azure embeddings; SDK chat is not implemented. |
+| `azure_ai` | passthrough / passthrough | `providers-extra` / `providers-extra` | – / – / – | `providers-extra` / `providers-extra` | `completion()` supports `azure_ai/` and `azure-ai/` routes when the native feature is enabled. |
+| `bedrock` | ✅ / ✅ | ✅ / – | – / – / – | – / – | SDK Bedrock and public `completion()` routing are not implemented. |
+| `mistral`, `cloudflare`, `cohere`, `vertex_ai`, `gemini`, `fal_ai`, `replicate` | provider-specific | provider-specific | – / – / – | – / – | See `support_matrix.rs` for feature-gated HTTP support. |
+| `google` / SDK `Google` | – / – | – / – | – / – / – | – / – | Google/Gemini SDK chat is intentionally unsupported until a real adapter exists. |
+| Default catalog dynamic routes: `openrouter`, `deepseek`, `moonshot`, `minimax`, `zhipu`, `groq`, `xiaomi_mimo`, `xai` | passthrough / passthrough | – / – | – / – / – | ✅ / ✅ | OpenAI-compatible routes wired into default `completion()` routing. |
+| Other Tier 1 catalog providers | passthrough / passthrough | – / – | – / – / – | – / – | HTTP gateway chat/stream only unless routed through explicit OpenAI-compatible config. |
+| SDK `Custom` | – / – | – / – | – / – / ✅ | – / – | SDK custom providers support embeddings when `base_url` is configured. |
+| SDK `Ollama` | – / – | – / – | – / ✅ / – | – / – | SDK streaming uses the OpenAI-compatible stream parser; SDK chat is not implemented. |
 
 ### Tier 2 — code-based providers
 

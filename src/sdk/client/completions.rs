@@ -5,6 +5,8 @@ use super::provider_payloads::{
     build_anthropic_request_body, build_openai_request_body, convert_anthropic_response,
     convert_messages_to_anthropic,
 };
+use super::routing::{sdk_provider_supports_surface, unsupported_sdk_surface_error};
+use crate::core::providers::registry::ProviderRouteSurface;
 use crate::sdk::{errors::*, types::*};
 use futures::StreamExt;
 use serde::de::DeserializeOwned;
@@ -96,6 +98,13 @@ impl LLMClient {
 
         debug!("Executing chat request with provider: {}", provider_id);
 
+        if !sdk_provider_supports_surface(provider, ProviderRouteSurface::SdkChat) {
+            return Err(unsupported_sdk_surface_error(
+                provider,
+                ProviderRouteSurface::SdkChat,
+            ));
+        }
+
         match provider.provider_type {
             crate::sdk::config::ProviderType::Anthropic => {
                 self.call_anthropic_api(provider, request).await
@@ -120,6 +129,13 @@ impl LLMClient {
         messages: Vec<Message>,
     ) -> Result<Pin<Box<dyn futures::Stream<Item = Result<ChatChunk>> + Send>>> {
         let provider = self.provider_config(provider_id)?;
+
+        if !sdk_provider_supports_surface(provider, ProviderRouteSurface::SdkChatStream) {
+            return Err(unsupported_sdk_surface_error(
+                provider,
+                ProviderRouteSurface::SdkChatStream,
+            ));
+        }
 
         match provider.provider_type {
             crate::sdk::config::ProviderType::OpenAI | crate::sdk::config::ProviderType::Ollama => {
@@ -482,10 +498,10 @@ impl LLMClient {
         provider: &crate::sdk::config::SdkProviderConfig,
         _request: SdkChatRequest,
     ) -> Result<ChatResponse> {
-        Err(SDKError::ProviderError(format!(
-            "Provider '{}' (Google) is not implemented in SDK client",
-            provider.id
-        )))
+        Err(unsupported_sdk_surface_error(
+            provider,
+            ProviderRouteSurface::SdkChat,
+        ))
     }
 }
 

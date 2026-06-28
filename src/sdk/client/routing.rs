@@ -2,6 +2,7 @@
 
 use super::llm_client::LLMClient;
 use super::types::{LoadBalancingStrategy, ProviderStats};
+use crate::core::providers::registry::{ProviderRouteSurface, supports_provider_surface};
 use crate::core::router::UnifiedRouter;
 use crate::core::router::UnifiedRoutingStrategy;
 use crate::core::router::deployment::DeploymentId;
@@ -31,7 +32,14 @@ impl LLMClient {
         }
 
         if let Some(provider) = self.default_enabled_provider() {
-            return Ok(provider);
+            return if sdk_provider_supports_surface(provider, ProviderRouteSurface::SdkChat) {
+                Ok(provider)
+            } else {
+                Err(unsupported_sdk_surface_error(
+                    provider,
+                    ProviderRouteSurface::SdkChat,
+                ))
+            };
         }
 
         self.load_balancer
@@ -45,7 +53,14 @@ impl LLMClient {
         _messages: &[Message],
     ) -> Result<&crate::sdk::config::SdkProviderConfig> {
         if let Some(provider) = self.default_enabled_provider() {
-            return Ok(provider);
+            return if sdk_provider_supports_surface(provider, ProviderRouteSurface::SdkChatStream) {
+                Ok(provider)
+            } else {
+                Err(unsupported_sdk_surface_error(
+                    provider,
+                    ProviderRouteSurface::SdkChatStream,
+                ))
+            };
         }
 
         self.load_balancer
@@ -65,8 +80,14 @@ impl LoadBalancer {
         stats: &Arc<RwLock<HashMap<String, ProviderStats>>>,
         model: Option<&str>,
     ) -> Result<&'a SdkProviderConfig> {
-        self.select_provider_with_capability(providers, stats, model, supports_chat)
-            .await
+        self.select_provider_with_capability(
+            providers,
+            stats,
+            model,
+            ProviderRouteSurface::SdkChat,
+            supports_chat,
+        )
+        .await
     }
 
     /// Select a streaming-capable provider using the configured load balancing strategy.
@@ -75,8 +96,14 @@ impl LoadBalancer {
         providers: &'a [SdkProviderConfig],
         stats: &Arc<RwLock<HashMap<String, ProviderStats>>>,
     ) -> Result<&'a SdkProviderConfig> {
-        self.select_provider_with_capability(providers, stats, None, supports_stream)
-            .await
+        self.select_provider_with_capability(
+            providers,
+            stats,
+            None,
+            ProviderRouteSurface::SdkChatStream,
+            supports_stream,
+        )
+        .await
     }
 
     async fn select_provider_with_capability<'a>(
@@ -84,20 +111,30 @@ impl LoadBalancer {
         providers: &'a [SdkProviderConfig],
         stats: &Arc<RwLock<HashMap<String, ProviderStats>>>,
         model: Option<&str>,
+        surface: ProviderRouteSurface,
         supports_capability: impl Fn(&SdkProviderConfig) -> bool,
     ) -> Result<&'a SdkProviderConfig> {
-        let enabled_providers: Vec<&SdkProviderConfig> = providers
+        let model_candidates: Vec<&SdkProviderConfig> = providers
             .iter()
             .filter(|provider| {
                 provider.enabled
-                    && supports_capability(provider)
                     && model.is_none_or(|model| {
                         provider.models.iter().any(|candidate| candidate == model)
                     })
             })
             .collect();
 
+        let enabled_providers: Vec<&SdkProviderConfig> = model_candidates
+            .iter()
+            .copied()
+            .filter(|provider| supports_capability(provider))
+            .collect();
+
         if enabled_providers.is_empty() {
+            if let Some(provider) = model_candidates.first() {
+                return Err(unsupported_sdk_surface_error(provider, surface));
+            }
+
             return match model {
                 Some(model) => Err(SDKError::ModelNotFound(format!(
                     "Model '{}' not supported by any provider",
@@ -168,17 +205,56 @@ impl LoadBalancer {
 }
 
 fn supports_chat(provider: &SdkProviderConfig) -> bool {
-    matches!(
-        provider.provider_type,
-        ProviderType::Anthropic | ProviderType::OpenAI | ProviderType::Google
-    )
+    sdk_provider_supports_surface(provider, ProviderRouteSurface::SdkChat)
 }
 
 fn supports_stream(provider: &SdkProviderConfig) -> bool {
-    matches!(
-        provider.provider_type,
-        ProviderType::Anthropic | ProviderType::OpenAI | ProviderType::Ollama
-    )
+    sdk_provider_supports_surface(provider, ProviderRouteSurface::SdkChatStream)
+}
+
+pub(crate) fn sdk_provider_supports_surface(
+    provider: &SdkProviderConfig,
+    surface: ProviderRouteSurface,
+) -> bool {
+    supports_provider_surface(&sdk_provider_matrix_selector(provider), surface)
+}
+
+pub(crate) fn sdk_provider_matrix_selector(provider: &SdkProviderConfig) -> String {
+    match &provider.provider_type {
+        ProviderType::OpenAI => "openai",
+        ProviderType::Anthropic => "anthropic",
+        ProviderType::Azure => "azure",
+        ProviderType::Google => "google",
+        ProviderType::Cohere => "cohere",
+        ProviderType::HuggingFace => "huggingface",
+        ProviderType::Ollama => "ollama",
+        ProviderType::AwsBedrock => "bedrock",
+        ProviderType::GoogleVertex => "vertex_ai",
+        ProviderType::Mistral => "mistral",
+        ProviderType::Custom(_) => "sdk_custom",
+    }
+    .to_string()
+}
+
+pub(crate) fn unsupported_sdk_surface_error(
+    provider: &SdkProviderConfig,
+    surface: ProviderRouteSurface,
+) -> SDKError {
+    SDKError::NotSupported(format!(
+        "SDK {} is not supported for provider '{}' ({:?})",
+        sdk_surface_name(surface),
+        provider.id,
+        provider.provider_type
+    ))
+}
+
+fn sdk_surface_name(surface: ProviderRouteSurface) -> &'static str {
+    match surface {
+        ProviderRouteSurface::SdkChat => "chat",
+        ProviderRouteSurface::SdkChatStream => "chat streaming",
+        ProviderRouteSurface::SdkEmbeddings => "embeddings",
+        _ => "surface",
+    }
 }
 
 fn sdk_weight_to_router_weight(weight: f32) -> u32 {

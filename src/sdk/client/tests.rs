@@ -220,6 +220,27 @@ async fn test_sdk_chat_routing_skips_non_chat_provider_with_matching_model() {
 }
 
 #[tokio::test]
+async fn test_sdk_chat_routing_rejects_google_as_unsupported() {
+    let providers = vec![test_provider_config(
+        "google",
+        ProviderType::Google,
+        "gemini-pro",
+    )];
+    let stats = Arc::new(RwLock::new(HashMap::<String, ProviderStats>::new()));
+    let load_balancer = LoadBalancer::new(LoadBalancingStrategy::RoundRobin);
+
+    let err = load_balancer
+        .select_chat_provider(&providers, &stats, Some("gemini-pro"))
+        .await
+        .unwrap_err();
+
+    assert!(
+        matches!(err, SDKError::NotSupported(ref message) if message.contains("google")),
+        "expected Google SDK chat to be explicitly unsupported, got {err:?}"
+    );
+}
+
+#[tokio::test]
 async fn test_sdk_stream_routing_skips_non_stream_provider() {
     let providers = vec![
         test_provider_config("google", ProviderType::Google, "gemini-pro"),
@@ -234,6 +255,33 @@ async fn test_sdk_stream_routing_skips_non_stream_provider() {
         .unwrap();
 
     assert_eq!(selected.id, "openai");
+}
+
+#[tokio::test]
+async fn test_provider_selection_rejects_unsupported_default_provider() {
+    let config = ConfigBuilder::new()
+        .default_provider("google")
+        .add_provider(test_provider_config(
+            "google",
+            ProviderType::Google,
+            "gemini-pro",
+        ))
+        .build();
+
+    let client = LLMClient::new(config).unwrap();
+    let err = client
+        .select_provider(&SdkChatRequest {
+            model: String::new(),
+            messages: Vec::new(),
+            options: ChatOptions::default(),
+        })
+        .await
+        .unwrap_err();
+
+    assert!(
+        matches!(err, SDKError::NotSupported(ref message) if message.contains("google")),
+        "expected unsupported default provider error, got {err:?}"
+    );
 }
 
 #[tokio::test]
@@ -462,6 +510,33 @@ async fn test_execute_chat_request_anthropic_malformed_data_uri_returns_invalid_
     assert!(
         matches!(err, SDKError::InvalidRequest(_)),
         "expected InvalidRequest, got {err:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_execute_chat_request_google_returns_not_supported() {
+    let config = ConfigBuilder::new()
+        .add_provider(test_provider_config(
+            "google",
+            ProviderType::Google,
+            "gemini-pro",
+        ))
+        .build();
+
+    let client = LLMClient::new(config).unwrap();
+    let request = SdkChatRequest {
+        model: "gemini-pro".to_string(),
+        messages: vec![],
+        options: ChatOptions::default(),
+    };
+
+    let err = client
+        .execute_chat_request("google", request)
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(err, SDKError::NotSupported(ref message) if message.contains("google")),
+        "expected Google SDK chat to be NotSupported, got {err:?}"
     );
 }
 
