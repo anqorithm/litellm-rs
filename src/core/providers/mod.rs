@@ -392,6 +392,9 @@ macro_rules! dispatch_provider_selective {
     };
 }
 
+mod audio_dispatch;
+mod capability_dispatch;
+
 /// Unified built-in Provider enum (Rust-idiomatic design).
 ///
 /// This enum provides zero-cost abstractions and type safety for all providers.
@@ -766,6 +769,6 @@ mod tests {
         assert!(provider.supports_capability(&ProviderCapability::ChatCompletion));
         assert!(provider.supports_capability(&ProviderCapability::ChatCompletionStream));
         assert!(provider.supports_capability(&ProviderCapability::Embeddings));
-        assert!(!provider.supports_capability(&ProviderCapability::TextToSpeech));
+        assert!(provider.supports_capability(&ProviderCapability::TextToSpeech));
     }
 }
