@@ -14,27 +14,31 @@ GH-727 / #727
 - [x] `SP727-T1` Owner: coordinator. Done when: `specs/GH727/product.md`, `tech.md`, and `tasks.md` exist and pass SpecRail packet validation. Verify: from this repository with a local SpecRail checkout, `SPEC_RAIL=/path/to/specrail; python3 "$SPEC_RAIL/checks/check_workflow.py" --repo "$SPEC_RAIL" --spec-dir "$PWD/specs/GH727"`.
 - [x] `SP727-T2` Owner: coordinator. Done when: `src/core/providers/thinking/tests.rs` is split into `tests/mod.rs` and provider-specific child modules. Verify: `git diff --stat`; `wc -l src/core/providers/thinking/tests/*.rs`.
 - [x] `SP727-T3` Owner: coordinator. Done when: moved tests compile and pass with unchanged assertions. Verify: `cargo test core::providers::thinking --lib`.
-- [ ] `SP727-T4` Owner: verification owner. Done when: formatting, all-features check, PR CI, and review-thread gate pass. Verify: `cargo fmt --all -- --check`; `cargo check --all-features --locked`; GitHub PR CI and review-thread query.
+- [x] `SP727-T4` Owner: verification owner. Done when: formatting, all-features check, PR CI, and review-thread gate pass. Verify: `cargo fmt --all -- --check`; `cargo check --all-features --locked`; GitHub PR CI and review-thread query.
+- [x] `SP727-T5` Owner: coordinator. Done when: `src/core/providers/azure/assistants.rs` delegates tests with `#[path = "assistants_tests.rs"] mod tests;`. Verify: `git diff -- src/core/providers/azure/assistants.rs`.
+- [x] `SP727-T6` Owner: coordinator. Done when: original inline Azure Assistants tests are moved to `src/core/providers/azure/assistants_tests.rs` without changing assertions. Verify: `rg -n "fn test_" src/core/providers/azure/assistants_tests.rs`.
+- [x] `SP727-T7` Owner: verification owner. Done when: both Azure Assistants files are below U-16's 800-line ceiling and focused tests pass. Verify: `wc -l src/core/providers/azure/assistants.rs src/core/providers/azure/assistants_tests.rs`; `cargo test core::providers::azure::assistants --lib --all-features`.
+- [ ] `SP727-T8` Owner: verification owner. Done when: SpecRail, formatting, all-features check, PR CI, and review-thread gate pass. Verify: `SPEC_RAIL=/path/to/specrail; python3 "$SPEC_RAIL/checks/check_workflow.py" --repo "$SPEC_RAIL" --spec-dir "$PWD/specs/GH727"`; `cargo fmt --all -- --check`; `cargo check --all-features --locked`; GitHub PR CI and review-thread query.
 
 ## 并行拆分
 
-This is a serial writable lane for one test file family. Other #727 large-file tranches may be planned read-only in parallel, but they must not edit this branch.
+This is a serial writable lane for one Azure Assistants test file family. Other #727 large-file tranches may be planned read-only in parallel, but they must not edit this branch.
 
 Writable ownership for this lane:
 
 - `specs/GH727/`
-- `src/core/providers/thinking/tests.rs`
-- `src/core/providers/thinking/tests/`
+- `src/core/providers/azure/assistants.rs`
+- `src/core/providers/azure/assistants_tests.rs`
 
 ## 验证
 
 - SpecRail packet validation.
 - `cargo fmt --all -- --check`
-- `cargo test core::providers::thinking --lib`
+- `cargo test core::providers::azure::assistants --lib --all-features`
 - `cargo check --all-features --locked`
 - PR CI and GraphQL review-thread gate before merge.
 
 ## Handoff Notes
 
-This PR is the first #727 maintenance tranche and should not use `Closes #727`.
+This PR is the next #727 maintenance tranche and should not use `Closes #727`.
 The issue should remain open until enough large-file tranches are completed or the tracker is explicitly closed.
