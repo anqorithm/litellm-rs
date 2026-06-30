@@ -63,6 +63,44 @@ fn openai_like_prefixed_chat_reservation_uses_provider_pricing() {
 }
 
 #[test]
+fn openai_chat_reservation_uses_exact_tiktoken_prompt_count() {
+    let budget = UnifiedBudgetLimits::new();
+    let messages = vec![ChatMessage {
+        role: MessageRole::User,
+        content: Some(MessageContent::Text("Hello, how are you?".to_string())),
+        name: None,
+        function_call: None,
+        tool_calls: None,
+        tool_call_id: None,
+        audio: None,
+    }];
+    let prompt_tokens =
+        estimate_chat_prompt_tokens("gpt-3.5-turbo", &messages, None, None, None, None);
+    assert_eq!(prompt_tokens, 13);
+
+    let expected = estimate_cost("gpt-3.5-turbo", "openai", prompt_tokens, Some(10))
+        .unwrap()
+        .max_cost;
+    budget.providers.set_provider_limit(
+        "openai",
+        ProviderLimitConfig::new(expected * 2.0, ResetPeriod::Monthly),
+    );
+    let mut request = ChatCompletionRequest {
+        model: "gpt-3.5-turbo".to_string(),
+        messages,
+        ..Default::default()
+    };
+    request.max_tokens = Some(10);
+
+    let reservation = reserve_chat_completion_budget(&budget, "openai", "gpt-3.5-turbo", &request)
+        .unwrap()
+        .unwrap();
+
+    assert!((reservation.reserved_amount() - expected).abs() < f64::EPSILON);
+    reservation.cancel();
+}
+
+#[test]
 fn chat_prompt_estimate_accounts_for_serialized_tool_parts() {
     let payload = "x".repeat(4_000);
     let messages = vec![ChatMessage {

@@ -1,7 +1,9 @@
 //! Tests for token counter functionality
 
 #[cfg(test)]
-use crate::core::models::openai::{ChatMessage, MessageContent, MessageRole};
+use crate::core::models::openai::{
+    ChatMessage, ContentPart, FunctionCall, ImageUrl, MessageContent, MessageRole, ToolCall,
+};
 use crate::utils::ai::counter::token_counter::TokenCounter;
 
 #[test]
@@ -31,7 +33,157 @@ fn test_chat_token_counting() {
         .count_chat_tokens("gpt-3.5-turbo", &messages)
         .unwrap();
     assert!(estimate.input_tokens > 0);
+    assert!(!estimate.is_approximate);
+    assert_eq!(estimate.input_tokens, 13);
+}
+
+#[test]
+fn test_openai_completion_token_count_uses_tiktoken() {
+    let counter = TokenCounter::new();
+
+    let estimate = counter
+        .count_completion_tokens("gpt-3.5-turbo", "Hello world")
+        .unwrap();
+
+    assert_eq!(estimate.input_tokens, 2);
+    assert_eq!(estimate.total_tokens, 2);
+    assert!(!estimate.is_approximate);
+    assert_eq!(estimate.confidence, 1.0);
+}
+
+#[test]
+fn test_openai_chat_system_message_uses_tiktoken() {
+    let counter = TokenCounter::new();
+    let messages = vec![ChatMessage {
+        role: MessageRole::System,
+        content: Some(MessageContent::Text("You are a bot.".to_string())),
+        name: None,
+        function_call: None,
+        tool_calls: None,
+        tool_call_id: None,
+        audio: None,
+    }];
+
+    let estimate = counter
+        .count_chat_tokens("openai/gpt-3.5-turbo", &messages)
+        .unwrap();
+
+    assert_eq!(estimate.input_tokens, 12);
+    assert!(!estimate.is_approximate);
+}
+
+#[test]
+fn test_multimodal_chat_token_count_remains_marked_approximate() {
+    let counter = TokenCounter::new();
+    let messages = vec![ChatMessage {
+        role: MessageRole::User,
+        content: Some(MessageContent::Parts(vec![ContentPart::ImageUrl {
+            image_url: ImageUrl {
+                url: "https://example.com/image.png".to_string(),
+                detail: Some("high".to_string()),
+            },
+        }])),
+        name: None,
+        function_call: None,
+        tool_calls: None,
+        tool_call_id: None,
+        audio: None,
+    }];
+
+    let estimate = counter.count_chat_tokens("gpt-4o", &messages).unwrap();
+
     assert!(estimate.is_approximate);
+    assert!(estimate.input_tokens >= 85);
+}
+
+#[test]
+fn test_text_part_chat_token_count_remains_marked_approximate() {
+    let counter = TokenCounter::new();
+    let messages = vec![ChatMessage {
+        role: MessageRole::User,
+        content: Some(MessageContent::Parts(vec![ContentPart::Text {
+            text: "Hello".to_string(),
+        }])),
+        name: None,
+        function_call: None,
+        tool_calls: None,
+        tool_call_id: None,
+        audio: None,
+    }];
+
+    let estimate = counter.count_chat_tokens("gpt-4o", &messages).unwrap();
+
+    assert!(estimate.is_approximate);
+    assert!(estimate.confidence < 1.0);
+}
+
+#[test]
+fn test_non_openai_token_count_remains_marked_approximate() {
+    let counter = TokenCounter::new();
+
+    let estimate = counter
+        .count_completion_tokens("claude-3-opus", "Hello world")
+        .unwrap();
+
+    assert!(estimate.is_approximate);
+    assert!(estimate.input_tokens > 0);
+}
+
+#[test]
+fn test_unknown_openai_like_model_remains_marked_approximate() {
+    let counter = TokenCounter::new();
+
+    let estimate = counter
+        .count_completion_tokens("gpt-future-unknown", "Hello world")
+        .unwrap();
+
+    assert!(estimate.is_approximate);
+    assert!(estimate.confidence < 1.0);
+}
+
+#[test]
+fn test_tool_call_chat_token_count_remains_marked_approximate() {
+    let counter = TokenCounter::new();
+    let messages = vec![ChatMessage {
+        role: MessageRole::Assistant,
+        content: None,
+        name: None,
+        function_call: None,
+        tool_calls: Some(vec![ToolCall {
+            id: "call_123".to_string(),
+            tool_type: "function".to_string(),
+            function: FunctionCall {
+                name: "lookup".to_string(),
+                arguments: r#"{"query":"hello"}"#.to_string(),
+            },
+        }]),
+        tool_call_id: None,
+        audio: None,
+    }];
+
+    let estimate = counter.count_chat_tokens("gpt-4o", &messages).unwrap();
+
+    assert!(estimate.is_approximate);
+    assert!(estimate.confidence < 1.0);
+}
+
+#[test]
+fn test_tool_result_chat_token_count_remains_marked_approximate() {
+    let counter = TokenCounter::new();
+    let messages = vec![ChatMessage {
+        role: MessageRole::Tool,
+        content: Some(MessageContent::Text("done".to_string())),
+        name: None,
+        function_call: None,
+        tool_calls: None,
+        tool_call_id: Some("call_123".to_string()),
+        audio: None,
+    }];
+
+    let estimate = counter.count_chat_tokens("gpt-4o", &messages).unwrap();
+
+    assert!(estimate.is_approximate);
+    assert!(estimate.confidence < 1.0);
 }
 
 #[test]
