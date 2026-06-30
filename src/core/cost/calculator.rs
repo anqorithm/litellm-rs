@@ -175,6 +175,7 @@ fn pricing_usage_from_cost_usage(usage: &UsageTokens) -> PricingUsage {
         image_tokens: usage.image_tokens,
         reasoning_tokens: usage.reasoning_tokens,
         output_image_count: None,
+        output_image_pricing_keys: Vec::new(),
     }
 }
 

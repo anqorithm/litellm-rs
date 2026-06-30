@@ -84,6 +84,7 @@ pub struct PricingUsage {
     pub image_tokens: Option<u32>,
     pub reasoning_tokens: Option<u32>,
     pub output_image_count: Option<u32>,
+    pub output_image_pricing_keys: Vec<String>,
 }
 
 impl PricingUsage {
@@ -99,6 +100,7 @@ impl PricingUsage {
             image_tokens: None,
             reasoning_tokens: None,
             output_image_count: None,
+            output_image_pricing_keys: Vec::new(),
         }
     }
 
@@ -135,6 +137,7 @@ impl From<&crate::core::types::responses::Usage> for PricingUsage {
                 .as_ref()
                 .and_then(|details| details.reasoning_tokens),
             output_image_count: None,
+            output_image_pricing_keys: Vec::new(),
         }
     }
 }

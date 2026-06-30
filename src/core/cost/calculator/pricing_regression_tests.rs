@@ -124,6 +124,16 @@ fn test_litellm_pricing_rejects_negative_flat_output_image_pricing() {
 }
 
 #[test]
+fn test_generic_cost_fails_closed_for_flat_image_without_image_count() {
+    let mut usage = UsageTokens::new(0, 0);
+    usage.image_tokens = Some(1);
+
+    let result = generic_cost_per_token("amazon.nova-canvas-v1:0", &usage, "bedrock");
+
+    assert!(matches!(result, Err(CostError::MissingPricing { .. })));
+}
+
+#[test]
 fn test_litellm_pricing_allows_single_missing_side_for_embedding() {
     // Embeddings can have only input-side token pricing.
     let info = model_info_from_json(serde_json::json!({

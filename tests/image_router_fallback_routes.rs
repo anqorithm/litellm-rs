@@ -189,6 +189,27 @@ mod tests {
         }
     }
 
+    fn token_priced_image_model_info(input_cost_per_token: f64) -> LiteLLMModelInfo {
+        LiteLLMModelInfo {
+            max_tokens: None,
+            max_input_tokens: None,
+            max_output_tokens: None,
+            input_cost_per_token: Some(input_cost_per_token),
+            output_cost_per_token: Some(0.0),
+            input_cost_per_character: None,
+            output_cost_per_character: None,
+            cost_per_second: None,
+            litellm_provider: "openai".to_string(),
+            mode: "image_generation".to_string(),
+            supports_function_calling: None,
+            supports_vision: None,
+            supports_streaming: None,
+            supports_parallel_function_calling: None,
+            supports_system_message: None,
+            extra: HashMap::new(),
+        }
+    }
+
     fn image_edit_multipart_body(boundary: &str) -> Vec<u8> {
         image_edit_multipart_body_for_model(boundary, "gpt-image-1-mini", 1)
     }
@@ -377,6 +398,118 @@ mod tests {
             .map(|usage| usage.current_spend)
             .unwrap_or_default();
         assert!((spent - 0.12).abs() < f64::EPSILON);
+        mock.stop().await;
+    }
+
+    #[tokio::test]
+    async fn image_generation_allows_token_priced_image_model_without_flat_price() {
+        let mock = MockImageServer::start().await;
+        let state = build_test_state(vec![openai_image_provider_with_mapping(
+            "openai-primary",
+            &mock.base_url,
+            "token-image-alias",
+            "token-priced-image-model",
+        )])
+        .await;
+        state.pricing.add_custom_model(
+            "token-priced-image-model".to_string(),
+            token_priced_image_model_info(0.01),
+        );
+        state.budget_limits.providers.set_provider_limit(
+            "openai-primary",
+            ProviderLimitConfig::new(100.0, ResetPeriod::Monthly),
+        );
+        let budget_limits = state.budget_limits.clone();
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(state))
+                .configure(litellm_rs::server::routes::ai::configure_routes),
+        )
+        .await;
+
+        let resp = test::call_service(
+            &app,
+            test::TestRequest::post()
+                .uri("/v1/images/generations")
+                .set_json(json!({
+                    "model": "token-image-alias",
+                    "prompt": "make an icon",
+                    "size": "1024x1024"
+                }))
+                .to_request(),
+        )
+        .await;
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(mock.paths(), vec!["/v1/images/generations".to_string()]);
+        let spent = budget_limits
+            .providers
+            .get_provider_usage("openai-primary")
+            .map(|usage| usage.current_spend)
+            .unwrap_or_default();
+        assert!((spent - 0.03).abs() < f64::EPSILON);
+        mock.stop().await;
+    }
+
+    #[tokio::test]
+    async fn image_generation_records_matching_flat_output_image_variant_spend() {
+        let mock = MockImageServer::start().await;
+        let state = build_test_state(vec![openai_image_provider_with_mapping(
+            "openai-primary",
+            &mock.base_url,
+            "flat-variant-alias",
+            "flat-variant-model",
+        )])
+        .await;
+        state.pricing.add_custom_model(
+            "512-x-512/flat-variant-model".to_string(),
+            flat_image_model_info(0.05),
+        );
+        state.pricing.add_custom_model(
+            "1024-x-1024/flat-variant-model".to_string(),
+            flat_image_model_info(0.10),
+        );
+        state.budget_limits.providers.set_provider_limit(
+            "openai-primary",
+            ProviderLimitConfig::new(100.0, ResetPeriod::Monthly),
+        );
+        let budget_limits = state.budget_limits.clone();
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(state))
+                .configure(litellm_rs::server::routes::ai::configure_routes),
+        )
+        .await;
+
+        let resp = test::call_service(
+            &app,
+            test::TestRequest::post()
+                .uri("/v1/images/generations")
+                .set_json(json!({
+                    "model": "flat-variant-alias",
+                    "prompt": "make an icon",
+                    "size": "512x512",
+                    "n": 2
+                }))
+                .to_request(),
+        )
+        .await;
+
+        if resp.status() != StatusCode::OK {
+            let status = resp.status();
+            let body = test::read_body(resp).await;
+            panic!(
+                "expected variant image generation to succeed, got {status}: {}",
+                String::from_utf8_lossy(&body)
+            );
+        }
+        assert_eq!(mock.paths(), vec!["/v1/images/generations".to_string()]);
+        let spent = budget_limits
+            .providers
+            .get_provider_usage("openai-primary")
+            .map(|usage| usage.current_spend)
+            .unwrap_or_default();
+        assert!((spent - 0.10).abs() < f64::EPSILON);
         mock.stop().await;
     }
 
