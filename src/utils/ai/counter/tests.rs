@@ -97,6 +97,27 @@ fn test_multimodal_chat_token_count_remains_marked_approximate() {
 }
 
 #[test]
+fn test_text_part_chat_token_count_remains_marked_approximate() {
+    let counter = TokenCounter::new();
+    let messages = vec![ChatMessage {
+        role: MessageRole::User,
+        content: Some(MessageContent::Parts(vec![ContentPart::Text {
+            text: "Hello".to_string(),
+        }])),
+        name: None,
+        function_call: None,
+        tool_calls: None,
+        tool_call_id: None,
+        audio: None,
+    }];
+
+    let estimate = counter.count_chat_tokens("gpt-4o", &messages).unwrap();
+
+    assert!(estimate.is_approximate);
+    assert!(estimate.confidence < 1.0);
+}
+
+#[test]
 fn test_non_openai_token_count_remains_marked_approximate() {
     let counter = TokenCounter::new();
 

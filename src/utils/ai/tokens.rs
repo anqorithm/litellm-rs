@@ -1,7 +1,7 @@
 use crate::core::providers::unified_provider::ProviderError;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tiktoken_rs::{CoreBPE, bpe_for_model, cl100k_base_singleton};
+use tiktoken_rs::{CoreBPE, bpe_for_model};
 
 #[derive(Debug, Clone)]
 pub enum TokenizerType {
@@ -173,7 +173,7 @@ impl TokenUtils {
     }
 
     fn encode_openai(model: &str, text: &str) -> Result<Vec<u32>, ProviderError> {
-        Ok(exact_bpe_for_model(model).encode_with_special_tokens(text))
+        Ok(exact_bpe_for_model(model)?.encode_with_special_tokens(text))
     }
 
     fn encode_claude(text: &str) -> Result<Vec<u32>, ProviderError> {
@@ -204,7 +204,7 @@ impl TokenUtils {
     }
 
     fn decode_openai(model: &str, tokens: &[u32]) -> Result<String, ProviderError> {
-        exact_bpe_for_model(model)
+        exact_bpe_for_model(model)?
             .decode(tokens)
             .map_err(|error| ProviderError::invalid_request("tokenizer", error.to_string()))
     }
@@ -406,9 +406,14 @@ impl TokenUtils {
     }
 }
 
-fn exact_bpe_for_model(model: &str) -> &'static CoreBPE {
+fn exact_bpe_for_model(model: &str) -> Result<&'static CoreBPE, ProviderError> {
     let model = tokenizer_model_name(model);
-    bpe_for_model(model).unwrap_or_else(|_| cl100k_base_singleton())
+    bpe_for_model(model).map_err(|error| {
+        ProviderError::invalid_request(
+            "tokenizer",
+            format!("unsupported OpenAI tokenizer model '{model}': {error}"),
+        )
+    })
 }
 
 fn tokenizer_model_name(model: &str) -> &str {
@@ -475,6 +480,17 @@ mod tests {
         let tokens = TokenUtils::encode("gpt-4", text).unwrap();
         let decoded = TokenUtils::decode("gpt-4", &tokens).unwrap();
         assert_eq!(decoded, text);
+    }
+
+    #[test]
+    fn test_openai_unknown_model_does_not_silently_fallback() {
+        let error = TokenUtils::encode("gpt-future-unknown", "Hello").unwrap_err();
+        match error {
+            ProviderError::InvalidRequest { message, .. } => {
+                assert!(message.contains("unsupported OpenAI tokenizer model"));
+            }
+            other => panic!("expected invalid tokenizer request, got {other}"),
+        }
     }
 
     #[test]

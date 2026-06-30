@@ -357,16 +357,7 @@ fn plain_text_message_content(message: &ChatMessage) -> Option<Option<String>> {
     match &message.content {
         None => Some(None),
         Some(MessageContent::Text(text)) => Some(Some(text.clone())),
-        Some(MessageContent::Parts(parts)) => {
-            let mut text = String::new();
-            for part in parts {
-                let ContentPart::Text { text: part_text } = part else {
-                    return None;
-                };
-                text.push_str(part_text);
-            }
-            Some(Some(text))
-        }
+        Some(MessageContent::Parts(_)) => None,
     }
 }
 
