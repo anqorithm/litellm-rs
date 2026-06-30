@@ -26,15 +26,12 @@ async fn stream_disconnect_without_usage_records_reserved_key_cost() {
         .expect("priced model should reserve budget");
     let reserved = reservation.reserved_amount();
 
-    record_stream_disconnect_spend_with_reservation(
-        &budget,
-        &keys,
-        Some(key_id),
-        "openai",
-        "gpt-4o",
-        None,
+    record_stream_disconnect_spend_with_reservation(usage_spend_settlement(
+        (&budget, &keys, Some(key_id)),
+        ("openai", "gpt-4o", None),
         Some(reservation),
-    )
+        None,
+    ))
     .await;
 
     let stats = keys
@@ -79,6 +76,7 @@ async fn finished_stream_without_usage_records_reserved_key_cost_after_output() 
         usage: None,
         saw_upstream_output: true,
         budget_reservation: Some(reservation),
+        key_budget_reservation: None,
     })
     .await;
 

@@ -4,11 +4,14 @@
 //! path: once a completion succeeds and its token usage is known, the served
 //! provider/model budget spend and the calling key's usage are recorded.
 
+mod key_budget;
 mod pricing;
 
 use uuid::Uuid;
 
-use crate::core::budget::{BudgetReservationError, UnifiedBudgetLimits, UnifiedBudgetReservation};
+use crate::core::budget::{
+    BudgetReservation, BudgetReservationError, UnifiedBudgetLimits, UnifiedBudgetReservation,
+};
 use crate::core::keys::KeyManager;
 use crate::core::models::openai::requests::ChatCompletionRequest;
 use crate::core::models::openai::{
@@ -21,6 +24,10 @@ use crate::utils::ai::counter::token_counter::TokenCounter;
 #[cfg(test)]
 use std::sync::LazyLock;
 
+pub(in crate::server::routes::ai) use key_budget::{
+    reserve_api_key_budget, reserve_api_key_budget_for_reservation,
+    settle_api_key_budget_reservation,
+};
 pub(super) use pricing::{
     pricing_identity_for_provider, record_pricing_usage_spend_with_reservation_with_pricing,
     reserve_embedding_budget_with_pricing, reserve_pricing_usage_budget_with_pricing,
@@ -413,7 +420,7 @@ fn fallback_message_tokens(messages: &[ChatMessage]) -> u32 {
     u32::try_from(chars.div_ceil(4).saturating_add(overhead)).unwrap_or(u32::MAX)
 }
 
-fn reservation_error_to_provider_error(
+pub(in crate::server::routes::ai) fn reservation_error_to_provider_error(
     error: BudgetReservationError,
     provider: &str,
     model: &str,
@@ -448,18 +455,26 @@ fn reservation_error_to_provider_error(
 /// response. When the cost cannot be priced, token usage is still recorded but
 /// budget spend is skipped rather than booked at $0 — under-counting a budget is
 /// worse than leaving it unchanged with a loud error.
-#[cfg(test)]
-pub(super) async fn record_completion_spend_with_reservation(
-    budget_limits: &UnifiedBudgetLimits,
-    key_manager: &KeyManager,
-    api_key_id: Option<Uuid>,
-    provider: &str,
-    model: &str,
-    usage: Option<&Usage>,
+pub(super) struct UsageSpendSettlement<'a> {
+    pub(super) budget_limits: &'a UnifiedBudgetLimits,
+    pub(super) key_manager: &'a KeyManager,
+    pub(super) api_key_id: Option<Uuid>,
+    pub(super) provider: &'a str,
+    pub(super) model: &'a str,
+    pub(super) usage: Option<&'a Usage>,
+    pub(super) budget_reservation: Option<UnifiedBudgetReservation>,
+    pub(super) key_budget_reservation: Option<BudgetReservation>,
+}
+
+pub(super) fn usage_spend_settlement<'a>(
+    core: (&'a UnifiedBudgetLimits, &'a KeyManager, Option<Uuid>),
+    usage: (&'a str, &'a str, Option<&'a Usage>),
     budget_reservation: Option<UnifiedBudgetReservation>,
-) {
-    record_completion_spend_with_reservation_with_pricing(
-        default_spend_pricing_service(),
+    key_budget_reservation: Option<BudgetReservation>,
+) -> UsageSpendSettlement<'a> {
+    let (budget_limits, key_manager, api_key_id) = core;
+    let (provider, model, usage) = usage;
+    UsageSpendSettlement {
         budget_limits,
         key_manager,
         api_key_id,
@@ -467,21 +482,34 @@ pub(super) async fn record_completion_spend_with_reservation(
         model,
         usage,
         budget_reservation,
+        key_budget_reservation,
+    }
+}
+
+#[cfg(test)]
+pub(super) async fn record_completion_spend_with_reservation(settlement: UsageSpendSettlement<'_>) {
+    record_completion_spend_with_reservation_with_pricing(
+        default_spend_pricing_service(),
+        settlement,
     )
     .await;
 }
 
-#[allow(clippy::too_many_arguments)]
 pub(super) async fn record_completion_spend_with_reservation_with_pricing(
     pricing_service: &PricingService,
-    budget_limits: &UnifiedBudgetLimits,
-    key_manager: &KeyManager,
-    api_key_id: Option<Uuid>,
-    provider: &str,
-    model: &str,
-    usage: Option<&Usage>,
-    budget_reservation: Option<UnifiedBudgetReservation>,
+    settlement: UsageSpendSettlement<'_>,
 ) {
+    let UsageSpendSettlement {
+        budget_limits,
+        key_manager,
+        api_key_id,
+        provider,
+        model,
+        usage,
+        budget_reservation,
+        key_budget_reservation,
+    } = settlement;
+
     let Some(usage) = usage else {
         record_reserved_spend_without_usage(
             key_manager,
@@ -489,6 +517,7 @@ pub(super) async fn record_completion_spend_with_reservation_with_pricing(
             provider,
             model,
             budget_reservation,
+            key_budget_reservation,
             "provider returned no usage for a successful completion",
         )
         .await;
@@ -524,6 +553,11 @@ pub(super) async fn record_completion_spend_with_reservation_with_pricing(
         } else {
             budget_limits.record_spend(provider, model, cost);
         }
+        settle_api_key_budget_reservation(
+            key_budget_reservation,
+            cost,
+            &format!("{provider}/{model}"),
+        );
     }
 
     if let Some(key_id) = api_key_id {
@@ -544,6 +578,7 @@ async fn record_reserved_spend_without_usage(
     provider: &str,
     model: &str,
     budget_reservation: Option<UnifiedBudgetReservation>,
+    key_budget_reservation: Option<BudgetReservation>,
     context: &str,
 ) {
     let Some(reservation) = budget_reservation else {
@@ -561,20 +596,25 @@ async fn record_reserved_spend_without_usage(
     {
         tracing::error!("failed to record reserved usage for key {key_id}: {error}");
     }
+    settle_api_key_budget_reservation(key_budget_reservation, reserved, context);
 }
 
 #[cfg(test)]
 pub(super) async fn record_stream_disconnect_spend_with_reservation(
-    budget_limits: &UnifiedBudgetLimits,
-    key_manager: &KeyManager,
-    api_key_id: Option<Uuid>,
-    provider: &str,
-    model: &str,
-    usage: Option<&Usage>,
-    budget_reservation: Option<UnifiedBudgetReservation>,
+    settlement: UsageSpendSettlement<'_>,
 ) {
     record_stream_disconnect_spend_with_reservation_with_pricing(
         default_spend_pricing_service(),
+        settlement,
+    )
+    .await;
+}
+
+pub(super) async fn record_stream_disconnect_spend_with_reservation_with_pricing(
+    pricing_service: &PricingService,
+    settlement: UsageSpendSettlement<'_>,
+) {
+    let UsageSpendSettlement {
         budget_limits,
         key_manager,
         api_key_id,
@@ -582,31 +622,18 @@ pub(super) async fn record_stream_disconnect_spend_with_reservation(
         model,
         usage,
         budget_reservation,
-    )
-    .await;
-}
+        key_budget_reservation,
+    } = settlement;
 
-#[allow(clippy::too_many_arguments)]
-pub(super) async fn record_stream_disconnect_spend_with_reservation_with_pricing(
-    pricing_service: &PricingService,
-    budget_limits: &UnifiedBudgetLimits,
-    key_manager: &KeyManager,
-    api_key_id: Option<Uuid>,
-    provider: &str,
-    model: &str,
-    usage: Option<&Usage>,
-    budget_reservation: Option<UnifiedBudgetReservation>,
-) {
     if let Some(usage) = usage {
         record_completion_spend_with_reservation_with_pricing(
             pricing_service,
-            budget_limits,
-            key_manager,
-            api_key_id,
-            provider,
-            model,
-            Some(usage),
-            budget_reservation,
+            usage_spend_settlement(
+                (budget_limits, key_manager, api_key_id),
+                (provider, model, Some(usage)),
+                budget_reservation,
+                key_budget_reservation,
+            ),
         )
         .await;
         return;
@@ -618,6 +645,7 @@ pub(super) async fn record_stream_disconnect_spend_with_reservation_with_pricing
         provider,
         model,
         budget_reservation,
+        key_budget_reservation,
         "client disconnected before provider returned usage",
     )
     .await;
@@ -632,6 +660,7 @@ pub(super) struct StreamSpendSettlement<'a> {
     pub(super) usage: Option<&'a Usage>,
     pub(super) saw_upstream_output: bool,
     pub(super) budget_reservation: Option<UnifiedBudgetReservation>,
+    pub(super) key_budget_reservation: Option<BudgetReservation>,
 }
 
 #[cfg(test)]
@@ -658,18 +687,18 @@ pub(super) async fn record_finished_stream_spend_with_reservation_with_pricing(
         usage,
         saw_upstream_output,
         budget_reservation,
+        key_budget_reservation,
     } = settlement;
 
     if usage.is_some() || saw_upstream_output {
         record_stream_disconnect_spend_with_reservation_with_pricing(
             pricing_service,
-            budget_limits,
-            key_manager,
-            api_key_id,
-            provider,
-            model,
-            usage,
-            budget_reservation,
+            usage_spend_settlement(
+                (budget_limits, key_manager, api_key_id),
+                (provider, model, usage),
+                budget_reservation,
+                key_budget_reservation,
+            ),
         )
         .await;
         return;
@@ -677,13 +706,12 @@ pub(super) async fn record_finished_stream_spend_with_reservation_with_pricing(
 
     record_completion_spend_with_reservation_with_pricing(
         pricing_service,
-        budget_limits,
-        key_manager,
-        api_key_id,
-        provider,
-        model,
-        usage,
-        budget_reservation,
+        usage_spend_settlement(
+            (budget_limits, key_manager, api_key_id),
+            (provider, model, usage),
+            budget_reservation,
+            key_budget_reservation,
+        ),
     )
     .await;
 }
