@@ -1,6 +1,7 @@
 use crate::core::providers::unified_provider::ProviderError;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use tiktoken_rs::{CoreBPE, bpe_for_model, cl100k_base_singleton};
 
 #[derive(Debug, Clone)]
 pub enum TokenizerType {
@@ -104,7 +105,7 @@ impl TokenUtils {
         let tokenizer_type = Self::select_tokenizer(model)?;
 
         match tokenizer_type {
-            TokenizerType::OpenAI => Self::encode_openai(text),
+            TokenizerType::OpenAI => Self::encode_openai(model, text),
             TokenizerType::Claude => Self::encode_claude(text),
             TokenizerType::HuggingFace => Self::encode_huggingface(text),
             TokenizerType::Custom(_) => Self::encode_generic(text),
@@ -115,7 +116,7 @@ impl TokenUtils {
         let tokenizer_type = Self::select_tokenizer(model)?;
 
         match tokenizer_type {
-            TokenizerType::OpenAI => Self::decode_openai(tokens),
+            TokenizerType::OpenAI => Self::decode_openai(model, tokens),
             TokenizerType::Claude => Self::decode_claude(tokens),
             TokenizerType::HuggingFace => Self::decode_huggingface(tokens),
             TokenizerType::Custom(_) => Self::decode_generic(tokens),
@@ -142,7 +143,7 @@ impl TokenUtils {
         let tokenizer_type = Self::select_tokenizer(model)?;
 
         match tokenizer_type {
-            TokenizerType::OpenAI => Ok(Self::estimate_openai_tokens(text)),
+            TokenizerType::OpenAI => Ok(Self::encode_openai(model, text)?.len()),
             TokenizerType::Claude => Ok(Self::estimate_claude_tokens(text)),
             _ => Ok(Self::estimate_generic_tokens(text)),
         }
@@ -171,9 +172,8 @@ impl TokenUtils {
         Ok(total_tokens)
     }
 
-    fn encode_openai(text: &str) -> Result<Vec<u32>, ProviderError> {
-        let tokens: Vec<u32> = text.chars().enumerate().map(|(i, _)| i as u32).collect();
-        Ok(tokens)
+    fn encode_openai(model: &str, text: &str) -> Result<Vec<u32>, ProviderError> {
+        Ok(exact_bpe_for_model(model).encode_with_special_tokens(text))
     }
 
     fn encode_claude(text: &str) -> Result<Vec<u32>, ProviderError> {
@@ -203,13 +203,10 @@ impl TokenUtils {
         Ok(tokens)
     }
 
-    fn decode_openai(tokens: &[u32]) -> Result<String, ProviderError> {
-        let text: String = tokens
-            .iter()
-            .enumerate()
-            .map(|(i, _)| char::from(65 + (i % 26) as u8))
-            .collect();
-        Ok(text)
+    fn decode_openai(model: &str, tokens: &[u32]) -> Result<String, ProviderError> {
+        exact_bpe_for_model(model)
+            .decode(tokens)
+            .map_err(|error| ProviderError::invalid_request("tokenizer", error.to_string()))
     }
 
     fn decode_claude(tokens: &[u32]) -> Result<String, ProviderError> {
@@ -237,11 +234,6 @@ impl TokenUtils {
             .map(|(i, _)| char::from(33 + (i % 94) as u8))
             .collect();
         Ok(text)
-    }
-
-    fn estimate_openai_tokens(text: &str) -> usize {
-        let words = text.split_whitespace().count();
-        (words as f64 * 1.3).ceil() as usize
     }
 
     fn estimate_claude_tokens(text: &str) -> usize {
@@ -414,6 +406,18 @@ impl TokenUtils {
     }
 }
 
+fn exact_bpe_for_model(model: &str) -> &'static CoreBPE {
+    let model = tokenizer_model_name(model);
+    bpe_for_model(model).unwrap_or_else(|_| cl100k_base_singleton())
+}
+
+fn tokenizer_model_name(model: &str) -> &str {
+    model
+        .rsplit_once('/')
+        .map(|(_, model)| model)
+        .unwrap_or(model)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TokenUsage {
     pub prompt_tokens: usize,
@@ -462,7 +466,7 @@ mod tests {
     fn test_token_counting() {
         let text = "Hello world this is a test";
         let count = TokenUtils::count_tokens_for_text("gpt-4", text).unwrap();
-        assert!(count > 0);
+        assert_eq!(count, 6);
     }
 
     #[test]
@@ -470,7 +474,7 @@ mod tests {
         let text = "Hello world";
         let tokens = TokenUtils::encode("gpt-4", text).unwrap();
         let decoded = TokenUtils::decode("gpt-4", &tokens).unwrap();
-        assert_eq!(decoded.len(), text.len());
+        assert_eq!(decoded, text);
     }
 
     #[test]

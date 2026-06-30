@@ -4,6 +4,9 @@ use super::types::{ModelTokenConfig, TokenEstimate};
 use crate::core::models::openai::{ChatMessage, ContentPart, MessageContent};
 use crate::utils::error::gateway_error::{GatewayError, Result};
 use std::collections::HashMap;
+use tiktoken_rs::{
+    ChatCompletionRequestMessage, bpe_for_model, cl100k_base_singleton, num_tokens_from_messages,
+};
 
 /// Token counter for different models
 #[derive(Debug, Clone)]
@@ -26,6 +29,16 @@ impl TokenCounter {
         model: &str,
         messages: &[ChatMessage],
     ) -> Result<TokenEstimate> {
+        if let Some(total_tokens) = self.exact_chat_tokens(model, messages)? {
+            return Ok(TokenEstimate {
+                input_tokens: total_tokens,
+                output_tokens: None,
+                total_tokens,
+                is_approximate: false,
+                confidence: 1.0,
+            });
+        }
+
         let config = self.get_model_config(model)?;
         let mut total_tokens = config.request_overhead;
 
@@ -141,6 +154,16 @@ impl TokenCounter {
 
     /// Count tokens in completion request
     pub fn count_completion_tokens(&self, model: &str, prompt: &str) -> Result<TokenEstimate> {
+        if let Some(input_tokens) = exact_text_tokens(model, prompt)? {
+            return Ok(TokenEstimate {
+                input_tokens,
+                output_tokens: None,
+                total_tokens: input_tokens,
+                is_approximate: false,
+                confidence: 1.0,
+            });
+        }
+
         let config = self.get_model_config(model)?;
         let input_tokens = config.request_overhead + self.estimate_text_tokens(config, prompt);
 
@@ -155,6 +178,21 @@ impl TokenCounter {
 
     /// Count tokens in embedding request
     pub fn count_embedding_tokens(&self, model: &str, input: &[String]) -> Result<TokenEstimate> {
+        let exact_counts = input
+            .iter()
+            .map(|text| exact_text_tokens(model, text))
+            .collect::<Result<Vec<_>>>()?;
+        if exact_counts.iter().all(Option::is_some) {
+            let total_tokens = exact_counts.into_iter().flatten().sum();
+            return Ok(TokenEstimate {
+                input_tokens: total_tokens,
+                output_tokens: None,
+                total_tokens,
+                is_approximate: false,
+                confidence: 1.0,
+            });
+        }
+
         let config = self.get_model_config(model)?;
         let mut total_tokens = config.request_overhead;
 
@@ -256,12 +294,106 @@ impl TokenCounter {
     pub fn get_supported_models(&self) -> Vec<String> {
         self.model_configs.keys().cloned().collect()
     }
+
+    fn exact_chat_tokens(&self, model: &str, messages: &[ChatMessage]) -> Result<Option<u32>> {
+        let mut tiktoken_messages = Vec::with_capacity(messages.len());
+        for message in messages {
+            let Some(content) = plain_text_message_content(message) else {
+                return Ok(None);
+            };
+            tiktoken_messages.push(ChatCompletionRequestMessage {
+                role: ToString::to_string(&message.role),
+                content,
+                name: message.name.clone(),
+                function_call: message.function_call.as_ref().map(|function_call| {
+                    tiktoken_rs::FunctionCall {
+                        name: function_call.name.clone(),
+                        arguments: function_call.arguments.clone(),
+                    }
+                }),
+                tool_calls: message
+                    .tool_calls
+                    .as_deref()
+                    .unwrap_or_default()
+                    .iter()
+                    .map(|tool_call| tiktoken_rs::FunctionCall {
+                        name: tool_call.function.name.clone(),
+                        arguments: tool_call.function.arguments.clone(),
+                    })
+                    .collect(),
+                refusal: None,
+            });
+        }
+        match num_tokens_from_messages(tokenizer_model_name(model), &tiktoken_messages) {
+            Ok(tokens) => Ok(Some(usize_to_u32(tokens)?)),
+            Err(_) => Ok(None),
+        }
+    }
 }
 
 impl Default for TokenCounter {
     fn default() -> Self {
         Self::new()
     }
+}
+
+fn exact_text_tokens(model: &str, text: &str) -> Result<Option<u32>> {
+    match exact_bpe_for_model(model) {
+        Ok(bpe) => Ok(Some(usize_to_u32(bpe.count_with_special_tokens(text))?)),
+        Err(_) => Ok(None),
+    }
+}
+
+fn exact_bpe_for_model(model: &str) -> std::result::Result<&'static tiktoken_rs::CoreBPE, ()> {
+    let model = tokenizer_model_name(model);
+    bpe_for_model(model).or_else(|_| {
+        if is_openai_tokenizer_model(model) {
+            Ok(cl100k_base_singleton())
+        } else {
+            Err(())
+        }
+    })
+}
+
+fn plain_text_message_content(message: &ChatMessage) -> Option<Option<String>> {
+    match &message.content {
+        None => Some(None),
+        Some(MessageContent::Text(text)) => Some(Some(text.clone())),
+        Some(MessageContent::Parts(parts)) => {
+            let mut text = String::new();
+            for part in parts {
+                let ContentPart::Text { text: part_text } = part else {
+                    return None;
+                };
+                text.push_str(part_text);
+            }
+            Some(Some(text))
+        }
+    }
+}
+
+fn tokenizer_model_name(model: &str) -> &str {
+    model
+        .rsplit_once('/')
+        .map(|(_, model)| model)
+        .unwrap_or(model)
+}
+
+fn is_openai_tokenizer_model(model: &str) -> bool {
+    let model = model.to_ascii_lowercase();
+    model.starts_with("gpt-")
+        || model.starts_with("chatgpt-")
+        || model.starts_with("o1")
+        || model.starts_with("o3")
+        || model.starts_with("o4")
+        || model.starts_with("codex-")
+        || model.starts_with("text-")
+        || matches!(model.as_str(), "davinci" | "curie" | "babbage" | "ada")
+}
+
+fn usize_to_u32(value: usize) -> Result<u32> {
+    u32::try_from(value)
+        .map_err(|_| GatewayError::Config(format!("token count {value} exceeds u32 range")))
 }
 
 // ==================== Unit Tests ====================
@@ -433,7 +565,7 @@ mod tests {
         assert!(result.is_ok());
         let estimate = result.unwrap();
         assert!(estimate.input_tokens > 0);
-        assert!(estimate.is_approximate);
+        assert!(!estimate.is_approximate);
     }
 
     #[test]
@@ -442,8 +574,8 @@ mod tests {
         let result = counter.count_completion_tokens("gpt-4", "");
         assert!(result.is_ok());
         let estimate = result.unwrap();
-        // Should still have request overhead
-        assert!(estimate.input_tokens > 0);
+        assert_eq!(estimate.input_tokens, 0);
+        assert!(!estimate.is_approximate);
     }
 
     #[test]
@@ -477,7 +609,7 @@ mod tests {
 
         assert_eq!(estimate.total_tokens, estimate.input_tokens);
         assert!(estimate.output_tokens.is_none());
-        assert!(estimate.is_approximate);
+        assert!(!estimate.is_approximate);
     }
 
     // ==================== Embedding Token Counting Tests ====================
@@ -490,7 +622,8 @@ mod tests {
         assert!(result.is_ok());
         let estimate = result.unwrap();
         assert!(estimate.input_tokens > 0);
-        assert_eq!(estimate.confidence, 0.9);
+        assert_eq!(estimate.confidence, 1.0);
+        assert!(!estimate.is_approximate);
     }
 
     #[test]
