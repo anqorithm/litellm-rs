@@ -1,3 +1,8 @@
+use super::routes::{
+    custom_api_base_api_key_fallback, dynamic_provider_api_key_env_var,
+    resolve_dynamic_provider_api_key_from_sources, resolve_dynamic_provider_route,
+    uses_dynamic_openai_like_provider,
+};
 use super::*;
 
 #[test]
@@ -38,10 +43,49 @@ fn test_resolve_dynamic_route_for_zai_alias() {
     let options = CompletionOptions::default();
     let route = resolve_dynamic_provider_route("zai/glm-5", &options).unwrap();
 
-    assert_eq!(route.provider_type, "zhipu");
-    assert_eq!(route.provider_label, "Zhipu");
+    assert_eq!(route.provider_type, "zai");
+    assert_eq!(route.provider_label, "ZAI");
     assert_eq!(route.actual_model, "glm-5");
-    assert_eq!(route.api_base, "https://open.bigmodel.cn/api/paas/v4");
+    assert_eq!(route.api_base, "https://api.z.ai/api/paas/v4");
+}
+
+#[test]
+fn issue_760_resolves_litellm_openai_compatible_alias_routes() {
+    let options = CompletionOptions::default();
+    let cases = [
+        (
+            "together_ai/meta-llama/Llama-3.3-70B-Instruct-Turbo",
+            "together_ai",
+            "Together AI",
+            "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+            "https://api.together.xyz/v1",
+        ),
+        (
+            "fireworks_ai/accounts/fireworks/models/deepseek-v3",
+            "fireworks_ai",
+            "Fireworks AI",
+            "accounts/fireworks/models/deepseek-v3",
+            "https://api.fireworks.ai/inference/v1",
+        ),
+        (
+            "aiml/gpt-4o-mini",
+            "aiml",
+            "AIML API",
+            "gpt-4o-mini",
+            "https://api.aimlapi.com/v1",
+        ),
+    ];
+
+    for (model, provider_type, provider_label, actual_model, api_base) in cases {
+        let route = resolve_dynamic_provider_route(model, &options)
+            .unwrap_or_else(|| panic!("{model} route should resolve"));
+
+        assert_eq!(route.provider_type, provider_type);
+        assert_eq!(route.provider_label, provider_label);
+        assert_eq!(route.actual_model, actual_model);
+        assert_eq!(route.api_base, api_base);
+        assert!(uses_dynamic_openai_like_provider(&route));
+    }
 }
 
 #[test]
@@ -161,6 +205,18 @@ fn test_dynamic_provider_api_key_env_var_maps_named_routes() {
             "MINIMAX_API_KEY",
         ),
         ("zhipu/glm-5", "zhipu", "ZHIPU_API_KEY"),
+        ("zai/glm-5", "zai", "ZAI_API_KEY"),
+        (
+            "together_ai/meta-llama/Llama-3.3-70B-Instruct-Turbo",
+            "together_ai",
+            "TOGETHER_API_KEY",
+        ),
+        (
+            "fireworks_ai/accounts/fireworks/models/deepseek-v3",
+            "fireworks_ai",
+            "FIREWORKS_API_KEY",
+        ),
+        ("aiml/gpt-4o-mini", "aiml", "AIML_API_KEY"),
         ("xai/grok-4.3", "xai", "XAI_API_KEY"),
         ("groq/llama-3.3-70b-versatile", "groq", "GROQ_API_KEY"),
         ("xiaomi_mimo/mimo-v2.5-pro", "xiaomi_mimo", "MIMO_API_KEY"),
@@ -190,6 +246,10 @@ fn test_custom_api_base_fallback_supports_openai_compatible_named_routes() {
         "moonshot/kimi-k2.5",
         "minimax/MiniMax-M2.5-lightning",
         "zhipu/glm-5",
+        "zai/glm-5",
+        "together_ai/meta-llama/Llama-3.3-70B-Instruct-Turbo",
+        "fireworks_ai/accounts/fireworks/models/deepseek-v3",
+        "aiml/gpt-4o-mini",
         "xai/grok-4.3",
         "groq/llama-3.3-70b-versatile",
         "xiaomi_mimo/mimo-v2.5-pro",

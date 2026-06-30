@@ -425,8 +425,11 @@ fn pricing_matches_provider(_model_key: &str, pricing: &ModelPricing, provider: 
 pub(crate) fn normalize_pricing_provider(provider: &str) -> String {
     match provider.to_ascii_lowercase().replace('-', "_").as_str() {
         "vertexai" | "google" => "vertex_ai".to_string(),
-        "zhipu" | "glm" | "zai" => "zhipuai".to_string(),
+        "zhipu" | "glm" => "zhipuai".to_string(),
         "mimo" | "xiaomi" => "xiaomi_mimo".to_string(),
+        "together" | "togetherai" => "together_ai".to_string(),
+        "fireworks" | "fireworksai" => "fireworks_ai".to_string(),
+        "aiml_api" | "aimlapi" => "aiml".to_string(),
         other => other.to_string(),
     }
 }

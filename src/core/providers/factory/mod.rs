@@ -496,6 +496,47 @@ mod tests {
         }
     }
 
+    #[test]
+    fn issue_760_litellm_alias_selectors_are_supported() {
+        for selector in ["zai", "together_ai", "fireworks_ai", "aiml"] {
+            assert!(
+                is_provider_selector_supported(selector),
+                "Expected LiteLLM alias selector '{}' to be supported",
+                selector
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn issue_760_create_provider_from_litellm_alias_selectors() {
+        let cases = [
+            ("zai", "https://api.z.ai/api/paas/v4"),
+            ("together_ai", "https://api.together.xyz/v1"),
+            ("fireworks_ai", "https://api.fireworks.ai/inference/v1"),
+            ("aiml", "https://api.aimlapi.com/v1"),
+        ];
+
+        for (selector, base_url) in cases {
+            for provider_type in ["", selector] {
+                let config = crate::config::models::provider::ProviderConfig {
+                    name: selector.to_string(),
+                    provider_type: provider_type.to_string(),
+                    api_key: "test-key".to_string(),
+                    ..Default::default()
+                };
+
+                let provider = create_provider(config).await.unwrap_or_else(|e| {
+                    panic!("Expected '{selector}' provider to be creatable: {e}")
+                });
+                let Provider::OpenAILike(provider) = provider else {
+                    panic!("Expected '{selector}' to create OpenAILike provider");
+                };
+                assert_eq!(provider.config().provider_name, selector);
+                assert_eq!(provider.config().base.api_base.as_deref(), Some(base_url));
+            }
+        }
+    }
+
     #[tokio::test]
     async fn test_b1_first_batch_create_provider_from_name() {
         for provider_name in ["aiml_api", "anyscale", "bytez", "comet_api"] {

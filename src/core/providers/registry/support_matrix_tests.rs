@@ -73,19 +73,19 @@ fn completion_matrix_matches_default_router_support() {
 #[test]
 fn catalog_fallback_is_http_chat_only() {
     assert!(supports_provider_surface(
-        "together",
+        "cerebras",
         ProviderRouteSurface::HttpChat
     ));
     assert!(supports_provider_surface(
-        "together",
+        "cerebras",
         ProviderRouteSurface::HttpChatStream
     ));
     assert!(!supports_provider_surface(
-        "together",
+        "cerebras",
         ProviderRouteSurface::CompletionChat
     ));
     assert!(!supports_provider_surface(
-        "together",
+        "cerebras",
         ProviderRouteSurface::SdkChat
     ));
 }
@@ -96,4 +96,9 @@ fn selector_aliases_resolve_to_canonical_matrix_entries() {
     assert_eq!(canonical_selector("google_vertex"), "vertex_ai");
     assert_eq!(canonical_selector("aws_bedrock"), "bedrock");
     assert_eq!(canonical_selector("openai-like"), "openai_compatible");
+    assert_eq!(canonical_selector("together-ai"), "together_ai");
+    assert_eq!(canonical_selector("fireworks-ai"), "fireworks_ai");
+    assert_eq!(canonical_selector("aiml-api"), "aiml_api");
+    assert_eq!(canonical_selector("zhipuai"), "zhipu");
+    assert_eq!(canonical_selector("zai"), "zai");
 }
