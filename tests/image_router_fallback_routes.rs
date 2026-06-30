@@ -5,6 +5,7 @@ mod tests {
     use litellm_rs::Config;
     use litellm_rs::config::models::provider::ProviderConfig;
     use litellm_rs::core::budget::{ProviderLimitConfig, ResetPeriod};
+    use litellm_rs::core::pricing_service::PricingUsage;
     use litellm_rs::server::HttpServer as GatewayHttpServer;
     use serde_json::{Value, json};
     use std::sync::{Arc, Mutex};
@@ -34,6 +35,10 @@ mod tests {
             let server = HttpServer::new(move || {
                 App::new()
                     .app_data(web::Data::new(state.clone()))
+                    .route(
+                        "/v1/images/generations",
+                        web::post().to(mock_image_generation),
+                    )
                     .route("/v1/images/edits", web::post().to(mock_image_edit))
             })
             .listen(listener)
@@ -86,6 +91,18 @@ mod tests {
         }))
     }
 
+    async fn mock_image_generation(
+        state: web::Data<MockImageState>,
+        request: HttpRequest,
+        _body: Bytes,
+    ) -> HttpResponse {
+        state.paths.lock().unwrap().push(request.path().to_string());
+        HttpResponse::Ok().json(json!({
+            "created": 1710000002,
+            "data": [{ "url": "https://images.example.test/generated.png" }]
+        }))
+    }
+
     async fn build_test_state(
         providers: Vec<ProviderConfig>,
     ) -> litellm_rs::server::state::AppState {
@@ -118,6 +135,31 @@ mod tests {
             models,
             ..ProviderConfig::default()
         }
+    }
+
+    fn openai_image_provider(name: &str, base_url: &str, models: Vec<String>) -> ProviderConfig {
+        ProviderConfig {
+            name: name.to_string(),
+            provider_type: "openai".to_string(),
+            api_key: "sk-test".to_string(),
+            base_url: Some(base_url.to_string()),
+            models,
+            ..ProviderConfig::default()
+        }
+    }
+
+    fn openai_image_provider_with_mapping(
+        name: &str,
+        base_url: &str,
+        alias: &str,
+        upstream_model: &str,
+    ) -> ProviderConfig {
+        let mut provider = openai_image_provider(name, base_url, vec![alias.to_string()]);
+        provider.settings.insert(
+            "model_mappings".to_string(),
+            json!({ alias: upstream_model }),
+        );
+        provider
     }
 
     fn image_edit_multipart_body(boundary: &str) -> Vec<u8> {
@@ -153,6 +195,107 @@ mod tests {
         body.extend_from_slice(b"Content-Type: image/png\r\n\r\n");
         body.extend_from_slice(content);
         body.extend_from_slice(b"\r\n");
+    }
+
+    #[tokio::test]
+    async fn image_generation_rejects_exhausted_provider_budget_before_upstream() {
+        let mock = MockImageServer::start().await;
+        let state = build_test_state(vec![openai_image_provider_with_mapping(
+            "openai-primary",
+            &mock.base_url,
+            "image-alias",
+            "gpt-image-1-mini",
+        )])
+        .await;
+        state.budget_limits.providers.set_provider_limit(
+            "openai-primary",
+            ProviderLimitConfig::new(0.01, ResetPeriod::Monthly),
+        );
+        state
+            .budget_limits
+            .record_spend("openai-primary", "image-alias", 0.01);
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(state))
+                .configure(litellm_rs::server::routes::ai::configure_routes),
+        )
+        .await;
+
+        let resp = test::call_service(
+            &app,
+            test::TestRequest::post()
+                .uri("/v1/images/generations")
+                .set_json(json!({
+                    "model": "image-alias",
+                    "prompt": "make an icon",
+                    "size": "1024x1024"
+                }))
+                .to_request(),
+        )
+        .await;
+
+        assert_eq!(resp.status(), StatusCode::PAYMENT_REQUIRED);
+        assert!(
+            mock.paths().is_empty(),
+            "image generation budget rejection must happen before upstream"
+        );
+        mock.stop().await;
+    }
+
+    #[tokio::test]
+    async fn image_generation_records_provider_spend_after_success() {
+        let mock = MockImageServer::start().await;
+        let state = build_test_state(vec![openai_image_provider_with_mapping(
+            "openai-primary",
+            &mock.base_url,
+            "image-alias",
+            "gpt-image-1-mini",
+        )])
+        .await;
+        state.budget_limits.providers.set_provider_limit(
+            "openai-primary",
+            ProviderLimitConfig::new(100.0, ResetPeriod::Monthly),
+        );
+        let budget_limits = state.budget_limits.clone();
+        let mut expected_usage = PricingUsage::new(3, 0);
+        expected_usage.image_tokens = Some(1024);
+        let expected_cost = state
+            .pricing
+            .calculate_loaded_usage_cost_for_provider("openai", "gpt-image-1-mini", &expected_usage)
+            .expect("image generation pricing should be available")
+            .total_cost;
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(state))
+                .configure(litellm_rs::server::routes::ai::configure_routes),
+        )
+        .await;
+
+        let resp = test::call_service(
+            &app,
+            test::TestRequest::post()
+                .uri("/v1/images/generations")
+                .set_json(json!({
+                    "model": "image-alias",
+                    "prompt": "make an icon",
+                    "size": "1024x1024"
+                }))
+                .to_request(),
+        )
+        .await;
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(mock.paths(), vec!["/v1/images/generations".to_string()]);
+        let spent = budget_limits
+            .providers
+            .get_provider_usage("openai-primary")
+            .map(|usage| usage.current_spend)
+            .unwrap_or_default();
+        assert!(
+            (spent - expected_cost).abs() < f64::EPSILON,
+            "successful image generation must record full image-token spend"
+        );
+        mock.stop().await;
     }
 
     #[tokio::test]

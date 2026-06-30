@@ -130,6 +130,10 @@ pub async fn audio_translations(
 
     let requested_model = model;
     let context_for_execution = context.clone();
+    let api_key_id = context.api_key_id();
+    let budget_limits = state.budget_limits.clone();
+    let key_manager = state.key_manager.clone();
+    let pricing_service = state.pricing.clone();
 
     match execute_with_selected_deployment(
         &state.unified_router,
@@ -138,10 +142,44 @@ pub async fn audio_translations(
         move |provider, selected_model, _deployment_id| {
             let mut request = translation_request.clone();
             let context = context_for_execution.clone();
+            let budget_limits = budget_limits.clone();
+            let key_manager = key_manager.clone();
+            let pricing_service = pricing_service.clone();
             async move {
-                request.model = selected_model;
+                let usage =
+                    super::budgeting::audio_file_usage(&request.file, request.prompt.as_deref());
+                let total_time_seconds =
+                    super::budgeting::estimated_audio_file_seconds(&request.file);
+                super::budgeting::reserve_audio_budget(
+                    &budget_limits,
+                    provider.name(),
+                    &selected_model,
+                    &usage,
+                )?;
+                let budget_provider = provider.name().to_string();
+                let (pricing_provider, pricing_model) =
+                    super::super::spend::pricing_identity_for_provider(
+                        pricing_service.as_ref(),
+                        &provider,
+                        &selected_model,
+                    );
+                request.model = selected_model.clone();
                 let response = provider.audio_translation(request, context).await?;
-                Ok((response, 0))
+                let tokens_used = u64::from(usage.total_tokens);
+                super::budgeting::record_audio_spend(
+                    pricing_service.as_ref(),
+                    &budget_limits,
+                    &key_manager,
+                    api_key_id,
+                    &budget_provider,
+                    &selected_model,
+                    &pricing_provider,
+                    &pricing_model,
+                    Some(total_time_seconds),
+                    &usage,
+                )
+                .await;
+                Ok((response, tokens_used))
             }
         },
     )

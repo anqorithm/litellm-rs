@@ -9,6 +9,7 @@ mod tests {
     use actix_web::{App, HttpResponse, HttpServer, test, web};
     use litellm_rs::Config;
     use litellm_rs::config::models::provider::ProviderConfig;
+    use litellm_rs::core::budget::{ProviderLimitConfig, ResetPeriod};
     use litellm_rs::server::HttpServer as GatewayHttpServer;
     use litellm_rs::server::middleware::AuthMiddleware;
     use litellm_rs::server::routes;
@@ -341,6 +342,112 @@ mod tests {
         assert_eq!(requests.len(), 1);
         assert_eq!(requests[0]["model"], "text-embedding-3-small");
         assert_ne!(requests[0]["model"], "body-model");
+    }
+
+    #[tokio::test]
+    async fn test_embeddings_rejects_exhausted_provider_budget_before_upstream() {
+        let captured_requests = Arc::new(Mutex::new(Vec::<Value>::new()));
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("mock server should bind");
+        let address = listener
+            .local_addr()
+            .expect("mock server should have local address");
+        let captured_for_server = Arc::clone(&captured_requests);
+        let server = HttpServer::new(move || {
+            App::new()
+                .app_data(web::Data::new(Arc::clone(&captured_for_server)))
+                .route("/embeddings", web::post().to(mock_embeddings))
+        })
+        .listen(listener)
+        .expect("mock server should listen")
+        .run();
+        let handle = server.handle();
+        let task = tokio::spawn(server);
+        tokio::time::sleep(Duration::from_millis(20)).await;
+
+        let state = build_openai_alias_state(&format!("http://{address}")).await;
+        state.budget_limits.providers.set_provider_limit(
+            "mock-openai",
+            ProviderLimitConfig::new(0.01, ResetPeriod::Monthly),
+        );
+        state
+            .budget_limits
+            .record_spend("mock-openai", "text-embedding-3-small", 0.01);
+        let app = test::init_service(build_test_app(state)).await;
+
+        let req = test::TestRequest::post()
+            .uri("/v1/embeddings")
+            .set_json(serde_json::json!({
+                "model": "text-embedding-3-small",
+                "input": "hello"
+            }))
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+
+        handle.stop(true).await;
+        let _ = task.await;
+
+        assert_eq!(resp.status(), StatusCode::PAYMENT_REQUIRED);
+        let body: Value = test::read_body_json(resp).await;
+        assert!(
+            body["error"]["message"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("provider 'mock-openai' budget exceeded")
+        );
+        assert!(
+            captured_requests.lock().unwrap().is_empty(),
+            "budget rejection must happen before upstream embedding call"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_embeddings_record_provider_spend_after_success() {
+        let captured_requests = Arc::new(Mutex::new(Vec::<Value>::new()));
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("mock server should bind");
+        let address = listener
+            .local_addr()
+            .expect("mock server should have local address");
+        let captured_for_server = Arc::clone(&captured_requests);
+        let server = HttpServer::new(move || {
+            App::new()
+                .app_data(web::Data::new(Arc::clone(&captured_for_server)))
+                .route("/embeddings", web::post().to(mock_embeddings))
+        })
+        .listen(listener)
+        .expect("mock server should listen")
+        .run();
+        let handle = server.handle();
+        let task = tokio::spawn(server);
+        tokio::time::sleep(Duration::from_millis(20)).await;
+
+        let state = build_openai_alias_state(&format!("http://{address}")).await;
+        state.budget_limits.providers.set_provider_limit(
+            "mock-openai",
+            ProviderLimitConfig::new(100.0, ResetPeriod::Monthly),
+        );
+        let budget_limits = Arc::clone(&state.budget_limits);
+        let app = test::init_service(build_test_app(state)).await;
+
+        let req = test::TestRequest::post()
+            .uri("/v1/embeddings")
+            .set_json(serde_json::json!({
+                "model": "text-embedding-3-small",
+                "input": "hello"
+            }))
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+
+        handle.stop(true).await;
+        let _ = task.await;
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(captured_requests.lock().unwrap().len(), 1);
+        let spent = budget_limits
+            .providers
+            .get_provider_usage("mock-openai")
+            .map(|usage| usage.current_spend)
+            .unwrap_or_default();
+        assert!(spent > 0.0, "successful embedding usage must record spend");
     }
 
     // ---------------------------------------------------------------

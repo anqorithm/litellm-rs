@@ -1,11 +1,12 @@
 //! Image API endpoints
 
 use crate::config::models::provider::ProviderConfig;
-use crate::core::models::openai::{ImageGenerationRequest, ImageGenerationResponse};
+mod generation;
+
+use crate::core::models::openai::ImageGenerationRequest;
 use crate::core::pricing_service::{PricingService, PricingUsage};
 use crate::core::providers::{Provider, ProviderError};
 use crate::core::types::context::RequestContext;
-use crate::core::types::image::ImageGenerationRequest as CoreImageRequest;
 use crate::core::types::model::ProviderCapability;
 use crate::server::state::AppState;
 use crate::utils::error::gateway_error::GatewayError;
@@ -65,7 +66,9 @@ pub async fn image_generations(
         &req,
         request.into_inner(),
         "Image generation",
-        |request, context| handle_image_generation_with_state(state.get_ref(), request, context),
+        |request, context| {
+            generation::handle_image_generation_with_state(state.get_ref(), request, context)
+        },
     )
     .await
 }
@@ -105,76 +108,6 @@ pub async fn image_variations(
             Ok(openai_errors::gateway_error_response(&error))
         }
     }
-}
-
-/// Handle image generation with app state (UnifiedRouter only)
-pub async fn handle_image_generation_with_state(
-    state: &AppState,
-    request: ImageGenerationRequest,
-    context: RequestContext,
-) -> Result<ImageGenerationResponse, GatewayError> {
-    let unified_router = &state.unified_router;
-    handle_image_generation_internal(unified_router, request, context).await
-}
-
-async fn handle_image_generation_internal(
-    unified_router: &crate::core::router::UnifiedRouter,
-    request: ImageGenerationRequest,
-    context: RequestContext,
-) -> Result<ImageGenerationResponse, GatewayError> {
-    let requested_model = request
-        .model
-        .clone()
-        .ok_or_else(|| GatewayError::validation("Model is required"))?;
-    if requested_model.trim().is_empty() {
-        return Err(GatewayError::validation("Model is required"));
-    }
-
-    let core_request = CoreImageRequest {
-        prompt: request.prompt,
-        model: Some(requested_model.clone()),
-        n: request.n,
-        size: request.size,
-        response_format: request.response_format,
-        user: request.user,
-        quality: None,
-        style: None,
-    };
-
-    let context_for_execution = context.clone();
-    let core_response = execute_with_selected_deployment(
-        unified_router,
-        &requested_model,
-        ProviderCapability::ImageGeneration,
-        move |provider, selected_model, _deployment_id| {
-            let core_request = core_request.clone();
-            let context = context_for_execution.clone();
-            async move {
-                let mut request_for_provider = core_request.clone();
-                request_for_provider.model = Some(selected_model);
-                let response = provider
-                    .create_images(request_for_provider, context)
-                    .await?;
-                Ok((response, 0))
-            }
-        },
-    )
-    .await?;
-
-    // Convert core response to OpenAI format
-    let response = ImageGenerationResponse {
-        created: core_response.created,
-        data: core_response
-            .data
-            .into_iter()
-            .map(|d| crate::core::models::openai::ImageObject {
-                url: d.url,
-                b64_json: d.b64_json,
-            })
-            .collect(),
-    };
-
-    Ok(response)
 }
 
 async fn proxy_image_multipart_endpoint(
@@ -343,7 +276,7 @@ fn estimated_image_proxy_usage(form_fields: &ImageProxyFormFields) -> PricingUsa
         form_fields.quality.as_deref(),
         form_fields.n,
     );
-    let mut usage = PricingUsage::new(prompt_tokens, image_tokens);
+    let mut usage = PricingUsage::new(prompt_tokens, 0);
     usage.image_tokens = Some(image_tokens);
     usage
 }

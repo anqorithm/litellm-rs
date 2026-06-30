@@ -4,6 +4,8 @@ mod tests {
     use bytes::Bytes;
     use litellm_rs::Config;
     use litellm_rs::config::models::provider::ProviderConfig;
+    use litellm_rs::core::budget::{ProviderLimitConfig, ResetPeriod};
+    use litellm_rs::core::pricing_service::LiteLLMModelInfo;
     use litellm_rs::server::HttpServer as GatewayHttpServer;
     use serde_json::{Value, json};
     use std::collections::HashMap;
@@ -177,6 +179,58 @@ mod tests {
             .clone()
     }
 
+    fn add_test_audio_pricing(state: &litellm_rs::server::state::AppState, model: &str) {
+        state.pricing.add_custom_model(
+            model.to_string(),
+            LiteLLMModelInfo {
+                max_tokens: Some(4096),
+                max_input_tokens: Some(4096),
+                max_output_tokens: Some(4096),
+                input_cost_per_token: Some(0.00001),
+                output_cost_per_token: Some(0.00002),
+                input_cost_per_character: None,
+                output_cost_per_character: None,
+                cost_per_second: None,
+                litellm_provider: "openai".to_string(),
+                mode: "audio_speech".to_string(),
+                supports_function_calling: Some(false),
+                supports_vision: Some(false),
+                supports_streaming: Some(false),
+                supports_parallel_function_calling: Some(false),
+                supports_system_message: Some(false),
+                extra: HashMap::new(),
+            },
+        );
+    }
+
+    fn add_test_time_audio_pricing(
+        state: &litellm_rs::server::state::AppState,
+        model: &str,
+        cost_per_second: f64,
+    ) {
+        state.pricing.add_custom_model(
+            model.to_string(),
+            LiteLLMModelInfo {
+                max_tokens: None,
+                max_input_tokens: None,
+                max_output_tokens: None,
+                input_cost_per_token: None,
+                output_cost_per_token: None,
+                input_cost_per_character: None,
+                output_cost_per_character: None,
+                cost_per_second: Some(cost_per_second),
+                litellm_provider: "openai".to_string(),
+                mode: "audio_transcription".to_string(),
+                supports_function_calling: Some(false),
+                supports_vision: Some(false),
+                supports_streaming: Some(false),
+                supports_parallel_function_calling: Some(false),
+                supports_system_message: Some(false),
+                extra: HashMap::new(),
+            },
+        );
+    }
+
     fn audio_multipart_body(
         boundary: &str,
         model: &str,
@@ -222,6 +276,12 @@ mod tests {
     async fn audio_transcriptions_route_executes_openai_provider() {
         let mock = MockAudioServer::start().await;
         let state = build_audio_state(&mock.base_url).await;
+        add_test_time_audio_pricing(&state, "whisper-1", 0.001);
+        state.budget_limits.providers.set_provider_limit(
+            "mock-openai-audio",
+            ProviderLimitConfig::new(100.0, ResetPeriod::Monthly),
+        );
+        let budget_limits = state.budget_limits.clone();
         let app = test::init_service(
             App::new()
                 .app_data(web::Data::new(state))
@@ -229,6 +289,7 @@ mod tests {
         )
         .await;
         let boundary = "litellm-rs-audio-boundary";
+        let audio_content = vec![b'a'; 32_000];
 
         let req = test::TestRequest::post()
             .uri("/v1/audio/transcriptions")
@@ -240,7 +301,7 @@ mod tests {
                 boundary,
                 "whisper-1",
                 "sample.mp3",
-                b"audio-bytes",
+                &audio_content,
             ))
             .to_request();
         let resp = test::call_service(&app, req).await;
@@ -264,6 +325,15 @@ mod tests {
         assert!(multipart_body.contains("name=\"model\""));
         assert!(multipart_body.contains("whisper-1"));
         assert!(multipart_body.contains("filename=\"sample.mp3\""));
+        let spent = budget_limits
+            .providers
+            .get_provider_usage("mock-openai-audio")
+            .map(|usage| usage.current_spend)
+            .unwrap_or_default();
+        assert!(
+            (spent - 0.002).abs() < f64::EPSILON,
+            "successful time-priced transcription must record spend"
+        );
         mock.shutdown().await;
     }
 
@@ -271,6 +341,12 @@ mod tests {
     async fn audio_translations_route_executes_openai_provider() {
         let mock = MockAudioServer::start().await;
         let state = build_audio_state(&mock.base_url).await;
+        add_test_time_audio_pricing(&state, "whisper-1", 0.001);
+        state.budget_limits.providers.set_provider_limit(
+            "mock-openai-audio",
+            ProviderLimitConfig::new(100.0, ResetPeriod::Monthly),
+        );
+        let budget_limits = state.budget_limits.clone();
         let app = test::init_service(
             App::new()
                 .app_data(web::Data::new(state))
@@ -278,6 +354,7 @@ mod tests {
         )
         .await;
         let boundary = "litellm-rs-audio-boundary";
+        let audio_content = vec![b'a'; 32_000];
 
         let req = test::TestRequest::post()
             .uri("/v1/audio/translations")
@@ -289,7 +366,7 @@ mod tests {
                 boundary,
                 "whisper-1",
                 "sample.mp3",
-                b"audio-bytes",
+                &audio_content,
             ))
             .to_request();
         let resp = test::call_service(&app, req).await;
@@ -304,6 +381,15 @@ mod tests {
         let multipart_body = String::from_utf8_lossy(&captured[0].body);
         assert!(multipart_body.contains("whisper-1"));
         assert!(multipart_body.contains("filename=\"sample.mp3\""));
+        let spent = budget_limits
+            .providers
+            .get_provider_usage("mock-openai-audio")
+            .map(|usage| usage.current_spend)
+            .unwrap_or_default();
+        assert!(
+            (spent - 0.002).abs() < f64::EPSILON,
+            "successful time-priced translation must record spend"
+        );
         mock.shutdown().await;
     }
 
@@ -311,6 +397,12 @@ mod tests {
     async fn audio_speech_route_executes_openai_provider() {
         let mock = MockAudioServer::start().await;
         let state = build_audio_state(&mock.base_url).await;
+        add_test_audio_pricing(&state, "tts-1");
+        state.budget_limits.providers.set_provider_limit(
+            "mock-openai-audio",
+            ProviderLimitConfig::new(100.0, ResetPeriod::Monthly),
+        );
+        let budget_limits = state.budget_limits.clone();
         let app = test::init_service(
             App::new()
                 .app_data(web::Data::new(state))
@@ -348,6 +440,92 @@ mod tests {
         assert_eq!(forwarded["model"], "tts-1");
         assert_eq!(forwarded["input"], "hello from litellm rs");
         assert_eq!(forwarded["voice"], "alloy");
+        let spent = budget_limits
+            .providers
+            .get_provider_usage("mock-openai-audio")
+            .map(|usage| usage.current_spend)
+            .unwrap_or_default();
+        assert!(spent > 0.0, "successful audio speech must record spend");
+        mock.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn audio_routes_reject_exhausted_provider_budget_before_upstream() {
+        assert_audio_budget_rejected("/v1/audio/transcriptions", "transcription").await;
+        assert_audio_budget_rejected("/v1/audio/translations", "translation").await;
+
+        let mock = MockAudioServer::start().await;
+        let state = build_audio_state(&mock.base_url).await;
+        state.budget_limits.providers.set_provider_limit(
+            "mock-openai-audio",
+            ProviderLimitConfig::new(0.01, ResetPeriod::Monthly),
+        );
+        state
+            .budget_limits
+            .record_spend("mock-openai-audio", "tts-1", 0.01);
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(state))
+                .configure(litellm_rs::server::routes::ai::configure_routes),
+        )
+        .await;
+
+        let req = test::TestRequest::post()
+            .uri("/v1/audio/speech")
+            .set_json(json!({
+                "model": "tts-1",
+                "input": "hello from litellm rs",
+                "voice": "alloy"
+            }))
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+
+        assert_eq!(resp.status(), StatusCode::PAYMENT_REQUIRED);
+        assert!(
+            mock.requests().is_empty(),
+            "speech budget rejection must happen before upstream"
+        );
+        mock.shutdown().await;
+    }
+
+    async fn assert_audio_budget_rejected(uri: &str, route_name: &str) {
+        let mock = MockAudioServer::start().await;
+        let state = build_audio_state(&mock.base_url).await;
+        state.budget_limits.providers.set_provider_limit(
+            "mock-openai-audio",
+            ProviderLimitConfig::new(0.01, ResetPeriod::Monthly),
+        );
+        state
+            .budget_limits
+            .record_spend("mock-openai-audio", "whisper-1", 0.01);
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(state))
+                .configure(litellm_rs::server::routes::ai::configure_routes),
+        )
+        .await;
+        let boundary = "litellm-rs-audio-boundary";
+
+        let req = test::TestRequest::post()
+            .uri(uri)
+            .insert_header((
+                "content-type",
+                format!("multipart/form-data; boundary={boundary}"),
+            ))
+            .set_payload(audio_multipart_body(
+                boundary,
+                "whisper-1",
+                "sample.mp3",
+                b"audio-bytes",
+            ))
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+
+        assert_eq!(resp.status(), StatusCode::PAYMENT_REQUIRED);
+        assert!(
+            mock.requests().is_empty(),
+            "{route_name} budget rejection must happen before upstream"
+        );
         mock.shutdown().await;
     }
 

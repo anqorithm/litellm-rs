@@ -1,6 +1,7 @@
 //! Embeddings endpoint
 
 use crate::core::models::openai::{EmbeddingRequest, EmbeddingResponse};
+use crate::core::pricing_service::PricingUsage;
 use crate::core::types::{
     context::RequestContext, embedding::EmbeddingInput,
     embedding::EmbeddingRequest as CoreEmbeddingRequest, model::ProviderCapability,
@@ -72,12 +73,11 @@ pub async fn handle_embedding_with_state(
     request: EmbeddingRequest,
     context: RequestContext,
 ) -> Result<EmbeddingResponse, GatewayError> {
-    let unified_router = &state.unified_router;
-    handle_embedding_internal(unified_router, request, context).await
+    handle_embedding_internal(state, request, context).await
 }
 
 async fn handle_embedding_internal(
-    unified_router: &crate::core::router::UnifiedRouter,
+    state: &AppState,
     request: EmbeddingRequest,
     context: RequestContext,
 ) -> Result<EmbeddingResponse, GatewayError> {
@@ -100,16 +100,43 @@ async fn handle_embedding_internal(
 
     let requested_model = core_request.model.clone();
     let context_for_execution = context.clone();
+    let api_key_id = context.api_key_id();
+    let budget_limits = state.budget_limits.clone();
+    let key_manager = state.key_manager.clone();
+    let pricing_service = state.pricing.clone();
     let core_response = execute_with_selected_deployment(
-        unified_router,
+        &state.unified_router,
         &requested_model,
         ProviderCapability::Embeddings,
         move |provider, selected_model, _deployment_id| {
             let core_request = core_request.clone();
             let context = context_for_execution.clone();
+            let budget_limits = budget_limits.clone();
+            let key_manager = key_manager.clone();
+            let pricing_service = pricing_service.clone();
             async move {
+                super::spend::ensure_budget_available(
+                    &budget_limits,
+                    provider.name(),
+                    &selected_model,
+                )?;
+                let budget_provider = provider.name().to_string();
+                let (pricing_provider, pricing_model) = super::spend::pricing_identity_for_provider(
+                    pricing_service.as_ref(),
+                    &provider,
+                    &selected_model,
+                );
+                let budget_reservation = super::spend::reserve_embedding_budget_with_pricing(
+                    pricing_service.as_ref(),
+                    &budget_limits,
+                    &budget_provider,
+                    &selected_model,
+                    &pricing_provider,
+                    &pricing_model,
+                    &core_request.input,
+                )?;
                 let mut request_for_provider = core_request.clone();
-                request_for_provider.model = selected_model;
+                request_for_provider.model = selected_model.clone();
                 let response = provider
                     .create_embeddings(request_for_provider, context)
                     .await?;
@@ -118,6 +145,34 @@ async fn handle_embedding_internal(
                     .as_ref()
                     .map(|usage| u64::from(usage.total_tokens))
                     .unwrap_or_default();
+                if let Some(usage) = response.usage.as_ref() {
+                    let usage = PricingUsage::from(usage);
+                    super::spend::record_pricing_usage_spend_with_reservation_with_pricing(
+                        pricing_service.as_ref(),
+                        &budget_limits,
+                        &key_manager,
+                        api_key_id,
+                        &budget_provider,
+                        &selected_model,
+                        &pricing_provider,
+                        &pricing_model,
+                        &usage,
+                        budget_reservation,
+                    )
+                    .await;
+                } else {
+                    super::spend::record_completion_spend_with_reservation_with_pricing(
+                        pricing_service.as_ref(),
+                        &budget_limits,
+                        &key_manager,
+                        api_key_id,
+                        &budget_provider,
+                        &selected_model,
+                        None,
+                        budget_reservation,
+                    )
+                    .await;
+                }
                 Ok((response, tokens))
             }
         },
