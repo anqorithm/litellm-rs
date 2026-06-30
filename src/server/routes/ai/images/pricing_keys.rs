@@ -12,10 +12,7 @@ pub(super) fn image_pricing_keys(
     }
 
     let size = size.map(normalize_image_pricing_size);
-    let quality = quality
-        .map(str::trim)
-        .filter(|quality| !quality.is_empty())
-        .map(str::to_ascii_lowercase);
+    let qualities = image_pricing_quality_segments(quality);
     let provider = pricing_provider.trim();
     let mut keys = Vec::new();
     push_unique_key(&mut keys, model.to_string());
@@ -24,7 +21,7 @@ pub(super) fn image_pricing_keys(
         if !provider.is_empty() {
             push_unique_key(&mut keys, format!("{provider}/{size}/{model}"));
         }
-        if let Some(quality) = quality.as_deref() {
+        for quality in &qualities {
             push_unique_key(&mut keys, format!("{quality}/{size}/{model}"));
             push_unique_key(&mut keys, format!("{size}/{quality}/{model}"));
             if !provider.is_empty() {
@@ -32,10 +29,12 @@ pub(super) fn image_pricing_keys(
                 push_unique_key(&mut keys, format!("{provider}/{size}/{quality}/{model}"));
             }
         }
-    } else if let Some(quality) = quality.as_deref() {
-        push_unique_key(&mut keys, format!("{quality}/{model}"));
-        if !provider.is_empty() {
-            push_unique_key(&mut keys, format!("{provider}/{quality}/{model}"));
+    } else {
+        for quality in &qualities {
+            push_unique_key(&mut keys, format!("{quality}/{model}"));
+            if !provider.is_empty() {
+                push_unique_key(&mut keys, format!("{provider}/{quality}/{model}"));
+            }
         }
     }
     keys
@@ -76,19 +75,18 @@ fn image_pricing_model_candidates(
     }
 
     let size = size.map(normalize_image_pricing_size);
-    let quality = quality
-        .map(str::trim)
-        .filter(|quality| !quality.is_empty())
-        .map(str::to_ascii_lowercase);
+    let qualities = image_pricing_quality_segments(quality);
     let mut candidates = Vec::new();
     if let Some(size) = size.as_deref() {
-        if let Some(quality) = quality.as_deref() {
+        for quality in &qualities {
             push_unique_key(&mut candidates, format!("{quality}/{size}/{model}"));
             push_unique_key(&mut candidates, format!("{size}/{quality}/{model}"));
         }
         push_unique_key(&mut candidates, format!("{size}/{model}"));
-    } else if let Some(quality) = quality.as_deref() {
-        push_unique_key(&mut candidates, format!("{quality}/{model}"));
+    } else {
+        for quality in &qualities {
+            push_unique_key(&mut candidates, format!("{quality}/{model}"));
+        }
     }
     candidates
 }
@@ -103,6 +101,23 @@ fn image_pricing_base_model(model: &str) -> &str {
 
 fn normalize_image_pricing_size(size: &str) -> String {
     size.trim().replace('x', "-x-")
+}
+
+fn image_pricing_quality_segments(quality: Option<&str>) -> Vec<String> {
+    let Some(quality) = quality
+        .map(str::trim)
+        .filter(|quality| !quality.is_empty())
+        .map(str::to_ascii_lowercase)
+    else {
+        return Vec::new();
+    };
+    let mut segments = vec![quality.clone()];
+    match quality.as_str() {
+        "standard" => push_unique_key(&mut segments, "30-steps".to_string()),
+        "hd" => push_unique_key(&mut segments, "50-steps".to_string()),
+        _ => {}
+    }
+    segments
 }
 
 fn supports_image_output_pricing(info: &LiteLLMModelInfo) -> bool {
@@ -147,6 +162,13 @@ mod tests {
     use std::collections::HashMap;
 
     fn model_info(extra: HashMap<String, serde_json::Value>) -> LiteLLMModelInfo {
+        model_info_for_provider("openai", extra)
+    }
+
+    fn model_info_for_provider(
+        provider: &str,
+        extra: HashMap<String, serde_json::Value>,
+    ) -> LiteLLMModelInfo {
         LiteLLMModelInfo {
             max_tokens: None,
             max_input_tokens: None,
@@ -156,7 +178,7 @@ mod tests {
             input_cost_per_character: None,
             output_cost_per_character: None,
             cost_per_second: None,
-            litellm_provider: "openai".to_string(),
+            litellm_provider: provider.to_string(),
             mode: "image_generation".to_string(),
             supports_function_calling: None,
             supports_vision: None,
@@ -211,6 +233,48 @@ mod tests {
         assert_eq!(
             resolved,
             Some("hd/1024-x-1024/flat-variant-model".to_string())
+        );
+    }
+
+    #[test]
+    fn image_pricing_keys_include_bedrock_hd_step_alias() {
+        let keys = image_pricing_keys(
+            "bedrock",
+            "stability.stable-diffusion-xl-v1",
+            Some("1024x1024"),
+            Some("hd"),
+        );
+
+        assert!(
+            keys.contains(&"1024-x-1024/50-steps/stability.stable-diffusion-xl-v1".to_string())
+        );
+    }
+
+    #[test]
+    fn resolve_image_pricing_model_accepts_bedrock_hd_step_variant() {
+        let service = PricingService::new(None);
+        service.add_custom_model(
+            "1024-x-1024/50-steps/stability.stable-diffusion-xl-v1".to_string(),
+            model_info_for_provider(
+                "bedrock",
+                HashMap::from([(
+                    "output_cost_per_image".to_string(),
+                    serde_json::Value::from(0.04),
+                )]),
+            ),
+        );
+
+        let resolved = resolve_image_pricing_model(
+            &service,
+            "bedrock",
+            "stability.stable-diffusion-xl-v1",
+            Some("1024x1024"),
+            Some("hd"),
+        );
+
+        assert_eq!(
+            resolved,
+            Some("1024-x-1024/50-steps/stability.stable-diffusion-xl-v1".to_string())
         );
     }
 }
