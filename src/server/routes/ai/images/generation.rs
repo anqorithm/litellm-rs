@@ -29,7 +29,7 @@ pub async fn handle_image_generation_with_state(
         size: request.size,
         response_format: request.response_format,
         user: request.user,
-        quality: None,
+        quality: request.quality,
         style: None,
     };
 
@@ -58,13 +58,42 @@ pub async fn handle_image_generation_with_state(
                     &selected_model,
                 )?;
                 let budget_provider = provider.name().to_string();
-                let (pricing_provider, pricing_model) =
+                let (pricing_provider, mut pricing_model) =
                     super::super::spend::pricing_identity_for_provider(
                         pricing_service.as_ref(),
                         &provider,
                         &selected_model,
                     );
-                let usage = estimated_image_generation_usage(&core_request);
+                let mut usage_pricing_model =
+                    if super::pricing_keys::is_variant_image_pricing_key(&pricing_model) {
+                        selected_model.clone()
+                    } else {
+                        pricing_model.clone()
+                    };
+                if let Some(variant_model) = super::pricing_keys::resolve_image_pricing_model(
+                    pricing_service.as_ref(),
+                    &pricing_provider,
+                    &selected_model,
+                    core_request.size.as_deref(),
+                    core_request.quality.as_deref(),
+                )
+                .or_else(|| {
+                    super::pricing_keys::resolve_image_pricing_model(
+                        pricing_service.as_ref(),
+                        &pricing_provider,
+                        &pricing_model,
+                        core_request.size.as_deref(),
+                        core_request.quality.as_deref(),
+                    )
+                }) {
+                    usage_pricing_model = variant_model.clone();
+                    pricing_model = variant_model;
+                }
+                let usage = estimated_image_generation_usage(
+                    &core_request,
+                    &pricing_provider,
+                    &usage_pricing_model,
+                );
                 let budget_reservation =
                     super::super::spend::reserve_pricing_usage_budget_with_pricing(
                         pricing_service.as_ref(),
@@ -126,14 +155,26 @@ pub async fn handle_image_generation_with_state(
     Ok(response)
 }
 
-fn estimated_image_generation_usage(request: &CoreImageRequest) -> PricingUsage {
+fn estimated_image_generation_usage(
+    request: &CoreImageRequest,
+    pricing_provider: &str,
+    pricing_model: &str,
+) -> PricingUsage {
     let prompt_tokens = super::estimated_text_tokens(&request.prompt);
+    let image_count = request.n.unwrap_or(1);
     let image_tokens = super::estimated_image_output_tokens(
         request.size.as_deref(),
         request.quality.as_deref(),
-        request.n.unwrap_or(1),
+        image_count,
     );
     let mut usage = PricingUsage::new(prompt_tokens, 0);
     usage.image_tokens = Some(image_tokens);
+    usage.output_image_count = Some(image_count.max(1));
+    usage.output_image_pricing_keys = super::pricing_keys::image_pricing_keys(
+        pricing_provider,
+        pricing_model,
+        request.size.as_deref(),
+        request.quality.as_deref(),
+    );
     usage
 }

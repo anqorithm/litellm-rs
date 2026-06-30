@@ -2,6 +2,7 @@
 
 use crate::config::models::provider::ProviderConfig;
 mod generation;
+mod pricing_keys;
 
 use crate::core::budget::BudgetReservation;
 use crate::core::models::openai::ImageGenerationRequest;
@@ -136,9 +137,17 @@ async fn proxy_image_multipart_endpoint(
     )?;
     let router_models =
         image_proxy_router_models(state.config().gateway.providers.as_slice(), requested_model);
-    let usage = estimated_image_proxy_usage(&form_fields);
+    let pricing_model = pricing_keys::resolve_image_pricing_model(
+        state.pricing.as_ref(),
+        "openai",
+        requested_model,
+        form_fields.size.as_deref(),
+        form_fields.quality.as_deref(),
+    )
+    .unwrap_or_else(|| requested_model.to_string());
+    let usage = estimated_image_proxy_usage(&form_fields, "openai", &pricing_model);
     let estimated_cost =
-        image_proxy_cost(state.pricing.as_ref(), "openai", requested_model, &usage)?;
+        image_proxy_cost(state.pricing.as_ref(), "openai", &pricing_model, &usage)?;
     if estimated_cost <= 0.0 {
         return Err(GatewayError::Config(format!(
             "Image model '{requested_model}' has non-positive pricing"
@@ -295,7 +304,11 @@ fn image_proxy_cost(
         .map(|breakdown| breakdown.total_cost)
 }
 
-fn estimated_image_proxy_usage(form_fields: &ImageProxyFormFields) -> PricingUsage {
+fn estimated_image_proxy_usage(
+    form_fields: &ImageProxyFormFields,
+    pricing_provider: &str,
+    pricing_model: &str,
+) -> PricingUsage {
     let prompt_tokens = form_fields
         .prompt
         .as_deref()
@@ -308,6 +321,13 @@ fn estimated_image_proxy_usage(form_fields: &ImageProxyFormFields) -> PricingUsa
     );
     let mut usage = PricingUsage::new(prompt_tokens, 0);
     usage.image_tokens = Some(image_tokens);
+    usage.output_image_count = Some(form_fields.n.max(1));
+    usage.output_image_pricing_keys = pricing_keys::image_pricing_keys(
+        pricing_provider,
+        pricing_model,
+        form_fields.size.as_deref(),
+        form_fields.quality.as_deref(),
+    );
     usage
 }
 

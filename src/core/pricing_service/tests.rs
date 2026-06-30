@@ -216,3 +216,229 @@ fn provider_pricing_uses_input_price_when_cache_prices_are_missing() {
     assert!((cost.cache_cost - 0.007).abs() < f64::EPSILON);
     assert!((cost.total_cost - 0.013).abs() < f64::EPSILON);
 }
+
+fn flat_image_model_info(output_cost_per_image: Option<f64>) -> LiteLLMModelInfo {
+    let mut extra = HashMap::new();
+    if let Some(price) = output_cost_per_image {
+        extra.insert(
+            "output_cost_per_image".to_string(),
+            serde_json::Value::from(price),
+        );
+    }
+    LiteLLMModelInfo {
+        max_tokens: None,
+        max_input_tokens: None,
+        max_output_tokens: None,
+        input_cost_per_token: None,
+        output_cost_per_token: None,
+        input_cost_per_character: None,
+        output_cost_per_character: None,
+        cost_per_second: None,
+        litellm_provider: "bedrock".to_string(),
+        mode: "image_generation".to_string(),
+        supports_function_calling: None,
+        supports_vision: None,
+        supports_streaming: None,
+        supports_parallel_function_calling: None,
+        supports_system_message: None,
+        extra,
+    }
+}
+
+#[test]
+fn provider_pricing_charges_flat_output_image_cost_without_token_prices() {
+    let service = PricingService::new(None);
+    service.add_custom_model(
+        "flat-image-model".to_string(),
+        flat_image_model_info(Some(0.06)),
+    );
+    let mut usage = PricingUsage::new(25, 0);
+    usage.output_image_count = Some(3);
+
+    let cost = service
+        .calculate_loaded_usage_cost_for_provider("bedrock", "flat-image-model", &usage)
+        .unwrap();
+
+    assert_eq!(cost.input_cost, 0.0);
+    assert!((cost.image_cost - 0.18).abs() < f64::EPSILON);
+    assert!((cost.total_cost - 0.18).abs() < f64::EPSILON);
+}
+
+#[test]
+fn provider_pricing_fails_closed_for_missing_flat_output_image_price() {
+    let service = PricingService::new(None);
+    service.add_custom_model(
+        "missing-image-price".to_string(),
+        flat_image_model_info(None),
+    );
+    let mut usage = PricingUsage::new(0, 0);
+    usage.output_image_count = Some(1);
+
+    let error = service
+        .calculate_loaded_usage_cost_for_provider("bedrock", "missing-image-price", &usage)
+        .unwrap_err();
+
+    assert!(error.to_string().contains("output_cost_per_image"));
+}
+
+#[test]
+fn provider_pricing_fails_closed_for_invalid_flat_output_image_price() {
+    let service = PricingService::new(None);
+    service.add_custom_model(
+        "invalid-image-price".to_string(),
+        flat_image_model_info(Some(-0.1)),
+    );
+    let mut usage = PricingUsage::new(0, 0);
+    usage.output_image_count = Some(1);
+
+    let error = service
+        .calculate_loaded_usage_cost_for_provider("bedrock", "invalid-image-price", &usage)
+        .unwrap_err();
+
+    assert!(error.to_string().contains("Invalid image pricing"));
+}
+
+#[test]
+fn provider_pricing_prefers_image_token_price_over_flat_output_image_price() {
+    let service = PricingService::new(None);
+    let mut model_info = flat_image_model_info(Some(0.06));
+    model_info.extra.insert(
+        "image_cost_per_token".to_string(),
+        serde_json::Value::from(0.01),
+    );
+    service.add_custom_model("image-token-model".to_string(), model_info);
+    let mut usage = PricingUsage::new(0, 0);
+    usage.image_tokens = Some(100);
+    usage.output_image_count = Some(3);
+
+    let cost = service
+        .calculate_loaded_usage_cost_for_provider("bedrock", "image-token-model", &usage)
+        .unwrap();
+
+    assert!((cost.image_cost - 1.0).abs() < f64::EPSILON);
+    assert!((cost.total_cost - 1.0).abs() < f64::EPSILON);
+}
+
+#[test]
+fn provider_pricing_treats_explicit_zero_image_token_price_as_present() {
+    let service = PricingService::new(None);
+    let mut model_info = flat_image_model_info(None);
+    model_info.extra.insert(
+        "image_cost_per_token".to_string(),
+        serde_json::Value::from(0.0),
+    );
+    service.add_custom_model("zero-image-token-model".to_string(), model_info);
+    let mut usage = PricingUsage::new(0, 0);
+    usage.image_tokens = Some(100);
+    usage.output_image_count = Some(3);
+
+    let cost = service
+        .calculate_loaded_usage_cost_for_provider("bedrock", "zero-image-token-model", &usage)
+        .unwrap();
+
+    assert_eq!(cost.image_cost, 0.0);
+    assert_eq!(cost.total_cost, 0.0);
+}
+
+#[test]
+fn provider_pricing_does_not_require_flat_price_for_token_priced_image_model() {
+    let service = PricingService::new(None);
+    let mut model_info = flat_image_model_info(None);
+    model_info.input_cost_per_token = Some(0.01);
+    model_info.output_cost_per_token = Some(0.0);
+    service.add_custom_model("token-priced-image-model".to_string(), model_info);
+    let mut usage = PricingUsage::new(2, 0);
+    usage.image_tokens = Some(100);
+    usage.output_image_count = Some(1);
+
+    let cost = service
+        .calculate_loaded_usage_cost_for_provider("bedrock", "token-priced-image-model", &usage)
+        .unwrap();
+
+    assert!((cost.input_cost - 0.02).abs() < f64::EPSILON);
+    assert_eq!(cost.image_cost, 0.0);
+}
+
+#[test]
+fn provider_pricing_fails_closed_for_mismatched_flat_image_variant() {
+    let service = PricingService::new(None);
+    service.add_custom_model(
+        "1024-x-1024/50-steps/flat-variant-model".to_string(),
+        flat_image_model_info(Some(0.06)),
+    );
+    let mut usage = PricingUsage::new(0, 0);
+    usage.output_image_count = Some(1);
+    usage
+        .output_image_pricing_keys
+        .push("1024-x-1024/flat-variant-model".to_string());
+
+    let error = service
+        .calculate_loaded_usage_cost_for_provider("bedrock", "flat-variant-model", &usage)
+        .unwrap_err();
+
+    assert!(error.to_string().contains("output_image_pricing_keys"));
+}
+
+#[test]
+fn provider_pricing_charges_matching_flat_image_variant() {
+    let service = PricingService::new(None);
+    service.add_custom_model(
+        "1024-x-1024/flat-variant-model".to_string(),
+        flat_image_model_info(Some(0.06)),
+    );
+    let mut usage = PricingUsage::new(0, 0);
+    usage.output_image_count = Some(2);
+    usage
+        .output_image_pricing_keys
+        .push("1024-x-1024/flat-variant-model".to_string());
+
+    let cost = service
+        .calculate_loaded_usage_cost_for_provider(
+            "bedrock",
+            "1024-x-1024/flat-variant-model",
+            &usage,
+        )
+        .unwrap();
+
+    assert!((cost.image_cost - 0.12).abs() < f64::EPSILON);
+}
+
+#[test]
+fn provider_pricing_charges_output_image_token_price() {
+    let service = PricingService::new(None);
+    let mut model_info = flat_image_model_info(None);
+    model_info.extra.insert(
+        "output_cost_per_image_token".to_string(),
+        serde_json::Value::from(0.03),
+    );
+    service.add_custom_model("image-token-output-model".to_string(), model_info);
+    let mut usage = PricingUsage::new(0, 0);
+    usage.image_tokens = Some(4);
+    usage.output_image_count = Some(1);
+
+    let cost = service
+        .calculate_loaded_usage_cost_for_provider("bedrock", "image-token-output-model", &usage)
+        .unwrap();
+
+    assert!((cost.image_cost - 0.12).abs() < f64::EPSILON);
+    assert!((cost.total_cost - 0.12).abs() < f64::EPSILON);
+}
+
+#[test]
+fn provider_pricing_ignores_optional_flat_image_price_for_text_usage() {
+    let service = PricingService::new(None);
+    let mut model_info = flat_image_model_info(Some(0.06));
+    model_info.input_cost_per_token = Some(0.01);
+    model_info.output_cost_per_token = Some(0.02);
+    service.add_custom_model("text-with-image-output-model".to_string(), model_info);
+    let usage = PricingUsage::new(2, 3);
+
+    let cost = service
+        .calculate_loaded_usage_cost_for_provider("bedrock", "text-with-image-output-model", &usage)
+        .unwrap();
+
+    assert!((cost.input_cost - 0.02).abs() < f64::EPSILON);
+    assert!((cost.output_cost - 0.06).abs() < f64::EPSILON);
+    assert_eq!(cost.image_cost, 0.0);
+    assert!((cost.total_cost - 0.08).abs() < f64::EPSILON);
+}

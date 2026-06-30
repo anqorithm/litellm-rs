@@ -208,6 +208,8 @@ pub struct ImageGenerationRequest {
     pub n: Option<u32>,
     /// Image size
     pub size: Option<String>,
+    /// Image quality
+    pub quality: Option<String>,
     /// Response format
     pub response_format: Option<String>,
     /// User identifier
@@ -656,6 +658,7 @@ mod tests {
             model: None,
             n: None,
             size: None,
+            quality: None,
             response_format: None,
             user: None,
         };
@@ -671,6 +674,7 @@ mod tests {
             model: Some("dall-e-3".to_string()),
             n: Some(2),
             size: Some("1024x1024".to_string()),
+            quality: Some("hd".to_string()),
             response_format: Some("url".to_string()),
             user: Some("user-456".to_string()),
         };
@@ -678,6 +682,7 @@ mod tests {
         assert_eq!(req.model, Some("dall-e-3".to_string()));
         assert_eq!(req.n, Some(2));
         assert_eq!(req.size, Some("1024x1024".to_string()));
+        assert_eq!(req.quality, Some("hd".to_string()));
         assert_eq!(req.response_format, Some("url".to_string()));
     }
 
@@ -688,6 +693,7 @@ mod tests {
             model: Some("dall-e-2".to_string()),
             n: Some(1),
             size: Some("512x512".to_string()),
+            quality: None,
             response_format: Some("b64_json".to_string()),
             user: None,
         };
@@ -702,6 +708,7 @@ mod tests {
             model: Some("dall-e-3".to_string()),
             n: Some(1),
             size: Some("1792x1024".to_string()),
+            quality: Some("standard".to_string()),
             response_format: None,
             user: None,
         };
@@ -710,6 +717,7 @@ mod tests {
         assert!(json.contains("Mountain landscape"));
         assert!(json.contains("dall-e-3"));
         assert!(json.contains("1792x1024"));
+        assert!(json.contains("standard"));
     }
 
     #[test]
@@ -719,6 +727,7 @@ mod tests {
             model: Some("dall-e-3".to_string()),
             n: Some(1),
             size: None,
+            quality: None,
             response_format: None,
             user: None,
         };
