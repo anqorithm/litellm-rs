@@ -1,6 +1,10 @@
 #[cfg(all(test, feature = "gateway", feature = "storage"))]
 mod tests {
-    use actix_web::{App, HttpRequest, HttpResponse, HttpServer, http::StatusCode, test, web};
+    use actix_web::{
+        App, HttpRequest, HttpResponse, HttpServer,
+        http::{Method, StatusCode},
+        test, web,
+    };
     use bytes::Bytes;
     use litellm_rs::Config;
     use litellm_rs::config::models::provider::ProviderConfig;
@@ -23,6 +27,7 @@ mod tests {
     #[derive(Clone)]
     struct MockFineTuningState {
         captured_requests: Arc<Mutex<Vec<CapturedFineTuningRequest>>>,
+        failure_status: Option<StatusCode>,
     }
 
     struct MockFineTuningServer {
@@ -34,9 +39,18 @@ mod tests {
 
     impl MockFineTuningServer {
         async fn start() -> Self {
+            Self::start_with_status(None).await
+        }
+
+        async fn start_failing(status: StatusCode) -> Self {
+            Self::start_with_status(Some(status)).await
+        }
+
+        async fn start_with_status(failure_status: Option<StatusCode>) -> Self {
             let captured_requests = Arc::new(Mutex::new(Vec::new()));
             let state = MockFineTuningState {
                 captured_requests: Arc::clone(&captured_requests),
+                failure_status,
             };
             let listener =
                 std::net::TcpListener::bind("127.0.0.1:0").expect("mock server should bind");
@@ -106,6 +120,9 @@ mod tests {
         body: Bytes,
     ) -> HttpResponse {
         capture_request(&state, &request, body);
+        if let Some(response) = maybe_failure_response(&state, &request) {
+            return response;
+        }
         HttpResponse::Ok().json(job_json("ftjob_mock", "queued"))
     }
 
@@ -115,6 +132,9 @@ mod tests {
         body: Bytes,
     ) -> HttpResponse {
         capture_request(&state, &request, body);
+        if let Some(response) = maybe_failure_response(&state, &request) {
+            return response;
+        }
         HttpResponse::Ok().json(json!({
             "object": "list",
             "data": [job_json("ftjob_mock", "running")],
@@ -128,6 +148,9 @@ mod tests {
         body: Bytes,
     ) -> HttpResponse {
         capture_request(&state, &request, body);
+        if let Some(response) = maybe_failure_response(&state, &request) {
+            return response;
+        }
         HttpResponse::Ok().json(job_json("ftjob_mock", "running"))
     }
 
@@ -137,6 +160,9 @@ mod tests {
         body: Bytes,
     ) -> HttpResponse {
         capture_request(&state, &request, body);
+        if let Some(response) = maybe_failure_response(&state, &request) {
+            return response;
+        }
         HttpResponse::Ok().json(job_json("ftjob_mock", "cancelled"))
     }
 
@@ -146,6 +172,9 @@ mod tests {
         body: Bytes,
     ) -> HttpResponse {
         capture_request(&state, &request, body);
+        if let Some(response) = maybe_failure_response(&state, &request) {
+            return response;
+        }
         HttpResponse::Ok().json(json!({
             "object": "list",
             "data": [{
@@ -165,6 +194,9 @@ mod tests {
         body: Bytes,
     ) -> HttpResponse {
         capture_request(&state, &request, body);
+        if let Some(response) = maybe_failure_response(&state, &request) {
+            return response;
+        }
         HttpResponse::Ok().json(json!({
             "object": "list",
             "data": [{
@@ -176,6 +208,19 @@ mod tests {
                 "created_at": 1710000002
             }]
         }))
+    }
+
+    fn maybe_failure_response(
+        state: &MockFineTuningState,
+        request: &HttpRequest,
+    ) -> Option<HttpResponse> {
+        state.failure_status.map(|status| {
+            HttpResponse::build(status).json(json!({
+                "error": {
+                    "message": format!("forced upstream {status} at {}", request.uri())
+                }
+            }))
+        })
     }
 
     fn job_json(id: &str, status: &str) -> Value {
@@ -263,6 +308,15 @@ mod tests {
                 }),
             ),
         ]);
+        provider
+    }
+
+    fn named_fine_tuning_provider(name: &str, base_url: &str) -> ProviderConfig {
+        let mut provider = fine_tuning_provider(base_url);
+        provider.name = name.to_string();
+        provider.organization = None;
+        provider.project = None;
+        provider.settings.clear();
         provider
     }
 
@@ -464,5 +518,191 @@ mod tests {
         );
 
         mock.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn fine_tuning_create_uses_fallback_when_primary_budget_exhausted() {
+        let primary = MockFineTuningServer::start().await;
+        let fallback = MockFineTuningServer::start().await;
+        let mut primary_provider =
+            named_fine_tuning_provider("primary-fine-tuning", &primary.base_url);
+        primary_provider.settings = HashMap::from([(
+            "headers".to_string(),
+            json!({
+                "invalid header name": "budget-skip"
+            }),
+        )]);
+        let state = build_test_state(vec![
+            primary_provider,
+            named_fine_tuning_provider("fallback-fine-tuning", &fallback.base_url),
+        ])
+        .await;
+        state.budget_limits.providers.set_provider_limit(
+            "primary-fine-tuning",
+            ProviderLimitConfig::new(1.0, ResetPeriod::Monthly),
+        );
+        state
+            .budget_limits
+            .providers
+            .record_provider_spend("primary-fine-tuning", 2.0);
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(state))
+                .configure(litellm_rs::server::routes::ai::configure_routes),
+        )
+        .await;
+
+        let response = test::call_service(
+            &app,
+            test::TestRequest::post()
+                .uri("/v1/fine_tuning/jobs")
+                .set_json(json!({
+                    "model": "gpt-4o-mini",
+                    "training_file": "file-train"
+                }))
+                .to_request(),
+        )
+        .await;
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body: Value = test::read_body_json(response).await;
+        assert_eq!(body["provider"], "fallback-fine-tuning");
+        assert!(
+            primary.requests().is_empty(),
+            "budget fallback must skip exhausted fine-tuning provider before upstream"
+        );
+        let fallback_requests = fallback.requests();
+        assert_eq!(fallback_requests.len(), 1);
+        assert_eq!(fallback_requests[0].path, "/v1/fine_tuning/jobs");
+
+        primary.shutdown().await;
+        fallback.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn fine_tuning_routes_use_fallback_when_primary_upstream_fails() {
+        let primary = MockFineTuningServer::start_failing(StatusCode::SERVICE_UNAVAILABLE).await;
+        let fallback = MockFineTuningServer::start().await;
+        let state = build_test_state(vec![
+            named_fine_tuning_provider("primary-fine-tuning", &primary.base_url),
+            named_fine_tuning_provider("fallback-fine-tuning", &fallback.base_url),
+        ])
+        .await;
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(state))
+                .configure(litellm_rs::server::routes::ai::configure_routes),
+        )
+        .await;
+
+        let scenarios = [
+            (
+                Method::POST,
+                "/v1/fine_tuning/jobs",
+                "/v1/fine_tuning/jobs",
+                "",
+            ),
+            (
+                Method::GET,
+                "/v1/fine_tuning/jobs?after=ftjob_prev&limit=1",
+                "/v1/fine_tuning/jobs",
+                "after=ftjob_prev&limit=1",
+            ),
+            (
+                Method::GET,
+                "/v1/fine_tuning/jobs/ftjob_mock",
+                "/v1/fine_tuning/jobs/ftjob_mock",
+                "",
+            ),
+            (
+                Method::POST,
+                "/v1/fine_tuning/jobs/ftjob_mock/cancel",
+                "/v1/fine_tuning/jobs/ftjob_mock/cancel",
+                "",
+            ),
+            (
+                Method::GET,
+                "/v1/fine_tuning/jobs/ftjob_mock/events?after=ftevent_prev&limit=2",
+                "/v1/fine_tuning/jobs/ftjob_mock/events",
+                "after=ftevent_prev&limit=2",
+            ),
+            (
+                Method::GET,
+                "/v1/fine_tuning/jobs/ftjob_mock/checkpoints",
+                "/v1/fine_tuning/jobs/ftjob_mock/checkpoints",
+                "",
+            ),
+        ];
+        for (method, uri, _, _) in &scenarios {
+            let mut request = test::TestRequest::with_uri(uri).method(method.clone());
+            if *uri == "/v1/fine_tuning/jobs" {
+                request = request.set_json(json!({
+                    "model": "gpt-4o-mini",
+                    "training_file": "file-train"
+                }));
+            }
+            let response = test::call_service(&app, request.to_request()).await;
+            assert!(
+                response.status().is_success(),
+                "{uri} should succeed via fallback, got {}",
+                response.status()
+            );
+        }
+
+        assert_eq!(primary.requests().len(), scenarios.len());
+        let fallback_requests = fallback.requests();
+        assert_eq!(fallback_requests.len(), scenarios.len());
+        assert_eq!(fallback_requests[0].body["training_file"], "file-train");
+        for (request, (method, _, path, query)) in fallback_requests.iter().zip(scenarios.iter()) {
+            assert_eq!(request.method, method.as_str());
+            assert_eq!(request.path, *path);
+            assert_eq!(request.query, *query);
+        }
+
+        primary.shutdown().await;
+        fallback.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn fine_tuning_route_does_not_validate_unreached_fallback_provider() {
+        let primary = MockFineTuningServer::start().await;
+        let mut broken_fallback =
+            named_fine_tuning_provider("broken-fine-tuning", "https://unused.invalid/v1");
+        broken_fallback.settings = HashMap::from([(
+            "headers".to_string(),
+            json!({
+                "invalid header name": "not reached"
+            }),
+        )]);
+        let state = build_test_state(vec![
+            named_fine_tuning_provider("primary-fine-tuning", &primary.base_url),
+            broken_fallback,
+        ])
+        .await;
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(state))
+                .configure(litellm_rs::server::routes::ai::configure_routes),
+        )
+        .await;
+
+        let response = test::call_service(
+            &app,
+            test::TestRequest::post()
+                .uri("/v1/fine_tuning/jobs")
+                .set_json(json!({
+                    "model": "gpt-4o-mini",
+                    "training_file": "file-train"
+                }))
+                .to_request(),
+        )
+        .await;
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let primary_requests = primary.requests();
+        assert_eq!(primary_requests.len(), 1);
+        assert_eq!(primary_requests[0].path, "/v1/fine_tuning/jobs");
+
+        primary.shutdown().await;
     }
 }
