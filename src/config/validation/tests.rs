@@ -270,6 +270,42 @@ fn test_rate_limit_validation_allows_enforced_rpm_only() {
 }
 
 #[test]
+fn test_rate_limit_validation_allows_requests_per_minute_alias() {
+    let config = RateLimitConfig {
+        enabled: true,
+        requests_per_minute: Some(25),
+        ..Default::default()
+    };
+
+    assert!(Validate::validate(&config).is_ok());
+}
+
+#[test]
+fn test_rate_limit_validation_allows_requests_per_minute_alias_with_zero_default_rpm() {
+    let config = RateLimitConfig {
+        enabled: true,
+        default_rpm: 0,
+        requests_per_minute: Some(25),
+        ..Default::default()
+    };
+
+    assert!(Validate::validate(&config).is_ok());
+}
+
+#[test]
+fn test_rate_limit_validation_rejects_zero_requests_per_minute_alias() {
+    let config = RateLimitConfig {
+        enabled: true,
+        requests_per_minute: Some(0),
+        ..Default::default()
+    };
+
+    let error = Validate::validate(&config).unwrap_err();
+    assert!(error.contains("Effective RPM"));
+    assert!(error.contains("greater than 0"));
+}
+
+#[test]
 fn test_database_validation_skips_when_disabled() {
     let config = DatabaseConfig {
         enabled: false,
