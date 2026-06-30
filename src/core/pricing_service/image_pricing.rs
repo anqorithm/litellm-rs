@@ -36,12 +36,7 @@ pub(super) fn output_image_cost(
     model_info: &LiteLLMModelInfo,
     usage: &PricingUsage,
 ) -> Result<f64> {
-    let has_image_token_price = model_info
-        .extra
-        .get("image_cost_per_token")
-        .and_then(serde_json::Value::as_f64)
-        .is_some();
-    if usage.image_tokens.is_some() && has_image_token_price {
+    if usage.image_tokens.is_some() && image_token_unit_price(model_info).is_some() {
         return Ok(0.0);
     }
 
@@ -63,12 +58,16 @@ pub(super) fn output_image_cost(
             )));
         }
     };
-    let count = usage.output_image_count.ok_or_else(|| {
-        GatewayError::Config(format!(
-            "Missing image count for model {}: output_image_count",
-            model
-        ))
-    })?;
+    let Some(count) = usage.output_image_count else {
+        return if usage.image_tokens.is_some() {
+            Err(GatewayError::Config(format!(
+                "Missing image count for model {}: output_image_count",
+                model
+            )))
+        } else {
+            Ok(0.0)
+        };
+    };
     if count == 0 {
         return Ok(0.0);
     }
@@ -85,6 +84,17 @@ pub(super) fn output_image_cost(
         )));
     }
     Ok(count as f64 * price)
+}
+
+pub(super) fn image_token_unit_price(model_info: &LiteLLMModelInfo) -> Option<f64> {
+    ["image_cost_per_token", "output_cost_per_image_token"]
+        .into_iter()
+        .find_map(|key| {
+            model_info
+                .extra
+                .get(key)
+                .and_then(serde_json::Value::as_f64)
+        })
 }
 
 fn flat_image_pricing_key_matches(model: &str, usage: &PricingUsage) -> bool {

@@ -525,7 +525,7 @@ fn litellm_to_cost_pricing(
         ),
         input_cost_per_audio_token: extra_f64(info, "input_cost_per_audio_token"),
         output_cost_per_audio_token: extra_f64(info, "output_cost_per_audio_token"),
-        image_cost_per_token: extra_f64(info, "image_cost_per_token"),
+        image_cost_per_token: image_cost_per_token(info),
         reasoning_cost_per_token: extra_f64(info, "output_cost_per_reasoning_token"),
         cost_per_second: info.cost_per_second,
         video_cost_per_second: extra_f64(info, "video_cost_per_second"),
@@ -547,7 +547,7 @@ fn has_non_token_pricing(info: &crate::core::pricing::LiteLLMModelInfo) -> bool 
     info.cost_per_second.is_some()
         || extra_f64(info, "video_cost_per_second").is_some()
         || extra_f64(info, "audio_cost_per_second").is_some()
-        || extra_f64(info, "image_cost_per_token").is_some()
+        || image_cost_per_token(info).is_some()
         || extra_f64(info, "output_cost_per_image").is_some()
 }
 
@@ -560,6 +560,11 @@ fn extra_token_cost_per_1k(
     key: &str,
 ) -> Option<f64> {
     extra_f64(info, key).map(price_per_token_to_per_1k)
+}
+
+fn image_cost_per_token(info: &crate::core::pricing::LiteLLMModelInfo) -> Option<f64> {
+    extra_f64(info, "image_cost_per_token")
+        .or_else(|| extra_f64(info, "output_cost_per_image_token"))
 }
 
 fn extra_cost_per_image(
