@@ -519,7 +519,7 @@ fn calculate_usage_cost_with_pricing(
         * extra_f64(model_info, "input_cost_per_audio_token");
     let image_cost_per_token = extra_f64(model_info, "image_cost_per_token");
     let image_cost = usage.image_tokens.unwrap_or(0) as f64 * image_cost_per_token
-        + super::image_pricing::output_image_cost(model, model_info, usage, image_cost_per_token)?;
+        + super::image_pricing::output_image_cost(model, model_info, usage)?;
     let reasoning_cost = usage.reasoning_tokens.unwrap_or(0) as f64
         * extra_f64(model_info, "output_cost_per_reasoning_token");
     let total_cost =

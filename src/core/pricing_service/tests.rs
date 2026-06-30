@@ -318,3 +318,24 @@ fn provider_pricing_prefers_image_token_price_over_flat_output_image_price() {
     assert!((cost.image_cost - 1.0).abs() < f64::EPSILON);
     assert!((cost.total_cost - 1.0).abs() < f64::EPSILON);
 }
+
+#[test]
+fn provider_pricing_treats_explicit_zero_image_token_price_as_present() {
+    let service = PricingService::new(None);
+    let mut model_info = flat_image_model_info(None);
+    model_info.extra.insert(
+        "image_cost_per_token".to_string(),
+        serde_json::Value::from(0.0),
+    );
+    service.add_custom_model("zero-image-token-model".to_string(), model_info);
+    let mut usage = PricingUsage::new(0, 0);
+    usage.image_tokens = Some(100);
+    usage.output_image_count = Some(3);
+
+    let cost = service
+        .calculate_loaded_usage_cost_for_provider("bedrock", "zero-image-token-model", &usage)
+        .unwrap();
+
+    assert_eq!(cost.image_cost, 0.0);
+    assert_eq!(cost.total_cost, 0.0);
+}

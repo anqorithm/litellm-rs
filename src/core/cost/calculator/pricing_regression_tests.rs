@@ -91,6 +91,39 @@ fn test_litellm_pricing_allows_flat_output_image_pricing_without_token_prices() 
 }
 
 #[test]
+fn test_litellm_pricing_maps_flat_output_image_pricing_to_legacy_cost_per_image() {
+    let info = model_info_from_json(serde_json::json!({
+        "litellm_provider": "bedrock",
+        "mode": "image_generation",
+        "output_cost_per_image": 0.06
+    }));
+
+    let pricing = litellm_to_cost_pricing("flat-image-model", &info)
+        .expect("flat image pricing should convert");
+
+    assert_eq!(
+        pricing
+            .cost_per_image
+            .as_ref()
+            .and_then(|prices| prices.get("base")),
+        Some(&0.06)
+    );
+}
+
+#[test]
+fn test_litellm_pricing_rejects_negative_flat_output_image_pricing() {
+    let info = model_info_from_json(serde_json::json!({
+        "litellm_provider": "bedrock",
+        "mode": "image_generation",
+        "output_cost_per_image": -0.06
+    }));
+
+    let result = litellm_to_cost_pricing("negative-flat-image-model", &info);
+
+    assert!(matches!(result, Err(CostError::InvalidUsage { .. })));
+}
+
+#[test]
 fn test_litellm_pricing_allows_single_missing_side_for_embedding() {
     // Embeddings can have only input-side token pricing.
     let info = model_info_from_json(serde_json::json!({

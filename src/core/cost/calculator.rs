@@ -529,7 +529,7 @@ fn litellm_to_cost_pricing(
         cost_per_second: info.cost_per_second,
         video_cost_per_second: extra_f64(info, "video_cost_per_second"),
         audio_cost_per_second: extra_f64(info, "audio_cost_per_second"),
-        cost_per_image: None,
+        cost_per_image: extra_cost_per_image(model, info)?,
         tiered_pricing: extra_tiered_pricing_per_1k(info),
         batch_discount: extra_f64(info, "batch_discount"),
         currency: "USD".to_string(),
@@ -559,6 +559,26 @@ fn extra_token_cost_per_1k(
     key: &str,
 ) -> Option<f64> {
     extra_f64(info, key).map(price_per_token_to_per_1k)
+}
+
+fn extra_cost_per_image(
+    model: &str,
+    info: &crate::core::pricing::LiteLLMModelInfo,
+) -> Result<Option<std::collections::HashMap<String, f64>>, CostError> {
+    let Some(price) = extra_f64(info, "output_cost_per_image") else {
+        return Ok(None);
+    };
+    if !price.is_finite() || price < 0.0 {
+        return Err(CostError::InvalidUsage {
+            message: format!(
+                "Invalid image pricing for model {model}: output_cost_per_image ({price})"
+            ),
+        });
+    }
+    Ok(Some(std::collections::HashMap::from([(
+        "base".to_string(),
+        price,
+    )])))
 }
 
 fn extra_tiered_pricing_per_1k(

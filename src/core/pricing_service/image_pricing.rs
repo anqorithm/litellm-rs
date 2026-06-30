@@ -35,10 +35,14 @@ pub(super) fn output_image_cost(
     model: &str,
     model_info: &LiteLLMModelInfo,
     usage: &PricingUsage,
-    image_token_cost: f64,
 ) -> Result<f64> {
     let count = usage.output_image_count.unwrap_or(0);
-    if count == 0 || usage.image_tokens.is_some() && image_token_cost > 0.0 {
+    let has_image_token_price = model_info
+        .extra
+        .get("image_cost_per_token")
+        .and_then(serde_json::Value::as_f64)
+        .is_some();
+    if count == 0 || usage.image_tokens.is_some() && has_image_token_price {
         return Ok(0.0);
     }
     let price = model_info
