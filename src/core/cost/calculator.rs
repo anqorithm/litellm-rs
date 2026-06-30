@@ -174,6 +174,7 @@ fn pricing_usage_from_cost_usage(usage: &UsageTokens) -> PricingUsage {
         audio_tokens: usage.audio_tokens,
         image_tokens: usage.image_tokens,
         reasoning_tokens: usage.reasoning_tokens,
+        output_image_count: None,
     }
 }
 
@@ -546,6 +547,7 @@ fn has_non_token_pricing(info: &crate::core::pricing::LiteLLMModelInfo) -> bool 
         || extra_f64(info, "video_cost_per_second").is_some()
         || extra_f64(info, "audio_cost_per_second").is_some()
         || extra_f64(info, "image_cost_per_token").is_some()
+        || extra_f64(info, "output_cost_per_image").is_some()
 }
 
 fn extra_f64(info: &crate::core::pricing::LiteLLMModelInfo, key: &str) -> Option<f64> {

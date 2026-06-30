@@ -6,6 +6,7 @@
 mod authority;
 mod cache;
 mod events;
+mod image_pricing;
 mod loader;
 mod service;
 mod types;

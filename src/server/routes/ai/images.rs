@@ -308,6 +308,7 @@ fn estimated_image_proxy_usage(form_fields: &ImageProxyFormFields) -> PricingUsa
     );
     let mut usage = PricingUsage::new(prompt_tokens, 0);
     usage.image_tokens = Some(image_tokens);
+    usage.output_image_count = Some(form_fields.n.max(1));
     usage
 }
 

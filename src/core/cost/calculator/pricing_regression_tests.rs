@@ -74,6 +74,23 @@ fn test_litellm_pricing_allows_missing_mode_with_non_token_pricing() {
 }
 
 #[test]
+fn test_litellm_pricing_allows_flat_output_image_pricing_without_token_prices() {
+    let info = model_info_from_json(serde_json::json!({
+        "litellm_provider": "bedrock",
+        "mode": "image_generation",
+        "output_cost_per_image": 0.06
+    }));
+
+    let pricing = match litellm_to_cost_pricing("flat-image-model", &info) {
+        Ok(pricing) => pricing,
+        Err(err) => panic!("flat image pricing should not require token prices: {err}"),
+    };
+
+    assert_eq!(pricing.input_cost_per_1k_tokens, 0.0);
+    assert_eq!(pricing.output_cost_per_1k_tokens, 0.0);
+}
+
+#[test]
 fn test_litellm_pricing_allows_single_missing_side_for_embedding() {
     // Embeddings can have only input-side token pricing.
     let info = model_info_from_json(serde_json::json!({

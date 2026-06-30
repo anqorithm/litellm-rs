@@ -473,18 +473,8 @@ fn calculate_usage_cost_with_pricing(
     model_info: &LiteLLMModelInfo,
     usage: &PricingUsage,
 ) -> Result<PricingCostBreakdown> {
-    let input_cost_per_token = super::service::require_pricing_field(
-        model_info.input_cost_per_token,
-        model,
-        "token pricing",
-        "input_cost_per_token",
-    )?;
-    let output_cost_per_token = super::service::require_pricing_field(
-        model_info.output_cost_per_token,
-        model,
-        "token pricing",
-        "output_cost_per_token",
-    )?;
+    let (input_cost_per_token, output_cost_per_token) =
+        super::image_pricing::token_unit_prices(model, model_info, usage)?;
 
     let input_cost_per_token = tiered_cost_per_token(
         model_info,
@@ -527,8 +517,9 @@ fn calculate_usage_cost_with_pricing(
         + cache_read_tokens as f64 * cache_read_cost_per_token;
     let audio_cost = usage.audio_tokens.unwrap_or(0) as f64
         * extra_f64(model_info, "input_cost_per_audio_token");
-    let image_cost =
-        usage.image_tokens.unwrap_or(0) as f64 * extra_f64(model_info, "image_cost_per_token");
+    let image_cost_per_token = extra_f64(model_info, "image_cost_per_token");
+    let image_cost = usage.image_tokens.unwrap_or(0) as f64 * image_cost_per_token
+        + super::image_pricing::output_image_cost(model, model_info, usage, image_cost_per_token)?;
     let reasoning_cost = usage.reasoning_tokens.unwrap_or(0) as f64
         * extra_f64(model_info, "output_cost_per_reasoning_token");
     let total_cost =

@@ -128,12 +128,14 @@ pub async fn handle_image_generation_with_state(
 
 fn estimated_image_generation_usage(request: &CoreImageRequest) -> PricingUsage {
     let prompt_tokens = super::estimated_text_tokens(&request.prompt);
+    let image_count = request.n.unwrap_or(1);
     let image_tokens = super::estimated_image_output_tokens(
         request.size.as_deref(),
         request.quality.as_deref(),
-        request.n.unwrap_or(1),
+        image_count,
     );
     let mut usage = PricingUsage::new(prompt_tokens, 0);
     usage.image_tokens = Some(image_tokens);
+    usage.output_image_count = Some(image_count.max(1));
     usage
 }

@@ -408,6 +408,11 @@ fn has_non_token_database_pricing(pricing: &ModelPricing) -> bool {
             .get("image_cost_per_token")
             .and_then(serde_json::Value::as_f64)
             .is_some()
+        || pricing
+            .extra
+            .get("output_cost_per_image")
+            .and_then(serde_json::Value::as_f64)
+            .is_some()
 }
 
 fn pricing_matches_provider(_model_key: &str, pricing: &ModelPricing, provider: &str) -> bool {
