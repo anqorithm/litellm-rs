@@ -462,11 +462,11 @@ mod tests {
         )])
         .await;
         state.pricing.add_custom_model(
-            "512-x-512/flat-variant-model".to_string(),
+            "standard/512-x-512/flat-variant-model".to_string(),
             flat_image_model_info(0.05),
         );
         state.pricing.add_custom_model(
-            "1024-x-1024/flat-variant-model".to_string(),
+            "hd/512-x-512/flat-variant-model".to_string(),
             flat_image_model_info(0.10),
         );
         state.budget_limits.providers.set_provider_limit(
@@ -489,6 +489,7 @@ mod tests {
                     "model": "flat-variant-alias",
                     "prompt": "make an icon",
                     "size": "512x512",
+                    "quality": "hd",
                     "n": 2
                 }))
                 .to_request(),
@@ -509,7 +510,7 @@ mod tests {
             .get_provider_usage("openai-primary")
             .map(|usage| usage.current_spend)
             .unwrap_or_default();
-        assert!((spent - 0.10).abs() < f64::EPSILON);
+        assert!((spent - 0.20).abs() < f64::EPSILON);
         mock.stop().await;
     }
 

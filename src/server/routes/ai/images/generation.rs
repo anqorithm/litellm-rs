@@ -29,7 +29,7 @@ pub async fn handle_image_generation_with_state(
         size: request.size,
         response_format: request.response_format,
         user: request.user,
-        quality: None,
+        quality: request.quality,
         style: None,
     };
 
