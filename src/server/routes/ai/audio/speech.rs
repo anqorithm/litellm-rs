@@ -70,6 +70,10 @@ pub async fn audio_speech(
 
     let requested_model = request.model.clone();
     let context_for_execution = context.clone();
+    let api_key_id = context.api_key_id();
+    let budget_limits = state.budget_limits.clone();
+    let key_manager = state.key_manager.clone();
+    let pricing_service = state.pricing.clone();
 
     match execute_with_selected_deployment(
         &state.unified_router,
@@ -78,10 +82,41 @@ pub async fn audio_speech(
         move |provider, selected_model, _deployment_id| {
             let mut request = speech_request.clone();
             let context = context_for_execution.clone();
+            let budget_limits = budget_limits.clone();
+            let key_manager = key_manager.clone();
+            let pricing_service = pricing_service.clone();
             async move {
-                request.model = selected_model;
+                let usage = super::budgeting::speech_usage(&request.input);
+                super::budgeting::reserve_audio_budget(
+                    &budget_limits,
+                    provider.name(),
+                    &selected_model,
+                    &usage,
+                )?;
+                let budget_provider = provider.name().to_string();
+                let (pricing_provider, pricing_model) =
+                    super::super::spend::pricing_identity_for_provider(
+                        pricing_service.as_ref(),
+                        &provider,
+                        &selected_model,
+                    );
+                request.model = selected_model.clone();
                 let response = provider.text_to_speech(request, context).await?;
-                Ok((response, 0))
+                let tokens_used = u64::from(usage.total_tokens);
+                super::budgeting::record_audio_spend(
+                    pricing_service.as_ref(),
+                    &budget_limits,
+                    &key_manager,
+                    api_key_id,
+                    &budget_provider,
+                    &selected_model,
+                    &pricing_provider,
+                    &pricing_model,
+                    None,
+                    &usage,
+                )
+                .await;
+                Ok((response, tokens_used))
             }
         },
     )

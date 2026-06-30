@@ -5,6 +5,7 @@ mod tests {
     use litellm_rs::Config;
     use litellm_rs::config::models::provider::ProviderConfig;
     use litellm_rs::core::budget::{ModelLimitConfig, ProviderLimitConfig, ResetPeriod};
+    use litellm_rs::core::pricing_service::PricingUsage;
     use litellm_rs::server::HttpServer as GatewayHttpServer;
     use serde_json::{Value, json};
     use std::collections::HashMap;
@@ -377,6 +378,24 @@ mod tests {
             "gpt-image-1-mini",
             ModelLimitConfig::new(100.0, ResetPeriod::Monthly),
         );
+        let mut edit_usage = PricingUsage::new(4, 0);
+        edit_usage.image_tokens = Some(1024);
+        let mut variation_usage = PricingUsage::new(1, 0);
+        variation_usage.image_tokens = Some(1024);
+        let expected_cost = state
+            .pricing
+            .calculate_loaded_usage_cost_for_provider("openai", "gpt-image-1-mini", &edit_usage)
+            .expect("edit image pricing should be available")
+            .total_cost
+            + state
+                .pricing
+                .calculate_loaded_usage_cost_for_provider(
+                    "openai",
+                    "gpt-image-1-mini",
+                    &variation_usage,
+                )
+                .expect("variation image pricing should be available")
+                .total_cost;
         let budget_limits = state.budget_limits.clone();
         let app = test::init_service(
             App::new()
@@ -450,21 +469,23 @@ mod tests {
         assert!(edit_multipart.contains("filename=\"input.png\""));
         let variation_multipart = String::from_utf8_lossy(&captured[1].body);
         assert!(variation_multipart.contains("filename=\"source.png\""));
+        let provider_spend = budget_limits
+            .providers
+            .get_provider_usage("mock-openai-compatible")
+            .expect("provider spend should be recorded")
+            .current_spend;
         assert!(
-            budget_limits
-                .providers
-                .get_provider_usage("mock-openai-compatible")
-                .expect("provider spend should be recorded")
-                .current_spend
-                > 0.0
+            (provider_spend - expected_cost).abs() < f64::EPSILON,
+            "image proxy spend must charge image tokens once"
         );
+        let model_spend = budget_limits
+            .models
+            .get_model_usage("gpt-image-1-mini")
+            .expect("model spend should be recorded")
+            .current_spend;
         assert!(
-            budget_limits
-                .models
-                .get_model_usage("gpt-image-1-mini")
-                .expect("model spend should be recorded")
-                .current_spend
-                > 0.0
+            (model_spend - expected_cost).abs() < f64::EPSILON,
+            "image proxy model spend must charge image tokens once"
         );
 
         mock.stop_image_mock().await;

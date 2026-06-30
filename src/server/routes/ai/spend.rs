@@ -4,6 +4,8 @@
 //! path: once a completion succeeds and its token usage is known, the served
 //! provider/model budget spend and the calling key's usage are recorded.
 
+mod pricing;
+
 use uuid::Uuid;
 
 use crate::core::budget::{BudgetReservationError, UnifiedBudgetLimits, UnifiedBudgetReservation};
@@ -18,6 +20,11 @@ use crate::core::types::responses::Usage;
 use crate::utils::ai::counter::token_counter::TokenCounter;
 #[cfg(test)]
 use std::sync::LazyLock;
+
+pub(super) use pricing::{
+    pricing_identity_for_provider, record_pricing_usage_spend_with_reservation_with_pricing,
+    reserve_embedding_budget_with_pricing, reserve_pricing_usage_budget_with_pricing,
+};
 
 const IMAGE_PROMPT_BASE_TOKENS: u32 = 85;
 const IMAGE_HIGH_DETAIL_PROMPT_TOKENS: u32 = 1_105;

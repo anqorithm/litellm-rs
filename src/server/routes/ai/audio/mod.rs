@@ -1,5 +1,6 @@
 //! Audio endpoints (transcription, translation, speech)
 
+mod budgeting;
 mod speech;
 mod transcriptions;
 mod translations;

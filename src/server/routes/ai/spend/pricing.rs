@@ -1,0 +1,254 @@
+use uuid::Uuid;
+
+use crate::core::budget::{UnifiedBudgetLimits, UnifiedBudgetReservation};
+use crate::core::keys::KeyManager;
+use crate::core::pricing_service::{PricingService, PricingUsage};
+use crate::core::providers::Provider;
+use crate::core::providers::provider_type::ProviderType;
+use crate::core::providers::unified_provider::ProviderError;
+use crate::core::types::embedding::EmbeddingInput;
+use crate::utils::ai::counter::token_counter::TokenCounter;
+
+pub(in crate::server::routes::ai) fn pricing_identity_for_provider(
+    pricing_service: &PricingService,
+    provider: &Provider,
+    model: &str,
+) -> (String, String) {
+    let provider_name = provider.name();
+    let mut provider_candidates = vec![provider_name.to_string()];
+
+    match provider.provider_type() {
+        ProviderType::OpenAI => provider_candidates.push("openai".to_string()),
+        ProviderType::OpenAICompatible => {
+            provider_candidates.push("openai_like".to_string());
+            provider_candidates.push("openai".to_string());
+        }
+        ProviderType::Azure => provider_candidates.push("azure".to_string()),
+        ProviderType::AzureAI => provider_candidates.push("azure_ai".to_string()),
+        other => provider_candidates.push(other.to_string()),
+    }
+
+    let provider_candidates =
+        provider_candidates
+            .into_iter()
+            .fold(Vec::new(), |mut unique, candidate| {
+                if !unique.contains(&candidate) {
+                    unique.push(candidate);
+                }
+                unique
+            });
+
+    let mut model_candidates = vec![model.to_string()];
+    if let Provider::OpenAI(provider) = provider {
+        let mapped = provider.config.get_model_mapping(model);
+        if !model_candidates.contains(&mapped) {
+            model_candidates.insert(0, mapped);
+        }
+    }
+
+    for pricing_provider in &provider_candidates {
+        for pricing_model in &model_candidates {
+            if let Some((resolved_model, _)) =
+                pricing_service.get_model_info_for_provider(pricing_provider, pricing_model)
+            {
+                return (pricing_provider.clone(), resolved_model);
+            }
+        }
+    }
+
+    (provider_name.to_string(), model.to_string())
+}
+
+pub(in crate::server::routes::ai) fn reserve_embedding_budget_with_pricing(
+    pricing_service: &PricingService,
+    budget_limits: &UnifiedBudgetLimits,
+    budget_provider: &str,
+    budget_model: &str,
+    pricing_provider: &str,
+    pricing_model: &str,
+    input: &EmbeddingInput,
+) -> Result<Option<UnifiedBudgetReservation>, ProviderError> {
+    let prompt_tokens = estimate_embedding_input_tokens(pricing_model, input);
+    reserve_completion_budget_with_split_pricing(
+        pricing_service,
+        budget_limits,
+        budget_provider,
+        budget_model,
+        pricing_provider,
+        pricing_model,
+        prompt_tokens,
+        Some(0),
+    )
+}
+
+pub(in crate::server::routes::ai) fn reserve_pricing_usage_budget_with_pricing(
+    pricing_service: &PricingService,
+    budget_limits: &UnifiedBudgetLimits,
+    budget_provider: &str,
+    budget_model: &str,
+    pricing_provider: &str,
+    pricing_model: &str,
+    usage: &PricingUsage,
+) -> Result<Option<UnifiedBudgetReservation>, ProviderError> {
+    let cost = match pricing_service.calculate_loaded_usage_cost_for_provider(
+        pricing_provider,
+        pricing_model,
+        usage,
+    ) {
+        Ok(breakdown) => breakdown.total_cost,
+        Err(error) => {
+            tracing::error!(
+                "cost estimation failed for pricing provider '{pricing_provider}' budget provider \
+                 '{budget_provider}' model '{budget_model}': {error}; checking exhausted status without \
+                 reservation"
+            );
+            if super::pricing_required_for_budget(budget_limits, budget_provider, budget_model) {
+                return Err(ProviderError::invalid_request(
+                    "pricing",
+                    format!(
+                        "pricing is required for budget reservation for \
+                         '{budget_provider}'/'{budget_model}': {error}"
+                    ),
+                ));
+            }
+            super::ensure_budget_available(budget_limits, budget_provider, budget_model)?;
+            return Ok(None);
+        }
+    };
+
+    if cost <= 0.0 {
+        super::ensure_budget_available(budget_limits, budget_provider, budget_model)?;
+        return Ok(None);
+    }
+
+    budget_limits
+        .reserve_spend(budget_provider, budget_model, cost)
+        .map(Some)
+        .map_err(|error| {
+            super::reservation_error_to_provider_error(error, budget_provider, budget_model)
+        })
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(in crate::server::routes::ai) async fn record_pricing_usage_spend_with_reservation_with_pricing(
+    pricing_service: &PricingService,
+    budget_limits: &UnifiedBudgetLimits,
+    key_manager: &KeyManager,
+    api_key_id: Option<Uuid>,
+    budget_provider: &str,
+    budget_model: &str,
+    pricing_provider: &str,
+    pricing_model: &str,
+    usage: &PricingUsage,
+    budget_reservation: Option<UnifiedBudgetReservation>,
+) {
+    let cost = match pricing_service.calculate_loaded_usage_cost_for_provider(
+        pricing_provider,
+        pricing_model,
+        usage,
+    ) {
+        Ok(breakdown) => Some(breakdown.total_cost),
+        Err(error) => {
+            tracing::error!(
+                "cost calculation failed for pricing provider '{pricing_provider}' budget provider \
+                 '{budget_provider}' model '{budget_model}': {error}; recording token usage without cost \
+                 and skipping budget spend"
+            );
+            None
+        }
+    };
+
+    if let Some(cost) = cost {
+        if let Some(reservation) = budget_reservation {
+            if let Err(error) = reservation.settle(cost) {
+                tracing::error!(
+                    "failed to settle reserved budget for '{budget_provider}'/'{budget_model}': \
+                     {error:?}; spend not recorded because reservation settlement failed"
+                );
+            }
+        } else {
+            budget_limits.record_spend(budget_provider, budget_model, cost);
+        }
+    }
+
+    if let Some(key_id) = api_key_id {
+        let total_tokens = usage
+            .total_tokens
+            .saturating_add(usage.audio_tokens.unwrap_or(0))
+            .saturating_add(usage.image_tokens.unwrap_or(0));
+        if let Err(error) = key_manager
+            .record_usage(key_id, u64::from(total_tokens), cost.unwrap_or(0.0))
+            .await
+        {
+            tracing::error!("failed to record usage for key {key_id}: {error}");
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn reserve_completion_budget_with_split_pricing(
+    pricing_service: &PricingService,
+    budget_limits: &UnifiedBudgetLimits,
+    budget_provider: &str,
+    budget_model: &str,
+    pricing_provider: &str,
+    pricing_model: &str,
+    estimated_prompt_tokens: u32,
+    max_output_tokens: Option<u32>,
+) -> Result<Option<UnifiedBudgetReservation>, ProviderError> {
+    let estimate = match pricing_service.estimate_loaded_completion_cost_for_provider(
+        pricing_provider,
+        pricing_model,
+        estimated_prompt_tokens,
+        max_output_tokens,
+    ) {
+        Ok(estimate) => estimate,
+        Err(error) => {
+            tracing::error!(
+                "cost estimation failed for pricing provider '{pricing_provider}' budget provider \
+                 '{budget_provider}' model '{budget_model}': {error}; checking exhausted status without \
+                 reservation"
+            );
+            if super::pricing_required_for_budget(budget_limits, budget_provider, budget_model) {
+                return Err(ProviderError::invalid_request(
+                    "pricing",
+                    format!(
+                        "pricing is required for budget reservation for \
+                         '{budget_provider}'/'{budget_model}': {error}"
+                    ),
+                ));
+            }
+            super::ensure_budget_available(budget_limits, budget_provider, budget_model)?;
+            return Ok(None);
+        }
+    };
+
+    if estimate.max_cost <= 0.0 {
+        super::ensure_budget_available(budget_limits, budget_provider, budget_model)?;
+        return Ok(None);
+    }
+
+    budget_limits
+        .reserve_spend(budget_provider, budget_model, estimate.max_cost)
+        .map(Some)
+        .map_err(|error| {
+            super::reservation_error_to_provider_error(error, budget_provider, budget_model)
+        })
+}
+
+fn estimate_embedding_input_tokens(model: &str, input: &EmbeddingInput) -> u32 {
+    let counter = TokenCounter::new();
+    input.iter().fold(0u32, |total, text| {
+        let tokens = counter
+            .count_completion_tokens(model, text)
+            .map(|estimate| estimate.input_tokens)
+            .unwrap_or_else(|error| {
+                tracing::warn!(
+                    "embedding token estimation failed for model '{model}': {error}; \
+                     using fallback estimate"
+                );
+                u32::try_from(text.chars().count().div_ceil(4)).unwrap_or(u32::MAX)
+            });
+        total.saturating_add(tokens)
+    })
+}
