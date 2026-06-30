@@ -4,9 +4,7 @@ use super::types::{ModelTokenConfig, TokenEstimate};
 use crate::core::models::openai::{ChatMessage, ContentPart, MessageContent};
 use crate::utils::error::gateway_error::{GatewayError, Result};
 use std::collections::HashMap;
-use tiktoken_rs::{
-    ChatCompletionRequestMessage, bpe_for_model, cl100k_base_singleton, num_tokens_from_messages,
-};
+use tiktoken_rs::{ChatCompletionRequestMessage, bpe_for_model, num_tokens_from_messages};
 
 /// Token counter for different models
 #[derive(Debug, Clone)]
@@ -298,6 +296,13 @@ impl TokenCounter {
     fn exact_chat_tokens(&self, model: &str, messages: &[ChatMessage]) -> Result<Option<u32>> {
         let mut tiktoken_messages = Vec::with_capacity(messages.len());
         for message in messages {
+            if message
+                .tool_calls
+                .as_ref()
+                .is_some_and(|calls| !calls.is_empty())
+            {
+                return Ok(None);
+            }
             let Some(content) = plain_text_message_content(message) else {
                 return Ok(None);
             };
@@ -345,14 +350,7 @@ fn exact_text_tokens(model: &str, text: &str) -> Result<Option<u32>> {
 }
 
 fn exact_bpe_for_model(model: &str) -> std::result::Result<&'static tiktoken_rs::CoreBPE, ()> {
-    let model = tokenizer_model_name(model);
-    bpe_for_model(model).or_else(|_| {
-        if is_openai_tokenizer_model(model) {
-            Ok(cl100k_base_singleton())
-        } else {
-            Err(())
-        }
-    })
+    bpe_for_model(tokenizer_model_name(model)).map_err(|_| ())
 }
 
 fn plain_text_message_content(message: &ChatMessage) -> Option<Option<String>> {
@@ -377,18 +375,6 @@ fn tokenizer_model_name(model: &str) -> &str {
         .rsplit_once('/')
         .map(|(_, model)| model)
         .unwrap_or(model)
-}
-
-fn is_openai_tokenizer_model(model: &str) -> bool {
-    let model = model.to_ascii_lowercase();
-    model.starts_with("gpt-")
-        || model.starts_with("chatgpt-")
-        || model.starts_with("o1")
-        || model.starts_with("o3")
-        || model.starts_with("o4")
-        || model.starts_with("codex-")
-        || model.starts_with("text-")
-        || matches!(model.as_str(), "davinci" | "curie" | "babbage" | "ada")
 }
 
 fn usize_to_u32(value: usize) -> Result<u32> {

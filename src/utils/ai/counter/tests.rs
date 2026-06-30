@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 use crate::core::models::openai::{
-    ChatMessage, ContentPart, ImageUrl, MessageContent, MessageRole,
+    ChatMessage, ContentPart, FunctionCall, ImageUrl, MessageContent, MessageRole, ToolCall,
 };
 use crate::utils::ai::counter::token_counter::TokenCounter;
 
@@ -106,6 +106,44 @@ fn test_non_openai_token_count_remains_marked_approximate() {
 
     assert!(estimate.is_approximate);
     assert!(estimate.input_tokens > 0);
+}
+
+#[test]
+fn test_unknown_openai_like_model_remains_marked_approximate() {
+    let counter = TokenCounter::new();
+
+    let estimate = counter
+        .count_completion_tokens("gpt-future-unknown", "Hello world")
+        .unwrap();
+
+    assert!(estimate.is_approximate);
+    assert!(estimate.confidence < 1.0);
+}
+
+#[test]
+fn test_tool_call_chat_token_count_remains_marked_approximate() {
+    let counter = TokenCounter::new();
+    let messages = vec![ChatMessage {
+        role: MessageRole::Assistant,
+        content: None,
+        name: None,
+        function_call: None,
+        tool_calls: Some(vec![ToolCall {
+            id: "call_123".to_string(),
+            tool_type: "function".to_string(),
+            function: FunctionCall {
+                name: "lookup".to_string(),
+                arguments: r#"{"query":"hello"}"#.to_string(),
+            },
+        }]),
+        tool_call_id: None,
+        audio: None,
+    }];
+
+    let estimate = counter.count_chat_tokens("gpt-4o", &messages).unwrap();
+
+    assert!(estimate.is_approximate);
+    assert!(estimate.confidence < 1.0);
 }
 
 #[test]
