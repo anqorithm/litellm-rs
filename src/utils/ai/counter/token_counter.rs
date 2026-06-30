@@ -296,6 +296,9 @@ impl TokenCounter {
     fn exact_chat_tokens(&self, model: &str, messages: &[ChatMessage]) -> Result<Option<u32>> {
         let mut tiktoken_messages = Vec::with_capacity(messages.len());
         for message in messages {
+            if message.tool_call_id.is_some() {
+                return Ok(None);
+            }
             if message
                 .tool_calls
                 .as_ref()
