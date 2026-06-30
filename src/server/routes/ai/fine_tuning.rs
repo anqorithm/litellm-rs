@@ -4,19 +4,21 @@
 //! proxy them to an enabled OpenAI or OpenAI-compatible provider.
 
 use crate::config::models::provider::ProviderConfig;
-use crate::core::fine_tuning::FineTuningManager;
-use crate::core::fine_tuning::config::{FineTuningConfig, ProviderFineTuningConfig};
-use crate::core::fine_tuning::providers::{FineTuningError, OpenAIFineTuningProvider};
+use crate::core::fine_tuning::config::ProviderFineTuningConfig;
+use crate::core::fine_tuning::providers::{
+    FineTuningError, FineTuningProvider, OpenAIFineTuningProvider,
+};
 use crate::core::fine_tuning::types::{
     CreateJobRequest, FineTuningCheckpoint, ListEventsParams, ListJobsParams,
 };
+use crate::core::router::execution::is_retryable_error;
 use crate::server::state::AppState;
 use crate::utils::error::gateway_error::GatewayError;
 use actix_web::{HttpResponse, Result as ActixResult, web};
 use reqwest::header::{HeaderName, HeaderValue};
 use serde::Serialize;
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::future::Future;
 use tracing::error;
 
 use super::openai_errors;
@@ -30,9 +32,9 @@ struct FineTuningRouteProvider {
     config: ProviderFineTuningConfig,
 }
 
-struct FineTuningRouteManager {
-    manager: FineTuningManager,
-    default_provider: String,
+enum FineTuningRouteError {
+    Gateway(GatewayError),
+    FineTuning(FineTuningError),
 }
 
 #[derive(Serialize)]
@@ -51,26 +53,20 @@ pub async fn create_fine_tuning_job(
         return Ok(openai_errors::gateway_error_response(&error));
     }
 
-    let route_manager = match build_fine_tuning_manager(state.get_ref()).await {
-        Ok(route_manager) => route_manager,
-        Err(error) => {
-            error!("Fine-tuning create route configuration error: {}", error);
-            return Ok(openai_errors::gateway_error_response(&error));
-        }
-    };
-    if let Err(error) = ensure_fine_tuning_budget(
-        state.get_ref(),
-        &route_manager.default_provider,
-        &request.model,
-    ) {
-        return Ok(openai_errors::gateway_error_response(&error));
-    }
-
-    match route_manager.manager.create_job(None, request).await {
+    let model = request.model.clone();
+    match execute_fine_tuning_route(state.get_ref(), &model, move |provider| {
+        let request = request.clone();
+        async move { provider.create_job(request).await }
+    })
+    .await
+    {
         Ok(job) => Ok(HttpResponse::Ok().json(job)),
         Err(error) => {
-            error!("Fine-tuning create error: {}", error);
-            Ok(fine_tuning_error_response(error))
+            error!(
+                "Fine-tuning create error: {}",
+                fine_tuning_route_error_message(&error)
+            );
+            Ok(fine_tuning_route_error_response(error))
         }
     }
 }
@@ -80,28 +76,20 @@ pub async fn list_fine_tuning_jobs(
     state: web::Data<AppState>,
     query: web::Query<ListJobsParams>,
 ) -> ActixResult<HttpResponse> {
-    let route_manager = match build_fine_tuning_manager(state.get_ref()).await {
-        Ok(route_manager) => route_manager,
-        Err(error) => {
-            error!("Fine-tuning list route configuration error: {}", error);
-            return Ok(openai_errors::gateway_error_response(&error));
-        }
-    };
-    if let Err(error) =
-        ensure_fine_tuning_budget(state.get_ref(), &route_manager.default_provider, "")
-    {
-        return Ok(openai_errors::gateway_error_response(&error));
-    }
-
-    match route_manager
-        .manager
-        .list_jobs(None, query.into_inner())
-        .await
+    let query = query.into_inner();
+    match execute_fine_tuning_route(state.get_ref(), "", move |provider| {
+        let query = query.clone();
+        async move { provider.list_jobs(query).await }
+    })
+    .await
     {
         Ok(response) => Ok(HttpResponse::Ok().json(response)),
         Err(error) => {
-            error!("Fine-tuning list error: {}", error);
-            Ok(fine_tuning_error_response(error))
+            error!(
+                "Fine-tuning list error: {}",
+                fine_tuning_route_error_message(&error)
+            );
+            Ok(fine_tuning_route_error_response(error))
         }
     }
 }
@@ -116,24 +104,19 @@ pub async fn get_fine_tuning_job(
         return Ok(openai_errors::gateway_error_response(&error));
     }
 
-    let route_manager = match build_fine_tuning_manager(state.get_ref()).await {
-        Ok(route_manager) => route_manager,
-        Err(error) => {
-            error!("Fine-tuning retrieve route configuration error: {}", error);
-            return Ok(openai_errors::gateway_error_response(&error));
-        }
-    };
-    if let Err(error) =
-        ensure_fine_tuning_budget(state.get_ref(), &route_manager.default_provider, "")
+    match execute_fine_tuning_route(state.get_ref(), "", move |provider| {
+        let job_id = job_id.clone();
+        async move { provider.get_job(&job_id).await }
+    })
+    .await
     {
-        return Ok(openai_errors::gateway_error_response(&error));
-    }
-
-    match route_manager.manager.get_job(None, &job_id).await {
         Ok(job) => Ok(HttpResponse::Ok().json(job)),
         Err(error) => {
-            error!("Fine-tuning retrieve error: {}", error);
-            Ok(fine_tuning_error_response(error))
+            error!(
+                "Fine-tuning retrieve error: {}",
+                fine_tuning_route_error_message(&error)
+            );
+            Ok(fine_tuning_route_error_response(error))
         }
     }
 }
@@ -148,24 +131,19 @@ pub async fn cancel_fine_tuning_job(
         return Ok(openai_errors::gateway_error_response(&error));
     }
 
-    let route_manager = match build_fine_tuning_manager(state.get_ref()).await {
-        Ok(route_manager) => route_manager,
-        Err(error) => {
-            error!("Fine-tuning cancel route configuration error: {}", error);
-            return Ok(openai_errors::gateway_error_response(&error));
-        }
-    };
-    if let Err(error) =
-        ensure_fine_tuning_budget(state.get_ref(), &route_manager.default_provider, "")
+    match execute_fine_tuning_route(state.get_ref(), "", move |provider| {
+        let job_id = job_id.clone();
+        async move { provider.cancel_job(&job_id).await }
+    })
+    .await
     {
-        return Ok(openai_errors::gateway_error_response(&error));
-    }
-
-    match route_manager.manager.cancel_job(None, &job_id).await {
         Ok(job) => Ok(HttpResponse::Ok().json(job)),
         Err(error) => {
-            error!("Fine-tuning cancel error: {}", error);
-            Ok(fine_tuning_error_response(error))
+            error!(
+                "Fine-tuning cancel error: {}",
+                fine_tuning_route_error_message(&error)
+            );
+            Ok(fine_tuning_route_error_response(error))
         }
     }
 }
@@ -181,28 +159,21 @@ pub async fn list_fine_tuning_events(
         return Ok(openai_errors::gateway_error_response(&error));
     }
 
-    let route_manager = match build_fine_tuning_manager(state.get_ref()).await {
-        Ok(route_manager) => route_manager,
-        Err(error) => {
-            error!("Fine-tuning events route configuration error: {}", error);
-            return Ok(openai_errors::gateway_error_response(&error));
-        }
-    };
-    if let Err(error) =
-        ensure_fine_tuning_budget(state.get_ref(), &route_manager.default_provider, "")
-    {
-        return Ok(openai_errors::gateway_error_response(&error));
-    }
-
-    match route_manager
-        .manager
-        .list_events(None, &job_id, query.into_inner())
-        .await
+    let query = query.into_inner();
+    match execute_fine_tuning_route(state.get_ref(), "", move |provider| {
+        let job_id = job_id.clone();
+        let query = query.clone();
+        async move { provider.list_events(&job_id, query).await }
+    })
+    .await
     {
         Ok(response) => Ok(HttpResponse::Ok().json(response)),
         Err(error) => {
-            error!("Fine-tuning events error: {}", error);
-            Ok(fine_tuning_error_response(error))
+            error!(
+                "Fine-tuning events error: {}",
+                fine_tuning_route_error_message(&error)
+            );
+            Ok(fine_tuning_route_error_response(error))
         }
     }
 }
@@ -217,70 +188,76 @@ pub async fn list_fine_tuning_checkpoints(
         return Ok(openai_errors::gateway_error_response(&error));
     }
 
-    let route_manager = match build_fine_tuning_manager(state.get_ref()).await {
-        Ok(route_manager) => route_manager,
-        Err(error) => {
-            error!(
-                "Fine-tuning checkpoints route configuration error: {}",
-                error
-            );
-            return Ok(openai_errors::gateway_error_response(&error));
-        }
-    };
-    if let Err(error) =
-        ensure_fine_tuning_budget(state.get_ref(), &route_manager.default_provider, "")
+    match execute_fine_tuning_route(state.get_ref(), "", move |provider| {
+        let job_id = job_id.clone();
+        async move { provider.list_checkpoints(&job_id).await }
+    })
+    .await
     {
-        return Ok(openai_errors::gateway_error_response(&error));
-    }
-
-    match route_manager.manager.list_checkpoints(None, &job_id).await {
         Ok(data) => Ok(HttpResponse::Ok().json(ListCheckpointsResponse {
             object: "list",
             data,
         })),
         Err(error) => {
-            error!("Fine-tuning checkpoints error: {}", error);
-            Ok(fine_tuning_error_response(error))
+            error!(
+                "Fine-tuning checkpoints error: {}",
+                fine_tuning_route_error_message(&error)
+            );
+            Ok(fine_tuning_route_error_response(error))
         }
     }
 }
 
-async fn build_fine_tuning_manager(
+async fn execute_fine_tuning_route<T, F, Fut>(
     state: &AppState,
-) -> Result<FineTuningRouteManager, GatewayError> {
-    let providers =
-        select_fine_tuning_route_providers(state.config().gateway.providers.as_slice())?;
-    let Some(default_provider) = providers.first().map(|provider| provider.name.clone()) else {
-        return Err(missing_fine_tuning_provider_error());
-    };
-
-    let provider_configs = providers
-        .iter()
-        .map(|provider| (provider.name.clone(), provider.config.clone()))
-        .collect();
-    let manager = FineTuningManager::new(FineTuningConfig {
-        enabled: true,
-        default_provider: Some(default_provider.clone()),
-        providers: provider_configs,
-        ..FineTuningConfig::default()
-    });
-
-    for provider in providers {
-        manager
-            .register_provider(
-                provider.name.clone(),
-                Arc::new(OpenAIFineTuningProvider::new_named(
-                    provider.config,
-                    provider.name,
-                )),
-            )
-            .await;
+    model: &str,
+    operation: F,
+) -> Result<T, FineTuningRouteError>
+where
+    F: Fn(OpenAIFineTuningProvider) -> Fut,
+    Fut: Future<Output = Result<T, FineTuningError>>,
+{
+    let config = state.config();
+    let provider_configs =
+        select_fine_tuning_route_provider_configs(config.gateway.providers.as_slice());
+    if provider_configs.is_empty() {
+        return Err(FineTuningRouteError::Gateway(
+            missing_fine_tuning_provider_error(),
+        ));
     }
 
-    Ok(FineTuningRouteManager {
-        manager,
-        default_provider,
-    })
+    let provider_count = provider_configs.len();
+    let mut last_error = None;
+    for (index, provider_config) in provider_configs.into_iter().enumerate() {
+        let is_last_provider = index + 1 == provider_count;
+        if let Err(error) = ensure_fine_tuning_budget(state, &provider_config.name, model) {
+            let error = FineTuningRouteError::Gateway(error);
+            if !is_last_provider && is_retryable_fine_tuning_route_error(&error) {
+                last_error = Some(error);
+                continue;
+            }
+            return Err(error);
+        }
+
+        let route_provider =
+            fine_tuning_route_provider(provider_config).map_err(FineTuningRouteError::Gateway)?;
+        let provider =
+            OpenAIFineTuningProvider::new_named(route_provider.config, route_provider.name);
+        match operation(provider).await {
+            Ok(response) => return Ok(response),
+            Err(error) => {
+                let error = FineTuningRouteError::FineTuning(error);
+                if !is_last_provider && is_retryable_fine_tuning_route_error(&error) {
+                    last_error = Some(error);
+                    continue;
+                }
+                return Err(error);
+            }
+        }
+    }
+
+    Err(last_error
+        .unwrap_or_else(|| FineTuningRouteError::Gateway(missing_fine_tuning_provider_error())))
 }
 
 fn ensure_fine_tuning_budget(
@@ -292,14 +269,53 @@ fn ensure_fine_tuning_budget(
         .map_err(GatewayError::from)
 }
 
+fn is_retryable_fine_tuning_route_error(error: &FineTuningRouteError) -> bool {
+    match error {
+        FineTuningRouteError::Gateway(GatewayError::Provider(error)) => is_retryable_error(error),
+        FineTuningRouteError::Gateway(
+            GatewayError::Network(_)
+            | GatewayError::Timeout(_)
+            | GatewayError::Unavailable(_)
+            | GatewayError::RateLimit { .. },
+        ) => true,
+        FineTuningRouteError::FineTuning(error) => is_retryable_fine_tuning_error(error),
+        _ => false,
+    }
+}
+
+fn is_retryable_fine_tuning_error(error: &FineTuningError) -> bool {
+    match error {
+        FineTuningError::RateLimited { .. } | FineTuningError::Network { .. } => true,
+        FineTuningError::Provider { message } => {
+            let Some(status) = message
+                .strip_prefix("API error ")
+                .and_then(|tail| tail.split(':').next())
+                .and_then(|status| status.split_whitespace().next())
+                .and_then(|status| status.parse::<u16>().ok())
+            else {
+                return false;
+            };
+            matches!(status, 408 | 429 | 500 | 502 | 503 | 504 | 507 | 529)
+        }
+        _ => false,
+    }
+}
+
+#[cfg(test)]
 fn select_fine_tuning_route_providers(
     providers: &[ProviderConfig],
 ) -> Result<Vec<FineTuningRouteProvider>, GatewayError> {
+    select_fine_tuning_route_provider_configs(providers)
+        .into_iter()
+        .map(fine_tuning_route_provider)
+        .collect()
+}
+
+fn select_fine_tuning_route_provider_configs(providers: &[ProviderConfig]) -> Vec<&ProviderConfig> {
     providers
         .iter()
         .filter(|provider| provider.enabled)
         .filter(|provider| is_openai_fine_tuning_provider(provider))
-        .map(fine_tuning_route_provider)
         .collect()
 }
 
@@ -411,6 +427,20 @@ fn missing_fine_tuning_provider_error() -> GatewayError {
     GatewayError::Config(
         "Fine-tuning API requires an enabled openai or openai_compatible provider".to_string(),
     )
+}
+
+fn fine_tuning_route_error_message(error: &FineTuningRouteError) -> String {
+    match error {
+        FineTuningRouteError::Gateway(error) => error.to_string(),
+        FineTuningRouteError::FineTuning(error) => error.to_string(),
+    }
+}
+
+fn fine_tuning_route_error_response(error: FineTuningRouteError) -> HttpResponse {
+    match error {
+        FineTuningRouteError::Gateway(error) => openai_errors::gateway_error_response(&error),
+        FineTuningRouteError::FineTuning(error) => fine_tuning_error_response(error),
+    }
 }
 
 fn fine_tuning_error_response(error: FineTuningError) -> HttpResponse {
@@ -561,5 +591,36 @@ mod tests {
         let error = validate_fine_tuning_job_id("../ftjob_123").unwrap_err();
 
         assert!(error.to_string().contains("safe path segment"));
+    }
+
+    #[test]
+    fn retryable_provider_api_statuses_are_detected() {
+        for status in [
+            "408 Request Timeout",
+            "429 Too Many Requests",
+            "500 Internal Server Error",
+            "502 Bad Gateway",
+            "503 Service Unavailable",
+            "504 Gateway Timeout",
+            "507 Insufficient Storage",
+            "529 Site is overloaded",
+        ] {
+            let error = FineTuningError::provider(format!("API error {status}: transient"));
+            assert!(
+                is_retryable_fine_tuning_error(&error),
+                "{status} should be retryable"
+            );
+        }
+
+        for status in ["400 Bad Request", "401 Unauthorized", "404 Not Found"] {
+            let error = FineTuningError::provider(format!("API error {status}: client error"));
+            assert!(
+                !is_retryable_fine_tuning_error(&error),
+                "{status} should not be retryable"
+            );
+        }
+
+        let malformed = FineTuningError::provider("API error unavailable: malformed");
+        assert!(!is_retryable_fine_tuning_error(&malformed));
     }
 }
