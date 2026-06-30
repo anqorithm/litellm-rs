@@ -97,7 +97,7 @@ fn bench_unified_router(c: &mut Criterion) {
                     router.add_deployment(deployment);
                 }
 
-                b.iter(|| black_box(router.select_deployment("gpt-4")));
+                b.iter(|| black_box(router.select_deployment_lease("gpt-4")));
             },
         );
     }
@@ -158,7 +158,7 @@ fn bench_unified_router(c: &mut Criterion) {
                     router.add_deployment(deployment);
                 }
 
-                b.iter(|| black_box(router.select_deployment("gpt-4")));
+                b.iter(|| black_box(router.select_deployment_lease("gpt-4")));
             },
         );
     }
@@ -220,7 +220,7 @@ fn bench_concurrent_router(c: &mut Criterion) {
                         for _ in 0..num_tasks {
                             let router = router.clone();
                             let handle = tokio::spawn(async move {
-                                let _ = router.select_deployment("gpt-4");
+                                let _ = router.select_deployment_lease("gpt-4");
                             });
                             handles.push(handle);
                         }
@@ -265,7 +265,7 @@ fn bench_concurrent_router(c: &mut Criterion) {
                                 } else if i % 3 == 1 {
                                     router.record_failure(&format!("deployment-{}", i % 10));
                                 } else {
-                                    let _ = router.select_deployment("gpt-4");
+                                    let _ = router.select_deployment_lease("gpt-4");
                                 }
                             });
                             handles.push(handle);
