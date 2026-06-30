@@ -16,7 +16,7 @@ pub(super) fn audio_file_usage(file: &[u8], prompt: Option<&str>) -> PricingUsag
         .unwrap_or(u32::MAX)
         .max(1);
     let prompt_tokens = prompt.map(estimated_audio_text_tokens).unwrap_or(0);
-    let mut usage = PricingUsage::new(file_tokens.saturating_add(prompt_tokens), 0);
+    let mut usage = PricingUsage::new(prompt_tokens, 0);
     usage.audio_tokens = Some(file_tokens);
     usage
 }
@@ -117,4 +117,19 @@ fn estimated_audio_text_tokens(text: &str) -> u32 {
     u32::try_from(text.chars().count().div_ceil(4))
         .unwrap_or(u32::MAX)
         .max(1)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn audio_file_usage_keeps_audio_tokens_out_of_total_tokens() {
+        let usage = audio_file_usage(&[0; 16], Some("guide"));
+
+        assert_eq!(usage.prompt_tokens, 2);
+        assert_eq!(usage.completion_tokens, 0);
+        assert_eq!(usage.total_tokens, 2);
+        assert_eq!(usage.audio_tokens, Some(4));
+    }
 }
