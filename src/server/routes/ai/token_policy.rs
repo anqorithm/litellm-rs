@@ -79,7 +79,9 @@ fn provider_effective_output_cap(
     match provider.as_str() {
         "openai" | "azure" | "azure_ai" | "openai_like" | "openrouter" | "xai" | "groq"
         | "deepseek" | "moonshot" | "minimax" | "zhipuai" | "xiaomi_mimo" | "amazon_nova"
-        | "baseten" | "huggingface" => request.max_completion_tokens.or(request.max_tokens),
+        | "baseten" | "huggingface" | "zai" | "together_ai" | "fireworks_ai" | "aiml" => {
+            request.max_completion_tokens.or(request.max_tokens)
+        }
         "anthropic" => Some(request.max_tokens.unwrap_or(4096)),
         "bedrock" => bedrock_effective_output_cap(model, request),
         "cohere" | "replicate" => request.max_tokens.or(request.max_completion_tokens),
@@ -144,6 +146,30 @@ mod tests {
             .expect("max_completion_tokens should cap max_tokens-only providers");
 
         assert_eq!(request.max_tokens, Some(10));
+    }
+
+    #[test]
+    fn issue_760_alias_providers_honor_max_completion_tokens() {
+        let request = ChatRequest {
+            max_completion_tokens: Some(10),
+            ..Default::default()
+        };
+
+        for provider in [
+            "zai",
+            "together",
+            "together_ai",
+            "fireworks",
+            "fireworks_ai",
+            "aiml_api",
+            "aiml",
+        ] {
+            assert_eq!(
+                provider_effective_output_cap(provider, "model", &request),
+                Some(10),
+                "{provider} should honor max_completion_tokens"
+            );
+        }
     }
 
     #[test]
