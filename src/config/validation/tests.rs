@@ -200,14 +200,26 @@ fn test_cache_validation_skips_when_disabled() {
 }
 
 #[test]
-fn test_cache_validation_rejects_unwired_cache_enabled() {
+fn test_cache_validation_accepts_wired_cache_enabled() {
     let config = CacheConfig {
         enabled: true,
         ..Default::default()
     };
 
+    assert!(config.validate().is_ok());
+}
+
+#[test]
+fn test_cache_validation_rejects_enabled_zero_ttl() {
+    let config = CacheConfig {
+        enabled: true,
+        ttl: 0,
+        ..Default::default()
+    };
+
     let error = config.validate().unwrap_err();
-    assert!(error.contains("not wired into runtime"));
+    assert!(error.contains("ttl"));
+    assert!(error.contains("greater than 0"));
 }
 
 #[test]
