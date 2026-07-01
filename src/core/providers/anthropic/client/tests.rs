@@ -305,7 +305,7 @@ fn test_anthropic_transform_messages_preserves_assistant_text_with_tool_use() {
     }];
 
     let transformed = client
-        .transform_messages(messages, Some(model_spec))
+        .transform_messages(messages, Some(model_spec), &Default::default())
         .unwrap();
     assert_eq!(transformed[0]["role"], "assistant");
     let content = transformed[0]["content"].as_array().unwrap();
@@ -337,7 +337,7 @@ fn test_anthropic_transform_messages_tool_role_to_tool_result() {
     }];
 
     let transformed = client
-        .transform_messages(messages, Some(model_spec))
+        .transform_messages(messages, Some(model_spec), &Default::default())
         .unwrap();
     assert_eq!(transformed[0]["role"], "user");
     let content = transformed[0]["content"].as_array().unwrap();
@@ -354,7 +354,9 @@ fn test_transform_tool_choice_auto() {
     let client = AnthropicClient::new(config).unwrap();
 
     let tool_choice = crate::core::types::tools::ToolChoice::String("auto".to_string());
-    let result = client.transform_tool_choice(&tool_choice).unwrap();
+    let result = client
+        .transform_tool_choice(&tool_choice, &Default::default())
+        .unwrap();
 
     assert_eq!(result["type"], "auto");
 }
@@ -365,7 +367,9 @@ fn test_transform_tool_choice_none() {
     let client = AnthropicClient::new(config).unwrap();
 
     let tool_choice = crate::core::types::tools::ToolChoice::String("none".to_string());
-    let result = client.transform_tool_choice(&tool_choice).unwrap();
+    let result = client
+        .transform_tool_choice(&tool_choice, &Default::default())
+        .unwrap();
 
     assert_eq!(result["type"], "none");
 }
@@ -376,7 +380,9 @@ fn test_transform_tool_choice_required() {
     let client = AnthropicClient::new(config).unwrap();
 
     let tool_choice = crate::core::types::tools::ToolChoice::String("required".to_string());
-    let result = client.transform_tool_choice(&tool_choice).unwrap();
+    let result = client
+        .transform_tool_choice(&tool_choice, &Default::default())
+        .unwrap();
 
     assert_eq!(result["type"], "any");
 }

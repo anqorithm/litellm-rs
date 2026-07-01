@@ -10,6 +10,8 @@ use super::AnthropicClient;
 
 const ANTHROPIC_TOOL_NAME_MAX_LEN: usize = 64;
 
+pub(super) type ToolNameMap = HashMap<String, String>;
+
 pub(super) fn anthropic_tool_name(name: &str) -> String {
     let mut sanitized = name
         .chars()
@@ -42,9 +44,7 @@ pub(super) fn anthropic_tools(tools: &[Tool]) -> Result<Vec<Value>, ProviderErro
         .collect())
 }
 
-pub(super) fn anthropic_tool_name_map(
-    tools: &[Tool],
-) -> Result<HashMap<String, String>, ProviderError> {
+pub(super) fn anthropic_tool_name_map(tools: &[Tool]) -> Result<ToolNameMap, ProviderError> {
     let mut names = HashMap::new();
 
     for tool in tools {
@@ -71,15 +71,41 @@ pub(super) fn anthropic_tool_name_map(
     Ok(names)
 }
 
-pub(super) fn restore_tool_name(name: &str, map: &HashMap<String, String>) -> String {
+pub(super) fn restore_tool_name(name: &str, map: &ToolNameMap) -> String {
     map.get(name).cloned().unwrap_or_else(|| name.to_string())
+}
+
+pub(super) fn declared_tool_name(
+    name: &str,
+    map: &ToolNameMap,
+    field: &str,
+) -> Result<String, ProviderError> {
+    let sanitized = anthropic_tool_name(name);
+    if map.is_empty() {
+        return Ok(sanitized);
+    }
+
+    match map.get(&sanitized) {
+        Some(original) if original == name => Ok(sanitized),
+        Some(original) => Err(ProviderError::invalid_request(
+            "anthropic",
+            format!(
+                "{} '{}' sanitizes to '{}' but declared tool '{}' already uses that Anthropic name",
+                field, name, sanitized, original
+            ),
+        )),
+        None => Err(ProviderError::invalid_request(
+            "anthropic",
+            format!("{} '{}' does not match a declared tool", field, name),
+        )),
+    }
 }
 
 impl AnthropicClient {
     pub(crate) fn anthropic_tool_name_map_for_request(
         &self,
         request: &ChatRequest,
-    ) -> Result<HashMap<String, String>, ProviderError> {
+    ) -> Result<ToolNameMap, ProviderError> {
         request
             .tools
             .as_deref()

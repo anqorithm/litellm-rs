@@ -350,9 +350,9 @@ impl AnthropicClient {
 
         // Separate system messages from user messages
         let (system_message, messages) = self.separate_system_messages(&request.messages)?;
+        let tool_name_map = self.anthropic_tool_name_map_for_request(request)?;
 
-        // Transform message format
-        let anthropic_messages = self.transform_messages(messages, model_spec)?;
+        let anthropic_messages = self.transform_messages(messages, model_spec, &tool_name_map)?;
 
         // Request
         let mut anthropic_request = json!({
@@ -401,9 +401,9 @@ impl AnthropicClient {
             let anthropic_tools = self.transform_tools(tools)?;
             anthropic_request["tools"] = json!(anthropic_tools);
 
-            // Add tool_choice
             if let Some(tool_choice) = &request.tool_choice {
-                anthropic_request["tool_choice"] = self.transform_tool_choice(tool_choice)?;
+                anthropic_request["tool_choice"] =
+                    self.transform_tool_choice(tool_choice, &tool_name_map)?;
             }
         }
 
@@ -516,6 +516,7 @@ impl AnthropicClient {
         &self,
         messages: Vec<ChatMessage>,
         model_spec: Option<&super::models::ModelSpec>,
+        tool_name_map: &request_utils::ToolNameMap,
     ) -> Result<Vec<Value>, ProviderError> {
         let mut anthropic_messages = Vec::new();
 
@@ -645,7 +646,9 @@ impl AnthropicClient {
                     anthropic_content.push(json!({
                         "type": "tool_use",
                         "id": tool_call.id,
-                        "name": request_utils::anthropic_tool_name(&tool_call.function.name),
+                        "name": request_utils::declared_tool_name(
+                            &tool_call.function.name, tool_name_map, "Tool call"
+                        )?,
                         "input": serde_json::from_str::<Value>(&tool_call.function.arguments)
                             .unwrap_or(json!({}))
                     }));
@@ -759,6 +762,7 @@ impl AnthropicClient {
     fn transform_tool_choice(
         &self,
         tool_choice: &crate::core::types::tools::ToolChoice,
+        tool_name_map: &request_utils::ToolNameMap,
     ) -> Result<Value, ProviderError> {
         match tool_choice {
             crate::core::types::tools::ToolChoice::String(choice) => match choice.as_str() {
@@ -771,7 +775,9 @@ impl AnthropicClient {
                 if let Some(func) = function {
                     Ok(json!({
                         "type": "tool",
-                        "name": request_utils::anthropic_tool_name(&func.name)
+                        "name": request_utils::declared_tool_name(
+                            &func.name, tool_name_map, "Tool choice"
+                        )?
                     }))
                 } else {
                     Ok(json!({"type": "auto"}))

@@ -54,6 +54,28 @@ fn issue_761_anthropic_transform_request_sanitizes_specific_tool_choice() {
 }
 
 #[test]
+fn issue_761_anthropic_transform_request_rejects_sanitized_tool_choice_alias() {
+    let mut request = ChatRequest::new("claude-3-opus-20240229")
+        .add_user_message("weather?")
+        .with_tools(vec![tool("weather_lookup")]);
+    request.tool_choice = Some(ToolChoice::Specific {
+        choice_type: "function".to_string(),
+        function: Some(FunctionChoice {
+            name: "weather.lookup".to_string(),
+        }),
+    });
+
+    let result = anthropic_client().transform_chat_request(&request);
+    let message = result
+        .err()
+        .map_or_else(String::new, |error| error.to_string());
+
+    assert!(message.contains("Tool choice"));
+    assert!(message.contains("weather.lookup"));
+    assert!(message.contains("weather_lookup"));
+}
+
+#[test]
 fn issue_761_anthropic_transform_request_sanitizes_assistant_tool_call_history() {
     let mut request = ChatRequest::new("claude-3-opus-20240229");
     request.messages.push(ChatMessage {
@@ -74,6 +96,35 @@ fn issue_761_anthropic_transform_request_sanitizes_assistant_tool_call_history()
     let content = transformed["messages"][0]["content"].as_array().unwrap();
 
     assert_eq!(content[1]["name"], "weather_lookup");
+}
+
+#[test]
+fn issue_761_anthropic_transform_request_rejects_sanitized_history_alias() {
+    let mut request = ChatRequest::new("claude-3-opus-20240229")
+        .add_user_message("weather?")
+        .with_tools(vec![tool("weather_lookup")]);
+    request.messages.push(ChatMessage {
+        role: MessageRole::Assistant,
+        content: None,
+        tool_calls: Some(vec![ToolCall {
+            id: "toolu_123".to_string(),
+            tool_type: "function".to_string(),
+            function: FunctionCall {
+                name: "weather.lookup".to_string(),
+                arguments: r#"{"city":"Paris"}"#.to_string(),
+            },
+        }]),
+        ..Default::default()
+    });
+
+    let result = anthropic_client().transform_chat_request(&request);
+    let message = result
+        .err()
+        .map_or_else(String::new, |error| error.to_string());
+
+    assert!(message.contains("Tool call"));
+    assert!(message.contains("weather.lookup"));
+    assert!(message.contains("weather_lookup"));
 }
 
 #[test]
