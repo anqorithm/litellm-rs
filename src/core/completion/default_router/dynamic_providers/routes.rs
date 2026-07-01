@@ -199,11 +199,22 @@ pub(super) fn resolve_dynamic_provider_api_key_from_sources(
         return Some(api_key);
     }
 
+    if route.provider_type != "openai-compatible"
+        && let Some(api_key) = provider_api_key
+    {
+        return Some(api_key);
+    }
+
     options.api_base.as_ref()?;
-    custom_api_base_api_key_fallback(options, route, openai_api_key, provider_api_key)
+    custom_api_base_api_key_fallback(options, route, openai_api_key, None)
 }
 
 fn dynamic_provider_api_key(route: &DynamicProviderRoute<'_>) -> Option<String> {
+    if let Some(definition) = crate::core::providers::registry::get_definition(route.provider_type)
+    {
+        return definition.resolve_api_key(None);
+    }
+
     dynamic_provider_api_key_env_var(route).and_then(|env_var| std::env::var(env_var).ok())
 }
 

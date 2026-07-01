@@ -110,6 +110,34 @@ fn test_get_providers_deduplication() {
     assert_eq!(providers[0], "openai");
 }
 
+#[test]
+fn issue_760_pricing_service_keeps_zai_separate_from_zhipu() {
+    let service = match PricingService::with_embedded_default() {
+        Ok(service) => service,
+        Err(error) => panic!("embedded pricing service should initialize for tests: {error}"),
+    };
+
+    let Some((resolved_model, info)) = service.get_model_info_for_provider("zai", "zai/glm-5")
+    else {
+        panic!("ZAI provider should resolve ZAI pricing rows");
+    };
+
+    assert_eq!(resolved_model, "zai/glm-5");
+    assert_eq!(info.litellm_provider, "zai");
+    assert!(
+        service
+            .get_model_info_for_provider("zhipu", "zai/glm-5")
+            .is_none(),
+        "Zhipu must not borrow distinct ZAI pricing rows"
+    );
+    assert!(
+        service
+            .get_model_info_for_provider("zhipuai", "zai/glm-5")
+            .is_none(),
+        "ZhipuAI aliases must not borrow distinct ZAI pricing rows"
+    );
+}
+
 // ==================== Add Custom Model Tests ====================
 
 #[test]

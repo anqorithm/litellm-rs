@@ -57,6 +57,24 @@ impl DefaultRouter {
         None
     }
 
+    fn select_provider_by_any_name<'a>(
+        providers: &'a [&'a crate::core::providers::Provider],
+        provider_names: &[&str],
+        original_model: &str,
+        prefix: &str,
+        chat_request: &ChatRequest,
+    ) -> Option<(&'a crate::core::providers::Provider, ChatRequest)> {
+        provider_names.iter().find_map(|provider_name| {
+            Self::select_provider_by_name(
+                providers,
+                provider_name,
+                original_model,
+                prefix,
+                chat_request,
+            )
+        })
+    }
+
     async fn register_openai_like_provider_from_env(
         provider_registry: &mut ProviderRegistry,
         provider_name: &str,

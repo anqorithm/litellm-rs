@@ -114,48 +114,54 @@ impl DefaultRouter {
                 Self::select_provider_by_name(providers, "zai", model, "zai/", chat_request)
             })
             .or_else(|| {
-                Self::select_provider_by_name(
+                Self::select_provider_by_any_name(
                     providers,
-                    "together_ai",
+                    &["together_ai", "together"],
                     model,
                     "together_ai/",
                     chat_request,
                 )
             })
             .or_else(|| {
-                Self::select_provider_by_name(
+                Self::select_provider_by_any_name(
                     providers,
-                    "together",
+                    &["together", "together_ai"],
                     model,
                     "together/",
                     chat_request,
                 )
             })
             .or_else(|| {
-                Self::select_provider_by_name(
+                Self::select_provider_by_any_name(
                     providers,
-                    "fireworks_ai",
+                    &["fireworks_ai", "fireworks"],
                     model,
                     "fireworks_ai/",
                     chat_request,
                 )
             })
             .or_else(|| {
-                Self::select_provider_by_name(
+                Self::select_provider_by_any_name(
                     providers,
-                    "fireworks",
+                    &["fireworks", "fireworks_ai"],
                     model,
                     "fireworks/",
                     chat_request,
                 )
             })
             .or_else(|| {
-                Self::select_provider_by_name(providers, "aiml", model, "aiml/", chat_request)
+                Self::select_provider_by_any_name(
+                    providers,
+                    &["aiml", "aiml_api"],
+                    model,
+                    "aiml/",
+                    chat_request,
+                )
             })
             .or_else(|| {
-                Self::select_provider_by_name(
+                Self::select_provider_by_any_name(
                     providers,
-                    "aiml_api",
+                    &["aiml_api", "aiml"],
                     model,
                     "aiml_api/",
                     chat_request,
@@ -518,27 +524,45 @@ mod tests {
 
     #[tokio::test]
     async fn issue_760_static_provider_routes_litellm_alias_prefixes() -> Result<()> {
-        let mut owned_providers = Vec::new();
-        for provider_name in ["zai", "together_ai", "fireworks_ai", "aiml"] {
-            owned_providers.push(tier1_provider(provider_name).await?);
-        }
-        let providers = owned_providers.iter().collect::<Vec<_>>();
         let cases = [
-            ("zai/glm-5", "zai", "glm-5"),
+            ("zai", "zai/glm-5", "zai", "glm-5"),
             (
+                "together_ai",
                 "together_ai/meta-llama/Llama-3.3-70B-Instruct-Turbo",
                 "together_ai",
                 "meta-llama/Llama-3.3-70B-Instruct-Turbo",
             ),
             (
+                "together",
+                "together_ai/meta-llama/Llama-3.3-70B-Instruct-Turbo",
+                "together",
+                "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+            ),
+            (
+                "together_ai",
+                "together/meta-llama/Llama-3.3-70B-Instruct-Turbo",
+                "together_ai",
+                "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+            ),
+            (
+                "fireworks_ai",
                 "fireworks_ai/accounts/fireworks/models/deepseek-v3",
                 "fireworks_ai",
                 "accounts/fireworks/models/deepseek-v3",
             ),
-            ("aiml/gpt-4o-mini", "aiml", "gpt-4o-mini"),
+            (
+                "fireworks",
+                "fireworks_ai/accounts/fireworks/models/deepseek-v3",
+                "fireworks",
+                "accounts/fireworks/models/deepseek-v3",
+            ),
+            ("aiml", "aiml/gpt-4o-mini", "aiml", "gpt-4o-mini"),
+            ("aiml_api", "aiml/gpt-4o-mini", "aiml_api", "gpt-4o-mini"),
         ];
 
-        for (model, provider_name, routed_model) in cases {
+        for (configured_provider, model, provider_name, routed_model) in cases {
+            let owned_provider = tier1_provider(configured_provider).await?;
+            let providers = vec![&owned_provider];
             let chat_request = ChatRequest {
                 model: model.to_string(),
                 ..Default::default()
