@@ -70,13 +70,14 @@ impl AnthropicClient {
 
     /// Request
     pub async fn chat(&self, request: ChatRequest) -> Result<ChatResponse, ProviderError> {
+        let tool_name_map = self.anthropic_tool_name_map_for_request(&request)?;
         let anthropic_request = self.transform_chat_request(&request)?;
         let mut headers = self.get_request_headers();
         headers.extend(self.compute_beta_headers(&request));
         let response = self
             .send_request("/v1/messages", anthropic_request, headers)
             .await?;
-        self.transform_chat_response(response)
+        self.transform_chat_response_with_tool_name_map(response, &tool_name_map)
     }
 
     /// Request
@@ -349,9 +350,9 @@ impl AnthropicClient {
 
         // Separate system messages from user messages
         let (system_message, messages) = self.separate_system_messages(&request.messages)?;
+        let tool_name_map = self.anthropic_tool_name_map_for_request(request)?;
 
-        // Transform message format
-        let anthropic_messages = self.transform_messages(messages, model_spec)?;
+        let anthropic_messages = self.transform_messages(messages, model_spec, &tool_name_map)?;
 
         // Request
         let mut anthropic_request = json!({
@@ -400,9 +401,9 @@ impl AnthropicClient {
             let anthropic_tools = self.transform_tools(tools)?;
             anthropic_request["tools"] = json!(anthropic_tools);
 
-            // Add tool_choice
             if let Some(tool_choice) = &request.tool_choice {
-                anthropic_request["tool_choice"] = self.transform_tool_choice(tool_choice)?;
+                anthropic_request["tool_choice"] =
+                    self.transform_tool_choice(tool_choice, &tool_name_map)?;
             }
         }
 
@@ -515,6 +516,7 @@ impl AnthropicClient {
         &self,
         messages: Vec<ChatMessage>,
         model_spec: Option<&super::models::ModelSpec>,
+        tool_name_map: &request_utils::ToolNameMap,
     ) -> Result<Vec<Value>, ProviderError> {
         let mut anthropic_messages = Vec::new();
 
@@ -644,7 +646,9 @@ impl AnthropicClient {
                     anthropic_content.push(json!({
                         "type": "tool_use",
                         "id": tool_call.id,
-                        "name": tool_call.function.name,
+                        "name": request_utils::declared_tool_name(
+                            &tool_call.function.name, tool_name_map, "Tool call"
+                        )?,
                         "input": serde_json::from_str::<Value>(&tool_call.function.arguments)
                             .unwrap_or(json!({}))
                     }));
@@ -751,23 +755,14 @@ impl AnthropicClient {
         &self,
         tools: &[crate::core::types::tools::Tool],
     ) -> Result<Vec<Value>, ProviderError> {
-        let mut anthropic_tools = Vec::new();
-
-        for tool in tools {
-            anthropic_tools.push(json!({
-                "name": tool.function.name,
-                "description": tool.function.description.as_ref().unwrap_or(&String::new()),
-                "input_schema": tool.function.parameters.as_ref().unwrap_or(&json!({}))
-            }));
-        }
-
-        Ok(anthropic_tools)
+        request_utils::anthropic_tools(tools)
     }
 
     /// Transform tool choice
     fn transform_tool_choice(
         &self,
         tool_choice: &crate::core::types::tools::ToolChoice,
+        tool_name_map: &request_utils::ToolNameMap,
     ) -> Result<Value, ProviderError> {
         match tool_choice {
             crate::core::types::tools::ToolChoice::String(choice) => match choice.as_str() {
@@ -780,7 +775,9 @@ impl AnthropicClient {
                 if let Some(func) = function {
                     Ok(json!({
                         "type": "tool",
-                        "name": func.name
+                        "name": request_utils::declared_tool_name(
+                            &func.name, tool_name_map, "Tool choice"
+                        )?
                     }))
                 } else {
                     Ok(json!({"type": "auto"}))
@@ -790,10 +787,13 @@ impl AnthropicClient {
     }
 }
 
+mod request_utils;
 mod response;
 mod usage;
 
 #[cfg(test)]
 mod compatible_tests;
+#[cfg(test)]
+mod request_tests;
 #[cfg(test)]
 mod tests;
