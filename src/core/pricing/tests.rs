@@ -402,6 +402,26 @@ fn provider_aliases_share_normalized_pricing_rows() {
             .contains(&"glm-5".to_string()),
         "zhipuai should list Zhipu pricing rows"
     );
+
+    assert_eq!(
+        db.calculate_for_provider("together", "together-ai-4.1b-8b", &usage),
+        db.calculate_for_provider("together_ai", "together-ai-4.1b-8b", &usage)
+    );
+    assert_eq!(
+        db.calculate_for_provider("fireworks", "fireworks_ai/deepseek-v4-flash", &usage),
+        db.calculate_for_provider("fireworks_ai", "fireworks_ai/deepseek-v4-flash", &usage)
+    );
+    assert!(
+        db.get_provider_models("aiml_api")
+            .contains(&"aiml/flux-pro".to_string()),
+        "aiml_api should list AIML pricing rows"
+    );
+    assert_eq!(normalize_pricing_provider("aiml_api"), "aiml");
+    assert_eq!(normalize_pricing_provider("zai"), "zai");
+    assert_ne!(
+        normalize_pricing_provider("zai"),
+        normalize_pricing_provider("zhipu")
+    );
 }
 
 #[test]

@@ -154,9 +154,31 @@ fn get_fallback_model_pricing(model: &str, provider: &str) -> Result<ModelPricin
         }
         "moonshot" => get_pricing_with_shared_source(model, &["moonshot"], get_moonshot_pricing),
         "minimax" => get_pricing_with_shared_source(model, &["minimax"], get_minimax_pricing),
-        "zhipuai" => {
-            get_pricing_with_shared_source(model, &["zhipuai", "glm", "zai"], get_zhipu_pricing)
-        }
+        "zhipuai" => get_pricing_with_shared_source(model, &["zhipuai", "glm"], get_zhipu_pricing),
+        "zai" => get_pricing_with_shared_source(model, &["zai"], |model| {
+            Err(CostError::ModelNotSupported {
+                model: model.to_string(),
+                provider: "zai".to_string(),
+            })
+        }),
+        "together_ai" => get_pricing_with_shared_source(model, &["together_ai"], |model| {
+            Err(CostError::ModelNotSupported {
+                model: model.to_string(),
+                provider: "together_ai".to_string(),
+            })
+        }),
+        "fireworks_ai" => get_pricing_with_shared_source(model, &["fireworks_ai"], |model| {
+            Err(CostError::ModelNotSupported {
+                model: model.to_string(),
+                provider: "fireworks_ai".to_string(),
+            })
+        }),
+        "aiml" => get_pricing_with_shared_source(model, &["aiml"], |model| {
+            Err(CostError::ModelNotSupported {
+                model: model.to_string(),
+                provider: "aiml".to_string(),
+            })
+        }),
         _ => Err(CostError::ProviderNotSupported {
             provider: provider.to_string(),
         }),
@@ -281,6 +303,10 @@ fn provider_is_supported(provider: &str) -> bool {
             | "moonshot"
             | "minimax"
             | "zhipuai"
+            | "zai"
+            | "together_ai"
+            | "fireworks_ai"
+            | "aiml"
     )
 }
 

@@ -5,7 +5,7 @@
 //! this file keeps SDK and `completion()` support from drifting away from the
 //! core provider registry.
 
-use super::{entry_for_name, get_definition};
+use super::{canonical_catalog_name, entry_for_name, get_definition};
 
 /// Public route surfaces covered by the support matrix.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -211,7 +211,42 @@ pub static PROVIDER_SURFACE_MATRIX: &[ProviderSurfaceSupport] = &[
     row(
         "zhipu",
         [P, P, U, U, U, U, U, S, S],
-        "Tier 1 catalog provider with zhipu/, glm/, and zai/ completion() routes.",
+        "Tier 1 catalog provider with zhipu/ and glm/ completion() routes.",
+    ),
+    row(
+        "zai",
+        [P, P, U, U, U, U, U, S, S],
+        "Tier 1 catalog provider with zai/ completion() dynamic route.",
+    ),
+    row(
+        "together",
+        [P, P, U, U, U, U, U, S, S],
+        "Legacy Tier 1 catalog selector with together/ completion() dynamic route.",
+    ),
+    row(
+        "together_ai",
+        [P, P, U, U, U, U, U, S, S],
+        "LiteLLM Tier 1 catalog selector with together_ai/ completion() dynamic route.",
+    ),
+    row(
+        "fireworks",
+        [P, P, U, U, U, U, U, S, S],
+        "Legacy Tier 1 catalog selector with fireworks/ completion() dynamic route.",
+    ),
+    row(
+        "fireworks_ai",
+        [P, P, U, U, U, U, U, S, S],
+        "LiteLLM Tier 1 catalog selector with fireworks_ai/ completion() dynamic route.",
+    ),
+    row(
+        "aiml",
+        [P, P, U, U, U, U, U, S, S],
+        "LiteLLM Tier 1 catalog selector with aiml/ completion() dynamic route.",
+    ),
+    row(
+        "aiml_api",
+        [P, P, U, U, U, U, U, S, S],
+        "Legacy Tier 1 catalog selector with aiml_api/ completion() dynamic route.",
     ),
     row(
         "groq",
@@ -266,6 +301,9 @@ pub fn canonical_selector(provider_name: &str) -> String {
     if let Some(entry) = entry_for_name(&lowered) {
         return entry.canonical_name.to_string();
     }
+    if let Some(canonical) = canonical_catalog_name(&lowered) {
+        return canonical.to_string();
+    }
 
     let normalized = lowered.replace('-', "_");
 
@@ -277,6 +315,7 @@ pub fn canonical_selector(provider_name: &str) -> String {
         "huggingface" | "hugging_face" => "huggingface".to_string(),
         other => entry_for_name(other)
             .map(|entry| entry.canonical_name.to_string())
+            .or_else(|| canonical_catalog_name(other).map(str::to_string))
             .unwrap_or_else(|| other.to_string()),
     }
 }

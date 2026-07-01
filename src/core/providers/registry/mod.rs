@@ -17,7 +17,7 @@ mod readme_tests;
 #[cfg(test)]
 mod support_matrix_tests;
 
-pub use catalog::{PROVIDER_CATALOG, get_definition, is_tier1_provider};
+pub use catalog::{PROVIDER_CATALOG, canonical_catalog_name, get_definition, is_tier1_provider};
 pub use definition::{AuthType, ProviderDefinition};
 pub use lifecycle::{
     PROVIDER_MODULE_LIFECYCLE, ProviderModuleLifecycle, ProviderModuleLifecycleEntry,

@@ -132,7 +132,7 @@ into the enum, dispatch, registry metadata, and factory.
 | `bedrock` | ✅ / ✅ | ✅ / – | – / – / – | – / – | SDK Bedrock and public `completion()` routing are not implemented. |
 | `mistral`, `cloudflare`, `cohere`, `vertex_ai`, `gemini`, `fal_ai`, `replicate` | provider-specific | provider-specific | – / – / – | – / – | See `support_matrix.rs` for feature-gated HTTP support. |
 | `google` / SDK `Google` | – / – | – / – | – / – / – | – / – | Google/Gemini SDK chat is intentionally unsupported until a real adapter exists. |
-| Default catalog dynamic routes: `openrouter`, `deepseek`, `moonshot`, `minimax`, `zhipu`, `groq`, `xiaomi_mimo`, `xai` | passthrough / passthrough | – / – | – / – / – | ✅ / ✅ | OpenAI-compatible routes wired into default `completion()` routing. |
+| Default catalog dynamic routes: `openrouter`, `deepseek`, `moonshot`, `minimax`, `zhipu`, `zai`, `together_ai`, `fireworks_ai`, `aiml`, `groq`, `xiaomi_mimo`, `xai` | passthrough / passthrough | – / – | – / – / – | ✅ / ✅ | OpenAI-compatible routes wired into default `completion()` routing. |
 | Other Tier 1 catalog providers | passthrough / passthrough | – / – | – / – / – | – / – | HTTP gateway chat/stream only unless routed through explicit OpenAI-compatible config. |
 | SDK `Custom` | – / – | – / – | – / – / ✅ | – / – | SDK custom providers support embeddings when `base_url` is configured. |
 | SDK `Ollama` | – / – | – / – | – / ✅ / – | – / – | SDK streaming uses the OpenAI-compatible stream parser; SDK chat is not implemented. |
@@ -166,7 +166,7 @@ All entries below route through `OpenAILikeProvider`. Chat and streaming work fo
 
 **Cloud (`Bearer` auth via env var):**
 
-`groq`, `together`, `fireworks`, `perplexity`, `cerebras`, `openrouter`, `deepinfra`, `deepseek`, `novita`, `nvidia_nim`, `nebius`, `nscale`, `hyperbolic`, `featherless`, `galadriel`, `sambanova`, `heroku`, `friendliai`, `xai`, `moonshot`, `dashscope`, `qwen`, `baichuan`, `minimax`, `volcengine`, `xiaomi_mimo`, `zhipu`, `lemonade`, `linkup`, `poe`, `wandb`, `nanogpt`, `aiml_api`, `aleph_alpha`, `anyscale`, `bytez`, `comet_api`, `compactifai`, `maritalk`, `siliconflow`, `yi`, `lambda_ai`, `ovhcloud`
+`groq`, `together`, `together_ai`, `fireworks`, `fireworks_ai`, `perplexity`, `cerebras`, `openrouter`, `deepinfra`, `deepseek`, `novita`, `nvidia_nim`, `nebius`, `nscale`, `hyperbolic`, `featherless`, `galadriel`, `sambanova`, `heroku`, `friendliai`, `xai`, `moonshot`, `dashscope`, `qwen`, `baichuan`, `minimax`, `volcengine`, `xiaomi_mimo`, `zhipu`, `zai`, `lemonade`, `linkup`, `poe`, `wandb`, `nanogpt`, `aiml_api`, `aiml`, `aleph_alpha`, `anyscale`, `bytez`, `comet_api`, `compactifai`, `maritalk`, `siliconflow`, `yi`, `lambda_ai`, `ovhcloud`
 
 **Local (no API key):**
 

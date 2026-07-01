@@ -1,4 +1,43 @@
+use super::routes::{
+    custom_api_base_api_key_fallback, dynamic_provider_api_key_env_var,
+    resolve_dynamic_provider_api_key, resolve_dynamic_provider_api_key_from_sources,
+    resolve_dynamic_provider_route, uses_dynamic_openai_like_provider,
+};
 use super::*;
+use std::sync::Mutex;
+
+static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+struct EnvSnapshot {
+    values: Vec<(&'static str, Option<String>)>,
+}
+
+impl EnvSnapshot {
+    fn clear(keys: &[&'static str]) -> Self {
+        let values = keys
+            .iter()
+            .map(|key| {
+                let value = std::env::var(key).ok();
+                unsafe { std::env::remove_var(key) };
+                (*key, value)
+            })
+            .collect();
+
+        Self { values }
+    }
+}
+
+impl Drop for EnvSnapshot {
+    fn drop(&mut self) {
+        for (key, value) in &self.values {
+            if let Some(value) = value {
+                unsafe { std::env::set_var(key, value) };
+            } else {
+                unsafe { std::env::remove_var(key) };
+            }
+        }
+    }
+}
 
 #[test]
 fn test_resolve_dynamic_route_for_moonshot() {
@@ -38,10 +77,49 @@ fn test_resolve_dynamic_route_for_zai_alias() {
     let options = CompletionOptions::default();
     let route = resolve_dynamic_provider_route("zai/glm-5", &options).unwrap();
 
-    assert_eq!(route.provider_type, "zhipu");
-    assert_eq!(route.provider_label, "Zhipu");
+    assert_eq!(route.provider_type, "zai");
+    assert_eq!(route.provider_label, "ZAI");
     assert_eq!(route.actual_model, "glm-5");
-    assert_eq!(route.api_base, "https://open.bigmodel.cn/api/paas/v4");
+    assert_eq!(route.api_base, "https://api.z.ai/api/paas/v4");
+}
+
+#[test]
+fn issue_760_resolves_litellm_openai_compatible_alias_routes() {
+    let options = CompletionOptions::default();
+    let cases = [
+        (
+            "together_ai/meta-llama/Llama-3.3-70B-Instruct-Turbo",
+            "together_ai",
+            "Together AI",
+            "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+            "https://api.together.xyz/v1",
+        ),
+        (
+            "fireworks_ai/accounts/fireworks/models/deepseek-v3",
+            "fireworks_ai",
+            "Fireworks AI",
+            "accounts/fireworks/models/deepseek-v3",
+            "https://api.fireworks.ai/inference/v1",
+        ),
+        (
+            "aiml/gpt-4o-mini",
+            "aiml",
+            "AIML API",
+            "gpt-4o-mini",
+            "https://api.aimlapi.com/v1",
+        ),
+    ];
+
+    for (model, provider_type, provider_label, actual_model, api_base) in cases {
+        let route = resolve_dynamic_provider_route(model, &options)
+            .unwrap_or_else(|| panic!("{model} route should resolve"));
+
+        assert_eq!(route.provider_type, provider_type);
+        assert_eq!(route.provider_label, provider_label);
+        assert_eq!(route.actual_model, actual_model);
+        assert_eq!(route.api_base, api_base);
+        assert!(uses_dynamic_openai_like_provider(&route));
+    }
 }
 
 #[test]
@@ -161,6 +239,18 @@ fn test_dynamic_provider_api_key_env_var_maps_named_routes() {
             "MINIMAX_API_KEY",
         ),
         ("zhipu/glm-5", "zhipu", "ZHIPU_API_KEY"),
+        ("zai/glm-5", "zai", "ZAI_API_KEY"),
+        (
+            "together_ai/meta-llama/Llama-3.3-70B-Instruct-Turbo",
+            "together_ai",
+            "TOGETHER_API_KEY",
+        ),
+        (
+            "fireworks_ai/accounts/fireworks/models/deepseek-v3",
+            "fireworks_ai",
+            "FIREWORKS_API_KEY",
+        ),
+        ("aiml/gpt-4o-mini", "aiml", "AIML_API_KEY"),
         ("xai/grok-4.3", "xai", "XAI_API_KEY"),
         ("groq/llama-3.3-70b-versatile", "groq", "GROQ_API_KEY"),
         ("xiaomi_mimo/mimo-v2.5-pro", "xiaomi_mimo", "MIMO_API_KEY"),
@@ -190,6 +280,10 @@ fn test_custom_api_base_fallback_supports_openai_compatible_named_routes() {
         "moonshot/kimi-k2.5",
         "minimax/MiniMax-M2.5-lightning",
         "zhipu/glm-5",
+        "zai/glm-5",
+        "together_ai/meta-llama/Llama-3.3-70B-Instruct-Turbo",
+        "fireworks_ai/accounts/fireworks/models/deepseek-v3",
+        "aiml/gpt-4o-mini",
         "xai/grok-4.3",
         "groq/llama-3.3-70b-versatile",
         "xiaomi_mimo/mimo-v2.5-pro",
@@ -219,6 +313,34 @@ fn test_custom_api_base_fallback_supports_openai_compatible_named_routes() {
         let dummy_key = custom_api_base_api_key_fallback(&options, &route, None, None);
         assert_eq!(dummy_key.as_deref(), Some("dummy-key-for-local"));
     }
+}
+
+#[test]
+fn issue_760_dynamic_provider_api_key_uses_catalog_alternate_env_vars() {
+    let _guard = ENV_LOCK.lock().expect("env lock should not be poisoned");
+    let _snapshot = EnvSnapshot::clear(&[
+        "OPENAI_API_KEY",
+        "TOGETHER_API_KEY",
+        "TOGETHER_AI_API_KEY",
+        "TOGETHERAI_API_KEY",
+        "TOGETHER_AI_TOKEN",
+    ]);
+    unsafe { std::env::set_var("TOGETHERAI_API_KEY", "sk-together-alt") };
+
+    let options = CompletionOptions {
+        api_base: Some("https://proxy.example.test/v1".to_string()),
+        ..CompletionOptions::default()
+    };
+    let Some(route) = resolve_dynamic_provider_route(
+        "together_ai/meta-llama/Llama-3.3-70B-Instruct-Turbo",
+        &options,
+    ) else {
+        panic!("Together AI route should resolve");
+    };
+
+    let api_key = resolve_dynamic_provider_api_key(&options, &route);
+
+    assert_eq!(api_key.as_deref(), Some("sk-together-alt"));
 }
 
 #[test]
@@ -435,7 +557,7 @@ fn test_api_key_fallback_does_not_apply_to_prefixed_routes() {
 }
 
 #[test]
-fn test_provider_env_key_does_not_activate_default_named_route() {
+fn test_provider_env_key_activates_default_named_route() {
     let options = CompletionOptions::default();
     let Some(route) = resolve_dynamic_provider_route("xai/grok-4.3", &options) else {
         panic!("prefixed route should resolve");
@@ -448,7 +570,7 @@ fn test_provider_env_key_does_not_activate_default_named_route() {
         Some("sk-openai-env".to_string()),
     );
 
-    assert!(api_key.is_none());
+    assert_eq!(api_key.as_deref(), Some("sk-xai-env"));
 }
 
 #[test]

@@ -163,6 +163,12 @@ fn resolve_model_info_for_provider(
     }
 
     let provider_aliases = pricing_provider_aliases(provider, model);
+    if let Some((prefixed_provider, _)) = provider_prefixed_model(model)
+        && crate::core::providers::registry::selector_has_matrix_entry(prefixed_provider)
+        && !provider_name_matches(prefixed_provider, &provider_aliases)
+    {
+        return None;
+    }
 
     if let Some(info) = models
         .get(model)
@@ -395,7 +401,7 @@ fn pricing_provider_aliases(provider: &str, model: &str) -> Vec<String> {
         "gemini" => vec!["gemini", "vertex_ai"],
         "vertex_ai" => vec!["vertex_ai", "google"],
         "xiaomi_mimo" => vec!["xiaomi_mimo", "xiaomi", "mimo"],
-        "zhipuai" => vec!["zhipuai", "glm", "zai"],
+        "zhipuai" => vec!["zhipuai", "glm"],
         "amazon_nova" => vec!["amazon_nova", "bedrock"],
         _ => return vec![normalized],
     };

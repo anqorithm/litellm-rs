@@ -14,12 +14,29 @@ pub static PROVIDER_CATALOG: LazyLock<HashMap<&'static str, ProviderDefinition>>
 
 /// Check if a provider name is in the Tier 1 catalog
 pub fn is_tier1_provider(name: &str) -> bool {
-    PROVIDER_CATALOG.contains_key(name)
+    canonical_catalog_name(name).is_some()
 }
 
 /// Get a provider definition by name
 pub fn get_definition(name: &str) -> Option<&'static ProviderDefinition> {
-    PROVIDER_CATALOG.get(name)
+    let canonical = canonical_catalog_name(name)?;
+    PROVIDER_CATALOG.get(canonical)
+}
+
+/// Return the canonical Tier 1 catalog selector for a provider name or alias.
+pub fn canonical_catalog_name(name: &str) -> Option<&'static str> {
+    let normalized = name.trim().to_ascii_lowercase().replace('-', "_");
+    if let Some((canonical, _)) = PROVIDER_CATALOG.get_key_value(normalized.as_str()) {
+        return Some(*canonical);
+    }
+
+    match normalized.as_str() {
+        "aimlapi" => Some("aiml_api"),
+        "fireworksai" => Some("fireworks_ai"),
+        "togetherai" => Some("together_ai"),
+        "glm" | "zhipuai" => Some("zhipu"),
+        _ => None,
+    }
 }
 
 fn build_catalog() -> HashMap<&'static str, ProviderDefinition> {
@@ -32,18 +49,58 @@ fn build_catalog() -> HashMap<&'static str, ProviderDefinition> {
             "https://api.groq.com/openai/v1",
             "GROQ_API_KEY",
         ),
-        def(
-            "together",
-            "Together AI",
-            "https://api.together.xyz/v1",
-            "TOGETHER_API_KEY",
-        ),
-        def(
-            "fireworks",
-            "Fireworks AI",
-            "https://api.fireworks.ai/inference/v1",
-            "FIREWORKS_API_KEY",
-        ),
+        ProviderDefinition {
+            alternate_auth_env_vars: &[
+                "TOGETHER_AI_API_KEY",
+                "TOGETHERAI_API_KEY",
+                "TOGETHER_AI_TOKEN",
+            ],
+            ..def(
+                "together",
+                "Together AI",
+                "https://api.together.xyz/v1",
+                "TOGETHER_API_KEY",
+            )
+        },
+        ProviderDefinition {
+            alternate_auth_env_vars: &[
+                "TOGETHER_AI_API_KEY",
+                "TOGETHERAI_API_KEY",
+                "TOGETHER_AI_TOKEN",
+            ],
+            ..def(
+                "together_ai",
+                "Together AI",
+                "https://api.together.xyz/v1",
+                "TOGETHER_API_KEY",
+            )
+        },
+        ProviderDefinition {
+            alternate_auth_env_vars: &[
+                "FIREWORKS_AI_API_KEY",
+                "FIREWORKSAI_API_KEY",
+                "FIREWORKS_AI_TOKEN",
+            ],
+            ..def(
+                "fireworks",
+                "Fireworks AI",
+                "https://api.fireworks.ai/inference/v1",
+                "FIREWORKS_API_KEY",
+            )
+        },
+        ProviderDefinition {
+            alternate_auth_env_vars: &[
+                "FIREWORKS_AI_API_KEY",
+                "FIREWORKSAI_API_KEY",
+                "FIREWORKS_AI_TOKEN",
+            ],
+            ..def(
+                "fireworks_ai",
+                "Fireworks AI",
+                "https://api.fireworks.ai/inference/v1",
+                "FIREWORKS_API_KEY",
+            )
+        },
         def(
             "perplexity",
             "Perplexity AI",
@@ -224,6 +281,7 @@ fn build_catalog() -> HashMap<&'static str, ProviderDefinition> {
             "https://open.bigmodel.cn/api/paas/v4",
             "ZHIPU_API_KEY",
         ),
+        def("zai", "ZAI", "https://api.z.ai/api/paas/v4", "ZAI_API_KEY"),
         // ===== Group 1e: Other OpenAI-compatible =====
         def(
             "lemonade",
@@ -251,12 +309,24 @@ fn build_catalog() -> HashMap<&'static str, ProviderDefinition> {
             "NANOGPT_API_KEY",
         ),
         // ===== Group 1a: Previously macro-based =====
-        def(
-            "aiml_api",
-            "AIML API",
-            "https://api.aimlapi.com/v1",
-            "AIML_API_KEY",
-        ),
+        ProviderDefinition {
+            alternate_auth_env_vars: &["AIMLAPI_KEY"],
+            ..def(
+                "aiml_api",
+                "AIML API",
+                "https://api.aimlapi.com/v1",
+                "AIML_API_KEY",
+            )
+        },
+        ProviderDefinition {
+            alternate_auth_env_vars: &["AIMLAPI_KEY"],
+            ..def(
+                "aiml",
+                "AIML API",
+                "https://api.aimlapi.com/v1",
+                "AIML_API_KEY",
+            )
+        },
         def(
             "aleph_alpha",
             "Aleph Alpha",
@@ -393,6 +463,44 @@ mod tests {
         assert_eq!(definition.alternate_auth_env_vars, &["XIAOMI_API_KEY"]);
         assert_eq!(definition.auth_type, AuthType::Bearer);
         assert!(!definition.skip_api_key);
+    }
+
+    #[test]
+    fn litellm_provider_aliases_resolve_to_canonical_catalog_definitions() {
+        let cases = [
+            (
+                "together_ai",
+                "together_ai",
+                "TOGETHER_API_KEY",
+                "https://api.together.xyz/v1",
+            ),
+            (
+                "fireworks_ai",
+                "fireworks_ai",
+                "FIREWORKS_API_KEY",
+                "https://api.fireworks.ai/inference/v1",
+            ),
+            ("aiml", "aiml", "AIML_API_KEY", "https://api.aimlapi.com/v1"),
+            ("zai", "zai", "ZAI_API_KEY", "https://api.z.ai/api/paas/v4"),
+            (
+                "zhipuai",
+                "zhipu",
+                "ZHIPU_API_KEY",
+                "https://open.bigmodel.cn/api/paas/v4",
+            ),
+        ];
+
+        for (alias, canonical, auth_env_var, base_url) in cases {
+            let Some(definition) = get_definition(alias) else {
+                panic!("{alias} alias should resolve to a catalog definition");
+            };
+
+            assert_eq!(definition.name, canonical);
+            assert_eq!(definition.auth_env_var, auth_env_var);
+            assert_eq!(definition.base_url, base_url);
+            assert_eq!(canonical_catalog_name(alias), Some(canonical));
+            assert!(is_tier1_provider(alias));
+        }
     }
 
     #[test]

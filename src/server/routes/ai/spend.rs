@@ -287,7 +287,9 @@ fn provider_effective_max_output_tokens(
     match provider.as_str() {
         "openai" | "azure" | "azure_ai" | "openai_like" | "openrouter" | "xai" | "groq"
         | "deepseek" | "moonshot" | "minimax" | "zhipuai" | "xiaomi_mimo" | "amazon_nova"
-        | "baseten" | "huggingface" => request.max_completion_tokens.or(request.max_tokens),
+        | "baseten" | "huggingface" | "zai" | "together_ai" | "fireworks_ai" | "aiml" => {
+            request.max_completion_tokens.or(request.max_tokens)
+        }
         "anthropic" => Some(request.max_tokens.unwrap_or(4096)),
         "bedrock" => bedrock_effective_max_output_tokens(model, request),
         "cohere" | "replicate" => request.max_tokens.or(request.max_completion_tokens),

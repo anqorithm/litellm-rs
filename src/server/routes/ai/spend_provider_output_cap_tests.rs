@@ -28,6 +28,31 @@ fn providers_that_ignore_max_completion_tokens_use_max_tokens_only() {
 }
 
 #[test]
+fn issue_760_alias_providers_reserve_max_completion_tokens() {
+    let mut request = ChatCompletionRequest {
+        model: "model".to_string(),
+        ..Default::default()
+    };
+    request.max_completion_tokens = Some(10);
+
+    for provider in [
+        "zai",
+        "together",
+        "together_ai",
+        "fireworks",
+        "fireworks_ai",
+        "aiml_api",
+        "aiml",
+    ] {
+        assert_eq!(
+            provider_effective_max_output_tokens(provider, "model", &request),
+            Some(10),
+            "{provider} should reserve against max_completion_tokens"
+        );
+    }
+}
+
+#[test]
 fn anthropic_without_max_tokens_reserves_adapter_default_output_cap() {
     let mut request = ChatCompletionRequest {
         model: "claude-sonnet-4-20250514".to_string(),

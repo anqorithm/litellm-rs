@@ -111,7 +111,61 @@ impl DefaultRouter {
                 Self::select_provider_by_name(providers, "zhipu", model, "glm/", chat_request)
             })
             .or_else(|| {
-                Self::select_provider_by_name(providers, "zhipu", model, "zai/", chat_request)
+                Self::select_provider_by_name(providers, "zai", model, "zai/", chat_request)
+            })
+            .or_else(|| {
+                Self::select_provider_by_any_name(
+                    providers,
+                    &["together_ai", "together"],
+                    model,
+                    "together_ai/",
+                    chat_request,
+                )
+            })
+            .or_else(|| {
+                Self::select_provider_by_any_name(
+                    providers,
+                    &["together", "together_ai"],
+                    model,
+                    "together/",
+                    chat_request,
+                )
+            })
+            .or_else(|| {
+                Self::select_provider_by_any_name(
+                    providers,
+                    &["fireworks_ai", "fireworks"],
+                    model,
+                    "fireworks_ai/",
+                    chat_request,
+                )
+            })
+            .or_else(|| {
+                Self::select_provider_by_any_name(
+                    providers,
+                    &["fireworks", "fireworks_ai"],
+                    model,
+                    "fireworks/",
+                    chat_request,
+                )
+            })
+            .or_else(|| {
+                Self::select_provider_by_any_name(
+                    providers,
+                    &["aiml", "aiml_api"],
+                    model,
+                    "aiml/",
+                    chat_request,
+                )
+            })
+            .or_else(|| {
+                Self::select_provider_by_any_name(
+                    providers,
+                    &["aiml_api", "aiml"],
+                    model,
+                    "aiml_api/",
+                    chat_request,
+                )
             })
     }
 }
@@ -465,6 +519,67 @@ mod tests {
         assert_eq!(provider.name(), "xiaomi_mimo");
         assert_eq!(routed_request.model, "mimo-v2.5-pro");
         assert_eq!(chat_request.model, "xiaomi_mimo/mimo-v2.5-pro");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn issue_760_static_provider_routes_litellm_alias_prefixes() -> Result<()> {
+        let cases = [
+            ("zai", "zai/glm-5", "zai", "glm-5"),
+            (
+                "together_ai",
+                "together_ai/meta-llama/Llama-3.3-70B-Instruct-Turbo",
+                "together_ai",
+                "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+            ),
+            (
+                "together",
+                "together_ai/meta-llama/Llama-3.3-70B-Instruct-Turbo",
+                "together",
+                "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+            ),
+            (
+                "together_ai",
+                "together/meta-llama/Llama-3.3-70B-Instruct-Turbo",
+                "together_ai",
+                "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+            ),
+            (
+                "fireworks_ai",
+                "fireworks_ai/accounts/fireworks/models/deepseek-v3",
+                "fireworks_ai",
+                "accounts/fireworks/models/deepseek-v3",
+            ),
+            (
+                "fireworks",
+                "fireworks_ai/accounts/fireworks/models/deepseek-v3",
+                "fireworks",
+                "accounts/fireworks/models/deepseek-v3",
+            ),
+            ("aiml", "aiml/gpt-4o-mini", "aiml", "gpt-4o-mini"),
+            ("aiml_api", "aiml/gpt-4o-mini", "aiml_api", "gpt-4o-mini"),
+        ];
+
+        for (configured_provider, model, provider_name, routed_model) in cases {
+            let owned_provider = tier1_provider(configured_provider).await?;
+            let providers = vec![&owned_provider];
+            let chat_request = ChatRequest {
+                model: model.to_string(),
+                ..Default::default()
+            };
+            let Some((provider, routed_request)) =
+                DefaultRouter::select_static_provider(&providers, model, &chat_request)
+            else {
+                return Err(GatewayError::internal(format!(
+                    "{provider_name}-prefixed model should select {provider_name} provider"
+                )));
+            };
+
+            assert_eq!(provider.name(), provider_name);
+            assert_eq!(routed_request.model, routed_model);
+            assert_eq!(chat_request.model, model);
+        }
+
         Ok(())
     }
 }
