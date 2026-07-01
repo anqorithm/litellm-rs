@@ -391,7 +391,7 @@ fn test_transform_tools() {
     let tools = vec![crate::core::types::tools::Tool {
         tool_type: crate::core::types::tools::ToolType::Function,
         function: crate::core::types::tools::FunctionDefinition {
-            name: "get_weather".to_string(),
+            name: "get.weather forecast".to_string(),
             description: Some("Get weather for a location".to_string()),
             parameters: Some(json!({"type": "object"})),
         },
@@ -399,7 +399,7 @@ fn test_transform_tools() {
 
     let result = client.transform_tools(&tools).unwrap();
     assert_eq!(result.len(), 1);
-    assert_eq!(result[0]["name"], "get_weather");
+    assert_eq!(result[0]["name"], "get_weather_forecast");
     assert_eq!(result[0]["description"], "Get weather for a location");
 }
 

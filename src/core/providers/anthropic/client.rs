@@ -644,7 +644,7 @@ impl AnthropicClient {
                     anthropic_content.push(json!({
                         "type": "tool_use",
                         "id": tool_call.id,
-                        "name": tool_call.function.name,
+                        "name": request_utils::anthropic_tool_name(&tool_call.function.name),
                         "input": serde_json::from_str::<Value>(&tool_call.function.arguments)
                             .unwrap_or(json!({}))
                     }));
@@ -751,17 +751,7 @@ impl AnthropicClient {
         &self,
         tools: &[crate::core::types::tools::Tool],
     ) -> Result<Vec<Value>, ProviderError> {
-        let mut anthropic_tools = Vec::new();
-
-        for tool in tools {
-            anthropic_tools.push(json!({
-                "name": tool.function.name,
-                "description": tool.function.description.as_ref().unwrap_or(&String::new()),
-                "input_schema": tool.function.parameters.as_ref().unwrap_or(&json!({}))
-            }));
-        }
-
-        Ok(anthropic_tools)
+        request_utils::anthropic_tools(tools)
     }
 
     /// Transform tool choice
@@ -780,7 +770,7 @@ impl AnthropicClient {
                 if let Some(func) = function {
                     Ok(json!({
                         "type": "tool",
-                        "name": func.name
+                        "name": request_utils::anthropic_tool_name(&func.name)
                     }))
                 } else {
                     Ok(json!({"type": "auto"}))
@@ -790,10 +780,13 @@ impl AnthropicClient {
     }
 }
 
+mod request_utils;
 mod response;
 mod usage;
 
 #[cfg(test)]
 mod compatible_tests;
+#[cfg(test)]
+mod request_tests;
 #[cfg(test)]
 mod tests;
