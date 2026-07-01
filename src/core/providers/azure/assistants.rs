@@ -210,31 +210,35 @@ impl AzureAssistantHandler {
         Ok(Self { client })
     }
 
-    fn build_assistants_url(&self, path: &str) -> String {
+    fn build_api_url(&self, resource: &str, path: &str) -> String {
+        let endpoint = self
+            .client
+            .get_config()
+            .azure_endpoint
+            .as_deref()
+            .unwrap_or("")
+            .trim_end_matches('/');
+        let base = if endpoint.is_empty() {
+            format!("openai/{}", resource)
+        } else {
+            format!("{}/openai/{}", endpoint, resource)
+        };
+
         format!(
-            "{}openai/assistants{}?api-version={}",
-            self.client
-                .get_config()
-                .azure_endpoint
-                .as_deref()
-                .unwrap_or(""),
+            "{}{}?api-version={}",
+            base,
             path,
             self.client.get_config().api_version
         )
     }
 
+    fn build_assistants_url(&self, path: &str) -> String {
+        self.build_api_url("assistants", path)
+    }
+
     #[cfg(test)]
     fn build_threads_url(&self, path: &str) -> String {
-        format!(
-            "{}openai/threads{}?api-version={}",
-            self.client
-                .get_config()
-                .azure_endpoint
-                .as_deref()
-                .unwrap_or(""),
-            path,
-            self.client.get_config().api_version
-        )
+        self.build_api_url("threads", path)
     }
 }
 

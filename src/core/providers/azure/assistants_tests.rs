@@ -534,59 +534,82 @@ fn test_validate_assistant_request_all_models() {
 
 // ==================== AzureAssistantHandler URL Tests ====================
 
-#[test]
-fn test_azure_assistant_handler_build_assistants_url() {
+fn azure_assistant_handler(endpoint: &str) -> AzureAssistantHandler {
     let config = AzureConfig::new()
-        .with_azure_endpoint("https://myresource.openai.azure.com/".to_string())
+        .with_azure_endpoint(endpoint.to_string())
         .with_api_version("2024-02-15-preview".to_string())
         .with_api_key("test-key".to_string());
 
-    let handler = AzureAssistantHandler::new(config).unwrap();
+    match AzureAssistantHandler::new(config) {
+        Ok(handler) => handler,
+        Err(error) => panic!("AzureAssistantHandler should initialize in URL tests: {error}"),
+    }
+}
+
+#[test]
+fn test_azure_assistant_handler_build_assistants_url_with_trailing_slash() {
+    let handler = azure_assistant_handler("https://myresource.openai.azure.com/");
     let url = handler.build_assistants_url("");
 
-    assert!(url.contains("myresource.openai.azure.com"));
-    assert!(url.contains("openai/assistants"));
-    assert!(url.contains("api-version=2024-02-15-preview"));
+    assert_eq!(
+        url,
+        "https://myresource.openai.azure.com/openai/assistants?api-version=2024-02-15-preview"
+    );
+}
+
+#[test]
+fn test_azure_assistant_handler_build_assistants_url_without_trailing_slash() {
+    let handler = azure_assistant_handler("https://myresource.openai.azure.com");
+    let url = handler.build_assistants_url("");
+
+    assert_eq!(
+        url,
+        "https://myresource.openai.azure.com/openai/assistants?api-version=2024-02-15-preview"
+    );
 }
 
 #[test]
 fn test_azure_assistant_handler_build_assistants_url_with_id() {
-    let config = AzureConfig::new()
-        .with_azure_endpoint("https://myresource.openai.azure.com/".to_string())
-        .with_api_version("2024-02-15-preview".to_string())
-        .with_api_key("test-key".to_string());
-
-    let handler = AzureAssistantHandler::new(config).unwrap();
+    let handler = azure_assistant_handler("https://myresource.openai.azure.com");
     let url = handler.build_assistants_url("/asst_abc123");
 
-    assert!(url.contains("/asst_abc123"));
+    assert_eq!(
+        url,
+        "https://myresource.openai.azure.com/openai/assistants/asst_abc123?api-version=2024-02-15-preview"
+    );
 }
 
 #[test]
-fn test_azure_assistant_handler_build_threads_url() {
-    let config = AzureConfig::new()
-        .with_azure_endpoint("https://myresource.openai.azure.com/".to_string())
-        .with_api_version("2024-02-15-preview".to_string())
-        .with_api_key("test-key".to_string());
-
-    let handler = AzureAssistantHandler::new(config).unwrap();
+fn test_azure_assistant_handler_build_threads_url_with_trailing_slash() {
+    let handler = azure_assistant_handler("https://myresource.openai.azure.com/");
     let url = handler.build_threads_url("");
 
-    assert!(url.contains("openai/threads"));
-    assert!(url.contains("api-version=2024-02-15-preview"));
+    assert_eq!(
+        url,
+        "https://myresource.openai.azure.com/openai/threads?api-version=2024-02-15-preview"
+    );
+}
+
+#[test]
+fn test_azure_assistant_handler_build_threads_url_without_trailing_slash() {
+    let handler = azure_assistant_handler("https://myresource.openai.azure.com");
+    let url = handler.build_threads_url("");
+
+    assert_eq!(
+        url,
+        "https://myresource.openai.azure.com/openai/threads?api-version=2024-02-15-preview"
+    );
 }
 
 #[test]
 fn test_azure_assistant_handler_build_threads_url_with_path() {
-    let config = AzureConfig::new()
-        .with_azure_endpoint("https://myresource.openai.azure.com/".to_string())
-        .with_api_version("2024-02-15-preview".to_string())
-        .with_api_key("test-key".to_string());
-
-    let handler = AzureAssistantHandler::new(config).unwrap();
+    let handler = azure_assistant_handler("https://myresource.openai.azure.com");
     let url = handler.build_threads_url("/thread_123/messages");
 
-    assert!(url.contains("/thread_123/messages"));
+    assert_eq!(
+        url,
+        "https://myresource.openai.azure.com/openai/threads/thread_123/messages?api-version=2024-02-15-preview"
+    );
 }
 
 // ==================== Clone and Debug Tests ====================
