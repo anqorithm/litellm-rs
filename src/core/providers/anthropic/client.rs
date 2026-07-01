@@ -70,13 +70,14 @@ impl AnthropicClient {
 
     /// Request
     pub async fn chat(&self, request: ChatRequest) -> Result<ChatResponse, ProviderError> {
+        let tool_name_map = self.anthropic_tool_name_map_for_request(&request)?;
         let anthropic_request = self.transform_chat_request(&request)?;
         let mut headers = self.get_request_headers();
         headers.extend(self.compute_beta_headers(&request));
         let response = self
             .send_request("/v1/messages", anthropic_request, headers)
             .await?;
-        self.transform_chat_response(response)
+        self.transform_chat_response_with_tool_name_map(response, &tool_name_map)
     }
 
     /// Request

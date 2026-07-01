@@ -1,9 +1,12 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, hash_map::Entry};
 
 use serde_json::{Value, json};
 
 use crate::core::providers::unified_provider::ProviderError;
+use crate::core::types::chat::ChatRequest;
 use crate::core::types::tools::Tool;
+
+use super::AnthropicClient;
 
 const ANTHROPIC_TOOL_NAME_MAX_LEN: usize = 64;
 
@@ -26,14 +29,12 @@ pub(super) fn anthropic_tool_name(name: &str) -> String {
 }
 
 pub(super) fn anthropic_tools(tools: &[Tool]) -> Result<Vec<Value>, ProviderError> {
-    let names =
-        sanitized_anthropic_tool_names(tools.iter().map(|tool| tool.function.name.as_str()))?;
+    anthropic_tool_name_map(tools)?;
     Ok(tools
         .iter()
-        .zip(names)
-        .map(|(tool, name)| {
+        .map(|tool| {
             json!({
-                "name": name,
+                "name": anthropic_tool_name(&tool.function.name),
                 "description": tool.function.description.as_deref().unwrap_or(""),
                 "input_schema": tool.function.parameters.as_ref().unwrap_or(&json!({}))
             })
@@ -41,27 +42,50 @@ pub(super) fn anthropic_tools(tools: &[Tool]) -> Result<Vec<Value>, ProviderErro
         .collect())
 }
 
-fn sanitized_anthropic_tool_names<'a>(
-    names: impl IntoIterator<Item = &'a str>,
-) -> Result<Vec<String>, ProviderError> {
-    let mut seen = HashSet::new();
-    let mut sanitized_names = Vec::new();
+pub(super) fn anthropic_tool_name_map(
+    tools: &[Tool],
+) -> Result<HashMap<String, String>, ProviderError> {
+    let mut names = HashMap::new();
 
-    for name in names {
+    for tool in tools {
+        let name = &tool.function.name;
         let sanitized = anthropic_tool_name(name);
-        if !seen.insert(sanitized.clone()) {
-            return Err(ProviderError::invalid_request(
-                "anthropic",
-                format!(
-                    "Tool name '{}' collides after Anthropic name sanitization",
-                    name
-                ),
-            ));
+        match names.entry(sanitized.clone()) {
+            Entry::Vacant(entry) => {
+                entry.insert(name.clone());
+            }
+            Entry::Occupied(entry) => {
+                return Err(ProviderError::invalid_request(
+                    "anthropic",
+                    format!(
+                        "Tool name '{}' collides with '{}' after Anthropic name sanitization to '{}'",
+                        name,
+                        entry.get(),
+                        sanitized
+                    ),
+                ));
+            }
         }
-        sanitized_names.push(sanitized);
     }
 
-    Ok(sanitized_names)
+    Ok(names)
+}
+
+pub(super) fn restore_tool_name(name: &str, map: &HashMap<String, String>) -> String {
+    map.get(name).cloned().unwrap_or_else(|| name.to_string())
+}
+
+impl AnthropicClient {
+    pub(crate) fn anthropic_tool_name_map_for_request(
+        &self,
+        request: &ChatRequest,
+    ) -> Result<HashMap<String, String>, ProviderError> {
+        request
+            .tools
+            .as_deref()
+            .map(anthropic_tool_name_map)
+            .unwrap_or_else(|| Ok(HashMap::new()))
+    }
 }
 
 #[cfg(test)]
@@ -80,9 +104,23 @@ mod tests {
 
     #[test]
     fn issue_761_rejects_sanitized_tool_name_collisions() {
-        let error = sanitized_anthropic_tool_names(["get.weather", "get_weather"])
-            .expect_err("sanitized tool names must be unique");
+        let tools = vec![test_tool("get.weather"), test_tool("get_weather")];
+        let error =
+            anthropic_tool_name_map(&tools).expect_err("sanitized tool names must be unique");
+        let message = error.to_string();
 
-        assert!(error.to_string().contains("collides"));
+        assert!(message.contains("get.weather"));
+        assert!(message.contains("get_weather"));
+    }
+
+    fn test_tool(name: &str) -> Tool {
+        Tool {
+            tool_type: crate::core::types::tools::ToolType::Function,
+            function: crate::core::types::tools::FunctionDefinition {
+                name: name.to_string(),
+                description: None,
+                parameters: None,
+            },
+        }
     }
 }

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde_json::Value;
 use tracing::warn;
 
@@ -17,13 +19,27 @@ use crate::core::types::thinking::ThinkingDelta;
 #[derive(Debug, Clone)]
 pub struct AnthropicTransformer {
     model: String,
+    tool_name_map: HashMap<String, String>,
 }
 
 impl AnthropicTransformer {
     pub fn new(model: impl Into<String>) -> Self {
         Self {
             model: model.into(),
+            tool_name_map: HashMap::new(),
         }
+    }
+
+    pub fn with_tool_name_map(mut self, tool_name_map: HashMap<String, String>) -> Self {
+        self.tool_name_map = tool_name_map;
+        self
+    }
+
+    fn restore_tool_name(&self, name: &str) -> String {
+        self.tool_name_map
+            .get(name)
+            .cloned()
+            .unwrap_or_else(|| name.to_string())
     }
 
     fn parse_anthropic_finish_reason(reason: &str) -> FinishReason {
@@ -143,7 +159,7 @@ impl SSETransformer for AnthropicTransformer {
                         let name = content_block
                             .get("name")
                             .and_then(|v| v.as_str())
-                            .map(str::to_string);
+                            .map(|name| self.restore_tool_name(name));
                         let arguments = content_block.get("input").and_then(|input| {
                             if input.is_null()
                                 || input
@@ -375,5 +391,37 @@ mod tests {
         let chunk = t.transform_chunk(&event.to_string()).unwrap().unwrap();
         let usage = chunk.usage.as_ref().unwrap();
         assert!(usage.prompt_tokens_details.is_none());
+    }
+
+    #[test]
+    fn issue_761_stream_restores_original_tool_names()
+    -> Result<(), crate::core::providers::unified_provider::ProviderError> {
+        let t =
+            AnthropicTransformer::new("claude-3-5-sonnet").with_tool_name_map(HashMap::from([(
+                "weather_lookup".to_string(),
+                "weather.lookup".to_string(),
+            )]));
+        let event = serde_json::json!({
+            "type": "content_block_start",
+            "index": 0,
+            "content_block": {
+                "type": "tool_use",
+                "id": "toolu_123",
+                "name": "weather_lookup",
+                "input": {}
+            }
+        });
+
+        let chunk = t.transform_chunk(&event.to_string())?;
+        let name = chunk
+            .as_ref()
+            .and_then(|chunk| chunk.choices.first())
+            .and_then(|choice| choice.delta.tool_calls.as_ref())
+            .and_then(|tool_calls| tool_calls.first())
+            .and_then(|tool_call| tool_call.function.as_ref())
+            .and_then(|function| function.name.as_deref());
+
+        assert_eq!(name, Some("weather.lookup"));
+        Ok(())
     }
 }

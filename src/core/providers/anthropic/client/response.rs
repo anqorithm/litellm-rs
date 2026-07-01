@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde_json::Value;
 
 use crate::core::providers::unified_provider::ProviderError;
@@ -9,7 +11,7 @@ use crate::core::types::{
     tools::{FunctionCall, ToolCall},
 };
 
-use super::{AnthropicClient, anthropic_parse_error, usage};
+use super::{AnthropicClient, anthropic_parse_error, request_utils, usage};
 
 fn parse_anthropic_stop_reason(reason: &str) -> FinishReason {
     match reason {
@@ -25,9 +27,18 @@ fn parse_anthropic_stop_reason(reason: &str) -> FinishReason {
 
 impl AnthropicClient {
     /// Response
+    #[cfg(test)]
     pub(super) fn transform_chat_response(
         &self,
         response: Value,
+    ) -> Result<ChatResponse, ProviderError> {
+        self.transform_chat_response_with_tool_name_map(response, &HashMap::new())
+    }
+
+    pub(crate) fn transform_chat_response_with_tool_name_map(
+        &self,
+        response: Value,
+        tool_name_map: &HashMap<String, String>,
     ) -> Result<ChatResponse, ProviderError> {
         // Extract basic information
         let id = response
@@ -76,7 +87,7 @@ impl AnthropicClient {
                             id: id.to_string(),
                             tool_type: "function".to_string(),
                             function: FunctionCall {
-                                name: name.to_string(),
+                                name: request_utils::restore_tool_name(name, tool_name_map),
                                 arguments: input.to_string(),
                             },
                         });

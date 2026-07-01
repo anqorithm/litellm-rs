@@ -81,6 +81,42 @@ fn issue_761_anthropic_transform_tools_rejects_sanitized_name_collisions() {
     let error = anthropic_client()
         .transform_tools(&[tool("weather.lookup"), tool("weather/lookup")])
         .expect_err("colliding sanitized names must fail closed");
+    let message = error.to_string();
 
-    assert!(error.to_string().contains("collides"));
+    assert!(message.contains("weather.lookup"));
+    assert!(message.contains("weather/lookup"));
+    assert!(message.contains("weather_lookup"));
+}
+
+#[test]
+fn issue_761_anthropic_transform_response_restores_original_tool_names()
+-> Result<(), crate::core::providers::unified_provider::ProviderError> {
+    let client = anthropic_client();
+    let request = ChatRequest::new("claude-3-opus-20240229")
+        .add_user_message("weather?")
+        .with_tools(vec![tool("weather.lookup")]);
+    let tool_name_map = client.anthropic_tool_name_map_for_request(&request)?;
+    let response = json!({
+        "id": "msg_123",
+        "model": "claude-3-opus-20240229",
+        "content": [{
+            "type": "tool_use",
+            "id": "toolu_123",
+            "name": "weather_lookup",
+            "input": {"city": "Paris"}
+        }],
+        "stop_reason": "tool_use",
+        "usage": {"input_tokens": 10, "output_tokens": 5}
+    });
+
+    let result = client.transform_chat_response_with_tool_name_map(response, &tool_name_map)?;
+    let name = result.choices[0]
+        .message
+        .tool_calls
+        .as_ref()
+        .and_then(|tool_calls| tool_calls.first())
+        .map(|tool_call| tool_call.function.name.as_str());
+
+    assert_eq!(name, Some("weather.lookup"));
+    Ok(())
 }

@@ -24,7 +24,6 @@ use crate::core::types::{
 use super::client::AnthropicClient;
 use super::config::AnthropicConfig;
 use super::models::{ModelFeature, get_anthropic_registry};
-use super::streaming::AnthropicStream;
 use crate::core::traits::error_mapper::trait_def::ErrorMapper;
 
 const COMPATIBLE_MODEL_MAX_OUTPUT_TOKENS: u32 = 128_000;
@@ -370,8 +369,7 @@ impl LLMProvider for AnthropicProvider {
             ));
         }
 
-        let response = self.client.chat_stream(request.clone()).await?;
-        let stream = AnthropicStream::from_response(response, request.model);
+        let stream = self.client.chat_stream_chunks(request).await?;
 
         Ok(Box::pin(stream))
     }
