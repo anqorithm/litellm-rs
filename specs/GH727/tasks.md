@@ -294,24 +294,30 @@ GH-727 / #727
 - [x] `SP727-T281` Owner: coordinator. Done when: `src/core/providers/openai/client_tests.rs` keeps shared imports, `create_test_config`, `create_test_provider`, typed-param request helper, typed-param assertion helper, and child module declarations. Verify: `sed -n '1,120p' src/core/providers/openai/client_tests.rs`.
 - [x] `SP727-T282` Owner: coordinator. Done when: original OpenAI provider tests move into `src/core/providers/openai/client_tests/*.rs` by behavior domain without assertion changes. Verify: `rg -n "test_provider_creation|test_provider_capabilities|test_model_support_detection|test_get_supported_openai_params_advertises_forwarded_chat_fields|test_transform_chat_request_basic|test_openai_like_transform_request_forwards_typed_params_and_extras|test_map_openai_params_passthrough|test_calculate_cost|test_error_mapper_authentication|test_get_request_headers_with_api_key|test_provider_clone|test_model_recommendations|test_model_pricing_prefers_shared_cost_source|test_context_window" src/core/providers/openai/client_tests`.
 - [x] `SP727-T283` Owner: verification owner. Done when: all touched OpenAI client test files are below U-16's 800-line ceiling and focused OpenAI client tests pass. Verify: `wc -l src/core/providers/openai/client_tests.rs src/core/providers/openai/client_tests/*.rs`; `cargo test core::providers::openai::client_tests --lib --all-features` passed 47 tests.
-- [ ] `SP727-T284` Owner: verification owner. Done when: formatting, SpecRail, diff check, lib all-features check, locked all-features check, default check, PR CI, and review-thread gate pass for the OpenAI client tests tranche. Verify: `cargo fmt --all -- --check`; `git diff --check`; `python3 /Users/apple/Desktop/code/AI/tool/specrail/checks/check_workflow.py --repo /Users/apple/Desktop/code/AI/tool/specrail --spec-dir "$PWD/specs/GH727"`; `cargo check --lib --all-features`; `cargo check --all-features --locked`; `cargo check`; GitHub PR CI and review-thread query.
+- [x] `SP727-T284` Owner: verification owner. Done when: formatting, SpecRail, diff check, lib all-features check, locked all-features check, default check, PR CI, and review-thread gate pass for the OpenAI client tests tranche. Verify: #872 PR body, green PR CI, GraphQL reviewThreads totalCount 0, merge commit `804aff955bb1`, #727 reopened, and #727 update comment.
+- [x] `SP727-T285` Owner: coordinator. Done when: after the OpenAI client tests tranche merges, the next #727 tranche is selected from the remaining queue with fresh tracked-file line-count evidence. Verify: at `origin/main@804aff95`, `src/core/observability/metrics.rs` is 808 lines and 4 tracked Rust files remain over the U-16 ceiling.
+- [x] `SP727-T286` Owner: coordinator. Done when: the observability metrics tranche documents why this slice is a test extraction rather than a production metrics/exporter split. Verify: `git diff -- specs/GH727/product.md specs/GH727/tech.md`.
+- [x] `SP727-T287` Owner: coordinator. Done when: `src/core/observability/metrics.rs` keeps production metrics structs, collector methods, and export/send behavior, then delegates tests with `#[path = "metrics_tests.rs"] mod tests;`. Verify: `tail -n 20 src/core/observability/metrics.rs`.
+- [x] `SP727-T288` Owner: coordinator. Done when: original inline metrics tests move to `src/core/observability/metrics_tests.rs` without assertion changes. Verify: `rg -n "test_prometheus_metrics_default|test_metrics_collector_with_datadog|test_record_request_updates_all_primary_metrics|test_record_cache_mixed|test_update_provider_health_overwrite|test_export_prometheus_with_health|test_send_to_datadog_with_client|test_record_request_duration|test_record_request_zero_tokens" src/core/observability/metrics_tests.rs`.
+- [x] `SP727-T289` Owner: verification owner. Done when: both touched observability metrics files are below U-16's 800-line ceiling and focused observability metrics tests pass. Verify: `wc -l src/core/observability/metrics.rs src/core/observability/metrics_tests.rs`; `cargo test core::observability::metrics --lib --all-features` passed 33 tests.
+- [ ] `SP727-T290` Owner: verification owner. Done when: formatting, SpecRail, diff check, lib all-features check, locked all-features check, default check, PR CI, and review-thread gate pass for the observability metrics tranche. Verify: `cargo fmt --all -- --check`; `git diff --check`; `python3 /Users/apple/Desktop/code/AI/tool/specrail/checks/check_workflow.py --repo /Users/apple/Desktop/code/AI/tool/specrail --spec-dir "$PWD/specs/GH727"`; `cargo check --lib --all-features`; `cargo check --all-features --locked`; `cargo check`; GitHub PR CI and review-thread query.
 
 ## 并行拆分
 
-This is a serial writable lane for the OpenAI client test file family. Other #727 large-file tranches may be planned read-only in parallel, but they must not edit this branch.
+This is a serial writable lane for the observability metrics file family. Other #727 large-file tranches may be planned read-only in parallel, but they must not edit this branch.
 
 Writable ownership for this lane:
 
 - `specs/GH727/`
-- `src/core/providers/openai/client_tests.rs`
-- `src/core/providers/openai/client_tests/`
+- `src/core/observability/metrics.rs`
+- `src/core/observability/metrics_tests.rs`
 
 ## 验证
 
 - SpecRail packet review.
 - `cargo fmt --all -- --check`
 - `git diff --check`
-- `cargo test core::providers::openai::client_tests --lib --all-features`
+- `cargo test core::observability::metrics --lib --all-features`
 - `cargo check --lib --all-features`
 - `cargo check --all-features --locked`
 - `cargo check`
@@ -319,5 +325,5 @@ Writable ownership for this lane:
 
 ## Handoff Notes
 
-This PR is the next #727 OpenAI client test-suite split tranche and should use `Refs #727`, not `Closes #727`.
+This PR is the next #727 observability metrics unit-test extraction tranche and should use `Refs #727`, not `Closes #727`.
 The issue should remain open until the final scan shows no Rust files over the U-16 ceiling.

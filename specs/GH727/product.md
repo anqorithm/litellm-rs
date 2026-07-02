@@ -6,9 +6,8 @@ GH-727 / #727
 
 ## 用户问题
 
-`origin/main@56f8cb2a` 仍有 5 个 tracked Rust 文件超过 U-16 的 800 行硬上限。当前最大文件是
-`src/core/providers/openai/client_tests.rs`，它是一个 809 行 OpenAI provider test suite；文件本身只承载
-provider creation/properties、model support、supported params、request transform、cost、error/header 和 convenience tests。
+`origin/main@804aff95` 仍有 4 个 tracked Rust 文件超过 U-16 的 800 行硬上限。当前最大文件是
+`src/core/observability/metrics.rs`，它是一个 808 行 observability metrics module；生产代码只到 metrics collector、Prometheus export、DataDog/Otel config helpers，超限主要来自 inline unit tests。
 
 本轮目标继续执行完整的大文件解耦计划：每个 PR 仍然小而可审，但所有 tranche 都必须服从同一套
 架构边界，避免制造新的耦合、重导出混乱或行为漂移。
@@ -34,40 +33,40 @@ provider creation/properties、model support、supported params、request transf
 
 ## 本 tranche 目标
 
-- 拆分 `src/core/providers/openai/client_tests.rs`，它当前 809 行，是 #727 当前最大的 tracked Rust 文件。
-- 保留 `src/core/providers/openai/client_tests.rs` 作为 OpenAI provider test facade 和 shared helper owner。
-- 将原 tests 按行为域移动到 `src/core/providers/openai/client_tests/*.rs` 子模块：provider/support、request transform/cost、error/header、convenience。
-- 不改变 provider creation/properties, model support, supported params, request transform, OpenAI-like passthrough, cost calculation, error mapping, request headers, clone/debug, convenience method, pricing, or context window expectations。
+- 拆分 `src/core/observability/metrics.rs`，它当前 808 行，是 #727 当前最大的 tracked Rust 文件。
+- 保留 `src/core/observability/metrics.rs` 作为 production metrics collector、Prometheus metrics struct、DataDog client config 和 OpenTelemetry exporter owner。
+- 将原 inline tests 移动到 `src/core/observability/metrics_tests.rs`，通过 path-backed child test module 继续访问私有 fields。
+- 不改变 request/error/token/cost/cache/provider-health recording, Prometheus export formatting, DataDog no-op send behavior, histogram duration recording, or edge-case expectations。
 - 所有新增或修改后的 Rust 文件低于 800 行。
 
 ## 非目标
 
-- 不修改 OpenAI production provider, client, model registry, transformer, streaming, cost source, or OpenAI-like provider behavior。
-- 不改变 helper factories, fixture API keys, model names, supported param expectations, JSON transform assertions, pricing values, or error mapper expectations。
-- 不在本 PR 中处理其余 4 个大文件。
+- 不修改 metrics production API, public re-exports, histogram implementation, TokenUsage type, outbound HTTP client wiring, DataDog payload implementation, or OpenTelemetry behavior。
+- 不改变 metric names, labels, cache counters, provider-health gauges, token/cost counters, duration histogram assertions, or existing no-network DataDog test semantics。
+- 不在本 PR 中处理其余 3 个大文件。
 - 不关闭 #727。
 
 ## Behavior Invariants
 
-1. `src/core/providers/openai/client_tests.rs` keeps the original `openai::client_tests` module entrypoint from `src/core/providers/openai/mod.rs`.
-2. Parent module keeps shared imports, `create_test_config`, `create_test_provider`, typed-param request helper, and typed-param assertion helper.
-3. Child modules continue to access shared helpers through `super::*`.
-4. Provider/support, request transform/cost, error/header, and convenience behavior stay unchanged.
+1. `src/core/observability/metrics.rs` keeps `PrometheusMetrics`, `DataDogClient`, `OtelExporter`, and `MetricsCollector` definitions and public method signatures.
+2. Parent module delegates tests with `#[path = "metrics_tests.rs"] mod tests;`.
+3. Child test module continues to access private metrics collector fields through `super::*`.
+4. Request recording, cache recording, provider health, Prometheus export, DataDog send, duration, and edge-case behavior stay unchanged.
 5. Tests move without assertion or fixture changes.
-6. No OpenAI production provider, model registry, transformer, streaming, or OpenAI-like provider behavior is changed.
+6. No observability production behavior, public re-export, histogram, or TokenUsage behavior is changed.
 7. Every touched Rust file must be below U-16's 800-line ceiling.
-8. `cargo test core::providers::openai::client_tests --lib --all-features` must pass.
+8. `cargo test core::observability::metrics --lib --all-features` must pass.
 
 ## 验收标准
 
-- [ ] `src/core/providers/openai/client_tests.rs` delegates behavior tests to child modules。
-- [ ] Original OpenAI provider tests move without assertion changes。
-- [ ] Shared OpenAI provider helper factories and typed-param helpers stay in the original test facade。
-- [ ] All touched OpenAI client test files are below U-16's 800-line ceiling。
-- [ ] Focused OpenAI client test suite 通过。
+- [ ] `src/core/observability/metrics.rs` delegates inline tests to a path-backed child module。
+- [ ] Original metrics tests move without assertion changes。
+- [ ] Production metrics structs, collector methods, and public re-export paths stay unchanged。
+- [ ] All touched observability metrics files are below U-16's 800-line ceiling。
+- [ ] Focused observability metrics test suite 通过。
 - [ ] `cargo fmt --all -- --check`、`cargo check --lib --all-features`、`cargo check --all-features --locked` 和 `cargo check` 通过。
 - [ ] PR body 明确该 PR 是 #727 的 partial tranche，使用 `Refs #727`，不自动关闭 tracker issue。
 
 ## 发布说明
 
-No runtime behavior change. This is an OpenAI provider test-suite split for U-16 compliance.
+No runtime behavior change. This is an observability metrics unit-test extraction for U-16 compliance.
