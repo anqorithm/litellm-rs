@@ -312,24 +312,32 @@ GH-727 / #727
 - [x] `SP727-T299` Owner: coordinator. Done when: `src/utils/sync/versioned_map.rs` keeps production `VersionError`, `VersionedEntry`, `VersionedMap`, methods, and trait impls, then delegates tests with `#[path = "versioned_map_tests.rs"] mod tests;`. Verify: `tail -n 20 src/utils/sync/versioned_map.rs`.
 - [x] `SP727-T300` Owner: coordinator. Done when: original inline VersionedMap tests move to `src/utils/sync/versioned_map_tests.rs` without assertion changes. Verify: `rg -n "test_new_and_default|test_insert_and_get|test_compare_and_swap_success|test_compare_and_swap_version_mismatch|test_update_with_retry|test_global_version|test_get_or_insert|test_version_error_display|test_concurrent_inserts|test_concurrent_compare_and_swap|test_optimistic_locking_pattern" src/utils/sync/versioned_map_tests.rs`.
 - [x] `SP727-T301` Owner: verification owner. Done when: both touched VersionedMap files are below U-16's 800-line ceiling and focused VersionedMap tests pass. Verify: `wc -l src/utils/sync/versioned_map.rs src/utils/sync/versioned_map_tests.rs`; `cargo test utils::sync::versioned_map --lib --all-features` passed 20 tests.
-- [ ] `SP727-T302` Owner: verification owner. Done when: formatting, SpecRail, diff check, lib all-features check, locked all-features check, default check, PR CI, and review-thread gate pass for the VersionedMap tranche. Verify: `cargo fmt --all -- --check`; `git diff --check`; `python3 /Users/apple/Desktop/code/AI/tool/specrail/checks/check_workflow.py --repo /Users/apple/Desktop/code/AI/tool/specrail --spec-dir "$PWD/specs/GH727"`; `cargo check --lib --all-features`; `cargo check --all-features --locked`; `cargo check`; GitHub PR CI and review-thread query.
+- [x] `SP727-T302` Owner: verification owner. Done when: formatting, SpecRail, diff check, lib all-features check, locked all-features check, default check, PR CI, and review-thread gate pass for the VersionedMap tranche. Verify: #875 PR body, green PR CI, GraphQL reviewThreads unresolved 0, merge commit `1bbe63fdebc2`, #727 reopened, and #727 update comment.
+- [x] `SP727-T303` Owner: coordinator. Done when: after the VersionedMap tranche merges, the final #727 tranche is selected from the remaining queue with fresh tracked-file line-count evidence. Verify: at `origin/main@1bbe63fd`, `src/core/user_management/types.rs` is 803 lines and 1 tracked Rust file remains over the U-16 ceiling.
+- [x] `SP727-T304` Owner: coordinator. Done when: the final user-management types tranche documents why this slice is a test extraction rather than a production public type facade split. Verify: `git diff -- specs/GH727/product.md specs/GH727/tech.md`.
+- [x] `SP727-T305` Owner: coordinator. Done when: `src/core/user_management/types.rs` keeps production `User`, `Team`, `Organization`, and `TeamMember` structs, then delegates tests with `#[path = "types_tests.rs"] mod tests;`. Verify: `tail -n 20 src/core/user_management/types.rs` shows the path-backed child test module.
+- [x] `SP727-T306` Owner: coordinator. Done when: original inline user-management type tests move to `src/core/user_management/types_tests.rs` without assertion changes. Verify: `rg -n "test_user_creation|test_team_creation|test_organization_creation|test_team_member_creation|test_budget_hierarchy|test_spend_aggregation_simulation|test_find_active_team_members|test_deserialization" src/core/user_management/types_tests.rs`.
+- [x] `SP727-T307` Owner: verification owner. Done when: both touched user-management type files are below U-16's 800-line ceiling, focused user-management type tests pass, and the full tracked Rust over-800 scan is empty. Verify: `wc -l src/core/user_management/types.rs src/core/user_management/types_tests.rs` -> 131 / 672 lines; `cargo test core::user_management::types --lib --all-features` passed 39 tests; full tracked Rust over-800 scan returned no files.
+- [x] `SP727-T308` Owner: verification owner. Done when: formatting, SpecRail, diff check, lib all-features check, locked all-features check, default check, and audit pass locally for the final user-management types tranche. Verify: `cargo fmt --all -- --check`; `git diff --check`; `python3 /Users/apple/Desktop/code/AI/tool/specrail/checks/check_workflow.py --repo /Users/apple/Desktop/code/AI/tool/specrail --spec-dir "$PWD/specs/GH727"`; `cargo check --lib --all-features`; `cargo check --all-features --locked`; `cargo check`; `cargo audit` passed with 2 allowed warnings.
+- [ ] `SP727-T309` Owner: verification owner. Done when: final PR CI is green, GraphQL reviewThreads unresolved count is 0, mergeStateStatus is CLEAN, final PR merges, and #727 is closed only after the clean final scan. Verify: final PR gate evidence, merge commit, issue state CLOSED, and closure comment.
 
 ## 并行拆分
 
-This is a serial writable lane for the VersionedMap file family. Other #727 large-file tranches may be planned read-only in parallel, but they must not edit this branch.
+This is a serial writable lane for the user-management types file family. Other #727 large-file tranches should be empty after this branch's final scan.
 
 Writable ownership for this lane:
 
 - `specs/GH727/`
-- `src/utils/sync/versioned_map.rs`
-- `src/utils/sync/versioned_map_tests.rs`
+- `src/core/user_management/types.rs`
+- `src/core/user_management/types_tests.rs`
 
 ## 验证
 
 - SpecRail packet review.
 - `cargo fmt --all -- --check`
 - `git diff --check`
-- `cargo test utils::sync::versioned_map --lib --all-features`
+- `cargo test core::user_management::types --lib --all-features`
+- `rg --files -g '*.rs' src tests | xargs wc -l | awk '$1 > 800 && $2 != "total" { print $1 " " $2 }' | sort -nr`
 - `cargo check --lib --all-features`
 - `cargo check --all-features --locked`
 - `cargo check`
@@ -337,5 +345,4 @@ Writable ownership for this lane:
 
 ## Handoff Notes
 
-This PR is the next #727 VersionedMap unit-test extraction tranche and should use `Refs #727`, not `Closes #727`.
-The issue should remain open until the final scan shows no Rust files over the U-16 ceiling.
+This PR is the final #727 user-management type test extraction tranche. It may use a closing keyword only after the local final scan shows no tracked Rust files over the U-16 ceiling and the PR gate is clean.
