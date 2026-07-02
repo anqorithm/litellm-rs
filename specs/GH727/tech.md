@@ -10,12 +10,11 @@ Link to `product.md`.
 
 ## Current Evidence
 
-At `origin/main@804aff95`, 4 tracked Rust files remain over the U-16
-800-line ceiling. The current largest file is `src/core/observability/metrics.rs`
-at 808 lines. It is a production metrics collector module whose production code ends
-before the inline test module; the oversize is caused by unit tests for Prometheus metrics,
-collector configuration, request/cache/provider-health recording, Prometheus export,
-DataDog send behavior, duration recording, and edge cases.
+At `origin/main@2cc5bedd`, 3 tracked Rust files remain over the U-16
+800-line ceiling. The current largest file is `src/utils/sync/concurrent_vec.rs`
+at 807 lines. It is a production concurrent-safe Vec utility whose production code ends
+before the inline test module; the oversize is caused by unit tests for construction,
+capacity, mutation, snapshot, search, clone-sharing, and concurrent access behavior.
 
 ## Architecture Principles
 
@@ -42,57 +41,57 @@ DataDog send behavior, duration recording, and edge cases.
 | P4 | Utility modules | config helpers, net client utils, sync containers | focused utility tests plus concurrency/behavior checks where relevant |
 | P5 | Closure scan | all Rust files | full over-800 scan, final SpecRail update, final PR may close #727 |
 
-## Current Tranche: Observability Metrics Test Extraction
+## Current Tranche: ConcurrentVec Test Extraction
 
 ### Codebase Context
 
 | Area | Files | Current behavior | Why relevant |
 | --- | --- | --- | --- |
-| Production metrics module | `src/core/observability/metrics.rs` | Defines `PrometheusMetrics`, `DataDogClient`, `OtelExporter`, and `MetricsCollector`, plus recording/export methods. | These public structs and methods stay in place to preserve re-export compatibility. |
-| Extracted unit tests | `src/core/observability/metrics_tests.rs` | New path-backed child test module under `metrics.rs`. | Keeps tests close to the private fields they assert while reducing the production file size. |
-| Observability siblings | `histogram.rs`, `types.rs`, `mod.rs` | Histogram storage, `TokenUsage`, and public re-exports. | They remain untouched to keep the tranche limited to metrics tests. |
+| Production sync utility | `src/utils/sync/concurrent_vec.rs` | Defines `ConcurrentVec<T>` with RwLock-backed methods and trait impls. | These public methods and storage semantics stay in place to preserve behavior. |
+| Extracted unit tests | `src/utils/sync/concurrent_vec_tests.rs` | New path-backed child test module under `concurrent_vec.rs`. | Keeps tests close to the private module while reducing the production file size. |
+| Sync module facade | `src/utils/sync/mod.rs` | Re-exports `ConcurrentVec` and sibling containers. | It remains untouched to keep public import paths stable. |
 
 ### Design
 
-1. Keep all production definitions and methods in `src/core/observability/metrics.rs`.
+1. Keep all production definitions and methods in `src/utils/sync/concurrent_vec.rs`.
 2. Replace the inline `#[cfg(test)] mod tests { ... }` body with:
    - `#[cfg(test)]`
-   - `#[path = "metrics_tests.rs"]`
+   - `#[path = "concurrent_vec_tests.rs"]`
    - `mod tests;`
-3. Move the original test body into `src/core/observability/metrics_tests.rs` with `use super::*;`.
-4. Move tests without assertion, metric name, label, cache counter, provider-health value, token/cost counter, histogram, or DataDog no-op expectation changes.
-5. Do not edit `src/core/observability/mod.rs`, histogram storage, `TokenUsage`, HTTP client setup, or unrelated observability modules.
+3. Move the original test body into `src/utils/sync/concurrent_vec_tests.rs` with `use super::*;`.
+4. Move tests without assertion, operation ordering, capacity, clone-sharing, or thread-concurrency expectation changes.
+5. Do not edit `src/utils/sync/mod.rs`, `ConcurrentMap`, `AtomicValue`, `VersionedMap`, or unrelated sync containers.
 
 ## Product-to-Test Mapping
 
 | Product invariant | Implementation area | Verification |
 | --- | --- | --- |
-| P1 | `src/core/observability/metrics.rs` | Production metrics structs and methods remain in the original module with path-backed test delegation. |
-| P2 | `src/core/observability/metrics_tests.rs` | Original test names and assertions remain present in the child test module. |
-| P3 | observability metrics behavior | No request/cache/provider-health recording, Prometheus export, DataDog send, duration, token, cost, or edge-case behavior changes. |
-| P4 | file size | `wc -l src/core/observability/metrics.rs src/core/observability/metrics_tests.rs` shows both files below 800. |
-| P5 | focused test suite | `cargo test core::observability::metrics --lib --all-features` runs the moved tests. |
-| P6 | queue count | tracked-file scan shows the remaining queue no longer includes `src/core/observability/metrics.rs`. |
+| P1 | `src/utils/sync/concurrent_vec.rs` | Production `ConcurrentVec<T>` type and methods remain in the original module with path-backed test delegation. |
+| P2 | `src/utils/sync/concurrent_vec_tests.rs` | Original test names and assertions remain present in the child test module. |
+| P3 | ConcurrentVec behavior | No push/pop/get/set/insert/remove/swap_remove/retain/for_each/contains/position/clone/concurrent behavior changes. |
+| P4 | file size | `wc -l src/utils/sync/concurrent_vec.rs src/utils/sync/concurrent_vec_tests.rs` shows both files below 800. |
+| P5 | focused test suite | `cargo test utils::sync::concurrent_vec --lib --all-features` runs the moved tests. |
+| P6 | queue count | tracked-file scan shows the remaining queue no longer includes `src/utils/sync/concurrent_vec.rs`. |
 
 ## Risks
 
-- Tests assert private `datadog_client` and `otel_exporter` fields, so the extracted file must remain a child module of `metrics.rs`, not a sibling top-level module.
-- The focused test filter should use `core::observability::metrics` because the test module remains nested below the metrics module.
-- Metrics behavior is observability-critical; this tranche must not modify metric names, labels, counters, histogram behavior, export formatting, or error/no-op behavior.
+- The tests use `std::thread` and `Arc<ConcurrentVec<_>>`, so the extracted file must retain the original imports and concurrency assertions.
+- The focused test filter should use `utils::sync::concurrent_vec` because the test module remains nested below the sync utility module.
+- `ConcurrentVec` is a shared utility; this tranche must not modify lock strategy, method signatures, ordering behavior, or public re-export paths.
 
 ## Test Plan
 
 - [ ] `cargo fmt --all -- --check`
 - [ ] `git diff --check`
 - [ ] `python3 /Users/apple/Desktop/code/AI/tool/specrail/checks/check_workflow.py --repo /Users/apple/Desktop/code/AI/tool/specrail --spec-dir "$PWD/specs/GH727"`
-- [ ] `wc -l src/core/observability/metrics.rs src/core/observability/metrics_tests.rs`
-- [ ] `cargo test core::observability::metrics --lib --all-features`
+- [ ] `wc -l src/utils/sync/concurrent_vec.rs src/utils/sync/concurrent_vec_tests.rs`
+- [ ] `cargo test utils::sync::concurrent_vec --lib --all-features`
 - [ ] `cargo check --lib --all-features`
 - [ ] `cargo check --all-features --locked`
 - [ ] `cargo check`
 
 ## Rollback
 
-Move the observability metrics tests back into `src/core/observability/metrics.rs`
+Move the ConcurrentVec tests back into `src/utils/sync/concurrent_vec.rs`
 and revert the `specs/GH727` edits. No schema, persistence, or runtime behavior
 changes are involved.
