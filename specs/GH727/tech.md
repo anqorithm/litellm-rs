@@ -10,11 +10,12 @@ Link to `product.md`.
 
 ## Current Evidence
 
-At `origin/main@56f8cb2a`, 5 tracked Rust files remain over the U-16
-800-line ceiling. The current largest file is `src/core/providers/openai/client_tests.rs`
-at 809 lines. It is a test-only OpenAI provider suite covering provider creation,
-properties, model support, supported params, request transform, OpenAI-like passthrough,
-cost calculation, error mapping, request headers, clone/debug, and convenience helpers.
+At `origin/main@804aff95`, 4 tracked Rust files remain over the U-16
+800-line ceiling. The current largest file is `src/core/observability/metrics.rs`
+at 808 lines. It is a production metrics collector module whose production code ends
+before the inline test module; the oversize is caused by unit tests for Prometheus metrics,
+collector configuration, request/cache/provider-health recording, Prometheus export,
+DataDog send behavior, duration recording, and edge cases.
 
 ## Architecture Principles
 
@@ -41,58 +42,57 @@ cost calculation, error mapping, request headers, clone/debug, and convenience h
 | P4 | Utility modules | config helpers, net client utils, sync containers | focused utility tests plus concurrency/behavior checks where relevant |
 | P5 | Closure scan | all Rust files | full over-800 scan, final SpecRail update, final PR may close #727 |
 
-## Current Tranche: OpenAI Client Test-Suite Split
+## Current Tranche: Observability Metrics Test Extraction
 
 ### Codebase Context
 
 | Area | Files | Current behavior | Why relevant |
 | --- | --- | --- | --- |
-| Test facade | `src/core/providers/openai/client_tests.rs` | Currently contains shared helper factories plus all OpenAI provider behavior tests directly. | This file can keep shared test setup while delegating behavior tests. |
-| Extracted child tests | `src/core/providers/openai/client_tests/*.rs` | New behavior-domain test modules under the existing `openai::client_tests` facade. | Splitting by provider behavior reduces file size without changing runtime code. |
-| Existing siblings | `streaming_request_tests.rs`, `transformer/response_tests.rs` | Other OpenAI-focused test modules. | They remain untouched to keep ownership boundaries clear. |
+| Production metrics module | `src/core/observability/metrics.rs` | Defines `PrometheusMetrics`, `DataDogClient`, `OtelExporter`, and `MetricsCollector`, plus recording/export methods. | These public structs and methods stay in place to preserve re-export compatibility. |
+| Extracted unit tests | `src/core/observability/metrics_tests.rs` | New path-backed child test module under `metrics.rs`. | Keeps tests close to the private fields they assert while reducing the production file size. |
+| Observability siblings | `histogram.rs`, `types.rs`, `mod.rs` | Histogram storage, `TokenUsage`, and public re-exports. | They remain untouched to keep the tranche limited to metrics tests. |
 
 ### Design
 
-1. Keep `src/core/providers/openai/client_tests.rs` as the test facade with the original imports, `create_test_config`, `create_test_provider`, typed-param request helper, and typed-param assertion helper.
-2. Split the original tests into child modules under `src/core/providers/openai/client_tests/`:
-   - `provider_support_tests.rs` for provider creation/properties, model support, model info/config, and supported params.
-   - `request_transform_tests.rs` for chat request transform, typed-param forwarding, OpenAI-like passthrough, and cost calculation.
-   - `error_header_tests.rs` for error mapper, request headers, clone, and debug tests.
-   - `convenience_tests.rs` for model recommendations, feature support, pricing, and context window helpers.
-3. Each child module uses `use super::*;` to retain the same access to shared provider helper factories.
-4. Move tests without assertion, fixture API key/model, JSON expected-value, pricing, context, or error-message expectation changes.
-5. Do not edit production OpenAI provider, client, registry, transformer, streaming, cost source, or OpenAI-like provider code.
+1. Keep all production definitions and methods in `src/core/observability/metrics.rs`.
+2. Replace the inline `#[cfg(test)] mod tests { ... }` body with:
+   - `#[cfg(test)]`
+   - `#[path = "metrics_tests.rs"]`
+   - `mod tests;`
+3. Move the original test body into `src/core/observability/metrics_tests.rs` with `use super::*;`.
+4. Move tests without assertion, metric name, label, cache counter, provider-health value, token/cost counter, histogram, or DataDog no-op expectation changes.
+5. Do not edit `src/core/observability/mod.rs`, histogram storage, `TokenUsage`, HTTP client setup, or unrelated observability modules.
 
 ## Product-to-Test Mapping
 
 | Product invariant | Implementation area | Verification |
 | --- | --- | --- |
-| P1 | `src/core/providers/openai/client_tests.rs` | Root test facade keeps shared helpers and delegates OpenAI provider tests to child modules. |
-| P2 | `src/core/providers/openai/client_tests/*.rs` | Original test names and assertions remain present under behavior-domain modules. |
-| P3 | OpenAI provider behavior | No provider creation, properties, model support, supported params, request transform, cost, error mapper, header, clone/debug, recommendation, pricing, or context behavior changes. |
-| P4 | file size | `wc -l src/core/providers/openai/client_tests.rs src/core/providers/openai/client_tests/*.rs` shows every touched file below 800. |
-| P5 | focused test suite | `cargo test core::providers::openai::client_tests --lib --all-features` runs the moved tests. |
-| P6 | queue count | tracked-file scan shows the remaining queue no longer includes `src/core/providers/openai/client_tests.rs`. |
+| P1 | `src/core/observability/metrics.rs` | Production metrics structs and methods remain in the original module with path-backed test delegation. |
+| P2 | `src/core/observability/metrics_tests.rs` | Original test names and assertions remain present in the child test module. |
+| P3 | observability metrics behavior | No request/cache/provider-health recording, Prometheus export, DataDog send, duration, token, cost, or edge-case behavior changes. |
+| P4 | file size | `wc -l src/core/observability/metrics.rs src/core/observability/metrics_tests.rs` shows both files below 800. |
+| P5 | focused test suite | `cargo test core::observability::metrics --lib --all-features` runs the moved tests. |
+| P6 | queue count | tracked-file scan shows the remaining queue no longer includes `src/core/observability/metrics.rs`. |
 
 ## Risks
 
-- Splitting a provider test file changes test module paths below `openai::client_tests`, so focused filtering should use `core::providers::openai::client_tests`.
-- Child modules must remain under the `client_tests.rs` facade so they share provider helper factories through `super::*`.
-- OpenAI provider behavior is customer-facing provider behavior; this tranche must not modify production provider, registry, transformer, cost, or OpenAI-like code, and must not weaken assertions.
+- Tests assert private `datadog_client` and `otel_exporter` fields, so the extracted file must remain a child module of `metrics.rs`, not a sibling top-level module.
+- The focused test filter should use `core::observability::metrics` because the test module remains nested below the metrics module.
+- Metrics behavior is observability-critical; this tranche must not modify metric names, labels, counters, histogram behavior, export formatting, or error/no-op behavior.
 
 ## Test Plan
 
 - [ ] `cargo fmt --all -- --check`
 - [ ] `git diff --check`
 - [ ] `python3 /Users/apple/Desktop/code/AI/tool/specrail/checks/check_workflow.py --repo /Users/apple/Desktop/code/AI/tool/specrail --spec-dir "$PWD/specs/GH727"`
-- [ ] `wc -l src/core/providers/openai/client_tests.rs src/core/providers/openai/client_tests/*.rs`
-- [ ] `cargo test core::providers::openai::client_tests --lib --all-features`
+- [ ] `wc -l src/core/observability/metrics.rs src/core/observability/metrics_tests.rs`
+- [ ] `cargo test core::observability::metrics --lib --all-features`
 - [ ] `cargo check --lib --all-features`
 - [ ] `cargo check --all-features --locked`
 - [ ] `cargo check`
 
 ## Rollback
 
-Move the OpenAI provider test modules back into `src/core/providers/openai/client_tests.rs`
+Move the observability metrics tests back into `src/core/observability/metrics.rs`
 and revert the `specs/GH727` edits. No schema, persistence, or runtime behavior
 changes are involved.
