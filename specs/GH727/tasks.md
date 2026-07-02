@@ -306,24 +306,30 @@ GH-727 / #727
 - [x] `SP727-T293` Owner: coordinator. Done when: `src/utils/sync/concurrent_vec.rs` keeps production `ConcurrentVec<T>` storage, methods, and trait impls, then delegates tests with `#[path = "concurrent_vec_tests.rs"] mod tests;`. Verify: `tail -n 20 src/utils/sync/concurrent_vec.rs`.
 - [x] `SP727-T294` Owner: coordinator. Done when: original inline ConcurrentVec tests move to `src/utils/sync/concurrent_vec_tests.rs` without assertion changes. Verify: `rg -n "test_new_and_default|test_push_and_pop|test_get_and_set|test_insert_and_remove|test_swap_remove|test_for_each_mut|test_contains_and_position|test_clone|test_concurrent_push|test_concurrent_read_write" src/utils/sync/concurrent_vec_tests.rs`.
 - [x] `SP727-T295` Owner: verification owner. Done when: both touched ConcurrentVec files are below U-16's 800-line ceiling and focused ConcurrentVec tests pass. Verify: `wc -l src/utils/sync/concurrent_vec.rs src/utils/sync/concurrent_vec_tests.rs`; `cargo test utils::sync::concurrent_vec --lib --all-features` passed 20 tests.
-- [ ] `SP727-T296` Owner: verification owner. Done when: formatting, SpecRail, diff check, lib all-features check, locked all-features check, default check, PR CI, and review-thread gate pass for the ConcurrentVec tranche. Verify: `cargo fmt --all -- --check`; `git diff --check`; `python3 /Users/apple/Desktop/code/AI/tool/specrail/checks/check_workflow.py --repo /Users/apple/Desktop/code/AI/tool/specrail --spec-dir "$PWD/specs/GH727"`; `cargo check --lib --all-features`; `cargo check --all-features --locked`; `cargo check`; GitHub PR CI and review-thread query.
+- [x] `SP727-T296` Owner: verification owner. Done when: formatting, SpecRail, diff check, lib all-features check, locked all-features check, default check, PR CI, and review-thread gate pass for the ConcurrentVec tranche. Verify: #874 PR body, green PR CI, GraphQL reviewThreads totalCount 0, merge commit `fec54a567336`, #727 reopened, and #727 update comment.
+- [x] `SP727-T297` Owner: coordinator. Done when: after the ConcurrentVec tranche merges, the next #727 tranche is selected from the remaining queue with fresh tracked-file line-count evidence. Verify: at `origin/main@fec54a56`, `src/utils/sync/versioned_map.rs` is 803 lines and 2 tracked Rust files remain over the U-16 ceiling.
+- [x] `SP727-T298` Owner: coordinator. Done when: the VersionedMap tranche documents why this slice is a test extraction rather than a production optimistic-locking utility split. Verify: `git diff -- specs/GH727/product.md specs/GH727/tech.md`.
+- [x] `SP727-T299` Owner: coordinator. Done when: `src/utils/sync/versioned_map.rs` keeps production `VersionError`, `VersionedEntry`, `VersionedMap`, methods, and trait impls, then delegates tests with `#[path = "versioned_map_tests.rs"] mod tests;`. Verify: `tail -n 20 src/utils/sync/versioned_map.rs`.
+- [x] `SP727-T300` Owner: coordinator. Done when: original inline VersionedMap tests move to `src/utils/sync/versioned_map_tests.rs` without assertion changes. Verify: `rg -n "test_new_and_default|test_insert_and_get|test_compare_and_swap_success|test_compare_and_swap_version_mismatch|test_update_with_retry|test_global_version|test_get_or_insert|test_version_error_display|test_concurrent_inserts|test_concurrent_compare_and_swap|test_optimistic_locking_pattern" src/utils/sync/versioned_map_tests.rs`.
+- [x] `SP727-T301` Owner: verification owner. Done when: both touched VersionedMap files are below U-16's 800-line ceiling and focused VersionedMap tests pass. Verify: `wc -l src/utils/sync/versioned_map.rs src/utils/sync/versioned_map_tests.rs`; `cargo test utils::sync::versioned_map --lib --all-features` passed 20 tests.
+- [ ] `SP727-T302` Owner: verification owner. Done when: formatting, SpecRail, diff check, lib all-features check, locked all-features check, default check, PR CI, and review-thread gate pass for the VersionedMap tranche. Verify: `cargo fmt --all -- --check`; `git diff --check`; `python3 /Users/apple/Desktop/code/AI/tool/specrail/checks/check_workflow.py --repo /Users/apple/Desktop/code/AI/tool/specrail --spec-dir "$PWD/specs/GH727"`; `cargo check --lib --all-features`; `cargo check --all-features --locked`; `cargo check`; GitHub PR CI and review-thread query.
 
 ## 并行拆分
 
-This is a serial writable lane for the ConcurrentVec file family. Other #727 large-file tranches may be planned read-only in parallel, but they must not edit this branch.
+This is a serial writable lane for the VersionedMap file family. Other #727 large-file tranches may be planned read-only in parallel, but they must not edit this branch.
 
 Writable ownership for this lane:
 
 - `specs/GH727/`
-- `src/utils/sync/concurrent_vec.rs`
-- `src/utils/sync/concurrent_vec_tests.rs`
+- `src/utils/sync/versioned_map.rs`
+- `src/utils/sync/versioned_map_tests.rs`
 
 ## 验证
 
 - SpecRail packet review.
 - `cargo fmt --all -- --check`
 - `git diff --check`
-- `cargo test utils::sync::concurrent_vec --lib --all-features`
+- `cargo test utils::sync::versioned_map --lib --all-features`
 - `cargo check --lib --all-features`
 - `cargo check --all-features --locked`
 - `cargo check`
@@ -331,5 +337,5 @@ Writable ownership for this lane:
 
 ## Handoff Notes
 
-This PR is the next #727 ConcurrentVec unit-test extraction tranche and should use `Refs #727`, not `Closes #727`.
+This PR is the next #727 VersionedMap unit-test extraction tranche and should use `Refs #727`, not `Closes #727`.
 The issue should remain open until the final scan shows no Rust files over the U-16 ceiling.
