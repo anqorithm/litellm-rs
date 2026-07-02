@@ -288,24 +288,30 @@ GH-727 / #727
 - [x] `SP727-T275` Owner: coordinator. Done when: `tests/moderations_routes.rs` becomes a gated integration-test facade with shared mock upstream, app-state, provider, and auth helpers plus child module declarations for proxy/default-selection, auth/validation, and budget/fallback tests. Verify: `sed -n '1,260p' tests/moderations_routes.rs`.
 - [x] `SP727-T276` Owner: coordinator. Done when: original moderation route tests move into `tests/tests/moderations_routes_*.rs` by behavior domain without assertion changes. Verify: `rg -n "moderation_route_without_provider_fails_closed|moderation_route_proxies_request_with_provider_headers|root_moderation_alias_proxies_request|moderation_route_uses_default_model_for_provider_selection_when_omitted|moderation_route_requires_auth_when_anonymous_is_disabled|moderation_route_allows_authenticated_api_key|moderation_route_rejects_invalid_request_before_upstream|moderation_route_rejects_unconfigured_model_before_upstream|moderation_route_rejects_exhausted_provider_budget_before_upstream|moderation_route_uses_router_budget_fallback_provider|native_openai_moderation_route_uses_default_model_with_empty_config_models|openai_compatible_named_openai_uses_provider_name_wildcard_fallback|moderation_route_uses_wildcard_provider_name_fallback|moderation_route_rejects_exhausted_default_model_budget_before_upstream" tests/tests`.
 - [x] `SP727-T277` Owner: verification owner. Done when: all touched moderation route test files are below U-16's 800-line ceiling and focused moderation routes test passes. Verify: `wc -l tests/moderations_routes.rs tests/tests/moderations_routes_*.rs`; `cargo test --test moderations_routes --all-features` passed 14 tests.
-- [ ] `SP727-T278` Owner: verification owner. Done when: formatting, SpecRail, diff check, lib all-features check, locked all-features check, default check, PR CI, and review-thread gate pass for the moderation routes tranche. Verify: `cargo fmt --all -- --check`; `git diff --check`; `python3 /Users/apple/Desktop/code/AI/tool/specrail/checks/check_workflow.py --repo /Users/apple/Desktop/code/AI/tool/specrail --spec-dir "$PWD/specs/GH727"`; `cargo check --lib --all-features`; `cargo check --all-features --locked`; `cargo check`; GitHub PR CI and review-thread query.
+- [x] `SP727-T278` Owner: verification owner. Done when: formatting, SpecRail, diff check, lib all-features check, locked all-features check, default check, PR CI, and review-thread gate pass for the moderation routes tranche. Verify: #871 PR body, green PR CI, GraphQL reviewThreads totalCount 0, merge commit `56f8cb2ae103`, #727 reopened, and #727 update comment.
+- [x] `SP727-T279` Owner: coordinator. Done when: after the moderation routes tranche merges, the next #727 tranche is selected from the remaining queue with fresh tracked-file line-count evidence. Verify: at `origin/main@56f8cb2a`, `src/core/providers/openai/client_tests.rs` is 809 lines and 5 tracked Rust files remain over the U-16 ceiling.
+- [x] `SP727-T280` Owner: coordinator. Done when: the OpenAI client tests tranche documents why this slice is a test-suite split rather than a production OpenAI provider/client/registry split. Verify: `git diff -- specs/GH727/product.md specs/GH727/tech.md`.
+- [x] `SP727-T281` Owner: coordinator. Done when: `src/core/providers/openai/client_tests.rs` keeps shared imports, `create_test_config`, `create_test_provider`, typed-param request helper, typed-param assertion helper, and child module declarations. Verify: `sed -n '1,120p' src/core/providers/openai/client_tests.rs`.
+- [x] `SP727-T282` Owner: coordinator. Done when: original OpenAI provider tests move into `src/core/providers/openai/client_tests/*.rs` by behavior domain without assertion changes. Verify: `rg -n "test_provider_creation|test_provider_capabilities|test_model_support_detection|test_get_supported_openai_params_advertises_forwarded_chat_fields|test_transform_chat_request_basic|test_openai_like_transform_request_forwards_typed_params_and_extras|test_map_openai_params_passthrough|test_calculate_cost|test_error_mapper_authentication|test_get_request_headers_with_api_key|test_provider_clone|test_model_recommendations|test_model_pricing_prefers_shared_cost_source|test_context_window" src/core/providers/openai/client_tests`.
+- [x] `SP727-T283` Owner: verification owner. Done when: all touched OpenAI client test files are below U-16's 800-line ceiling and focused OpenAI client tests pass. Verify: `wc -l src/core/providers/openai/client_tests.rs src/core/providers/openai/client_tests/*.rs`; `cargo test core::providers::openai::client_tests --lib --all-features` passed 47 tests.
+- [ ] `SP727-T284` Owner: verification owner. Done when: formatting, SpecRail, diff check, lib all-features check, locked all-features check, default check, PR CI, and review-thread gate pass for the OpenAI client tests tranche. Verify: `cargo fmt --all -- --check`; `git diff --check`; `python3 /Users/apple/Desktop/code/AI/tool/specrail/checks/check_workflow.py --repo /Users/apple/Desktop/code/AI/tool/specrail --spec-dir "$PWD/specs/GH727"`; `cargo check --lib --all-features`; `cargo check --all-features --locked`; `cargo check`; GitHub PR CI and review-thread query.
 
 ## 并行拆分
 
-This is a serial writable lane for the moderation routes test file family. Other #727 large-file tranches may be planned read-only in parallel, but they must not edit this branch.
+This is a serial writable lane for the OpenAI client test file family. Other #727 large-file tranches may be planned read-only in parallel, but they must not edit this branch.
 
 Writable ownership for this lane:
 
 - `specs/GH727/`
-- `tests/moderations_routes.rs`
-- `tests/tests/moderations_routes_*.rs`
+- `src/core/providers/openai/client_tests.rs`
+- `src/core/providers/openai/client_tests/`
 
 ## 验证
 
 - SpecRail packet review.
 - `cargo fmt --all -- --check`
 - `git diff --check`
-- `cargo test --test moderations_routes --all-features`
+- `cargo test core::providers::openai::client_tests --lib --all-features`
 - `cargo check --lib --all-features`
 - `cargo check --all-features --locked`
 - `cargo check`
@@ -313,5 +319,5 @@ Writable ownership for this lane:
 
 ## Handoff Notes
 
-This PR is the next #727 moderation routes integration-test split tranche and should use `Refs #727`, not `Closes #727`.
+This PR is the next #727 OpenAI client test-suite split tranche and should use `Refs #727`, not `Closes #727`.
 The issue should remain open until the final scan shows no Rust files over the U-16 ceiling.
