@@ -28,17 +28,21 @@ GH-831 / #831
 ## Behavior Invariants
 
 1. 默认配置下，pricing 解析失败的请求在预算预留阶段被拒绝（HTTP 4xx，OpenAI 错误形状），不会到达 provider。
-2. 管理员显式开启 `allow_unpriced_models`（命名以 tech spec 为准）时，请求放行，但：
-   a. 预算预留按配置的保守单价（或 0 但显式记录 `unpriced=true`）结算，绝不静默退回；
-   b. per-key `record_usage` 写入的 spend 记录携带可查询的 unpriced 标记，而不是与正常 $0 混同。
+2. 管理员显式配置 `unpriced_model_policy=allow_unpriced` 时，请求放行，但：
+   a. 预算预留按配置的保守单价随实际 usage 等比例结算（或 0 但显式记录 `unpriced=true`），绝不静默退回；
+   b. per-key usage/spend 读模型携带可查询的 unpriced 字段或聚合计数，而不是与正常 $0 混同。
 3. 结算路径中「预留被退回」只发生在请求失败（未产生 usage）的场景；只要 provider 返回了 usage，预留必须被结算。
-4. 每次 unpriced 结算触发 error 级日志与专用 metric（计数器，按 provider/model 维度）。
+4. 每次 unpriced 拒绝或结算触发 error 级日志与专用 metric；metric 的模型维度必须有界，不能把任意请求 model 直接作为 Prometheus label。
 5. 已定价模型的现有计费行为完全不变。
+6. 当同一个用户请求 model 有多个候选 deployment 时，默认拒绝策略先跳过不可定价候选并尝试可定价候选；只有所有候选都不可定价时才返回最终 `model_not_priced`。
 
 ## 验收标准
 
 - [ ] 复现测试：未定价模型 + 带预算 key，默认配置下请求被拒绝且预算不变。
 - [ ] 复现测试：开启放行配置后，usage 产生时预留被结算（非退回），spend 记录带 unpriced 标记。
+- [ ] 复现测试：配置非 0 `unpriced_fallback_cost_per_1k_tokens` 时，结算金额随 token/image/audio usage 缩放，不是固定每请求金额。
+- [ ] 复现测试：默认拒绝路径在返回 4xx 前记录 error 日志并增加 unpriced metric。
+- [ ] 复现测试：存在一个未定价候选 deployment 和一个可定价候选 deployment 时，请求路由到可定价候选而不是提前失败。
 - [ ] `spend.rs` 与 `spend/pricing.rs` 两处同模式路径行为一致。
 - [ ] metric 可在 `/metrics` 观测到。
 
@@ -46,7 +50,7 @@ GH-831 / #831
 
 - 流式请求中途才拿到 usage：settle 时 pricing 失败同样适用上述 invariants。
 - pricing 服务短暂不可用 vs 模型确实不在 catalog：两者对结算层等价（都是 `Err`），策略一致。
-- 预留成功但 settle 时才发现 unpriced（价格数据在请求期间被热更新移除）：按 invariant 2 结算，不退回。
+- 预留成功但 settle 时才发现 unpriced（价格数据在请求期间被热更新移除）：不能退回；`reject` 策略按既有预留金额或 tech spec fallback 规则结算并打标，`allow_unpriced` 按 usage-scaled fallback 或 0 结算并打标。
 
 ## 发布说明
 
