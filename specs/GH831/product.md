@@ -35,6 +35,7 @@ GH-831 / #831
 4. 每次 unpriced 拒绝或结算触发 error 级日志与专用 metric；metric 的模型维度必须有界，不能把任意请求 model 直接作为 Prometheus label。
 5. 已定价模型的现有计费行为完全不变。
 6. 当同一个用户请求 model 有多个候选 deployment 时，默认拒绝策略先跳过不可定价候选并尝试可定价候选；只有所有候选都不可定价时才返回最终 `model_not_priced`。
+7. response cache 命中不能绕过 unpriced policy：chat / embeddings 等缓存返回前也必须执行同一 usage-aware gate。
 
 ## 验收标准
 
@@ -43,8 +44,9 @@ GH-831 / #831
 - [ ] 复现测试：配置非 0 `unpriced_fallback_cost_per_1k_tokens` 时，结算金额随 token/image/audio usage 缩放，不是固定每请求金额。
 - [ ] 复现测试：默认拒绝路径在返回 4xx 前记录 error 日志并增加 unpriced metric。
 - [ ] 复现测试：存在一个未定价候选 deployment 和一个可定价候选 deployment 时，请求路由到可定价候选而不是提前失败。
-- [ ] `spend.rs` 与 `spend/pricing.rs` 两处同模式路径行为一致。
-- [ ] metric 可在 `/metrics` 观测到。
+- [ ] `spend.rs`、`spend/pricing.rs`、`gemini/spend.rs`、`audio/budgeting.rs` 等同模式路径行为一致。
+- [ ] OpenAI 错误 code 明确为 `model_not_priced`，不是泛化 `invalid_request` / `model_not_found`。
+- [ ] metric 可在 `/metrics` 观测到：事件计数与金额累计分离，拒绝/候选排除不会写入 spend total。
 
 ## 边界情况
 
