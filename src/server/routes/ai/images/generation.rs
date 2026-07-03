@@ -6,7 +6,7 @@ use crate::core::types::model::ProviderCapability;
 use crate::server::state::AppState;
 use crate::utils::error::gateway_error::GatewayError;
 
-use super::super::budgeted::{ApiKeyBudgetPolicy, BudgetedCall};
+use super::super::budgeted::ApiKeyBudgetPolicy;
 use super::super::execution::execute_with_selected_deployment;
 
 /// Handle image generation with app state (UnifiedRouter only)
@@ -37,10 +37,9 @@ pub async fn handle_image_generation_with_state(
     let context_for_execution = context.clone();
     let api_key_id = context.api_key_id();
     let api_key_budget_id = context.api_key_budget_id();
-    let budget_manager = state.budget_manager.clone();
-    let budget_limits = state.budget_limits.clone();
-    let key_manager = state.key_manager.clone();
-    let pricing_service = state.pricing.clone();
+    let budgeted = state.budgeted.clone();
+    let key_manager = budgeted.key_manager();
+    let pricing_service = budgeted.pricing();
     let pricing_config = state.config().gateway.pricing.clone();
     let core_response = execute_with_selected_deployment(
         &state.unified_router,
@@ -49,8 +48,7 @@ pub async fn handle_image_generation_with_state(
         move |provider, selected_model, _deployment_id| {
             let core_request = core_request.clone();
             let context = context_for_execution.clone();
-            let budget_manager = budget_manager.clone();
-            let budget_limits = budget_limits.clone();
+            let budgeted = budgeted.clone();
             let key_manager = key_manager.clone();
             let pricing_service = pricing_service.clone();
             let pricing_config = pricing_config.clone();
@@ -105,13 +103,10 @@ pub async fn handle_image_generation_with_state(
                 let reserve_usage = usage.clone();
                 let settle_usage = usage;
                 let settle_key_manager = key_manager.clone();
-                BudgetedCall::new(
-                    budget_limits.clone(),
-                    budget_provider.clone(),
-                    selected_model.clone(),
-                )
-                    .with_api_key_budget(
-                        budget_manager.clone(),
+                budgeted
+                    .for_selected_with_api_key_budget(
+                        budget_provider.clone(),
+                        selected_model.clone(),
                         api_key_budget_id,
                         ApiKeyBudgetPolicy::FromProviderReservation,
                     )
