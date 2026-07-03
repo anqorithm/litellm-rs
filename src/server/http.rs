@@ -17,7 +17,10 @@ use crate::utils::error::gateway_error::{GatewayError, Result};
 use actix_cors::Cors;
 use actix_web::{
     App, HttpServer as ActixHttpServer,
-    middleware::{Condition, DefaultHeaders, Logger},
+    body::MessageBody,
+    dev::{ServiceRequest, ServiceResponse},
+    http::{Method, header},
+    middleware::{Condition, DefaultHeaders, Logger, Next, from_fn},
     web,
 };
 use std::sync::Arc;
@@ -198,7 +201,6 @@ impl HttpServer {
         App::new()
             .app_data(state)
             .app_data(budget_limits)
-            .wrap(cors)
             .wrap(Logger::default())
             .wrap(DefaultHeaders::new().add(("Server", "LiteLLM-RS")))
             .wrap(SecurityHeadersMiddleware)
@@ -212,6 +214,10 @@ impl HttpServer {
             .wrap(AuthMiddleware)
             .wrap(RequestIdMiddleware)
             .wrap(Condition::new(metrics_enabled, MetricsMiddleware))
+            // CORS must run outside auth/rate-limit, but only standard browser
+            // preflight may be short-circuited before those layers.
+            .wrap(Condition::new(cors_config.enabled, cors))
+            .wrap(from_fn(normalize_non_cors_options_before_cors))
             .configure(routes::health::configure_routes)
             .configure(routes::auth::configure_routes)
             .configure(routes::keys::configure_routes)
@@ -376,11 +382,31 @@ impl HttpServer {
     }
 }
 
+async fn normalize_non_cors_options_before_cors(
+    mut req: ServiceRequest,
+    next: Next<impl MessageBody>,
+) -> std::result::Result<ServiceResponse<impl MessageBody>, actix_web::Error> {
+    if req.method() == Method::OPTIONS
+        && req
+            .headers()
+            .contains_key(header::ACCESS_CONTROL_REQUEST_METHOD)
+        && !req.headers().contains_key(header::ORIGIN)
+    {
+        req.headers_mut()
+            .remove(header::ACCESS_CONTROL_REQUEST_METHOD);
+    }
+
+    next.call(req).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::config::Config;
-    use actix_web::{http::StatusCode, test as actix_test};
+    use actix_web::{
+        http::{StatusCode, header},
+        test as actix_test,
+    };
 
     #[test]
     fn build_cors_rejects_wildcard_with_credentials() {
@@ -597,6 +623,8 @@ mod tests {
         assert!(body.contains("gateway_http_request_errors_total 1"));
         assert!(body.contains("gateway_http_responses_total{class=\"4xx\"} 1"));
     }
+
+    include!("http_cors_tests.rs");
 
     #[tokio::test]
     async fn app_factory_does_not_collect_http_metrics_when_metrics_disabled() {
