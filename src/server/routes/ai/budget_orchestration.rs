@@ -62,6 +62,20 @@ impl BudgetedExecutor {
             .with_budget_manager(self.budget_manager.clone())
     }
 
+    pub(super) fn for_selected_with_api_key_budget(
+        &self,
+        provider: impl Into<String>,
+        model: impl Into<String>,
+        api_key_budget_id: Option<Uuid>,
+        mode: SettlementMode,
+    ) -> BudgetedCall {
+        self.for_selected(provider, model).with_api_key_budget(
+            self.budget_manager.clone(),
+            api_key_budget_id,
+            mode,
+        )
+    }
+
     pub(super) fn pricing(&self) -> Arc<PricingService> {
         self.pricing.clone()
     }

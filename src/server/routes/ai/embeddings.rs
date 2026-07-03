@@ -11,7 +11,7 @@ use crate::utils::error::gateway_error::GatewayError;
 use actix_web::{HttpRequest, HttpResponse, Result as ActixResult, web};
 use tracing::info;
 
-use super::budgeted::{ApiKeyBudgetPolicy, BudgetedCall};
+use super::budgeted::ApiKeyBudgetPolicy;
 use super::context::handle_ai_request;
 use super::execution::execute_with_selected_deployment;
 
@@ -112,10 +112,9 @@ async fn handle_embedding_internal(
     let context_for_execution = context.clone();
     let api_key_id = context.api_key_id();
     let api_key_budget_id = context.api_key_budget_id();
-    let budget_limits = state.budget_limits.clone();
-    let budget_manager = state.budget_manager.clone();
-    let key_manager = state.key_manager.clone();
-    let pricing_service = state.pricing.clone();
+    let budgeted = state.budgeted.clone();
+    let key_manager = budgeted.key_manager();
+    let pricing_service = budgeted.pricing();
     let pricing_config = state.config().gateway.pricing.clone();
     let core_response = execute_with_selected_deployment(
         &state.unified_router,
@@ -124,8 +123,7 @@ async fn handle_embedding_internal(
         move |provider, selected_model, _deployment_id| {
             let core_request = core_request.clone();
             let context = context_for_execution.clone();
-            let budget_limits = budget_limits.clone();
-            let budget_manager = budget_manager.clone();
+            let budgeted = budgeted.clone();
             let key_manager = key_manager.clone();
             let pricing_service = pricing_service.clone();
             let pricing_config = pricing_config.clone();
@@ -147,34 +145,31 @@ async fn handle_embedding_internal(
                 let settle_pricing_provider = pricing_provider;
                 let settle_pricing_model = pricing_model;
                 let settle_key_manager = key_manager.clone();
-                BudgetedCall::new(
-                    budget_limits.clone(),
-                    budget_provider.clone(),
-                    selected_model.clone(),
-                )
-                .with_api_key_budget(
-                    budget_manager.clone(),
-                    api_key_budget_id,
-                    ApiKeyBudgetPolicy::RequirePricedReservation,
-                )
-                .reserve_call_settle(
-                    |budget| {
-                        super::spend::reserve_embedding_budget_with_policy(
-                            reserve_pricing_service.as_ref(),
-                            &reserve_pricing_config,
-                            budget.budget_limits(),
-                            budget.provider(),
-                            budget.model(),
-                            &reserve_pricing_provider,
-                            &reserve_pricing_model,
-                            &core_request.input,
-                        )
-                    },
-                    || provider.create_embeddings(request_for_provider, context),
-                    |response, reservations, budget| {
-                        let (budget_reservation, key_budget_reservation) =
-                            reservations.into_parts();
-                        async move {
+                budgeted
+                    .for_selected_with_api_key_budget(
+                        budget_provider.clone(),
+                        selected_model.clone(),
+                        api_key_budget_id,
+                        ApiKeyBudgetPolicy::RequirePricedReservation,
+                    )
+                    .reserve_call_settle(
+                        |budget| {
+                            super::spend::reserve_embedding_budget_with_policy(
+                                reserve_pricing_service.as_ref(),
+                                &reserve_pricing_config,
+                                budget.budget_limits(),
+                                budget.provider(),
+                                budget.model(),
+                                &reserve_pricing_provider,
+                                &reserve_pricing_model,
+                                &core_request.input,
+                            )
+                        },
+                        || provider.create_embeddings(request_for_provider, context),
+                        |response, reservations, budget| {
+                            let (budget_reservation, key_budget_reservation) =
+                                reservations.into_parts();
+                            async move {
                                 let tokens = response
                                     .usage
                                     .as_ref()
