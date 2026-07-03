@@ -52,7 +52,8 @@ Link to `product.md`.
 - catalog evidence：`registry/catalog.rs` 的 `def()` 只能证明 `Provider::OpenAILike` 路径存在；
   当同名 native 目录仍存在时，不从 native orphan set 中扣除；
 - public export evidence：`src/core/providers/mod.rs` 中 `pub mod <dir>` 与 feature gate；
-- provider implementation evidence：literal `impl LLMProvider` 与 `define_http_provider_with_hooks!` 等 macro invocation；
+- provider implementation evidence：literal `impl LLMProvider`、`define_http_provider_with_hooks!`、
+  `define_pooled_http_provider_with_hooks!` 等 macro invocation；
 - capability evidence：`ProviderCapability::*` 或 model metadata，用于把 image/video/translation/search/vector/embedding-only
   provider 放入 non-llm-lane。
 
@@ -60,14 +61,18 @@ Link to `product.md`.
 
 **Phase 2 — 守护测试（先行合入）**
 
-在 `registry` 增加 conformance 测试：扫描 `src/core/providers/*/` 的 literal `impl LLMProvider` 类型名与
-`define_http_provider_with_hooks!` 等 macro-generated provider 名称，与「native enum/factory/dispatch 构造点 +
-catalog-only 完成状态 + 豁免清单」求差集，非空即失败。关键规则：
+在 `registry` 增加 conformance 测试：扫描 `src/core/providers/*/` 的 literal `impl LLMProvider` 类型名、
+`define_http_provider_with_hooks!` 与 `define_pooled_http_provider_with_hooks!` 等 macro-generated provider 名称，
+与「native enum/factory/dispatch 构造点 + catalog-only 完成状态 + 维护者批复的临时 orphan baseline +
+豁免清单」求差集。新增或未批准 orphan 非空即失败；已在 #837 批复矩阵中排入 delete/demote/non-LLM lane
+的当前 orphan 可作为临时 baseline，带 issue、owner、期限和退出条件。关键规则：
 
 - catalog 条目只在 native 目录不存在、或该目录被显式豁免时，才可满足该 provider 的最终可达状态；
-- `custom_api` 等 macro provider 必须出现在扫描结果中，不能因无 literal impl 被漏掉；
+- `custom_api`、pooled-hook provider（如 `ai21`、`amazon_nova`、`datarobot`、`empower`、`firecrawl`）
+  等 macro provider 必须出现在扫描结果中，不能因无 literal impl 被漏掉；
 - non-LLM provider 进入独立 lane，不得被 LLM delete guard 自动要求删除；
-- 豁免清单为带 issue 引用、owner、期限和退出条件的常量表，CI 可见。
+- 豁免清单与临时 baseline 为带 issue 引用、owner、期限和退出条件的常量表，CI 可见；T5/T6
+  每删除或 demote 一个目录必须同步收缩 baseline，最终收尾时 baseline 为空。
 
 **Phase 3 — 分批执行**
 
