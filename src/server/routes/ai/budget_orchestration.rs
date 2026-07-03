@@ -66,6 +66,10 @@ impl BudgetedExecutor {
         self.pricing.clone()
     }
 
+    pub(super) fn budget_limits(&self) -> Arc<UnifiedBudgetLimits> {
+        self.budget_limits.clone()
+    }
+
     pub(super) fn key_manager(&self) -> KeyManager {
         self.key_manager.clone()
     }

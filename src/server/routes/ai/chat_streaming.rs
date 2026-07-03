@@ -13,7 +13,7 @@ use crate::core::streaming::types::Event;
 use crate::core::types::{context::RequestContext, model::ProviderCapability};
 use crate::server::state::AppState;
 
-use super::super::budgeted::{ApiKeyBudgetPolicy, BudgetedCall};
+use super::super::budgeted::{ApiKeyBudgetPolicy, SettledStream};
 use super::super::execution::execute_stream_with_selected_deployment;
 use super::super::openai_errors;
 use super::super::{spend, token_policy};
@@ -48,7 +48,10 @@ pub(super) async fn handle_streaming_chat_completion(
 
     let requested_model = core_request.model.clone();
     let context_for_execution = context.clone();
-    let (budget_limits, pricing_service) = (state.budget_limits.clone(), state.pricing.clone());
+    let budgeted = state.budgeted.clone();
+    let pricing_service = state.budgeted.pricing();
+    let budget_limits = state.budgeted.budget_limits();
+    let key_manager = state.budgeted.key_manager();
     let pricing_config = state.config().gateway.pricing.clone();
     let api_key_id = context.api_key_id();
     let api_key_budget_id = context.api_key_budget_id();
@@ -60,7 +63,10 @@ pub(super) async fn handle_streaming_chat_completion(
         move |provider, selected_model, _selected_deployment_id| {
             let core_request = core_request.clone();
             let context = context_for_execution.clone();
-            let (budget_limits, pricing_service) = (budget_limits.clone(), pricing_service.clone());
+            let budgeted = budgeted.clone();
+            let pricing_service = pricing_service.clone();
+            let budget_limits = budget_limits.clone();
+            let key_manager = key_manager.clone();
             let budget_manager = budget_manager.clone();
             let request_for_budget = request_for_budget.clone();
             let pricing_config = pricing_config.clone();
@@ -83,64 +89,52 @@ pub(super) async fn handle_streaming_chat_completion(
                 let reserve_pricing_config = pricing_config.clone();
                 let reserve_pricing_provider = pricing_provider.clone();
                 let reserve_pricing_model = pricing_model.clone();
-                let (stream, reservations) = BudgetedCall::new(
-                    budget_limits.clone(),
-                    provider_name.clone(),
-                    selected_model.clone(),
-                )
-                .with_api_key_budget(
-                    budget_manager.clone(),
-                    api_key_budget_id,
-                    ApiKeyBudgetPolicy::FromProviderReservation,
-                )
-                .reserve_call(
-                    |budget| {
-                        spend::reserve_chat_completion_budget_with_split_pricing(
-                            reserve_pricing_service.as_ref(),
-                            &reserve_pricing_config,
-                            budget.budget_limits(),
-                            budget.provider(),
-                            budget.model(),
-                            &reserve_pricing_provider,
-                            &reserve_pricing_model,
-                            &request_for_budget,
-                        )
-                    },
-                    || provider.chat_completion_stream(request_for_provider, context),
-                )
-                .await?;
+                let (stream, reservations) = budgeted
+                    .for_selected(provider_name.clone(), selected_model.clone())
+                    .with_api_key_budget(
+                        budget_manager.clone(),
+                        api_key_budget_id,
+                        ApiKeyBudgetPolicy::FromProviderReservation,
+                    )
+                    .reserve_call(
+                        |budget| {
+                            spend::reserve_chat_completion_budget_with_split_pricing(
+                                reserve_pricing_service.as_ref(),
+                                &reserve_pricing_config,
+                                budget.budget_limits(),
+                                budget.provider(),
+                                budget.model(),
+                                &reserve_pricing_provider,
+                                &reserve_pricing_model,
+                                &request_for_budget,
+                            )
+                        },
+                        || provider.chat_completion_stream(request_for_provider, context),
+                    )
+                    .await?;
                 let (budget_reservation, key_budget_reservation) = reservations.into_parts();
-                Ok((
-                    stream,
-                    provider_name,
-                    selected_model,
+                let settlement = SettledStream {
+                    pricing_service,
+                    pricing_config,
+                    budget_limits,
+                    key_manager,
+                    api_key_id,
+                    provider: provider_name.clone(),
+                    model: selected_model.clone(),
                     pricing_provider,
                     pricing_model,
                     budget_reservation,
                     key_budget_reservation,
-                ))
+                };
+                Ok((stream, settlement))
             }
         },
     )
     .await
     {
-        Ok((
-            (
-                mut stream,
-                served_provider,
-                served_model,
-                pricing_provider,
-                pricing_model,
-                mut budget_reservation,
-                mut key_budget_reservation,
-            ),
-            lease,
-        )) => {
+        Ok(((mut stream, mut settlement), lease)) => {
             let (tx, rx) = mpsc::channel::<Bytes>(8);
             let idle_timeout_secs = state.config.load().gateway.server.stream_idle_timeout;
-            let budget_limits = state.budget_limits.clone();
-            let (key_manager, pricing_service) = (state.key_manager.clone(), state.pricing.clone());
-            let pricing_config = state.config().gateway.pricing.clone();
 
             tokio::spawn(async move {
                 let mut lease = Some(lease);
@@ -150,18 +144,7 @@ pub(super) async fn handle_streaming_chat_completion(
                 macro_rules! settle_after_upstream_output {
                     () => {
                         if final_usage.is_some() || saw_upstream_output {
-                            spend::record_stream_disconnect_spend_with_reservation_with_policy(
-                                pricing_service.as_ref(),
-                                &pricing_config,
-                                spend::usage_spend_settlement_with_pricing(
-                                    (&budget_limits, &key_manager, api_key_id),
-                                    (&served_provider, &served_model, final_usage.as_ref()),
-                                    (&pricing_provider, &pricing_model),
-                                    budget_reservation.take(),
-                                    key_budget_reservation.take(),
-                                ),
-                            )
-                            .await;
+                            settlement.record_disconnect(final_usage.as_ref()).await;
                         }
                     };
                 }
@@ -290,18 +273,7 @@ pub(super) async fn handle_streaming_chat_completion(
 
                     if tx.send(bytes).await.is_err() {
                         info!("Client disconnected during streaming, cancelling upstream");
-                        spend::record_stream_disconnect_spend_with_reservation_with_policy(
-                            pricing_service.as_ref(),
-                            &pricing_config,
-                            spend::usage_spend_settlement_with_pricing(
-                                (&budget_limits, &key_manager, api_key_id),
-                                (&served_provider, &served_model, final_usage.as_ref()),
-                                (&pricing_provider, &pricing_model),
-                                budget_reservation.take(),
-                                key_budget_reservation.take(),
-                            ),
-                        )
-                        .await;
+                        settlement.record_disconnect(final_usage.as_ref()).await;
                         return;
                     }
                 }
@@ -310,24 +282,9 @@ pub(super) async fn handle_streaming_chat_completion(
                 if tx.send(done_event.to_bytes()).await.is_err() {
                     info!("Client disconnected before [DONE] event could be sent");
                 }
-                spend::record_finished_stream_spend_with_reservation_with_policy(
-                    pricing_service.as_ref(),
-                    &pricing_config,
-                    spend::StreamSpendSettlement {
-                        budget_limits: &budget_limits,
-                        key_manager: &key_manager,
-                        api_key_id,
-                        provider: &served_provider,
-                        model: &served_model,
-                        pricing_provider: &pricing_provider,
-                        pricing_model: &pricing_model,
-                        usage: final_usage.as_ref(),
-                        saw_upstream_output,
-                        budget_reservation: budget_reservation.take(),
-                        key_budget_reservation: key_budget_reservation.take(),
-                    },
-                )
-                .await;
+                settlement
+                    .record_completion(final_usage.as_ref(), saw_upstream_output)
+                    .await;
                 if let Some(lease) = lease.take() {
                     lease.finish_success(tokens_used);
                 }
