@@ -13,7 +13,7 @@ Link to `product.md`.
 | Area | Files | Current behavior | Why relevant |
 | --- | --- | --- | --- |
 | 现有半抽象 | `src/server/routes/ai/execution.rs:68` | `execute_with_selected_deployment` 只抽了 retry/选路 | 编排抽象的挂载点 |
-| 样板站点 | `chat.rs:113-166, 416-482`、`completions.rs:152-231`、`embeddings.rs:113-198`、`images/generation.rs:39-90`、`images.rs` image proxy、`audio/{speech.rs:81-139,transcriptions.rs:153-,translations.rs:141-}`、`gemini/provider.rs:315-`、`responses_stream.rs:78-140`、`moderations.rs:103`、`rerank.rs:81` | 各自直接访问 `state.budget_limits` / `state.pricing` / `state.key_manager` / `state.budget_manager`，并手写不同预算生命周期 | 迁移对象；最终 guard 不能只匹配 `.clone()` |
+| 样板站点 | `chat.rs:113-166, 416-482`、`completions.rs:152-231`、`embeddings.rs:113-198`、`images/generation.rs:39-90`、`images.rs` image proxy、`audio/{speech.rs:81-139,transcriptions.rs:153-,translations.rs:141-}`、`gemini/provider.rs:315-`、`responses_stream.rs:78-140`、`moderations.rs:103`、`rerank.rs:81`、`fine_tuning.rs`、`batches.rs` | 各自直接访问 `state.budget_limits` / `state.pricing` / `state.key_manager` / `state.budget_manager`，并手写不同预算生命周期 | 迁移对象；最终 guard 不能只匹配 `.clone()` |
 | 结算实现 | `src/server/routes/ai/spend.rs`（`record_settled_spend` 等） | 结算细节（含 #831 修复后的语义） | 抽象的下游 |
 | 预留实现 | `ensure_budget_available` / `reserve_*_budget` / `reserve_api_key_budget` | 预留三件套 | 抽象的上游 |
 | 流式选路租约 | `src/server/routes/ai/execution.rs` (`StreamingDeploymentLease`) | `finish_success(tokens)` / `finish_failure(error)` 才记录部署结果；`Drop` 只 release | `run_stream` 必须继续持有并显式完成租约 |
@@ -79,17 +79,22 @@ Link to `product.md`.
    来执行 async 操作。包装器内部持有预留凭据、usage 状态、`saw_upstream_output`、可选
    `StreamingDeploymentLease`，并在每条可观测终止路径中显式 `.await` finalizer：
    - usage chunk：按实际 usage settle。
-   - 正常结束且无 usage：按当前 chat/completions 路径记录预留 spend；空成功流也覆盖，不能误退款。
+	   - 正常结束且无 usage：按当前端点行为处理。chat/completions 路径记录预留 spend，空成功流也覆盖；
+	     native Gemini 当前空 2xx SSE 且无 bytes/usage metadata 时保持退款，不能被通用 finalizer 改成扣费。
    - 客户端断开：按当前端点路径记录或释放，不能新增未定义扣费。
-   - 上游错误/转换错误/超时：若已经有 usage 或上游输出，沿用当前错误结算；若没有任何上游 usage/output，则 cancel/drop reservation，不扣费。
+	   - 上游错误/转换错误/超时：按当前端点行为结算。chat/completions 若已经有 usage 或上游输出则沿用当前错误结算；
+	     native Gemini `bytes_stream` error 即使此前有 bytes、但没有 usage metadata，当前也保持退款，必须以
+	     endpoint-specific branch 或测试保留；若没有任何上游 usage/output，则 cancel/drop reservation，不扣费。
      route 自己先发出的 SSE preamble / `response.created` 不算上游输出。
    - 对当前会记录部署结果的路径继续调用 `StreamingDeploymentLease::finish_success(tokens)` 或
      `finish_failure(error)`；不能让 lease 只靠 `Drop` release 后丢失 success/failure。
 
-3. **AppState 收敛**：`AppState` 增加 `budgeted: BudgetedExecutor`（内部持 4 组件 Arc）。
-   在声称类型强制前，旧 `pricing`、`budget_limits`、`budget_manager`、`key_manager` 字段必须被隐藏、
-   降低可见性、移入内部 wrapper，或通过 accessor 限制为 `budgeted` / `spend` 内部使用；不能保留 public
-   字段同时只靠 `rg` 约束兄弟 route。
+3. **AppState 收敛**：`AppState` 先增加 `budgeted: BudgetedExecutor`（内部持 4 组件 Arc）。
+   旧 `pricing`、`budget_limits`、`budget_manager`、`key_manager` 字段在端点迁移完成前可暂留，避免
+   T3 基础设施 PR 被迫迁移全部端点；最终收尾时再隐藏、降低可见性、移入内部 wrapper，或通过 accessor
+   限制 AI route 的预算/计费用途只能从 `budgeted` / `spend` 进入。`key_manager` 的非预算管理用途
+   （例如 `/v1/keys` key-management route）不属于本 issue 的限制对象，必须保留或拆分为独立服务；
+   不能把合法 key-management 访问误收进预算编排约束。
 
 4. **迁移策略**：每 PR 一个端点家族，先 chat 非 stream（最复杂的非流式）→ chat stream →
    其余端点机械迁移。每 PR 内新旧路径不并存（该端点整体切换），端点间允许新旧并存。
@@ -122,8 +127,9 @@ Link to `product.md`.
 | chat / completions / embeddings / image generation / audio / gemini / responses_stream | `Metered` | provider/model 与 API-key 预留、成功结算、失败退回语义不变 |
 | audio speech/transcription/translation | `Metered` + `PreCallCharge::PricedUsage` | 请求派生 `PricingUsage` 与 `total_time_seconds` 在 provider 调用前用于预留 |
 | image generation | `Metered` + `PreCallCharge::PricedUsage` | 图片尺寸/质量/数量派生 usage 在 provider 调用前用于预留 |
-| image edit / variation proxy | `KeyReservationThenPostSuccessRecord` + per-attempt `PreCallCharge::PrecomputedCost` | provider/model 不做预调用 reservation；只预留 API key budget；upstream status 成功后、body conversion 前即记录 provider/model spend，以保持当前转换失败也已计费的边界 |
+| image edit / variation proxy | `KeyReservationThenPostSuccessRecord` + request-level `PreCallCharge::PrecomputedCost` | provider/model 不做预调用 reservation；沿用当前在 router loop 前按 OpenAI pricing identity / requested model 预计算 usage 与 cost，只预留 API key budget；upstream status 成功后、body conversion 前即记录 provider/model spend，以保持当前转换失败也已计费的边界。该模式不得强制按 selected deployment 重新计算价格 |
 | moderations / rerank | `AvailabilityOnly` | 只执行现有 `ensure_budget_available`；不新增 spend 或 key usage |
+| fine_tuning / batches | `AvailabilityOnly` 或现有等价模式 | 迁移/豁免必须以现有行为为准；若当前仅做预算可用性检查，不新增 spend/key usage。最终 guard 覆盖这些文件，不能遗漏直接 `state.budget_limits` 访问 |
 
 ## 备选方案
 
@@ -143,7 +149,7 @@ Link to `product.md`.
 ## 测试计划
 
 - [ ] 单元测试：budgeted.rs 四分支 + 重试兼容 callback context + `PreCallCharge` 分支 + `AvailabilityOnly` 不记账。
-- [ ] 流式测试：usage 中段、正常结束无 usage 但有输出、客户端断开、预输出错误退回、错误终止、lease success/failure。
+- [ ] 流式测试：usage 中段、chat/completions 正常结束无 usage 但有输出、chat/completions 空成功流扣预留、native Gemini 空成功流退款、Gemini 无 usage metadata 的 upstream error 退款、客户端断开、预输出错误退回、错误终止、lease success/failure。
 - [ ] 集成测试：chat/embeddings/images 带预算 key 端到端（迁移前后同断言）。
 - [ ] 守卫检查：direct AppState budget field access guard + sibling `execution::execute_*` import/call guard。
 - [ ] 手工验证：迁移每端点后 `cargo test --all-features` + 聚焦模块测试。

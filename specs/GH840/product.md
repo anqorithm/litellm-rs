@@ -9,7 +9,7 @@ GH-840 / #840
 在 `origin/main@c47596a4`，「预算预留 → provider 调用 → 结算」的编排样板在 AI 路由中复制了 10+ 处
 （约 18 个 4-Arc capture 点：`budget_limits` / `pricing` / `key_manager` / `budget_manager`）：
 chat（stream + 非 stream）、completions、embeddings、images、audio×3、gemini、responses_stream、
-moderations、rerank。任何计费语义修改（例如 #831 的 fail-closed）都要同步修改 ~10 个文件，
+moderations、rerank、fine_tuning、batches。任何计费语义修改（例如 #831 的 fail-closed）都要同步修改 ~10 个文件，
 极易漏改造成端点间计费口径不一致——这正是 #831 缺口能长期存在的结构性原因。
 
 ## 目标
@@ -30,9 +30,11 @@ moderations、rerank。任何计费语义修改（例如 #831 的 fail-closed）
 1. 迁移前后，每个端点在以下分支的可观测行为逐一相等：预算不足拒绝、预留成功+调用成功+结算、
    调用失败+预留退回、settle 失败的日志与 spend 记录。
 2. 新抽象对 stream 与非 stream 两种生命周期都适用：非 stream 在响应前结算；stream 在终止时走显式异步 finalization，
-   不依赖 `Drop` 执行 async 结算。stream 行为矩阵必须与现状一致：
-   usage chunk 结算实际 usage；正常结束且无 usage 时按当前端点行为记录预留 spend（包括空成功流）；
-   客户端断开按当前路径记录或释放；上游错误若发生在任何上游 usage/output 前则退回/丢弃预留而不是扣费。
+   不依赖 `Drop` 执行 async 结算。stream 行为矩阵必须逐端点与现状一致：
+   usage chunk 结算实际 usage；正常结束且无 usage 时按当前端点行为处理（chat/completions 记录预留 spend，
+   native Gemini 空成功流保持退款）；客户端断开按当前路径记录或释放；上游错误按当前端点行为处理
+   （chat/completions 有上游输出后可记录，native Gemini 无 usage metadata 时保持退款），任何上游 usage/output
+   前仍退回/丢弃预留而不是扣费。
    Responses 等协议层合成的 `response.created` / preamble 不算上游 output，不能触发扣费。
 3. 端点新增时不再可能绕过预算编排：能拿到 provider 执行入口的 API 就是编排抽象本身
    （类型上强制，而不是靠 review 记住加样板）；兄弟 route 不能直接 import/call `execution::execute_*`。
