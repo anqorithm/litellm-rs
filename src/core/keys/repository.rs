@@ -2,7 +2,7 @@
 //!
 //! This module provides the storage abstraction for API keys.
 
-use super::types::{KeyStatus, ManagedApiKey, UpdateKeyConfig};
+use super::types::{KeyStatus, ManagedApiKey, UpdateKeyConfig, UsageRecord};
 use crate::utils::error::gateway_error::{GatewayError, Result};
 use async_trait::async_trait;
 use chrono::Utc;
@@ -32,7 +32,7 @@ pub trait KeyRepository: Send + Sync {
     async fn update_last_used(&self, id: Uuid) -> Result<()>;
 
     /// Update usage statistics
-    async fn update_usage(&self, id: Uuid, tokens: u64, cost: f64) -> Result<()>;
+    async fn update_usage(&self, id: Uuid, record: UsageRecord) -> Result<()>;
 
     /// List keys by user ID
     async fn list_by_user(&self, user_id: Uuid) -> Result<Vec<ManagedApiKey>>;
@@ -162,11 +162,11 @@ impl KeyRepository for InMemoryKeyRepository {
         Ok(())
     }
 
-    async fn update_usage(&self, id: Uuid, tokens: u64, cost: f64) -> Result<()> {
+    async fn update_usage(&self, id: Uuid, record: UsageRecord) -> Result<()> {
         if let Some(mut entry) = self.keys_by_id.get_mut(&id) {
             let key = entry.value_mut();
             key.usage_stats.reset_daily_if_needed();
-            key.usage_stats.record_usage(tokens, cost);
+            key.usage_stats.record_usage_record(&record);
             key.last_used_at = Some(Utc::now());
         }
         Ok(())
@@ -431,7 +431,8 @@ mod repository_tests {
         let id = key.id;
 
         repo.create(key).await.unwrap();
-        repo.update_usage(id, 100, 0.01).await.unwrap();
+        let result = repo.update_usage(id, UsageRecord::priced(100, 0.01)).await;
+        assert!(result.is_ok(), "usage update should succeed: {result:?}");
 
         let found = repo.find_by_id(id).await.unwrap().unwrap();
         assert_eq!(found.usage_stats.total_requests, 1);

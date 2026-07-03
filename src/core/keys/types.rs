@@ -195,8 +195,74 @@ pub struct KeyUsageStats {
     /// Cost today
     pub cost_today: f64,
 
+    /// Total unpriced requests recorded with this key
+    #[serde(default)]
+    pub unpriced_requests: u64,
+
+    /// Total tokens recorded from unpriced requests
+    #[serde(default)]
+    pub unpriced_tokens: u64,
+
+    /// Total fallback or zero-cost amount recorded from unpriced requests
+    #[serde(default)]
+    pub unpriced_cost: f64,
+
+    /// Last time an unpriced usage record was seen
+    #[serde(default)]
+    pub last_unpriced_at: Option<DateTime<Utc>>,
+
     /// Last reset date (for daily counters)
     pub last_reset: DateTime<Utc>,
+}
+
+/// Explicit usage write record for API key usage aggregation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UsageRecord {
+    /// Number of requests represented by this record
+    pub requests: u64,
+    /// Token count represented by this record
+    pub tokens: u64,
+    /// Cost represented by this record
+    pub cost: f64,
+    /// Whether this usage came from an unpriced/fallback policy path
+    pub unpriced: bool,
+    /// Pricing policy used when `unpriced` is true
+    #[serde(default)]
+    pub pricing_policy: Option<String>,
+    /// Provider associated with this record when known
+    #[serde(default)]
+    pub provider: Option<String>,
+    /// Model associated with this record when known
+    #[serde(default)]
+    pub model: Option<String>,
+}
+
+impl UsageRecord {
+    /// Create a normal priced usage record for one request.
+    pub fn priced(tokens: u64, cost: f64) -> Self {
+        Self {
+            requests: 1,
+            tokens,
+            cost,
+            unpriced: false,
+            pricing_policy: None,
+            provider: None,
+            model: None,
+        }
+    }
+
+    /// Create an unpriced usage record for one request.
+    pub fn unpriced(tokens: u64, cost: f64, pricing_policy: impl Into<String>) -> Self {
+        Self {
+            requests: 1,
+            tokens,
+            cost,
+            unpriced: true,
+            pricing_policy: Some(pricing_policy.into()),
+            provider: None,
+            model: None,
+        }
+    }
 }
 
 impl KeyUsageStats {
@@ -209,18 +275,37 @@ impl KeyUsageStats {
             requests_today: 0,
             tokens_today: 0,
             cost_today: 0.0,
+            unpriced_requests: 0,
+            unpriced_tokens: 0,
+            unpriced_cost: 0.0,
+            last_unpriced_at: None,
             last_reset: Utc::now(),
         }
     }
 
     /// Record usage
     pub fn record_usage(&mut self, tokens: u64, cost: f64) {
-        self.total_requests += 1;
-        self.total_tokens += tokens;
-        self.total_cost += cost;
-        self.requests_today += 1;
-        self.tokens_today += tokens as u32;
-        self.cost_today += cost;
+        self.record_usage_record(&UsageRecord::priced(tokens, cost));
+    }
+
+    /// Record usage from an explicit usage write record.
+    pub fn record_usage_record(&mut self, record: &UsageRecord) {
+        self.total_requests = self.total_requests.saturating_add(record.requests);
+        self.total_tokens = self.total_tokens.saturating_add(record.tokens);
+        self.total_cost += record.cost;
+        self.requests_today = self
+            .requests_today
+            .saturating_add(record.requests.try_into().unwrap_or(u32::MAX));
+        self.tokens_today = self
+            .tokens_today
+            .saturating_add(record.tokens.try_into().unwrap_or(u32::MAX));
+        self.cost_today += record.cost;
+        if record.unpriced {
+            self.unpriced_requests = self.unpriced_requests.saturating_add(record.requests);
+            self.unpriced_tokens = self.unpriced_tokens.saturating_add(record.tokens);
+            self.unpriced_cost += record.cost;
+            self.last_unpriced_at = Some(Utc::now());
+        }
     }
 
     /// Reset daily counters if needed
@@ -542,6 +627,28 @@ mod type_tests {
         assert_eq!(stats.total_requests, 1);
         assert_eq!(stats.total_tokens, 100);
         assert!((stats.total_cost - 0.01).abs() < f64::EPSILON);
+        assert_eq!(stats.unpriced_requests, 0);
+        assert_eq!(stats.unpriced_tokens, 0);
+        assert_eq!(stats.unpriced_cost, 0.0);
+        assert!(stats.last_unpriced_at.is_none());
+    }
+
+    #[test]
+    fn test_usage_stats_record_unpriced() {
+        let mut stats = KeyUsageStats::new();
+        let mut record = UsageRecord::unpriced(250, 0.05, "allow_unpriced");
+        record.provider = Some("openai_like".to_string());
+        record.model = Some("private-model".to_string());
+
+        stats.record_usage_record(&record);
+
+        assert_eq!(stats.total_requests, 1);
+        assert_eq!(stats.total_tokens, 250);
+        assert!((stats.total_cost - 0.05).abs() < f64::EPSILON);
+        assert_eq!(stats.unpriced_requests, 1);
+        assert_eq!(stats.unpriced_tokens, 250);
+        assert!((stats.unpriced_cost - 0.05).abs() < f64::EPSILON);
+        assert!(stats.last_unpriced_at.is_some());
     }
 
     #[test]

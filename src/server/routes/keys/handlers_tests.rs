@@ -116,6 +116,26 @@ fn update_request_with_permissions(permissions: Option<KeyPermissions>) -> Updat
     }
 }
 
+#[test]
+fn key_usage_response_serializes_unpriced_fields() {
+    let key_id = Uuid::new_v4();
+    let mut usage = KeyUsageStats::new();
+    usage.record_usage_record(&crate::core::keys::UsageRecord::unpriced(
+        25,
+        0.01,
+        "allow_unpriced",
+    ));
+    let response = KeyUsageResponse { key_id, usage };
+
+    let value = serde_json::to_value(response).expect("key usage response should serialize");
+
+    assert_eq!(value["key_id"], key_id.to_string());
+    assert_eq!(value["usage"]["unpriced_requests"], 1);
+    assert_eq!(value["usage"]["unpriced_tokens"], 25);
+    assert_eq!(value["usage"]["unpriced_cost"], 0.01);
+    assert!(value["usage"]["last_unpriced_at"].is_string());
+}
+
 fn make_key_info(id: Uuid, status: KeyStatus) -> KeyInfo {
     KeyInfo {
         id,
