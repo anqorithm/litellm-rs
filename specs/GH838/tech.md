@@ -58,10 +58,12 @@ Link to `product.md`.
 **Phase 4 — 守护检查**
 
 脚本或测试：解析 `src/core/mod.rs` 的顶层 `pub mod` 清单，先分类为 `gateway_facing`、`library_only`、
-`internal_support`、`feature_gated`。仅 `gateway_facing` 模块断言
-「被 `src/server|src/main.rs|src/bin|src/config` 引用 ∨ 在带 issue 的豁免清单 ∨ 被真 feature gate」。
-CI 负测试必须证明新增未接线 gateway 子系统会失败，正测试必须证明 `completion`、`function_calling`、
-`traits`、`secret_managers` 不会被误拦。
+`internal_support`、`feature_gated`。仅 `gateway_facing` 模块断言运行时可达：
+「被启动装配实际构造并挂入请求路径/中间件/路由/后台任务 ∨ 在带 issue 的豁免清单 ∨ 被真 feature gate」。
+单纯存在 `GatewayConfig` 字段、admin/status 展示、validation 文案或 `src/config`/`src/server` 文本引用不算可达性证据；
+例如 `semantic_cache` 的配置与 admin flag 不能替代真实请求处理接线。CI 负测试必须证明新增 config-only
+或 admin-only 的 gateway 子系统会失败，正测试必须证明 `completion`、`function_calling`、`traits`、
+`secret_managers` 不会被误拦。
 
 ## Product-to-Test Mapping
 
@@ -76,9 +78,11 @@ CI 负测试必须证明新增未接线 gateway 子系统会失败，正测试�
 ## 数据流
 
 wire lane 引入新的启动初始化顺序：config load → storage → 各子系统 init → middleware 注册 → 路由。
-observability 初始化必须在 server 启动前完成（tracing 全局注册的一次性约束）。observability+integrations
-还必须进入真实 LLM request 生命周期：请求开始时触发 `IntegrationManager::on_llm_start`，成功/失败结束时触发
-`on_llm_end`/`on_llm_error`，不能只依赖既有 `/metrics` HTTP middleware。
+observability 初始化必须在 server 启动前完成（tracing 全局注册的一次性约束），且配置感知 tracing/OTel/Langfuse
+初始化必须发生在当前 fallback `tracing_subscriber::fmt().init()` 之前或替代它；不能先注册全局 fallback subscriber
+再在 builder 中尝试安装配置化 subscriber。observability+integrations 还必须进入真实 LLM request 生命周期：
+请求开始时触发 `IntegrationManager::on_llm_start`，成功/失败结束时触发 `on_llm_end`/`on_llm_error`，
+不能只依赖既有 `/metrics` HTTP middleware。
 
 ## 备选方案
 
