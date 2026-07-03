@@ -8,6 +8,7 @@ use actix_web::{HttpRequest, HttpResponse, Result as ActixResult, web};
 use futures::StreamExt;
 use tracing::{error, info};
 
+use super::super::budget_orchestration::{ApiKeyBudgetPolicy, BudgetedCall};
 use super::super::execution::execute_with_selected_deployment;
 use super::upload::{
     drain_field, parse_optional_f32_field, raw_response_format_error, read_audio_file,
@@ -178,38 +179,65 @@ pub async fn audio_transcriptions(
                         &provider,
                         &selected_model,
                     );
-                let (budget_reservation, key_budget_reservation) =
-                    super::budgeting::reserve_audio_budget_with_pricing(
-                        pricing_service.as_ref(),
-                        &budget_manager,
-                        &budget_limits,
-                        api_key_budget_id,
-                        &budget_provider,
-                        &selected_model,
-                        &pricing_provider,
-                        &pricing_model,
-                        Some(total_time_seconds),
-                        &usage,
-                    )?;
                 request.model = selected_model.clone();
-                let response = provider.audio_transcription(request, context).await?;
-                let tokens_used = u64::from(usage.total_tokens);
-                super::budgeting::record_audio_spend(
-                    pricing_service.as_ref(),
-                    &budget_limits,
-                    &key_manager,
-                    api_key_id,
-                    &budget_provider,
-                    &selected_model,
-                    &pricing_provider,
-                    &pricing_model,
-                    Some(total_time_seconds),
-                    &usage,
-                    budget_reservation,
-                    key_budget_reservation,
+                let reserve_pricing_service = pricing_service.clone();
+                let settle_pricing_service = pricing_service.clone();
+                let reserve_pricing_provider = pricing_provider.clone();
+                let reserve_pricing_model = pricing_model.clone();
+                let settle_pricing_provider = pricing_provider;
+                let settle_pricing_model = pricing_model;
+                let reserve_usage = usage.clone();
+                let settle_usage = usage;
+                let settle_key_manager = key_manager.clone();
+                BudgetedCall::new(
+                    budget_limits.clone(),
+                    budget_provider.clone(),
+                    selected_model.clone(),
                 )
-                .await;
-                Ok((response, tokens_used))
+                .with_api_key_budget(
+                    budget_manager.clone(),
+                    api_key_budget_id,
+                    ApiKeyBudgetPolicy::FromProviderReservation,
+                )
+                .reserve_call_settle(
+                    |budget| {
+                        super::budgeting::reserve_audio_provider_budget_with_pricing(
+                            reserve_pricing_service.as_ref(),
+                            budget.budget_limits(),
+                            budget.provider(),
+                            budget.model(),
+                            &reserve_pricing_provider,
+                            &reserve_pricing_model,
+                            Some(total_time_seconds),
+                            &reserve_usage,
+                        )
+                    },
+                    || provider.audio_transcription(request, context),
+                    |response, reservations, budget| {
+                        let (budget_reservation, key_budget_reservation) =
+                            reservations.into_parts();
+                        async move {
+                            let tokens_used = u64::from(settle_usage.total_tokens);
+                            super::budgeting::record_audio_spend(
+                                settle_pricing_service.as_ref(),
+                                budget.budget_limits(),
+                                &settle_key_manager,
+                                api_key_id,
+                                budget.provider(),
+                                budget.model(),
+                                &settle_pricing_provider,
+                                &settle_pricing_model,
+                                Some(total_time_seconds),
+                                &settle_usage,
+                                budget_reservation,
+                                key_budget_reservation,
+                            )
+                            .await;
+                            (response, tokens_used)
+                        }
+                    },
+                )
+                .await
             }
         },
     )

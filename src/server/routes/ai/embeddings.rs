@@ -11,6 +11,7 @@ use crate::utils::error::gateway_error::GatewayError;
 use actix_web::{HttpRequest, HttpResponse, Result as ActixResult, web};
 use tracing::info;
 
+use super::budget_orchestration::{ApiKeyBudgetPolicy, BudgetedCall};
 use super::context::handle_ai_request;
 use super::execution::execute_with_selected_deployment;
 
@@ -126,72 +127,90 @@ async fn handle_embedding_internal(
             let key_manager = key_manager.clone();
             let pricing_service = pricing_service.clone();
             async move {
-                super::spend::ensure_budget_available(
-                    &budget_limits,
-                    provider.name(),
-                    &selected_model,
-                )?;
                 let budget_provider = provider.name().to_string();
                 let (pricing_provider, pricing_model) = super::spend::pricing_identity_for_provider(
                     pricing_service.as_ref(),
                     &provider,
                     &selected_model,
                 );
-                let budget_reservation = super::spend::reserve_embedding_budget_with_pricing(
-                    pricing_service.as_ref(),
-                    &budget_limits,
-                    &budget_provider,
-                    &selected_model,
-                    &pricing_provider,
-                    &pricing_model,
-                    &core_request.input,
-                )?;
-                let key_budget_reservation = super::spend::reserve_api_key_budget(
-                    &budget_manager,
-                    api_key_budget_id,
-                    budget_reservation
-                        .as_ref()
-                        .map(|reservation| reservation.reserved_amount()),
-                )?;
                 let mut request_for_provider = core_request.clone();
                 request_for_provider.model = selected_model.clone();
-                let response = provider
-                    .create_embeddings(request_for_provider, context)
-                    .await?;
-                let tokens = response
-                    .usage
-                    .as_ref()
-                    .map(|usage| u64::from(usage.total_tokens))
-                    .unwrap_or_default();
-                if let Some(usage) = response.usage.as_ref() {
-                    let usage = PricingUsage::from(usage);
-                    super::spend::record_pricing_usage_spend_with_reservation_with_pricing(
-                        pricing_service.as_ref(),
-                        &budget_limits,
-                        &key_manager,
-                        api_key_id,
-                        &budget_provider,
-                        &selected_model,
-                        &pricing_provider,
-                        &pricing_model,
-                        &usage,
-                        budget_reservation,
-                        key_budget_reservation,
+                let reserve_pricing_service = pricing_service.clone();
+                let settle_pricing_service = pricing_service.clone();
+                let reserve_pricing_provider = pricing_provider.clone();
+                let reserve_pricing_model = pricing_model.clone();
+                let settle_pricing_provider = pricing_provider;
+                let settle_pricing_model = pricing_model;
+                let settle_key_manager = key_manager.clone();
+                BudgetedCall::new(
+                    budget_limits.clone(),
+                    budget_provider.clone(),
+                    selected_model.clone(),
+                )
+                .with_api_key_budget(
+                    budget_manager.clone(),
+                    api_key_budget_id,
+                    ApiKeyBudgetPolicy::RequirePricedReservation,
+                )
+                .reserve_call_settle(
+                    |budget| {
+                        super::spend::reserve_embedding_budget_with_pricing(
+                            reserve_pricing_service.as_ref(),
+                            budget.budget_limits(),
+                            budget.provider(),
+                            budget.model(),
+                            &reserve_pricing_provider,
+                            &reserve_pricing_model,
+                            &core_request.input,
+                        )
+                    },
+                    || provider.create_embeddings(request_for_provider, context),
+                    |response, reservations, budget| {
+                        let (budget_reservation, key_budget_reservation) =
+                            reservations.into_parts();
+                        async move {
+                                let tokens = response
+                                    .usage
+                                    .as_ref()
+                                    .map(|usage| u64::from(usage.total_tokens))
+                                    .unwrap_or_default();
+                                if let Some(usage) = response.usage.as_ref() {
+                                    let usage = PricingUsage::from(usage);
+                                    super::spend::record_pricing_usage_spend_with_reservation_with_pricing(
+                                        settle_pricing_service.as_ref(),
+                                        budget.budget_limits(),
+                                        &settle_key_manager,
+                                        api_key_id,
+                                        budget.provider(),
+                                        budget.model(),
+                                        &settle_pricing_provider,
+                                        &settle_pricing_model,
+                                        &usage,
+                                        budget_reservation,
+                                        key_budget_reservation,
+                                    )
+                                    .await;
+                                } else {
+                                    super::spend::record_completion_spend_with_reservation_with_pricing(
+                                        settle_pricing_service.as_ref(),
+                                        super::spend::usage_spend_settlement(
+                                            (
+                                                budget.budget_limits(),
+                                                &settle_key_manager,
+                                                api_key_id,
+                                            ),
+                                            (budget.provider(), budget.model(), None),
+                                            budget_reservation,
+                                            key_budget_reservation,
+                                        ),
+                                    )
+                                    .await;
+                                }
+                                (response, tokens)
+                            }
+                        },
                     )
-                    .await;
-                } else {
-                    super::spend::record_completion_spend_with_reservation_with_pricing(
-                        pricing_service.as_ref(),
-                        super::spend::usage_spend_settlement(
-                            (&budget_limits, &key_manager, api_key_id),
-                            (&budget_provider, &selected_model, None),
-                            budget_reservation,
-                            key_budget_reservation,
-                        ),
-                    )
-                    .await;
-                }
-                Ok((response, tokens))
+                    .await
             }
         },
     )

@@ -1,11 +1,8 @@
-use crate::core::budget::{
-    BudgetManager, BudgetReservation, UnifiedBudgetLimits, UnifiedBudgetReservation,
-};
+use crate::core::budget::{BudgetReservation, UnifiedBudgetLimits, UnifiedBudgetReservation};
 use crate::core::keys::KeyManager;
 use crate::core::pricing_service::PricingService;
 use crate::core::pricing_service::PricingUsage;
 use crate::core::providers::ProviderError;
-use uuid::Uuid;
 
 const ESTIMATED_AUDIO_BYTES_PER_SECOND: usize = 16_000;
 
@@ -29,18 +26,16 @@ pub(super) fn estimated_audio_file_seconds(file: &[u8]) -> f64 {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(super) fn reserve_audio_budget_with_pricing(
+pub(super) fn reserve_audio_provider_budget_with_pricing(
     pricing_service: &PricingService,
-    budget_manager: &BudgetManager,
     budget_limits: &UnifiedBudgetLimits,
-    api_key_budget_id: Option<Uuid>,
     budget_provider: &str,
     budget_model: &str,
     pricing_provider: &str,
     pricing_model: &str,
     total_time_seconds: Option<f64>,
     usage: &PricingUsage,
-) -> Result<(Option<UnifiedBudgetReservation>, Option<BudgetReservation>), ProviderError> {
+) -> Result<Option<UnifiedBudgetReservation>, ProviderError> {
     super::super::spend::ensure_budget_available(budget_limits, budget_provider, budget_model)?;
     let budget_reservation = if is_time_priced_audio(
         pricing_service,
@@ -98,12 +93,7 @@ pub(super) fn reserve_audio_budget_with_pricing(
             usage,
         )?
     };
-    let key_budget_reservation = super::super::spend::reserve_api_key_budget_for_reservation(
-        budget_manager,
-        api_key_budget_id,
-        budget_reservation.as_ref(),
-    )?;
-    Ok((budget_reservation, key_budget_reservation))
+    Ok(budget_reservation)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -270,7 +260,7 @@ fn estimated_audio_text_tokens(text: &str) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::budget::{BudgetConfig, BudgetScope};
+    use crate::core::budget::{BudgetConfig, BudgetManager, BudgetScope};
     use crate::core::keys::InMemoryKeyRepository;
 
     #[test]

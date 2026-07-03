@@ -23,6 +23,7 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 
+use super::budget_orchestration::{ApiKeyBudgetPolicy, BudgetedCall};
 use super::context::get_request_context;
 use super::execution::{execute_stream_with_selected_deployment, execute_with_selected_deployment};
 use super::openai_errors;
@@ -125,35 +126,39 @@ async fn handle_streaming_chat_completion(
             let budget_manager = budget_manager.clone();
             let request_for_budget = request_for_budget.clone();
             async move {
-                super::spend::ensure_budget_available(
-                    &budget_limits,
-                    provider.name(),
-                    &selected_model,
-                )?;
                 let provider_name = provider.name().to_string();
                 let (request_for_provider, request_for_budget) =
                     super::token_policy::prepare_chat_request_for_provider(
                         context.api_key_max_tokens_per_request(),
-                        provider.name(),
+                        &provider_name,
                         &selected_model,
                         core_request.clone(),
                         request_for_budget,
                     )?;
-                let budget_reservation = super::spend::reserve_chat_completion_budget_with_pricing(
-                    pricing_service.as_ref(),
-                    &budget_limits,
-                    provider.name(),
-                    &selected_model,
-                    &request_for_budget,
-                )?;
-                let key_budget_reservation = super::spend::reserve_api_key_budget_for_reservation(
-                    &budget_manager,
+                let (stream, reservations) = BudgetedCall::new(
+                    budget_limits.clone(),
+                    provider_name.clone(),
+                    selected_model.clone(),
+                )
+                .with_api_key_budget(
+                    budget_manager.clone(),
                     api_key_budget_id,
-                    budget_reservation.as_ref(),
-                )?;
-                let stream = provider
-                    .chat_completion_stream(request_for_provider, context)
-                    .await?;
+                    ApiKeyBudgetPolicy::FromProviderReservation,
+                )
+                .reserve_call(
+                    |budget| {
+                        super::spend::reserve_chat_completion_budget_with_pricing(
+                            pricing_service.as_ref(),
+                            budget.budget_limits(),
+                            budget.provider(),
+                            budget.model(),
+                            &request_for_budget,
+                        )
+                    },
+                    || provider.chat_completion_stream(request_for_provider, context),
+                )
+                .await?;
+                let (budget_reservation, key_budget_reservation) = reservations.into_parts();
                 Ok((
                     stream,
                     provider_name,
@@ -431,52 +436,63 @@ async fn handle_chat_completion_internal(
             let budget_manager = budget_manager.clone();
             let request_for_budget = request_for_budget.clone();
             async move {
-                // Reject before spending upstream tokens when the selected
-                // provider/model budget is already exhausted.
-                super::spend::ensure_budget_available(
-                    &budget_limits,
-                    provider.name(),
-                    &selected_model,
-                )?;
+                let provider_name = provider.name().to_string();
                 let (request_for_provider, request_for_budget) =
                     super::token_policy::prepare_chat_request_for_provider(
                         context.api_key_max_tokens_per_request(),
-                        provider.name(),
+                        &provider_name,
                         &selected_model,
                         core_request.clone(),
                         request_for_budget,
                     )?;
-                let budget_reservation = super::spend::reserve_chat_completion_budget_with_pricing(
-                    pricing_service.as_ref(),
-                    &budget_limits,
-                    provider.name(),
-                    &selected_model,
-                    &request_for_budget,
-                )?;
-                let key_budget_reservation = super::spend::reserve_api_key_budget_for_reservation(
-                    &budget_manager,
-                    api_key_budget_id,
-                    budget_reservation.as_ref(),
-                )?;
-                let response = provider
-                    .chat_completion(request_for_provider, context)
-                    .await?;
-                let tokens = response
-                    .usage
-                    .as_ref()
-                    .map(|usage| u64::from(usage.total_tokens))
-                    .unwrap_or_default();
-                super::spend::record_completion_spend_with_reservation_with_pricing(
-                    pricing_service.as_ref(),
-                    super::spend::usage_spend_settlement(
-                        (&budget_limits, &key_manager, api_key_id),
-                        (provider.name(), &selected_model, response.usage.as_ref()),
-                        budget_reservation,
-                        key_budget_reservation,
-                    ),
+                let reserve_pricing_service = pricing_service.clone();
+                let settle_pricing_service = pricing_service.clone();
+                let settle_key_manager = key_manager.clone();
+                BudgetedCall::new(
+                    budget_limits.clone(),
+                    provider_name.clone(),
+                    selected_model.clone(),
                 )
-                .await;
-                Ok((response, tokens))
+                .with_api_key_budget(
+                    budget_manager.clone(),
+                    api_key_budget_id,
+                    ApiKeyBudgetPolicy::FromProviderReservation,
+                )
+                .reserve_call_settle(
+                    |budget| {
+                        super::spend::reserve_chat_completion_budget_with_pricing(
+                            reserve_pricing_service.as_ref(),
+                            budget.budget_limits(),
+                            budget.provider(),
+                            budget.model(),
+                            &request_for_budget,
+                        )
+                    },
+                    || provider.chat_completion(request_for_provider, context),
+                    |response, reservations, budget| {
+                        let (budget_reservation, key_budget_reservation) =
+                            reservations.into_parts();
+                        async move {
+                            let tokens = response
+                                .usage
+                                .as_ref()
+                                .map(|usage| u64::from(usage.total_tokens))
+                                .unwrap_or_default();
+                            super::spend::record_completion_spend_with_reservation_with_pricing(
+                                settle_pricing_service.as_ref(),
+                                super::spend::usage_spend_settlement(
+                                    (budget.budget_limits(), &settle_key_manager, api_key_id),
+                                    (budget.provider(), budget.model(), response.usage.as_ref()),
+                                    budget_reservation,
+                                    key_budget_reservation,
+                                ),
+                            )
+                            .await;
+                            (response, tokens)
+                        }
+                    },
+                )
+                .await
             }
         },
     )

@@ -5,6 +5,7 @@
 // Module declarations
 mod audio;
 mod batches;
+mod budget_orchestration;
 mod chat;
 mod completions;
 mod context;

@@ -22,6 +22,7 @@ use crate::server::state::AppState;
 use crate::utils::data::validation::RequestValidator;
 use crate::utils::error::gateway_error::GatewayError;
 
+use super::budget_orchestration::{ApiKeyBudgetPolicy, BudgetedCall};
 use super::context::get_request_context;
 use super::execution::execute_stream_with_selected_deployment;
 use super::openai_errors;
@@ -174,26 +175,30 @@ async fn handle_streaming_completion(
                         core_request.clone(),
                         request_for_budget,
                     )?;
-                super::spend::ensure_budget_available(
-                    &budget_limits,
-                    &provider_name,
-                    &selected_model,
-                )?;
-                let budget_reservation = super::spend::reserve_chat_completion_budget_with_pricing(
-                    pricing_service.as_ref(),
-                    &budget_limits,
-                    &provider_name,
-                    &selected_model,
-                    &request_for_budget,
-                )?;
-                let key_budget_reservation = super::spend::reserve_api_key_budget_for_reservation(
-                    &budget_manager,
+                let (stream, reservations) = BudgetedCall::new(
+                    budget_limits.clone(),
+                    provider_name.clone(),
+                    selected_model.clone(),
+                )
+                .with_api_key_budget(
+                    budget_manager.clone(),
                     api_key_budget_id,
-                    budget_reservation.as_ref(),
-                )?;
-                let stream = provider
-                    .chat_completion_stream(request_for_provider, context)
-                    .await?;
+                    ApiKeyBudgetPolicy::FromProviderReservation,
+                )
+                .reserve_call(
+                    |budget| {
+                        super::spend::reserve_chat_completion_budget_with_pricing(
+                            pricing_service.as_ref(),
+                            budget.budget_limits(),
+                            budget.provider(),
+                            budget.model(),
+                            &request_for_budget,
+                        )
+                    },
+                    || provider.chat_completion_stream(request_for_provider, context),
+                )
+                .await?;
+                let (budget_reservation, key_budget_reservation) = reservations.into_parts();
                 Ok((
                     stream,
                     provider_name,

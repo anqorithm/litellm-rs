@@ -30,6 +30,7 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 
+use super::budget_orchestration::{ApiKeyBudgetPolicy, BudgetedCall};
 use super::{openai_errors, spend};
 #[path = "responses_stream_budget.rs"]
 mod responses_stream_budget;
@@ -102,20 +103,30 @@ pub(crate) async fn handle_streaming_response(
                         core_request.clone(),
                         request_for_budget,
                     )?;
-                spend::ensure_budget_available(&budget_limits, &provider_name, &selected_model)?;
-                let budget_reservation = spend::reserve_chat_completion_budget_with_pricing(
-                    pricing_service.as_ref(),
-                    &budget_limits,
-                    &provider_name,
-                    &selected_model,
-                    &request_for_budget,
-                )?;
-                let key_budget_reservation = spend::reserve_api_key_budget_for_reservation(
-                    &budget_manager,
+                let (stream, reservations) = BudgetedCall::new(
+                    budget_limits.clone(),
+                    provider_name.clone(),
+                    selected_model.clone(),
+                )
+                .with_api_key_budget(
+                    budget_manager.clone(),
                     api_key_budget_id,
-                    budget_reservation.as_ref(),
-                )?;
-                let stream = provider.chat_completion_stream(req, ctx).await?;
+                    ApiKeyBudgetPolicy::FromProviderReservation,
+                )
+                .reserve_call(
+                    |budget| {
+                        spend::reserve_chat_completion_budget_with_pricing(
+                            pricing_service.as_ref(),
+                            budget.budget_limits(),
+                            budget.provider(),
+                            budget.model(),
+                            &request_for_budget,
+                        )
+                    },
+                    || provider.chat_completion_stream(req, ctx),
+                )
+                .await?;
+                let (budget_reservation, key_budget_reservation) = reservations.into_parts();
                 Ok((
                     stream,
                     provider_name,
