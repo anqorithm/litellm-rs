@@ -118,7 +118,7 @@ impl ApiKeyHandler {
 
         self.storage
             .db()
-            .update_api_key_usage(key_id, requests, tokens, cost)
+            .update_api_key_usage(key_id, requests, tokens, cost, false, None)
             .await?;
 
         // Invalidate cached API key so subsequent reads see updated usage stats

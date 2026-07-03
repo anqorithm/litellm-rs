@@ -557,7 +557,7 @@ mod tests {
             .expect("API key missing after rate limit update");
         assert_eq!(after_limits.rate_limits.and_then(|r| r.rpm), Some(60));
 
-        db.update_api_key_usage(key_id, 3, 123, 0.42)
+        db.update_api_key_usage(key_id, 3, 123, 0.42, false, None)
             .await
             .expect("Failed to update usage");
         let after_usage = db
@@ -567,6 +567,21 @@ mod tests {
             .expect("API key missing after usage update");
         assert_eq!(after_usage.usage_stats.total_requests, 3);
         assert_eq!(after_usage.usage_stats.total_tokens, 123);
+
+        db.update_api_key_usage(key_id, 1, 25, 0.01, true, Some("allow_unpriced"))
+            .await
+            .expect("Failed to update unpriced usage");
+        let after_unpriced_usage = db
+            .find_api_key_by_id(key_id)
+            .await
+            .expect("Failed to refetch api key")
+            .expect("API key missing after unpriced usage update");
+        assert_eq!(after_unpriced_usage.usage_stats.total_requests, 4);
+        assert_eq!(after_unpriced_usage.usage_stats.total_tokens, 148);
+        assert_eq!(after_unpriced_usage.usage_stats.unpriced_requests, 1);
+        assert_eq!(after_unpriced_usage.usage_stats.unpriced_tokens, 25);
+        assert_eq!(after_unpriced_usage.usage_stats.unpriced_cost, 0.01);
+        assert!(after_unpriced_usage.usage_stats.last_unpriced_at.is_some());
 
         db.update_api_key_last_used(key_id)
             .await

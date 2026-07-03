@@ -29,5 +29,5 @@ pub use manager::KeyManager;
 pub use repository::{InMemoryKeyRepository, KeyRepository};
 pub use types::{
     CreateKeyConfig, KeyInfo, KeyPermissions, KeyRateLimits, KeyStatus, KeyUsageStats,
-    ManagedApiKey, UpdateKeyConfig, VerifyKeyResult,
+    ManagedApiKey, UpdateKeyConfig, UsageRecord, VerifyKeyResult,
 };

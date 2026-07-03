@@ -4,7 +4,9 @@
 
 use super::manager::KeyManager;
 use super::repository::InMemoryKeyRepository;
-use super::types::{CreateKeyConfig, KeyPermissions, KeyRateLimits, KeyStatus, UpdateKeyConfig};
+use super::types::{
+    CreateKeyConfig, KeyPermissions, KeyRateLimits, KeyStatus, UpdateKeyConfig, UsageRecord,
+};
 use chrono::{Duration, Utc};
 use uuid::Uuid;
 
@@ -475,6 +477,32 @@ async fn test_record_usage() {
     assert_eq!(stats.total_requests, 2);
     assert_eq!(stats.total_tokens, 300);
     assert!((stats.total_cost - 0.03).abs() < f64::EPSILON);
+}
+
+#[tokio::test]
+async fn test_record_usage_record_unpriced() {
+    let manager = create_test_manager();
+
+    let config = CreateKeyConfig {
+        name: "Unpriced Usage Key".to_string(),
+        ..Default::default()
+    };
+
+    let (key_id, _) = manager.generate_key(config).await.unwrap();
+
+    manager
+        .record_usage_record(key_id, UsageRecord::unpriced(250, 0.05, "allow_unpriced"))
+        .await
+        .unwrap();
+
+    let stats = manager.get_usage_stats(key_id).await.unwrap();
+    assert_eq!(stats.total_requests, 1);
+    assert_eq!(stats.total_tokens, 250);
+    assert!((stats.total_cost - 0.05).abs() < f64::EPSILON);
+    assert_eq!(stats.unpriced_requests, 1);
+    assert_eq!(stats.unpriced_tokens, 250);
+    assert!((stats.unpriced_cost - 0.05).abs() < f64::EPSILON);
+    assert!(stats.last_unpriced_at.is_some());
 }
 
 // ==================== Key Deletion Tests ====================

@@ -3,7 +3,7 @@
 use super::db_mapping::{from_domain_api_key, to_domain_api_key};
 use super::db_update::apply_update_config;
 use super::repository::KeyRepository;
-use super::types::{KeyStatus, ManagedApiKey, UpdateKeyConfig};
+use super::types::{KeyStatus, ManagedApiKey, UpdateKeyConfig, UsageRecord};
 use crate::storage::StorageLayer;
 use crate::utils::error::gateway_error::{GatewayError, Result};
 use async_trait::async_trait;
@@ -66,10 +66,17 @@ impl KeyRepository for DatabaseKeyRepository {
         self.storage.db().update_api_key_last_used(id).await
     }
 
-    async fn update_usage(&self, id: Uuid, tokens: u64, cost: f64) -> Result<()> {
+    async fn update_usage(&self, id: Uuid, record: UsageRecord) -> Result<()> {
         self.storage
             .db()
-            .update_api_key_usage(id, 1, tokens, cost)
+            .update_api_key_usage(
+                id,
+                record.requests,
+                record.tokens,
+                record.cost,
+                record.unpriced,
+                record.pricing_policy.as_deref(),
+            )
             .await
     }
 
