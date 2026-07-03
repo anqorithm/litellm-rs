@@ -14,11 +14,11 @@ GH-838 / #838
 - [ ] `SP838-T1` Owner: coordinator. Done when: `specs/GH838/` 三件套通过 SpecRail packet validation. Verify: `SPEC_RAIL=/path/to/specrail; python3 "$SPEC_RAIL/checks/check_workflow.py" --repo "$SPEC_RAIL" --spec-dir "$PWD/specs/GH838"`.
 - [ ] `SP838-T2` Owner: coordinator. Done when: 可达性证据表（每子系统的 `rg` 命中数、依赖、测试规模、churn）作为附录追加到本 spec. Verify: `git diff -- specs/GH838/`; 每子系统一行且附判定命令。
 - [ ] `SP838-T3` Owner: maintainer. Done when: 维护者在 #838 批复处置矩阵（wire/remove/experimental-gate），特别是 mcp/a2a/realtime 的产品意向与 guardrails 默认开关（SpecRail human gate `spec_approval`）. Verify: #838 issue thread 中的明确批复。
-- [ ] `SP838-T4` Owner: coordinator. Done when: 守护检查合入 CI——`src/core/mod.rs` 顶层 `pub mod` 必须被 server/main 引用、或在豁免清单、或被真 feature gate. Verify: 检查脚本/测试绿色；人为添加未接线模块的负测试验证后移除。
-- [ ] `SP838-T5` Owner: coordinator. Done when: wire lane 执行完毕——每子系统一个 PR，含 `GatewayConfig` 字段、启动初始化、中间件/路由挂载、smoke 测试（U-26 三要件）. Verify: 每 PR `cargo test --all-features` + 冒烟请求记录。
-- [ ] `SP838-T6` Owner: coordinator. Done when: gate lane 执行完毕——被 gate 模块默认不编译，README 标注 experimental，docs.rs feature 列表同步. Verify: `cargo check --no-default-features --features "metrics,tracing"` 与 `cargo check --all-features` 双向通过。
-- [ ] `SP838-T7` Owner: coordinator. Done when: remove lane 执行完毕，`core/mod.rs` 与文档同步清理. Verify: `cargo check --all-features`; `rg -n "MCP Gateway|A2A Protocol" CLAUDE.md README.md` 输出与处置一致。
-- [ ] `SP838-T8` Owner: verification owner. Done when: 全量回归通过，README/CLAUDE.md 能力表与实际可达能力一致. Verify: `cargo fmt --all -- --check`; `cargo clippy --all-targets --all-features -- -D warnings`; `cargo test --all-features`.
+- [ ] `SP838-T4` Owner: coordinator. Done when: 守护检查合入 CI——`src/core/mod.rs` 顶层 `pub mod` 先分类为 gateway-facing / library-only / internal-support / feature-gated；只有 gateway-facing 模块必须被 server/main/config 引用、或在豁免清单、或被真 feature gate. Verify: 检查脚本/测试绿色；人为添加未接线 gateway 模块的负测试验证后移除；`completion`、`function_calling`、`traits`、`secret_managers` 作为 library-only 正测试不被误拦。
+- [ ] `SP838-T5` Owner: coordinator. Done when: wire lane 执行完毕——每子系统一个 PR，含 `GatewayConfig` 字段、启动初始化、中间件/路由挂载、smoke 测试（U-26 三要件）；observability+integrations 还必须在真实 LLM request 生命周期触发 `on_llm_start` 与 `on_llm_end`/`on_llm_error`. Verify: 每 PR `cargo test --all-features` + 冒烟请求记录；observability PR 用 test integration 或 Langfuse/OTel 测试替身证明事件分发，不以 `/metrics` 单独作为通过证据。
+- [ ] `SP838-T6` Owner: coordinator. Done when: gate lane 执行完毕——被 gate 模块默认不编译，README、`docs/README.md`、相关 `docs/protocols/*.md` 标注 experimental，docs.rs feature 列表同步；若影响 `litellm_rs::core::<module>` import，完成 semver、CHANGELOG、deprecation/迁移说明. Verify: `cargo check --no-default-features --features "metrics,tracing"` 与 `cargo check --all-features` 双向通过；`rg -n "MCP Gateway|A2A Protocol" README.md CLAUDE.md docs/README.md docs/protocols/mcp.md docs/protocols/a2a.md` 输出与处置一致。
+- [ ] `SP838-T7` Owner: coordinator. Done when: remove lane 执行完毕，`core/mod.rs` 与 README、CLAUDE.md、`docs/README.md`、相关 `docs/protocols/*.md` 同步清理；若删除 public module，完成 semver、CHANGELOG、deprecation/迁移说明. Verify: `cargo check --all-features`; `rg -n "MCP Gateway|A2A Protocol" README.md CLAUDE.md docs/README.md docs/protocols/mcp.md docs/protocols/a2a.md` 输出与处置一致；public import 破坏有发布记录。
+- [ ] `SP838-T8` Owner: verification owner. Done when: 全量回归通过，README/CLAUDE.md/`docs/` 能力表与实际可达能力一致，public API 变更记录完整. Verify: `cargo fmt --all -- --check`; `cargo clippy --all-targets --all-features -- -D warnings`; `cargo test --all-features`.
 
 ## 并行拆分
 
@@ -28,10 +28,12 @@ GH-838 / #838
 
 ## 验证
 
-- [ ] `SP838-T9` Owner: verification owner. Done when: 被 wire 的每个子系统有一条本会话可复现的端到端证据（冒烟请求或 metric 输出）记录在对应 PR body. Verify: PR body 中的命令输出（W-16：本会话证据）。
+- [ ] `SP838-T9` Owner: verification owner. Done when: 被 wire 的每个子系统有一条本会话可复现的端到端证据记录在对应 PR body；observability+integrations 必须证明 request lifecycle event dispatch（`on_llm_start` 与 `on_llm_end`/`on_llm_error`），不是只有 `/metrics` 输出. Verify: PR body 中的命令输出（W-16：本会话证据）。
 
 ## Handoff Notes
 
 - 与 #837 的边界：本 issue 只处理 core 子系统层；provider 目录归 #837。两者的守护检查可共享豁免清单机制但分开断言。
 - batch 半接线态是最优先消除项：现状「路由存在但持久化被绕过」比完全未接线更误导（用户以为 batch 有持久化）。
 - guardrails 若 wire，注意其 `check_output` 每次调用重新编译正则（`src/core/guardrails/prompt_injection.rs:294-303`），接线前先改为预编译（`LazyLock`），否则把性能问题带上热路径。
+- `virtual_keys` 不是 stub-only：已有迁移、manager 与 SeaORM CRUD，后续处置应围绕 gateway/API 接线或 public API gate，而不是按空壳删除。
+- remove/gate lane 可能破坏 `src/lib.rs` 暴露的 `pub mod core` import；合入前必须保留 human gate，确认 semver/CHANGELOG/deprecation/迁移说明。
