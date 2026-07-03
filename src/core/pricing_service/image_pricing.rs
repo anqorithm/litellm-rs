@@ -36,7 +36,11 @@ pub(super) fn output_image_cost(
     model_info: &LiteLLMModelInfo,
     usage: &PricingUsage,
 ) -> Result<f64> {
-    if usage.image_tokens.is_some() && image_token_unit_price(model_info).is_some() {
+    let image_tokens = usage.image_tokens.unwrap_or(0);
+    if image_tokens == 0 && usage.output_image_count.unwrap_or(0) == 0 {
+        return Ok(0.0);
+    }
+    if image_tokens > 0 && image_token_unit_price(model_info, usage).is_some() {
         return Ok(0.0);
     }
 
@@ -46,6 +50,12 @@ pub(super) fn output_image_cost(
         .and_then(serde_json::Value::as_f64)
     {
         Some(price) => price,
+        None if image_tokens > 0 => {
+            return Err(GatewayError::Config(format!(
+                "Missing image pricing for model {}: image_cost_per_token, input_cost_per_image_token, output_cost_per_image_token, or output_cost_per_image",
+                model
+            )));
+        }
         None if model_info.input_cost_per_token.is_some()
             || model_info.output_cost_per_token.is_some() =>
         {
@@ -86,15 +96,25 @@ pub(super) fn output_image_cost(
     Ok(count as f64 * price)
 }
 
-pub(super) fn image_token_unit_price(model_info: &LiteLLMModelInfo) -> Option<f64> {
-    ["image_cost_per_token", "output_cost_per_image_token"]
-        .into_iter()
-        .find_map(|key| {
-            model_info
-                .extra
-                .get(key)
-                .and_then(serde_json::Value::as_f64)
-        })
+pub(super) fn image_token_unit_price(
+    model_info: &LiteLLMModelInfo,
+    usage: &PricingUsage,
+) -> Option<f64> {
+    let keys: &[&str] = if usage.output_image_count.unwrap_or(0) > 0 {
+        &["image_cost_per_token", "output_cost_per_image_token"]
+    } else {
+        &[
+            "image_cost_per_token",
+            "input_cost_per_image_token",
+            "output_cost_per_image_token",
+        ]
+    };
+    keys.iter().find_map(|key| {
+        model_info
+            .extra
+            .get(*key)
+            .and_then(serde_json::Value::as_f64)
+    })
 }
 
 fn flat_image_pricing_key_matches(model: &str, usage: &PricingUsage) -> bool {
