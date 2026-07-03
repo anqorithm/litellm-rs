@@ -8,7 +8,7 @@ use actix_web::{HttpRequest, HttpResponse, Result as ActixResult, web};
 use futures::StreamExt;
 use tracing::{error, info};
 
-use super::super::budget_orchestration::{ApiKeyBudgetPolicy, BudgetedCall};
+use super::super::budgeted::{ApiKeyBudgetPolicy, BudgetedCall};
 use super::super::execution::execute_with_selected_deployment;
 use super::upload::{
     drain_field, parse_optional_f32_field, raw_response_format_error, read_audio_file,

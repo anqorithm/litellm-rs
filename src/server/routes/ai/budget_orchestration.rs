@@ -6,15 +6,67 @@ use uuid::Uuid;
 use crate::core::budget::{
     BudgetManager, BudgetReservation, UnifiedBudgetLimits, UnifiedBudgetReservation,
 };
+use crate::core::keys::KeyManager;
+use crate::core::pricing_service::PricingService;
 use crate::core::providers::ProviderError;
 
 use super::spend;
 
 #[derive(Clone, Copy)]
-pub(super) enum ApiKeyBudgetPolicy {
-    None,
-    FromProviderReservation,
-    RequirePricedReservation,
+pub(super) enum SettlementMode {
+    Metered,
+    AvailabilityOnly,
+    KeyReservationThenPostSuccessRecord,
+}
+
+pub(super) type ApiKeyBudgetPolicy = SettlementMode;
+
+impl SettlementMode {
+    #[allow(non_upper_case_globals)]
+    pub(super) const FromProviderReservation: Self = Self::Metered;
+    #[allow(non_upper_case_globals)]
+    pub(super) const RequirePricedReservation: Self = Self::KeyReservationThenPostSuccessRecord;
+}
+
+#[derive(Clone)]
+pub(crate) struct BudgetedExecutor {
+    budget_limits: Arc<UnifiedBudgetLimits>,
+    budget_manager: Arc<BudgetManager>,
+    pricing: Arc<PricingService>,
+    key_manager: KeyManager,
+}
+
+impl BudgetedExecutor {
+    pub(crate) fn new(
+        budget_limits: Arc<UnifiedBudgetLimits>,
+        budget_manager: Arc<BudgetManager>,
+        pricing: Arc<PricingService>,
+        key_manager: KeyManager,
+    ) -> Self {
+        Self {
+            budget_limits,
+            budget_manager,
+            pricing,
+            key_manager,
+        }
+    }
+
+    pub(super) fn for_selected(
+        &self,
+        provider: impl Into<String>,
+        model: impl Into<String>,
+    ) -> BudgetedCall {
+        BudgetedCall::new(self.budget_limits.clone(), provider, model)
+            .with_budget_manager(self.budget_manager.clone())
+    }
+
+    pub(super) fn pricing(&self) -> Arc<PricingService> {
+        self.pricing.clone()
+    }
+
+    pub(super) fn key_manager(&self) -> KeyManager {
+        self.key_manager.clone()
+    }
 }
 
 pub(super) struct BudgetedCall {
@@ -23,7 +75,7 @@ pub(super) struct BudgetedCall {
     api_key_budget_id: Option<Uuid>,
     provider: String,
     model: String,
-    api_key_budget_policy: ApiKeyBudgetPolicy,
+    settlement_mode: SettlementMode,
 }
 
 #[derive(Clone)]
@@ -59,19 +111,29 @@ impl BudgetedCall {
             api_key_budget_id: None,
             provider: provider.into(),
             model: model.into(),
-            api_key_budget_policy: ApiKeyBudgetPolicy::None,
+            settlement_mode: SettlementMode::AvailabilityOnly,
         }
+    }
+
+    pub(super) fn with_settlement_mode(mut self, mode: SettlementMode) -> Self {
+        self.settlement_mode = mode;
+        self
+    }
+
+    pub(super) fn with_budget_manager(mut self, budget_manager: Arc<BudgetManager>) -> Self {
+        self.budget_manager = Some(budget_manager);
+        self
     }
 
     pub(super) fn with_api_key_budget(
         mut self,
         budget_manager: Arc<BudgetManager>,
         api_key_budget_id: Option<Uuid>,
-        policy: ApiKeyBudgetPolicy,
+        mode: SettlementMode,
     ) -> Self {
         self.budget_manager = Some(budget_manager);
         self.api_key_budget_id = api_key_budget_id;
-        self.api_key_budget_policy = policy;
+        self.settlement_mode = mode;
         self
     }
 
@@ -124,9 +186,9 @@ impl BudgetedCall {
             context.model(),
         )?;
         let budget = reserve(&context)?;
-        let key = match self.api_key_budget_policy {
-            ApiKeyBudgetPolicy::None => None,
-            ApiKeyBudgetPolicy::FromProviderReservation => {
+        let key = match self.settlement_mode {
+            SettlementMode::AvailabilityOnly => None,
+            SettlementMode::Metered => {
                 let budget_manager = self.budget_manager.as_ref().ok_or_else(|| {
                     ProviderError::invalid_request(
                         "budget",
@@ -139,7 +201,7 @@ impl BudgetedCall {
                     budget.as_ref(),
                 )?
             }
-            ApiKeyBudgetPolicy::RequirePricedReservation => {
+            SettlementMode::KeyReservationThenPostSuccessRecord => {
                 let budget_manager = self.budget_manager.as_ref().ok_or_else(|| {
                     ProviderError::invalid_request(
                         "budget",

@@ -18,7 +18,7 @@ use actix_web::{HttpRequest, HttpResponse, Result as ActixResult, web};
 use serde_json::json;
 use tracing::{error, info, warn};
 
-use super::budget_orchestration::{ApiKeyBudgetPolicy, BudgetedCall};
+use super::budgeted::ApiKeyBudgetPolicy;
 use super::context::get_request_context;
 use super::execution::execute_with_selected_deployment;
 use super::openai_errors;
@@ -112,54 +112,55 @@ async fn handle_chat_completion_internal(
 
     // Owned handles captured into the (retryable) execution closure so that the
     // successful attempt records budget spend and per-key usage.
-    let (budget_limits, pricing_service) = (state.budget_limits.clone(), state.pricing.clone());
+    let pricing_service = state.budgeted.pricing();
     let pricing_config = state.config().gateway.pricing.clone();
-    let key_manager = state.key_manager.clone();
+    let key_manager = state.budgeted.key_manager();
     let api_key_id = context.api_key_id();
     let api_key_budget_id = context.api_key_budget_id();
     let budget_manager = state.budget_manager.clone();
+    let budgeted = state.budgeted.clone();
 
-    let core_response = execute_with_selected_deployment(
-        unified_router,
-        &requested_model,
-        ProviderCapability::ChatCompletion,
-        move |provider, selected_model, _deployment_id| {
-            let core_request = core_request.clone();
-            let context = context_for_execution.clone();
-            let (budget_limits, pricing_service) = (budget_limits.clone(), pricing_service.clone());
-            let key_manager = key_manager.clone();
-            let budget_manager = budget_manager.clone();
-            let request_for_budget = request_for_budget.clone();
-            let pricing_config = pricing_config.clone();
-            async move {
-                let provider_name = provider.name().to_string();
-                let (pricing_provider, pricing_model) = super::spend::pricing_identity_for_provider(
-                    pricing_service.as_ref(),
-                    &provider,
-                    &selected_model,
-                );
-                let (request_for_provider, request_for_budget) =
-                    super::token_policy::prepare_chat_request_for_provider(
-                        context.api_key_max_tokens_per_request(),
-                        &provider_name,
-                        &selected_model,
-                        core_request.clone(),
-                        request_for_budget,
-                    )?;
-                let reserve_pricing_service = pricing_service.clone();
-                let settle_pricing_service = pricing_service.clone();
-                let reserve_pricing_config = pricing_config.clone();
-                let settle_pricing_config = pricing_config;
-                let reserve_pricing_provider = pricing_provider.clone();
-                let reserve_pricing_model = pricing_model.clone();
-                let settle_pricing_provider = pricing_provider;
-                let settle_pricing_model = pricing_model;
-                let settle_key_manager = key_manager.clone();
-                BudgetedCall::new(
-                    budget_limits.clone(),
-                    provider_name.clone(),
-                    selected_model.clone(),
-                )
+    let core_response =
+        execute_with_selected_deployment(
+            unified_router,
+            &requested_model,
+            ProviderCapability::ChatCompletion,
+            move |provider, selected_model, _deployment_id| {
+                let core_request = core_request.clone();
+                let context = context_for_execution.clone();
+                let pricing_service = pricing_service.clone();
+                let key_manager = key_manager.clone();
+                let budget_manager = budget_manager.clone();
+                let budgeted = budgeted.clone();
+                let request_for_budget = request_for_budget.clone();
+                let pricing_config = pricing_config.clone();
+                async move {
+                    let provider_name = provider.name().to_string();
+                    let (pricing_provider, pricing_model) =
+                        super::spend::pricing_identity_for_provider(
+                            pricing_service.as_ref(),
+                            &provider,
+                            &selected_model,
+                        );
+                    let (request_for_provider, request_for_budget) =
+                        super::token_policy::prepare_chat_request_for_provider(
+                            context.api_key_max_tokens_per_request(),
+                            &provider_name,
+                            &selected_model,
+                            core_request.clone(),
+                            request_for_budget,
+                        )?;
+                    let reserve_pricing_service = pricing_service.clone();
+                    let settle_pricing_service = pricing_service.clone();
+                    let reserve_pricing_config = pricing_config.clone();
+                    let settle_pricing_config = pricing_config;
+                    let reserve_pricing_provider = pricing_provider.clone();
+                    let reserve_pricing_model = pricing_model.clone();
+                    let settle_pricing_provider = pricing_provider;
+                    let settle_pricing_model = pricing_model;
+                    let settle_key_manager = key_manager.clone();
+                    budgeted
+                    .for_selected(provider_name.clone(), selected_model.clone())
                 .with_api_key_budget(
                     budget_manager.clone(),
                     api_key_budget_id,
@@ -205,10 +206,10 @@ async fn handle_chat_completion_internal(
                     },
                 )
                 .await
-            }
-        },
-    )
-    .await?;
+                }
+            },
+        )
+        .await?;
 
     let response = convert_core_chat_response(core_response);
     super::response_cache::store_chat(state, &request_for_cache, &response, &context).await?;

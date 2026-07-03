@@ -14,7 +14,7 @@ use crate::core::providers::{Provider, ProviderError};
 use crate::server::state::AppState;
 use crate::utils::error::gateway_error::GatewayError;
 
-use super::super::budget_orchestration::{ApiKeyBudgetPolicy, BudgetedCall};
+use super::super::budgeted::{ApiKeyBudgetPolicy, BudgetedCall};
 use super::{validate_api_version, validate_method, validate_model_segment};
 use uuid::Uuid;
 

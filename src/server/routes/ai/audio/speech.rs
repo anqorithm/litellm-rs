@@ -7,7 +7,7 @@ use actix_web::{HttpRequest, HttpResponse, Result as ActixResult, web};
 use serde::Deserialize;
 use tracing::{error, info};
 
-use super::super::budget_orchestration::{ApiKeyBudgetPolicy, BudgetedCall};
+use super::super::budgeted::{ApiKeyBudgetPolicy, BudgetedCall};
 use super::super::execution::execute_with_selected_deployment;
 use crate::server::routes::ai::context::{
     enforce_api_key_model_and_token_limits, get_request_context,

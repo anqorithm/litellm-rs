@@ -6,7 +6,7 @@ use crate::core::types::model::ProviderCapability;
 use crate::server::state::AppState;
 use crate::utils::error::gateway_error::GatewayError;
 
-use super::super::budget_orchestration::{ApiKeyBudgetPolicy, BudgetedCall};
+use super::super::budgeted::{ApiKeyBudgetPolicy, BudgetedCall};
 use super::super::execution::execute_with_selected_deployment;
 
 /// Handle image generation with app state (UnifiedRouter only)

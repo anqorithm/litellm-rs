@@ -12,7 +12,7 @@ use serde_json::Value;
 use std::time::Duration;
 use tracing::error;
 
-use super::budget_orchestration::BudgetedCall;
+use super::budgeted::{BudgetedCall, SettlementMode};
 use super::execution::execute_with_selected_deployment;
 use super::openai_errors;
 use super::provider_config;
@@ -107,6 +107,7 @@ async fn proxy_moderation(
                             budget_provider,
                             resolved_model.clone(),
                         )
+                        .with_settlement_mode(SettlementMode::AvailabilityOnly)
                         .reserve_call_settle(
                             |_budget| Ok(None),
                             || async move {

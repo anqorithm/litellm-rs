@@ -14,8 +14,9 @@ use std::time::Duration;
 use tracing::{error, info};
 
 use super::{
-    budget_orchestration::BudgetedCall, execution::execute_with_selected_deployment, openai_errors,
-    provider_config,
+    budgeted::{BudgetedCall, SettlementMode},
+    execution::execute_with_selected_deployment,
+    openai_errors, provider_config,
 };
 
 /// Rerank documents against a query.
@@ -86,6 +87,7 @@ async fn handle_rerank_with_state(
                             budget_provider,
                             served_model.to_string(),
                         )
+                        .with_settlement_mode(SettlementMode::AvailabilityOnly)
                         .reserve_call_settle(
                             |_budget| Ok(None),
                             || async move {

@@ -11,7 +11,7 @@ use crate::utils::error::gateway_error::GatewayError;
 use actix_web::{HttpRequest, HttpResponse, Result as ActixResult, web};
 use tracing::info;
 
-use super::budget_orchestration::{ApiKeyBudgetPolicy, BudgetedCall};
+use super::budgeted::{ApiKeyBudgetPolicy, BudgetedCall};
 use super::context::handle_ai_request;
 use super::execution::execute_with_selected_deployment;
 

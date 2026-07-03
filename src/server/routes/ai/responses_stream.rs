@@ -30,7 +30,7 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 
-use super::budget_orchestration::{ApiKeyBudgetPolicy, BudgetedCall};
+use super::budgeted::{ApiKeyBudgetPolicy, BudgetedCall};
 use super::{openai_errors, spend};
 #[path = "responses_stream_budget.rs"]
 mod responses_stream_budget;

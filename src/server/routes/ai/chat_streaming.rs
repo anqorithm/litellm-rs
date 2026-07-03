@@ -13,7 +13,7 @@ use crate::core::streaming::types::Event;
 use crate::core::types::{context::RequestContext, model::ProviderCapability};
 use crate::server::state::AppState;
 
-use super::super::budget_orchestration::{ApiKeyBudgetPolicy, BudgetedCall};
+use super::super::budgeted::{ApiKeyBudgetPolicy, BudgetedCall};
 use super::super::execution::execute_stream_with_selected_deployment;
 use super::super::openai_errors;
 use super::super::{spend, token_policy};
