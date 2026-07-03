@@ -13,7 +13,11 @@ use std::sync::Arc;
 use std::time::Duration;
 use tracing::{error, info};
 
-use super::{execution::execute_with_selected_deployment, openai_errors, provider_config};
+use super::{
+    budgeted::{BudgetedCall, SettlementMode},
+    execution::execute_with_selected_deployment,
+    openai_errors, provider_config,
+};
 
 /// Rerank documents against a query.
 pub async fn rerank(
@@ -77,20 +81,26 @@ async fn handle_rerank_with_state(
                             &requested_model,
                         )?;
                         let served_model = served_rerank_model(&requested_model);
-
-                        super::spend::ensure_budget_available(
-                            &state.budget_limits,
-                            &selected.provider_name,
-                            served_model,
-                        )?;
-
-                        let service = build_rerank_service(&selected)
-                            .map_err(rerank_gateway_error_to_provider_error)?;
-                        let response = service
-                            .rerank(request)
-                            .await
-                            .map_err(rerank_gateway_error_to_provider_error)?;
-                        Ok((response, 0))
+                        let budget_provider = selected.provider_name.clone();
+                        BudgetedCall::new(
+                            state.budget_limits.clone(),
+                            budget_provider,
+                            served_model.to_string(),
+                        )
+                        .with_settlement_mode(SettlementMode::AvailabilityOnly)
+                        .reserve_call_settle(
+                            |_budget| Ok(None),
+                            || async move {
+                                let service = build_rerank_service(&selected)
+                                    .map_err(rerank_gateway_error_to_provider_error)?;
+                                service
+                                    .rerank(request)
+                                    .await
+                                    .map_err(rerank_gateway_error_to_provider_error)
+                            },
+                            |response, _reservations, _budget| async move { (response, 0) },
+                        )
+                        .await
                     }
                 }
             },

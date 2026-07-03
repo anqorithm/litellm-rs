@@ -5,6 +5,8 @@
 // Module declarations
 mod audio;
 mod batches;
+#[path = "budget_orchestration.rs"]
+pub(crate) mod budgeted;
 mod chat;
 mod completions;
 mod context;

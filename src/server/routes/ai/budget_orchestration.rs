@@ -1,0 +1,423 @@
+use std::future::Future;
+use std::sync::Arc;
+
+use uuid::Uuid;
+
+use crate::core::budget::{
+    BudgetManager, BudgetReservation, UnifiedBudgetLimits, UnifiedBudgetReservation,
+};
+use crate::core::keys::KeyManager;
+use crate::core::pricing_service::PricingService;
+use crate::core::providers::ProviderError;
+
+use super::spend;
+
+#[derive(Clone, Copy)]
+pub(super) enum SettlementMode {
+    Metered,
+    AvailabilityOnly,
+    KeyReservationThenPostSuccessRecord,
+}
+
+pub(super) type ApiKeyBudgetPolicy = SettlementMode;
+
+impl SettlementMode {
+    #[allow(non_upper_case_globals)]
+    pub(super) const FromProviderReservation: Self = Self::Metered;
+    #[allow(non_upper_case_globals)]
+    pub(super) const RequirePricedReservation: Self = Self::KeyReservationThenPostSuccessRecord;
+}
+
+#[derive(Clone)]
+pub(crate) struct BudgetedExecutor {
+    budget_limits: Arc<UnifiedBudgetLimits>,
+    budget_manager: Arc<BudgetManager>,
+    pricing: Arc<PricingService>,
+    key_manager: KeyManager,
+}
+
+impl BudgetedExecutor {
+    pub(crate) fn new(
+        budget_limits: Arc<UnifiedBudgetLimits>,
+        budget_manager: Arc<BudgetManager>,
+        pricing: Arc<PricingService>,
+        key_manager: KeyManager,
+    ) -> Self {
+        Self {
+            budget_limits,
+            budget_manager,
+            pricing,
+            key_manager,
+        }
+    }
+
+    pub(super) fn for_selected(
+        &self,
+        provider: impl Into<String>,
+        model: impl Into<String>,
+    ) -> BudgetedCall {
+        BudgetedCall::new(self.budget_limits.clone(), provider, model)
+            .with_budget_manager(self.budget_manager.clone())
+    }
+
+    pub(super) fn pricing(&self) -> Arc<PricingService> {
+        self.pricing.clone()
+    }
+
+    pub(super) fn key_manager(&self) -> KeyManager {
+        self.key_manager.clone()
+    }
+}
+
+pub(super) struct BudgetedCall {
+    budget_limits: Arc<UnifiedBudgetLimits>,
+    budget_manager: Option<Arc<BudgetManager>>,
+    api_key_budget_id: Option<Uuid>,
+    provider: String,
+    model: String,
+    settlement_mode: SettlementMode,
+}
+
+#[derive(Clone)]
+pub(super) struct BudgetContext {
+    budget_limits: Arc<UnifiedBudgetLimits>,
+    provider: String,
+    model: String,
+}
+
+impl BudgetContext {
+    pub(super) fn budget_limits(&self) -> &UnifiedBudgetLimits {
+        self.budget_limits.as_ref()
+    }
+
+    pub(super) fn provider(&self) -> &str {
+        &self.provider
+    }
+
+    pub(super) fn model(&self) -> &str {
+        &self.model
+    }
+}
+
+impl BudgetedCall {
+    pub(super) fn new(
+        budget_limits: Arc<UnifiedBudgetLimits>,
+        provider: impl Into<String>,
+        model: impl Into<String>,
+    ) -> Self {
+        Self {
+            budget_limits,
+            budget_manager: None,
+            api_key_budget_id: None,
+            provider: provider.into(),
+            model: model.into(),
+            settlement_mode: SettlementMode::AvailabilityOnly,
+        }
+    }
+
+    pub(super) fn with_settlement_mode(mut self, mode: SettlementMode) -> Self {
+        self.settlement_mode = mode;
+        self
+    }
+
+    pub(super) fn with_budget_manager(mut self, budget_manager: Arc<BudgetManager>) -> Self {
+        self.budget_manager = Some(budget_manager);
+        self
+    }
+
+    pub(super) fn with_api_key_budget(
+        mut self,
+        budget_manager: Arc<BudgetManager>,
+        api_key_budget_id: Option<Uuid>,
+        mode: SettlementMode,
+    ) -> Self {
+        self.budget_manager = Some(budget_manager);
+        self.api_key_budget_id = api_key_budget_id;
+        self.settlement_mode = mode;
+        self
+    }
+
+    pub(super) async fn reserve_call<T, Reserve, Call, CallFuture>(
+        self,
+        reserve: Reserve,
+        call: Call,
+    ) -> Result<(T, BudgetReservations), ProviderError>
+    where
+        Reserve: FnOnce(&BudgetContext) -> Result<Option<UnifiedBudgetReservation>, ProviderError>,
+        Call: FnOnce() -> CallFuture,
+        CallFuture: Future<Output = Result<T, ProviderError>>,
+    {
+        let mut reservations = self.reserve(reserve)?;
+        match call().await {
+            Ok(value) => Ok((value, reservations)),
+            Err(error) => {
+                reservations.cancel();
+                Err(error)
+            }
+        }
+    }
+
+    pub(super) async fn reserve_call_settle<T, Reserve, Call, CallFuture, Settle, SettleFuture>(
+        self,
+        reserve: Reserve,
+        call: Call,
+        settle: Settle,
+    ) -> Result<(T, u64), ProviderError>
+    where
+        Reserve: FnOnce(&BudgetContext) -> Result<Option<UnifiedBudgetReservation>, ProviderError>,
+        Call: FnOnce() -> CallFuture,
+        CallFuture: Future<Output = Result<T, ProviderError>>,
+        Settle: FnOnce(T, BudgetReservations, BudgetContext) -> SettleFuture,
+        SettleFuture: Future<Output = (T, u64)>,
+    {
+        let context = self.context();
+        let (value, reservations) = self.reserve_call(reserve, call).await?;
+        Ok(settle(value, reservations, context).await)
+    }
+
+    fn reserve<Reserve>(&self, reserve: Reserve) -> Result<BudgetReservations, ProviderError>
+    where
+        Reserve: FnOnce(&BudgetContext) -> Result<Option<UnifiedBudgetReservation>, ProviderError>,
+    {
+        let context = self.context();
+        spend::ensure_budget_available(
+            context.budget_limits(),
+            context.provider(),
+            context.model(),
+        )?;
+        let budget = reserve(&context)?;
+        let key = match self.settlement_mode {
+            SettlementMode::AvailabilityOnly => None,
+            SettlementMode::Metered => {
+                let budget_manager = self.budget_manager.as_ref().ok_or_else(|| {
+                    ProviderError::invalid_request(
+                        "budget",
+                        "API key budget manager is required for budget reservation",
+                    )
+                })?;
+                spend::reserve_api_key_budget_for_reservation(
+                    budget_manager.as_ref(),
+                    self.api_key_budget_id,
+                    budget.as_ref(),
+                )?
+            }
+            SettlementMode::KeyReservationThenPostSuccessRecord => {
+                let budget_manager = self.budget_manager.as_ref().ok_or_else(|| {
+                    ProviderError::invalid_request(
+                        "budget",
+                        "API key budget manager is required for budget reservation",
+                    )
+                })?;
+                spend::reserve_api_key_budget(
+                    budget_manager.as_ref(),
+                    self.api_key_budget_id,
+                    budget
+                        .as_ref()
+                        .map(UnifiedBudgetReservation::reserved_amount),
+                )?
+            }
+        };
+
+        Ok(BudgetReservations { budget, key })
+    }
+
+    fn context(&self) -> BudgetContext {
+        BudgetContext {
+            budget_limits: self.budget_limits.clone(),
+            provider: self.provider.clone(),
+            model: self.model.clone(),
+        }
+    }
+}
+
+pub(super) struct BudgetReservations {
+    budget: Option<UnifiedBudgetReservation>,
+    key: Option<BudgetReservation>,
+}
+
+impl BudgetReservations {
+    pub(super) fn into_parts(
+        self,
+    ) -> (Option<UnifiedBudgetReservation>, Option<BudgetReservation>) {
+        (self.budget, self.key)
+    }
+
+    fn cancel(&mut self) {
+        if let Some(reservation) = self.budget.take() {
+            reservation.cancel();
+        }
+        if let Some(reservation) = self.key.take() {
+            reservation.cancel();
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    };
+
+    use crate::core::budget::{BudgetConfig, BudgetManager, BudgetScope, ResetPeriod};
+    use crate::core::budget::{ModelLimitConfig, ProviderLimitConfig, UnifiedBudgetLimits};
+
+    use super::{ApiKeyBudgetPolicy, BudgetedCall};
+
+    fn limited_budget() -> Arc<UnifiedBudgetLimits> {
+        let limits = UnifiedBudgetLimits::new();
+        limits.providers.set_provider_limit(
+            "openai",
+            ProviderLimitConfig::new(1.0, ResetPeriod::Monthly),
+        );
+        limits
+            .models
+            .set_model_limit("gpt-4", ModelLimitConfig::new(1.0, ResetPeriod::Monthly));
+        Arc::new(limits)
+    }
+
+    #[tokio::test]
+    async fn reserve_failure_prevents_provider_call() {
+        let limits = limited_budget();
+        let called = Arc::new(AtomicBool::new(false));
+
+        let result = BudgetedCall::new(limits.clone(), "openai", "gpt-4")
+            .reserve_call_settle(
+                |context| {
+                    limits
+                        .reserve_spend(context.provider(), context.model(), 2.0)
+                        .map(Some)
+                        .map_err(|error| {
+                            super::spend::reservation_error_to_provider_error(
+                                error,
+                                context.provider(),
+                                context.model(),
+                            )
+                        })
+                },
+                {
+                    let called = called.clone();
+                    move || async move {
+                        called.store(true, Ordering::Relaxed);
+                        Ok::<_, crate::core::providers::ProviderError>("should not run")
+                    }
+                },
+                |value, _reservations, _context| async move { (value, 0) },
+            )
+            .await;
+
+        assert!(result.is_err());
+        assert!(!called.load(Ordering::Relaxed));
+        assert_eq!(
+            limits
+                .providers
+                .get_provider_usage("openai")
+                .map(|usage| usage.current_spend)
+                .unwrap_or_default(),
+            0.0
+        );
+    }
+
+    #[tokio::test]
+    async fn provider_failure_cancels_provider_model_and_key_reservations() {
+        let limits = limited_budget();
+        let budget_manager = Arc::new(BudgetManager::new());
+        let scope = BudgetScope::ApiKey("key-budget".to_string());
+        let budget = budget_manager
+            .create_budget(scope.clone(), BudgetConfig::new("key budget", 1.0))
+            .await
+            .expect("key budget should be created");
+        let budget_id = uuid::Uuid::parse_str(&budget.id).expect("budget id should be UUID");
+
+        let result = BudgetedCall::new(limits.clone(), "openai", "gpt-4")
+            .with_api_key_budget(
+                budget_manager.clone(),
+                Some(budget_id),
+                ApiKeyBudgetPolicy::FromProviderReservation,
+            )
+            .reserve_call_settle(
+                |context| {
+                    limits
+                        .reserve_spend(context.provider(), context.model(), 0.25)
+                        .map(Some)
+                        .map_err(|error| {
+                            super::spend::reservation_error_to_provider_error(
+                                error,
+                                context.provider(),
+                                context.model(),
+                            )
+                        })
+                },
+                || async {
+                    Err::<(), _>(crate::core::providers::ProviderError::timeout(
+                        "test",
+                        "upstream failed",
+                    ))
+                },
+                |value, _reservations, _context| async move { (value, 0) },
+            )
+            .await;
+
+        assert!(result.is_err());
+        assert_eq!(
+            limits
+                .providers
+                .get_provider_usage("openai")
+                .expect("provider usage should exist")
+                .current_spend,
+            0.0
+        );
+        assert_eq!(
+            limits
+                .models
+                .get_model_usage("gpt-4")
+                .expect("model usage should exist")
+                .current_spend,
+            0.0
+        );
+        assert_eq!(budget_manager.get_current_spend(&scope), 0.0);
+    }
+
+    #[tokio::test]
+    async fn success_hands_reservations_to_settlement() {
+        let limits = limited_budget();
+        let settled = Arc::new(AtomicBool::new(false));
+
+        let (value, tokens) = BudgetedCall::new(limits.clone(), "openai", "gpt-4")
+            .reserve_call_settle(
+                |context| {
+                    limits
+                        .reserve_spend(context.provider(), context.model(), 0.25)
+                        .map(Some)
+                        .map_err(|error| {
+                            super::spend::reservation_error_to_provider_error(
+                                error,
+                                context.provider(),
+                                context.model(),
+                            )
+                        })
+                },
+                || async { Ok::<_, crate::core::providers::ProviderError>("ok") },
+                {
+                    let settled = settled.clone();
+                    move |value, reservations, _context| async move {
+                        let (budget, key) = reservations.into_parts();
+                        let settlement_failed = budget
+                            .expect("provider/model reservation should be present")
+                            .settle(f64::NAN)
+                            .is_err();
+                        assert!(key.is_none());
+                        assert!(settlement_failed);
+                        settled.store(true, Ordering::Relaxed);
+                        (value, 17)
+                    }
+                },
+            )
+            .await
+            .expect("provider success should return response even when settlement logs internally");
+
+        assert_eq!(value, "ok");
+        assert_eq!(tokens, 17);
+        assert!(settled.load(Ordering::Relaxed));
+    }
+}

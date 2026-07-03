@@ -7,6 +7,7 @@ use actix_web::{HttpRequest, HttpResponse, Result as ActixResult, web};
 use serde::Deserialize;
 use tracing::{error, info};
 
+use super::super::budgeted::{ApiKeyBudgetPolicy, BudgetedCall};
 use super::super::execution::execute_with_selected_deployment;
 use crate::server::routes::ai::context::{
     enforce_api_key_model_and_token_limits, get_request_context,
@@ -105,40 +106,69 @@ pub async fn audio_speech(
                         &provider,
                         &selected_model,
                     );
-                let (budget_reservation, key_budget_reservation) =
-                    super::budgeting::reserve_audio_budget_with_pricing(
-                        pricing_service.as_ref(),
-                        &pricing_config,
-                        &budget_manager,
-                        &budget_limits,
-                        api_key_budget_id,
-                        &budget_provider,
-                        &selected_model,
-                        &pricing_provider,
-                        &pricing_model,
-                        None,
-                        &usage,
-                    )?;
                 request.model = selected_model.clone();
-                let response = provider.text_to_speech(request, context).await?;
-                let tokens_used = u64::from(usage.total_tokens);
-                super::budgeting::record_audio_spend(
-                    pricing_service.as_ref(),
-                    &pricing_config,
-                    &budget_limits,
-                    &key_manager,
-                    api_key_id,
-                    &budget_provider,
-                    &selected_model,
-                    &pricing_provider,
-                    &pricing_model,
-                    None,
-                    &usage,
-                    budget_reservation,
-                    key_budget_reservation,
+                let reserve_pricing_service = pricing_service.clone();
+                let settle_pricing_service = pricing_service.clone();
+                let reserve_pricing_config = pricing_config.clone();
+                let settle_pricing_config = pricing_config;
+                let reserve_pricing_provider = pricing_provider.clone();
+                let reserve_pricing_model = pricing_model.clone();
+                let settle_pricing_provider = pricing_provider;
+                let settle_pricing_model = pricing_model;
+                let reserve_usage = usage.clone();
+                let settle_usage = usage;
+                let settle_key_manager = key_manager.clone();
+                BudgetedCall::new(
+                    budget_limits.clone(),
+                    budget_provider.clone(),
+                    selected_model.clone(),
                 )
-                .await;
-                Ok((response, tokens_used))
+                .with_api_key_budget(
+                    budget_manager.clone(),
+                    api_key_budget_id,
+                    ApiKeyBudgetPolicy::FromProviderReservation,
+                )
+                .reserve_call_settle(
+                    |budget| {
+                        super::budgeting::reserve_audio_provider_budget_with_pricing(
+                            reserve_pricing_service.as_ref(),
+                            &reserve_pricing_config,
+                            budget.budget_limits(),
+                            budget.provider(),
+                            budget.model(),
+                            &reserve_pricing_provider,
+                            &reserve_pricing_model,
+                            None,
+                            &reserve_usage,
+                        )
+                    },
+                    || provider.text_to_speech(request, context),
+                    |response, reservations, budget| {
+                        let (budget_reservation, key_budget_reservation) =
+                            reservations.into_parts();
+                        async move {
+                            let tokens_used = u64::from(settle_usage.total_tokens);
+                            super::budgeting::record_audio_spend(
+                                settle_pricing_service.as_ref(),
+                                &settle_pricing_config,
+                                budget.budget_limits(),
+                                &settle_key_manager,
+                                api_key_id,
+                                budget.provider(),
+                                budget.model(),
+                                &settle_pricing_provider,
+                                &settle_pricing_model,
+                                None,
+                                &settle_usage,
+                                budget_reservation,
+                                key_budget_reservation,
+                            )
+                            .await;
+                            (response, tokens_used)
+                        }
+                    },
+                )
+                .await
             }
         },
     )

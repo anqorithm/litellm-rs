@@ -6,6 +6,7 @@ use crate::core::types::model::ProviderCapability;
 use crate::server::state::AppState;
 use crate::utils::error::gateway_error::GatewayError;
 
+use super::super::budgeted::{ApiKeyBudgetPolicy, BudgetedCall};
 use super::super::execution::execute_with_selected_deployment;
 
 /// Handle image generation with app state (UnifiedRouter only)
@@ -54,11 +55,6 @@ pub async fn handle_image_generation_with_state(
             let pricing_service = pricing_service.clone();
             let pricing_config = pricing_config.clone();
             async move {
-                super::super::spend::ensure_budget_available(
-                    &budget_limits,
-                    provider.name(),
-                    &selected_model,
-                )?;
                 let budget_provider = provider.name().to_string();
                 let (pricing_provider, mut pricing_model) =
                     super::super::spend::pricing_identity_for_provider(
@@ -96,49 +92,72 @@ pub async fn handle_image_generation_with_state(
                     &pricing_provider,
                     &usage_pricing_model,
                 );
-                let budget_reservation =
-                    super::super::spend::reserve_pricing_usage_budget_with_policy(
-                        pricing_service.as_ref(),
-                        &pricing_config,
-                        &budget_limits,
-                        &budget_provider,
-                        &selected_model,
-                        &pricing_provider,
-                        &pricing_model,
-                        &usage,
-                    )?;
-                let key_budget_reservation =
-                    super::super::spend::reserve_api_key_budget_for_reservation(
-                        &budget_manager,
-                        api_key_budget_id,
-                        budget_reservation.as_ref(),
-                    )?;
                 let mut request_for_provider = core_request.clone();
                 request_for_provider.model = Some(selected_model.clone());
-                let response = provider
-                    .create_images(request_for_provider, context)
-                    .await?;
-                let tokens_used = u64::from(
-                    usage
-                        .total_tokens
-                        .saturating_add(usage.image_tokens.unwrap_or(0)),
-                );
-                super::super::spend::record_pricing_usage_spend_with_reservation_with_policy(
-                    pricing_service.as_ref(),
-                    &pricing_config,
-                    &budget_limits,
-                    &key_manager,
-                    api_key_id,
-                    &budget_provider,
-                    &selected_model,
-                    &pricing_provider,
-                    &pricing_model,
-                    &usage,
-                    budget_reservation,
-                    key_budget_reservation,
+                let reserve_pricing_service = pricing_service.clone();
+                let settle_pricing_service = pricing_service.clone();
+                let reserve_pricing_config = pricing_config.clone();
+                let settle_pricing_config = pricing_config;
+                let reserve_pricing_provider = pricing_provider.clone();
+                let reserve_pricing_model = pricing_model.clone();
+                let settle_pricing_provider = pricing_provider;
+                let settle_pricing_model = pricing_model;
+                let reserve_usage = usage.clone();
+                let settle_usage = usage;
+                let settle_key_manager = key_manager.clone();
+                BudgetedCall::new(
+                    budget_limits.clone(),
+                    budget_provider.clone(),
+                    selected_model.clone(),
                 )
-                .await;
-                Ok((response, tokens_used))
+                    .with_api_key_budget(
+                        budget_manager.clone(),
+                        api_key_budget_id,
+                        ApiKeyBudgetPolicy::FromProviderReservation,
+                    )
+                    .reserve_call_settle(
+                        |budget| {
+                            super::super::spend::reserve_pricing_usage_budget_with_policy(
+                                reserve_pricing_service.as_ref(),
+                                &reserve_pricing_config,
+                                budget.budget_limits(),
+                                budget.provider(),
+                                budget.model(),
+                                &reserve_pricing_provider,
+                                &reserve_pricing_model,
+                                &reserve_usage,
+                            )
+                        },
+                        || provider.create_images(request_for_provider, context),
+                        |response, reservations, budget| {
+                            let (budget_reservation, key_budget_reservation) =
+                                reservations.into_parts();
+                            async move {
+                                let tokens_used = u64::from(
+                                    settle_usage
+                                        .total_tokens
+                                        .saturating_add(settle_usage.image_tokens.unwrap_or(0)),
+                                );
+                                super::super::spend::record_pricing_usage_spend_with_reservation_with_policy(
+                                    settle_pricing_service.as_ref(),
+                                    &settle_pricing_config,
+                                    budget.budget_limits(),
+                                    &settle_key_manager,
+                                    api_key_id,
+                                    budget.provider(),
+                                    budget.model(),
+                                    &settle_pricing_provider,
+                                    &settle_pricing_model,
+                                    &settle_usage,
+                                    budget_reservation,
+                                    key_budget_reservation,
+                                )
+                                .await;
+                                (response, tokens_used)
+                            }
+                        },
+                    )
+                    .await
             }
         },
     )

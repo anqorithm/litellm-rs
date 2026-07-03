@@ -8,6 +8,7 @@ use crate::core::cache::{DualCacheConfig, LLMCache, LLMCacheConfig};
 use crate::core::keys::{DatabaseKeyRepository, KeyManager};
 use crate::core::pricing_service::PricingService;
 use crate::core::teams::TeamManager;
+use crate::server::routes::ai::budgeted::BudgetedExecutor;
 use crate::storage::database::SeaOrmTeamRepository;
 use crate::storage::redis::RedisPool;
 use crate::utils::sync::AtomicValue;
@@ -44,6 +45,8 @@ pub struct AppState {
     pub team_manager: Arc<TeamManager>,
     /// API key manager for `/v1/keys` route handlers (shared across requests)
     pub key_manager: KeyManager,
+    /// Budget orchestration service for AI route reserve/call/settle lifecycles
+    pub(crate) budgeted: BudgetedExecutor,
     /// Optional deterministic response cache for non-streaming chat and embeddings
     pub response_cache: Option<Arc<LLMCache>>,
 }
@@ -62,6 +65,13 @@ impl AppState {
         let response_cache = build_response_cache(&config, storage.redis.clone());
         let key_manager = KeyManager::new(DatabaseKeyRepository::new(storage.clone()))
             .with_hmac_secret(config.gateway.auth.api_key_hmac_secret.clone());
+        let budget_manager = Arc::new(BudgetManager::new());
+        let budgeted = BudgetedExecutor::new(
+            budget_limits.clone(),
+            budget_manager.clone(),
+            pricing.clone(),
+            key_manager.clone(),
+        );
         let team_manager = Arc::new(TeamManager::new(Arc::new(SeaOrmTeamRepository::new(
             storage.database.clone(),
         ))));
@@ -72,9 +82,10 @@ impl AppState {
             storage,
             pricing,
             budget_limits,
-            budget_manager: Arc::new(BudgetManager::new()),
+            budget_manager,
             team_manager,
             key_manager,
+            budgeted,
             response_cache,
         }
     }

@@ -12,6 +12,7 @@ use serde_json::Value;
 use std::time::Duration;
 use tracing::error;
 
+use super::budgeted::{BudgetedCall, SettlementMode};
 use super::execution::execute_with_selected_deployment;
 use super::openai_errors;
 use super::provider_config;
@@ -100,34 +101,41 @@ async fn proxy_moderation(
                             &selected_model,
                             &resolved_model,
                         )?;
-                        super::spend::ensure_budget_available(
-                            &state.budget_limits,
-                            &provider.provider_name,
-                            &resolved_model,
-                        )?;
-
-                        let url = moderation_url(&provider)
-                            .map_err(moderation_gateway_error_to_provider_error)?;
-                        let response = provider_config::apply_proxy_headers(
-                            provider_config::proxy_http_client().post(url),
-                            &provider.headers,
+                        let budget_provider = provider.provider_name.clone();
+                        BudgetedCall::new(
+                            state.budget_limits.clone(),
+                            budget_provider,
+                            resolved_model.clone(),
                         )
-                        .timeout(provider.timeout)
-                        .json(&request)
-                        .send()
+                        .with_settlement_mode(SettlementMode::AvailabilityOnly)
+                        .reserve_call_settle(
+                            |_budget| Ok(None),
+                            || async move {
+                                let url = moderation_url(&provider)
+                                    .map_err(moderation_gateway_error_to_provider_error)?;
+                                let response = provider_config::apply_proxy_headers(
+                                    provider_config::proxy_http_client().post(url),
+                                    &provider.headers,
+                                )
+                                .timeout(provider.timeout)
+                                .json(&request)
+                                .send()
+                                .await
+                                .map_err(|error| {
+                                    ProviderError::network("moderation_proxy", error.to_string())
+                                })?;
+
+                                if !response.status().is_success() {
+                                    return Err(moderation_upstream_error(response).await);
+                                }
+
+                                provider_config::proxy_response_to_http_response(response)
+                                    .await
+                                    .map_err(moderation_gateway_error_to_provider_error)
+                            },
+                            |response, _reservations, _budget| async move { (response, 0) },
+                        )
                         .await
-                        .map_err(|error| {
-                            ProviderError::network("moderation_proxy", error.to_string())
-                        })?;
-
-                        if !response.status().is_success() {
-                            return Err(moderation_upstream_error(response).await);
-                        }
-
-                        let response = provider_config::proxy_response_to_http_response(response)
-                            .await
-                            .map_err(moderation_gateway_error_to_provider_error)?;
-                        Ok((response, 0))
                     }
                 }
             },
