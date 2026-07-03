@@ -15,7 +15,7 @@ Link to `product.md`.
 | 启动入口 | `src/main.rs:103-114`、`src/server/builder.rs` | 仅 `tracing_subscriber::fmt()`；无 observability/langfuse/otel 初始化 | wire 的落点 |
 | HTTP 装配 | `src/server/http.rs:198-223` | 中间件与路由注册全集；无 ip_access/guardrails/mcp/a2a/realtime | 可达性判定依据 |
 | 配置根 | `src/config/models/gateway.rs:351-375` | `GatewayConfig` 字段全集；上述子系统无配置项 | invariant 2 的第一要件 |
-| 未接线子系统 | `src/core/{guardrails,ip_access,mcp,a2a,realtime,webhooks,semantic_cache,analytics,virtual_keys,observability,integrations}` | 完整实现 + 测试，server/main 零引用 | 处置对象 |
+| 未接线子系统 | `src/core/{guardrails,ip_access,mcp,a2a,realtime,webhooks,semantic_cache,analytics,virtual_keys,observability,integrations,audit}` | 完整实现 + 测试，server/main 零引用 | 处置对象 |
 | 合法库 API | `src/lib.rs`、`src/core/{completion,function_calling,traits,secret_managers}` | 通过 `pub mod core`、prelude 或 provider 内部 trait 使用暴露，不需要 server 路由 | guard 必须区分 library-only 与 gateway-facing |
 | 公共模块导出 | `src/lib.rs`、`src/core/mod.rs` | `pub mod core` 暴露 `mcp`、`a2a`、`realtime` 等候选模块 | remove/gate 会影响下游 import，需 semver/CHANGELOG/deprecation |
 | Batch 半接线 | `src/server/routes/ai/batches.rs:41-95` vs `src/core/batch/processor/core.rs:71,143,181` | 路由纯透传；`BatchProcessor` 从未构造 | 半接线样本 |
@@ -43,8 +43,10 @@ Link to `product.md`.
 | observability + integrations | wire（启动初始化 + 配置） | 近期仍在投入（edec83d7），删除损失最大 |
 | batch 持久化 | wire 完整化 or 删 processor（二选一） | 半接线态最误导；wire 时 batch item 必须调用真实 provider execution path 或保留 upstream proxy 语义，不能返回 mock response |
 | mcp / a2a / realtime | experimental-gate | 实现大、无路由，产品化是独立决策 |
-| webhooks / semantic_cache / analytics | remove or gate | stub 密度高，按维护者产品意向 |
+| webhooks | wire or gate | 已有 subscription / delivery processor / signing / HTTP POST 能力，但未挂 gateway event path；按 implemented-but-unwired 处置，不按 stub-only 删除 |
+| semantic_cache / analytics | remove or gate | 默认路径不可达；按维护者产品意向 |
 | virtual_keys | wire or gate | 已有迁移与 storage-backed CRUD，但 gateway 管理/API 路径未接线；不能按 stub-only 删除 |
+| audit logging | wire or gate | 有 `AuditLogger` / `AuditMiddleware` 与 `enterprise.audit_logging` 配置示例，但未证明挂入 server/main；必须进入矩阵与 no-op knob 检查 |
 
 **Phase 3 — 执行**
 
@@ -52,7 +54,8 @@ Link to `product.md`.
   中间件/路由挂载 → 行为测试（U-26 checklist 全项 + 子系统真实执行）。guardrails PR 必须用恶意输入/输出证明
   engine 被调用并 enforcement；ip_access PR 必须用 sentinel handler/provider 证明 denied IP 不会执行下游副作用；
   batch wire PR 必须证明 batch item 走真实 provider execution path 或显式保留 upstream proxy 语义。
-- gate lane：`Cargo.toml` 真 feature（`mcp = []` → gate `core/mcp` 的 `pub mod`）+ README/docs
+- gate lane：`Cargo.toml` 真 default-off feature（`mcp = []` → gate `core/mcp` 的 `pub mod`，且不被 default
+  features 间接启用；`storage` / `sqlite` 等默认或支持性 feature 不算 experimental gate）+ README/docs
   experimental 段；相关 config schema/env/example 同步 gate 或返回显式 validation error，避免用户配置 no-op knob；
   若 public import 改变，同步 semver、CHANGELOG、deprecation/迁移说明。
 - remove lane：删除模块 + `core/mod.rs` 清理 + README/CLAUDE.md/`docs/` 同步；若 public import 改变，
@@ -62,7 +65,8 @@ Link to `product.md`.
 **Phase 4 — 守护检查**
 
 脚本或测试：解析 `src/core/mod.rs` 的顶层 `pub mod` 清单，先分类为 `gateway_facing`、`library_only`、
-`internal_support`、`feature_gated`。仅 `gateway_facing` 模块断言运行时可达：
+`internal_support`、`feature_gated`。`feature_gated` 只接受 default-off experimental feature；被 default
+features 启用的支持 feature（例如 storage-backed cfg）仍按 gateway-facing 判断。仅 `gateway_facing` 模块断言运行时可达：
 「被启动装配实际构造并挂入请求路径/中间件/路由/后台任务 ∨ 在带 issue 的豁免清单 ∨ 被真 feature gate」。
 单纯存在 `GatewayConfig` 字段、admin/status 展示、validation 文案或 `src/config`/`src/server` 文本引用不算可达性证据；
 例如 `semantic_cache` 的配置与 admin flag 不能替代真实请求处理接线。CI 负测试必须证明新增 config-only
@@ -75,7 +79,7 @@ Link to `product.md`.
 | --- | --- | --- |
 | P2 wire 三要件 | config + builder + http.rs + request path | U-26 checklist 单测 + 子系统真实行为测试 |
 | P3 remove 干净 | core/mod.rs + README/CLAUDE.md/`docs/` + CHANGELOG | `cargo check --all-features` + 全量测试 + public import/semver 记录 |
-| P4 gate 真实 | Cargo.toml + cfg + docs.rs feature 列表 + CHANGELOG | `cargo check --no-default-features` 组合验证 + deprecation/迁移说明 |
+| P4 gate 真实 | Cargo.toml + cfg + docs.rs feature 列表 + CHANGELOG | default-off feature 组合验证 + deprecation/迁移说明 |
 | P5 安全默认 | guardrails/ip_access 配置 | 默认配置下中间件生效的集成测试 |
 | P6 守护常驻 | CI 检查 | 人为添加未接线模块的负测试 + library-only 模块正测试 |
 

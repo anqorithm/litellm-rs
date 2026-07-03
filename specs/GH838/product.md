@@ -15,7 +15,7 @@ GH-838 / #838
   `docs/protocols/{mcp,a2a}.md` 以 "MCP Gateway"、"A2A Protocol" 对外宣传；
 - `core/observability` + `core/integrations`（Langfuse/OTel）——`main.rs:103-114` 只初始化
   `tracing_subscriber::fmt()`，整套导出器无可达路径，且近期仍有 commit 在重构它（`edec83d7`）；
-- `core/webhooks`、`core/semantic_cache`、`core/analytics`、`core/virtual_keys`；其中
+- `core/webhooks`、`core/semantic_cache`、`core/analytics`、`core/virtual_keys`、`core/audit`；其中
   `virtual_keys` 已有迁移与 SeaORM CRUD，问题是 storage-backed 子系统已实现但未挂到 gateway 管理/API 路径；
 - `/v1/batches` 纯透传，`core/batch::BatchProcessor` 持久化层从未被构造。
 
@@ -41,8 +41,8 @@ GH-838 / #838
 2. 「wire」处置的子系统：存在配置项、启动初始化调用、以及至少一条端到端可达路径（路由或中间件），
    三者缺一即 CI 失败。
 3. 「remove」处置的子系统：删除后 `cargo check --all-features` 与全量测试通过，文档同步更新。
-4. 「experimental-gate」处置的子系统：模块被真实 feature gate（默认不编译），README 标注
-   experimental 且不再出现在能力列表主表。
+4. 「experimental-gate」处置的子系统：模块被真实 default-off feature gate（默认不编译），README 标注
+   experimental 且不再出现在能力列表主表；`storage`、`sqlite` 等默认/支持性 feature 不能冒充实验 gate。
 5. 安全语义类子系统（guardrails、ip_access）若保留，必须默认接线或在配置显式关闭——不允许
    「代码在但从不执行」的中间态。
 6. remove/gate 若影响 `src/lib.rs` 暴露的 `pub mod core` 下公共模块，必须按 public API 变更处理：
@@ -60,7 +60,8 @@ GH-838 / #838
 
 ## 边界情况
 
-- 子系统之间的依赖（如 observability 依赖 integrations）：处置必须按依赖拓扑成组决策。
+- 子系统之间的依赖（如 observability 依赖 integrations，audit logging 依赖 enterprise 配置/中间件）：
+  处置必须按依赖拓扑成组决策。
 - 半接线状态（batch：路由存在但绕过持久化层）：按「wire 完整化 or remove 持久化层」二选一，
   不允许维持绕过态。
 - `.specrail/runtime`、`docs/` 中引用这些子系统的历史文档：不追溯修改，只改能力宣传文档。
