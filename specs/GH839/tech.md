@@ -38,8 +38,10 @@ Link to `product.md`.
    pub fn http_facts(err: &GatewayError) -> ErrorHttpFacts;
    ```
 
-   该模块必须 `cfg(feature = "gateway")` 或使用 feature-neutral 状态/头类型，避免 `lite` /
-   `--no-default-features` build 拉入 actix-web。现有两张 match 表合并为这一张；`openai_errors.rs` 与 `response.rs` 改为从 `ErrorHttpFacts`
+   该模块必须拆成 feature-neutral 的 status/code facts 与 gateway-only 的 header/status-code adapter：
+   `ProviderError::http_status` / `ContextualError::http_status` 在 `lite` / `--no-default-features`
+   build 仍消费同一 feature-neutral facts；actix `StatusCode`、`HeaderName`、`HeaderValue` 只在
+   gateway adapter 层出现。现有两张 match 表合并为这一张；`openai_errors.rs` 与 `response.rs` 改为从 `ErrorHttpFacts`
    渲染各自 JSON 形状，不再各自 match。`headers` 必须从错误实例保留当前已存在的动态头：
    provider `Retry-After`，以及 gateway `Retry-After` / `X-RateLimit-Limit-Requests` /
    `X-RateLimit-Limit-Tokens` / middleware `X-RateLimit-Limit`。#833 只负责补全更完整的 Retry-After 策略，不允许本 issue
@@ -48,8 +50,8 @@ Link to `product.md`.
    OpenAI 适配器还需要保留 `ProviderError::ApiError` 的 per-instance 覆盖：如果上游 body
    已是 OpenAI `{error:{message,type,param,code}}`，则 OpenAI JSON 的这四个字段沿用上游值；
    canonical/internal JSON 仍使用 `canonical_code` / `legacy_code` 与本地 message 策略。
-   现有 public `ProviderError::http_status` / `ContextualError::http_status` 也必须消费同一映射，
-   或在 SP839-T2 明确 deprecate/remove；不能保留第三张状态码表。
+   现有 public `ProviderError::http_status` / `ContextualError::http_status` 也必须消费同一
+   feature-neutral 映射，或在 SP839-T2 明确 deprecate/remove；不能保留第三张状态码表。
 
 2. **request_id 注入**：`ResponseError::error_response` 无法拿到中间件扩展——反转依赖：
    OpenAI-compatible AI 路由统一改用显式 `gateway_error_response(&err, &ctx)`（`ctx` 携带
@@ -57,6 +59,10 @@ Link to `product.md`.
    `web::QueryConfig::default().error_handler(...)`、`web::PathConfig::default().error_handler(...)`
    汇入同一渲染函数。`ResponseError` impl 保留为最后兜底（此时 request_id 缺失可接受，但
    渲染仍走 canonical 表）。
+
+   直接返回的 OpenAI helper 也必须进入统一计划：`openai_errors::validation_error` /
+   `unauthorized_error` / multipart helper 等本地 handler 失败要么接收 request context 并注入
+   `request_id`，要么改为构造统一错误后交给 renderer；不能保留无 context 的直出路径。
 
    中间件拒绝也必须进入统一计划：`AuthMiddleware` 的 missing/bad credentials 与
    `RateLimitError::error_response` 应构造可映射错误并按请求所属路由族渲染。AI 路由使用
@@ -69,10 +75,13 @@ Link to `product.md`.
    `http_facts` / code facts 取得；`chat_sse.rs` 与 `responses_stream.rs` 中独立
    `ProviderError` match 表必须迁移或删除。
 
-3. **管理端**：`src/server/routes/mod.rs:233-268` 的 `errors::*` helpers 改为携带语义状态码
-   构造 `ApiResponse`。`ApiResponse::to_http_response` 是 public API，默认保留并加
-   `#[deprecated]` 或改为调用语义状态码 helper；只有维护者明确批准 breaking change 时才删除。
-   信封 JSON 字段不动。
+3. **管理端与非 AI `/v1` 路由**：`src/server/routes/mod.rs:233-268` 的 `errors::*` helpers
+   改为携带语义状态码构造 `ApiResponse`，`/v1/pricing` 保留其既有非 OpenAI 错误形状并纳入
+   route-family tests。public auth recovery / verification flow（password reset unknown email /
+   invalid token、email verification invalid token 等）属于反枚举安全路径，必须显式豁免通用
+   NotFound/Conflict 语义化或在测试中证明不泄露账户/token 有效性。`ApiResponse::to_http_response`
+   是 public API，默认保留并加 `#[deprecated]` 或改为调用语义状态码 helper；只有维护者明确批准
+   breaking change 时才删除。信封 JSON 字段不动。
 
 4. **一致性测试**：为 `GatewayError`/`ProviderError` 的代表值集合（每变体至少一个构造样本）
    断言：副本 1 渲染 status == 副本 2 渲染 status == `http_facts().status`。变体新增时测试
@@ -86,13 +95,13 @@ Link to `product.md`.
 | --- | --- | --- |
 | P1 两路径同 status | http_mapping.rs + 两适配器 | 变体遍历一致性测试 |
 | P2 AI 路由同形状 | chat.rs 等 AI 路由 + JsonConfig/QueryConfig/PathConfig + middleware render path | 集成测试：extractor / auth-rate-limit / handler 失败均为 OpenAI 形状 |
-| P3 管理端语义状态码 | routes/mod.rs errors helpers + 管理端路由 | keys/teams/budget 路由错误码测试，信封字段保持 |
+| P3 管理端语义状态码 | routes/mod.rs errors helpers + 管理端路由 | keys/teams/budget/pricing 路由错误码测试，auth 反枚举 flow 保持不泄露，信封字段保持 |
 | P4 request_id 一致 | 渲染函数 + RequestIdMiddleware | 集成测试：body request_id == 头 X-Request-ID |
 | P5 public API 处理 | routes/mod.rs `ApiResponse::to_http_response` | 保留/deprecated 的编译测试；若删除则 release note + human gate |
 
 ## 数据流
 
-错误产生（provider/extractor/中间件/handler）→ `http_facts()`（唯一决策点，含分离的
+错误产生（provider/extractor/中间件/handler/direct helper）→ `http_facts()`（唯一决策点，含分离的
 OpenAI 与 canonical code 词表、动态 headers）→ 按路由族选择形状适配器（OpenAI JSON /
 canonical JSON / 管理端信封）→ HttpResponse（+ request_id 注入）。
 

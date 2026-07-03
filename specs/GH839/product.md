@@ -23,7 +23,8 @@ GH-839 / #839
 - 状态码与错误码词表映射只在一处定义，两个适配器（OpenAI 形状、canonical 形状）消费同一张表。
 - OpenAI-compatible AI 端点的任何失败阶段返回同一 JSON 形状；管理端 `/v1/*` 路由继续使用
   `ApiResponse` 信封。
-- 管理端错误保留真实语义状态码（404/409/500 不再统一 400）。
+- 管理端错误保留真实语义状态码（404/409/500 不再统一 400），但 public auth recovery /
+  verification 等反枚举流程保留现有不泄露账户或 token 有效性的响应语义。
 - 错误响应携带与中间件分配一致的 `request_id`。
 
 ## 非目标
@@ -39,8 +40,10 @@ GH-839 / #839
 2. OpenAI-compatible AI 路由在 extractor 失败（JSON/query/path）、中间件拒绝（auth/rate-limit）、
    handler 内失败、raw upstream proxy 非 2xx 四类阶段返回的 JSON 形状相同（OpenAI 形状），
    除非某个 passthrough 行为被维护者显式豁免并记录兼容性理由。
-3. 管理端点（keys/teams/budget/auth）即使挂在 `/v1/*` 下，也继续使用 `ApiResponse` 信封；
-   NotFound → 404、冲突 → 409、内部错误 → 500；`{success,data,error}` 信封字段保持兼容。
+3. 非 OpenAI-compatible 管理/辅助端点（keys/teams/budget/auth/pricing）即使挂在 `/v1/*` 下，也继续使用
+   `ApiResponse` 或该路由既有的非 OpenAI 信封；管理资源 NotFound → 404、冲突 → 409、内部错误 → 500；
+   public password-reset / email-verification 等反枚举 auth flow 显式豁免，不因语义状态码收敛而暴露邮箱、token
+   或 current-password 是否有效。
 4. 错误响应 body 中的 `request_id` 与响应头 `X-Request-ID` 一致（可关联日志）。
 5. `ApiResponse::to_http_response` 是经 `server::routes` 暴露的 public API：默认保留并标记
    deprecated；若删除，必须在 spec approval 中明确批准 public API break 并写入发布说明。
@@ -58,7 +61,8 @@ GH-839 / #839
 - [ ] 映射一致性测试：遍历错误变体断言两路径 status 相等（含 `Cancelled` 的漂移修复决策：400 或 499 二选一，见 tech spec）。
 - [ ] AI 路由三阶段失败形状一致的集成测试，覆盖 `JsonConfig`、`QueryConfig`、`PathConfig`
       extractor 失败、auth/rate-limit 中间件拒绝以及 batches/images/Gemini proxy 的 upstream 非 2xx。
-- [ ] 管理端错误状态码语义化 + 兼容性测试（信封字段不变）。
+- [ ] 管理端错误状态码语义化 + 兼容性测试（信封字段不变），并覆盖 `/v1/pricing` 仍保持非 OpenAI 错误形状。
+- [ ] public auth recovery / verification 反枚举流程保持现状响应语义，不被通用 404/409 规则改写。
 - [ ] 错误 body `request_id` 非 null 且与头一致。
 
 ## 边界情况
@@ -76,6 +80,7 @@ GH-839 / #839
 ## 发布说明
 
 管理端错误状态码从部分丢失语义变为稳定语义化 4xx/5xx，属于对外行为变化；OpenAI-compatible
-AI 路由错误形状统一到 OpenAI 形状，管理端 `/v1/*` 继续使用 `ApiResponse` 信封。若删除
+AI 路由错误形状统一到 OpenAI 形状，管理端 `/v1/*` 与 `/v1/pricing` 等非 AI 路由继续使用既有非
+OpenAI 信封。反枚举 auth recovery / verification flow 不改变响应暴露策略。若删除
 `ApiResponse::to_http_response`，CHANGELOG 必须列为 public API break；默认方案是保留并
 deprecated。CHANGELOG 需列出状态码变化矩阵。
