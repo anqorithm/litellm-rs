@@ -29,6 +29,18 @@ pub struct ProviderModuleLifecycleEntry {
     pub reason: &'static str,
 }
 
+/// Temporary approved baseline for provider implementation directories that
+/// GH837 has not yet deleted, demoted, wired, or explicitly exempted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProviderOrphanBaselineEntry {
+    pub module_name: &'static str,
+    pub lane: &'static str,
+    pub issue: &'static str,
+    pub owner: &'static str,
+    pub expires: &'static str,
+    pub reason: &'static str,
+}
+
 pub static PROVIDER_MODULE_LIFECYCLE: &[ProviderModuleLifecycleEntry] = &[
     stub(
         "ai21",
@@ -152,7 +164,7 @@ pub static PROVIDER_MODULE_LIFECYCLE: &[ProviderModuleLifecycleEntry] = &[
         "meta_llama",
         "native Meta Llama module retained; ProviderType::MetaLlama currently uses a generic OpenAI-compatible adapter",
     ),
-    internal(
+    stub(
         "milvus",
         "vector-store provider module, outside LLM factory dispatch",
     ),
@@ -179,7 +191,7 @@ pub static PROVIDER_MODULE_LIFECYCLE: &[ProviderModuleLifecycleEntry] = &[
         "petals",
         "specialized provider module; not wired through the LLM factory yet",
     ),
-    internal(
+    stub(
         "pg_vector",
         "vector-store provider module, outside LLM factory dispatch",
     ),
@@ -263,8 +275,166 @@ pub static PROVIDER_MODULE_LIFECYCLE: &[ProviderModuleLifecycleEntry] = &[
     ),
 ];
 
+pub static PROVIDER_ORPHAN_BASELINE: &[ProviderOrphanBaselineEntry] = &[
+    baseline(
+        "ai21",
+        "delete-native",
+        "macro-generated chat provider awaiting GH837 disposition approval",
+    ),
+    baseline(
+        "amazon_nova",
+        "demote-to-catalog",
+        "catalog-backed duplicate with native macro provider retained until demote tranche",
+    ),
+    baseline("baseten", "delete-native", "unwired native chat provider"),
+    baseline("clarifai", "delete-native", "unwired native chat provider"),
+    baseline("codestral", "delete-native", "unwired native chat provider"),
+    baseline(
+        "custom_api",
+        "exempt",
+        "macro-generated custom provider needs explicit product/architecture decision",
+    ),
+    baseline(
+        "databricks",
+        "delete-native",
+        "unwired native chat provider",
+    ),
+    baseline(
+        "datarobot",
+        "delete-native",
+        "macro-generated chat provider awaiting GH837 disposition approval",
+    ),
+    baseline(
+        "deepgram",
+        "non-llm-lane",
+        "audio provider module without a gateway LLM factory path",
+    ),
+    baseline(
+        "deepl",
+        "delete-native",
+        "translation provider declares ChatCompletion and awaits GH837 disposition approval",
+    ),
+    baseline(
+        "elevenlabs",
+        "non-llm-lane",
+        "audio provider module without a gateway LLM factory path",
+    ),
+    baseline(
+        "empower",
+        "delete-native",
+        "macro-generated chat provider awaiting GH837 disposition approval",
+    ),
+    baseline("exa_ai", "delete-native", "unwired native chat provider"),
+    baseline(
+        "firecrawl",
+        "delete-native",
+        "macro-generated chat provider awaiting GH837 disposition approval",
+    ),
+    baseline("gigachat", "delete-native", "unwired native chat provider"),
+    baseline(
+        "github",
+        "demote-to-catalog",
+        "catalog-backed duplicate with native provider retained until demote tranche",
+    ),
+    baseline(
+        "google_pse",
+        "delete-native",
+        "search provider declares ChatCompletion and awaits GH837 disposition approval",
+    ),
+    baseline(
+        "gradient_ai",
+        "delete-native",
+        "unwired native chat provider",
+    ),
+    baseline(
+        "huggingface",
+        "delete-native",
+        "unwired native chat provider",
+    ),
+    baseline(
+        "jina",
+        "non-llm-lane",
+        "embedding/rerank provider exposes LLMProvider",
+    ),
+    baseline("langgraph", "delete-native", "unwired native chat provider"),
+    baseline("manus", "delete-native", "unwired native chat provider"),
+    baseline(
+        "meta_llama",
+        "demote-to-catalog",
+        "catalog-backed duplicate with native provider retained until demote tranche",
+    ),
+    baseline(
+        "milvus",
+        "non-llm-lane",
+        "vector provider exposes LLMProvider",
+    ),
+    baseline("morph", "delete-native", "unwired native chat provider"),
+    baseline("nlp_cloud", "delete-native", "unwired native chat provider"),
+    baseline("oci", "delete-native", "unwired native chat provider"),
+    baseline(
+        "ollama",
+        "demote-to-catalog",
+        "local OpenAI-compatible candidate",
+    ),
+    baseline("petals", "delete-native", "unwired native chat provider"),
+    baseline(
+        "pg_vector",
+        "non-llm-lane",
+        "vector provider module without a gateway LLM factory path",
+    ),
+    baseline("predibase", "delete-native", "unwired native chat provider"),
+    baseline("ragflow", "delete-native", "unwired native chat provider"),
+    baseline(
+        "recraft",
+        "non-llm-lane",
+        "image provider exposes LLMProvider",
+    ),
+    baseline(
+        "runwayml",
+        "non-llm-lane",
+        "video/image provider exposes LLMProvider",
+    ),
+    baseline("sagemaker", "delete-native", "unwired native chat provider"),
+    baseline("sap_ai", "delete-native", "unwired native chat provider"),
+    baseline(
+        "searxng",
+        "non-llm-lane",
+        "search provider exposes LLMProvider",
+    ),
+    baseline("snowflake", "delete-native", "unwired native chat provider"),
+    baseline("spark", "delete-native", "unwired native chat provider"),
+    baseline(
+        "stability",
+        "non-llm-lane",
+        "image provider exposes LLMProvider",
+    ),
+    baseline(
+        "tavily",
+        "non-llm-lane",
+        "search provider exposes LLMProvider",
+    ),
+    baseline("topaz", "delete-native", "unwired native chat provider"),
+    baseline("triton", "delete-native", "unwired native chat provider"),
+    baseline(
+        "v0",
+        "demote-to-catalog",
+        "catalog-backed duplicate with native provider retained until demote tranche",
+    ),
+    baseline("vercel_ai", "delete-native", "unwired native chat provider"),
+    baseline(
+        "voyage",
+        "non-llm-lane",
+        "embedding provider exposes LLMProvider",
+    ),
+    baseline("watsonx", "delete-native", "unwired native chat provider"),
+];
+
 pub fn provider_module_lifecycle() -> &'static [ProviderModuleLifecycleEntry] {
     PROVIDER_MODULE_LIFECYCLE
+}
+
+pub fn provider_orphan_baseline() -> &'static [ProviderOrphanBaselineEntry] {
+    PROVIDER_ORPHAN_BASELINE
 }
 
 const fn wire(module_name: &'static str, reason: &'static str) -> ProviderModuleLifecycleEntry {
@@ -277,6 +447,21 @@ const fn stub(module_name: &'static str, reason: &'static str) -> ProviderModule
 
 const fn internal(module_name: &'static str, reason: &'static str) -> ProviderModuleLifecycleEntry {
     entry(module_name, ProviderModuleLifecycle::Internal, reason)
+}
+
+const fn baseline(
+    module_name: &'static str,
+    lane: &'static str,
+    reason: &'static str,
+) -> ProviderOrphanBaselineEntry {
+    ProviderOrphanBaselineEntry {
+        module_name,
+        lane,
+        issue: "GH837",
+        owner: "coordinator",
+        expires: "remove after GH837 disposition approval and tranche execution",
+        reason,
+    }
 }
 
 const fn provider_extra_wire(
@@ -316,176 +501,5 @@ const fn entry(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::collections::BTreeSet;
-    use std::fs;
-    use std::path::Path;
-
-    fn lifecycle_module_names() -> BTreeSet<&'static str> {
-        PROVIDER_MODULE_LIFECYCLE
-            .iter()
-            .map(|entry| entry.module_name)
-            .collect()
-    }
-
-    fn lifecycle_for(module_name: &str) -> ProviderModuleLifecycle {
-        PROVIDER_MODULE_LIFECYCLE
-            .iter()
-            .find(|entry| entry.module_name == module_name)
-            .unwrap_or_else(|| panic!("missing lifecycle entry for {module_name}"))
-            .lifecycle
-    }
-
-    #[test]
-    fn lifecycle_classifies_phase0_key_provider_modules() {
-        assert_eq!(lifecycle_for("bedrock"), ProviderModuleLifecycle::Wire);
-        assert_eq!(
-            lifecycle_for("vertex_ai"),
-            if cfg!(feature = "providers-extra") {
-                ProviderModuleLifecycle::Wire
-            } else {
-                ProviderModuleLifecycle::Stub
-            }
-        );
-        assert_eq!(
-            lifecycle_for("azure"),
-            if cfg!(feature = "providers-extra") {
-                ProviderModuleLifecycle::Wire
-            } else {
-                ProviderModuleLifecycle::Stub
-            }
-        );
-        assert_eq!(
-            lifecycle_for("azure_ai"),
-            if cfg!(feature = "providers-extra") {
-                ProviderModuleLifecycle::Wire
-            } else {
-                ProviderModuleLifecycle::Stub
-            }
-        );
-        assert_eq!(
-            lifecycle_for("github_copilot"),
-            if cfg!(feature = "providers-extended") {
-                ProviderModuleLifecycle::Wire
-            } else {
-                ProviderModuleLifecycle::Stub
-            }
-        );
-        assert_eq!(
-            lifecycle_for("cohere"),
-            if cfg!(feature = "providers-extended") {
-                ProviderModuleLifecycle::Wire
-            } else {
-                ProviderModuleLifecycle::Stub
-            }
-        );
-        assert_eq!(
-            lifecycle_for("fal_ai"),
-            if cfg!(feature = "providers-extended") {
-                ProviderModuleLifecycle::Wire
-            } else {
-                ProviderModuleLifecycle::Stub
-            }
-        );
-        assert_eq!(
-            lifecycle_for("replicate"),
-            if cfg!(feature = "providers-extended") {
-                ProviderModuleLifecycle::Wire
-            } else {
-                ProviderModuleLifecycle::Stub
-            }
-        );
-        assert_eq!(
-            lifecycle_for("gemini"),
-            if cfg!(feature = "providers-extended") {
-                ProviderModuleLifecycle::Wire
-            } else {
-                ProviderModuleLifecycle::Stub
-            }
-        );
-    }
-
-    #[test]
-    fn lifecycle_wire_entries_are_native_runtime_modules() {
-        let actual = PROVIDER_MODULE_LIFECYCLE
-            .iter()
-            .filter(|entry| entry.lifecycle == ProviderModuleLifecycle::Wire)
-            .map(|entry| entry.module_name)
-            .collect::<BTreeSet<_>>();
-        let expected = [
-            "anthropic",
-            #[cfg(feature = "providers-extra")]
-            "azure",
-            #[cfg(feature = "providers-extra")]
-            "azure_ai",
-            "bedrock",
-            "cloudflare",
-            #[cfg(feature = "providers-extended")]
-            "cohere",
-            #[cfg(feature = "providers-extended")]
-            "fal_ai",
-            #[cfg(feature = "providers-extended")]
-            "gemini",
-            #[cfg(feature = "providers-extended")]
-            "github_copilot",
-            #[cfg(feature = "providers-extended")]
-            "replicate",
-            "mistral",
-            "openai",
-            "openai_like",
-            #[cfg(feature = "providers-extra")]
-            "vertex_ai",
-        ]
-        .into_iter()
-        .collect::<BTreeSet<_>>();
-
-        assert_eq!(actual, expected);
-    }
-
-    #[test]
-    fn lifecycle_covers_every_provider_directory() {
-        let providers_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/core/providers");
-        let actual = fs::read_dir(providers_dir)
-            .expect("providers directory should be readable")
-            .filter_map(|entry| {
-                let entry = entry.expect("provider directory entry should be readable");
-                if !entry
-                    .file_type()
-                    .expect("file type should be readable")
-                    .is_dir()
-                {
-                    return None;
-                }
-                entry.file_name().into_string().ok()
-            })
-            .collect::<BTreeSet<_>>();
-        let declared = lifecycle_module_names()
-            .into_iter()
-            .map(str::to_string)
-            .collect::<BTreeSet<_>>();
-
-        assert_eq!(actual, declared);
-    }
-
-    #[test]
-    fn lifecycle_has_no_delete_decisions_without_owner_confirmation() {
-        assert!(
-            PROVIDER_MODULE_LIFECYCLE
-                .iter()
-                .all(|entry| entry.lifecycle != ProviderModuleLifecycle::Delete),
-            "Delete lifecycle requires explicit owner confirmation"
-        );
-    }
-
-    #[test]
-    fn lifecycle_entries_have_reasons() {
-        for entry in PROVIDER_MODULE_LIFECYCLE {
-            assert!(
-                !entry.reason.trim().is_empty(),
-                "{} lifecycle entry must include a reason",
-                entry.module_name
-            );
-        }
-    }
-}
+#[path = "lifecycle_tests.rs"]
+mod tests;
