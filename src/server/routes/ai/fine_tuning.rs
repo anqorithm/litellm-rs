@@ -21,6 +21,7 @@ use std::collections::HashMap;
 use std::future::Future;
 use tracing::error;
 
+use super::budgeted::SettlementMode;
 use super::openai_errors;
 use super::provider_config;
 
@@ -265,7 +266,11 @@ fn ensure_fine_tuning_budget(
     provider: &str,
     model: &str,
 ) -> Result<(), GatewayError> {
-    super::spend::ensure_budget_available(&state.budget_limits, provider, model)
+    state
+        .budgeted
+        .for_selected(provider, model)
+        .with_settlement_mode(SettlementMode::AvailabilityOnly)
+        .ensure_available()
         .map_err(GatewayError::from)
 }
 

@@ -143,6 +143,17 @@ impl BudgetedCall {
         self
     }
 
+    pub(super) fn ensure_available(self) -> Result<(), ProviderError> {
+        if !matches!(self.settlement_mode, SettlementMode::AvailabilityOnly) {
+            return Err(ProviderError::invalid_request(
+                "budget",
+                "availability check requires AvailabilityOnly settlement mode",
+            ));
+        }
+        let context = self.context();
+        spend::ensure_budget_available(context.budget_limits(), context.provider(), context.model())
+    }
+
     pub(super) async fn reserve_call<T, Reserve, Call, CallFuture>(
         self,
         reserve: Reserve,
@@ -447,6 +458,42 @@ mod tests {
             0.0
         );
         assert_eq!(budget_manager.get_current_spend(&scope), 0.0);
+    }
+
+    #[test]
+    fn availability_only_ensure_available_does_not_record_spend() {
+        let limits = limited_budget();
+
+        BudgetedCall::new(limits.clone(), "openai", "gpt-4")
+            .ensure_available()
+            .expect("availability check should pass without recording spend");
+
+        assert_eq!(
+            limits
+                .providers
+                .get_provider_usage("openai")
+                .map(|usage| usage.current_spend)
+                .unwrap_or_default(),
+            0.0
+        );
+        assert_eq!(
+            limits
+                .models
+                .get_model_usage("gpt-4")
+                .map(|usage| usage.current_spend)
+                .unwrap_or_default(),
+            0.0
+        );
+    }
+
+    #[test]
+    fn ensure_available_rejects_metered_mode() {
+        let error = BudgetedCall::new(limited_budget(), "openai", "gpt-4")
+            .with_settlement_mode(ApiKeyBudgetPolicy::FromProviderReservation)
+            .ensure_available()
+            .expect_err("metered budget calls must use reservation settlement");
+
+        assert_eq!(error.http_status(), 400);
     }
 
     #[tokio::test]
