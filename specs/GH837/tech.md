@@ -14,8 +14,11 @@ Link to `product.md`.
 | --- | --- | --- | --- |
 | Provider enum | `src/core/providers/mod.rs:406-430` | 14 个可构造变体（3 个 `providers-extra`、6 个 `providers-extended` gate） | 可达性的第一入口 |
 | Factory | `src/core/providers/factory/registry.rs:52-258` | `from_config_async` 分支即全部 Tier-2 构造点 | 可达性判定依据 |
-| Tier-1 catalog | `src/core/providers/registry/catalog.rs` | 数据驱动 OpenAI 兼容 provider → `Provider::OpenAILike` | demote 目标位置 |
-| Orphan dirs | `src/core/providers/{deepgram,ollama,elevenlabs,stability,huggingface,sagemaker,watsonx,voyage,databricks,triton,jina,...}` | `pub mod` 声明 + 完整实现，目录外零引用 | 处置对象（~41 个） |
+| Tier-1 catalog | `src/core/providers/registry/catalog.rs` | 数据驱动 OpenAI 兼容 provider → `Provider::OpenAILike`；catalog path 不等于同名 native module 可达 | demote 目标位置，但不能掩盖重复 native 实现 |
+| Public exports | `src/core/providers/mod.rs` | 多个孤儿目录仍以 `pub mod` 导出，feature gate 后下游 crate 可能直接 import | 删除前必须评估 public API / semver |
+| Macro providers | `src/core/providers/*/provider.rs` + `src/core/providers/macros/` | `custom_api`、`deepl` 等通过 `define_http_provider_with_hooks!` 生成 `LLMProvider` impl | 守护测试不能只搜 literal `impl LLMProvider` |
+| Non-LLM surfaces | `runwayml`、`recraft`、`stability`、`deepl`、search/vector/embedding-only 目录 | 可能暴露 image/video/translation/search/vector/embedding capability，而非 chat LLM | 进入 non-llm-lane，不走 LLM delete lane |
+| Orphan dirs | `src/core/providers/{custom_api,deepgram,ollama,elevenlabs,huggingface,sagemaker,watsonx,voyage,databricks,triton,jina,...}` | `pub mod` 声明 + 完整实现，但无 native factory/dispatch 构造点 | 处置对象（~41 个） |
 | Registry types | `src/core/providers/registry/{types.rs,lifecycle.rs,support_matrix.rs}` | `PROVIDER_TYPE_REGISTRY` 等元数据 | 守护测试挂载点 |
 | Prior art | #137 / #140 / #714（均 CLOSED） | 清理过一轮后回归 | 说明需要守护测试 |
 
@@ -23,31 +26,55 @@ Link to `product.md`.
 
 **Phase 1 — 处置矩阵（本 spec 附录，人工批复）**
 
-对 66 个目录逐一标注五类 lane：
+对 66 个目录逐一标注六类 lane：
 
-- `keep-infra`：base、factory、registry、macros、thinking、custom_api、openai_like。
-- `wired`：openai、anthropic、bedrock、mistral、cloudflare、azure、azure_ai、vertex_ai、gemini、
-  github_copilot、fal_ai、cohere、replicate（+ 确认 v0 / meta_llama 实际状态）。
+- `keep-infra`：base、factory、registry、macros、thinking、openai_like；仅限 shared infra。
+- `wired-native`：openai、anthropic、bedrock、mistral、cloudflare、azure、azure_ai、vertex_ai、gemini、
+  github_copilot、fal_ai、cohere、replicate 等已有 native enum/factory/dispatch 构造点者。
+- `catalog-only-with-native-duplicate`：catalog 已支持但同名 native 目录仍存在者（当前至少 v0 / meta_llama）；
+  catalog 条目不能算 native module 可达，必须转为 `demote-to-catalog` 删除 native 目录，或进入显式豁免。
 - `demote-to-catalog`：OpenAI 兼容且无自定义流式/鉴权者（候选：baseten、codestral、empower、
-  datarobot、gradient_ai、morph、predibase、snowflake、vercel_ai 等，逐个验证 API 形状）。
-- `delete`：非 OpenAI 兼容、无用户需求证据、不可达者（候选：petals、nlp_cloud、spark、gigachat、
-  clarifai、ragflow、sap_ai、topaz、runwayml、recraft 等）。
+  datarobot、gradient_ai、morph、predibase、snowflake、vercel_ai 等，逐个验证 API 形状）；
+  demote 完成条件必须包含 native 目录删除或显式豁免。
+- `delete-native`：chat/LLM native module 非 OpenAI 兼容、无用户需求证据、无构造点，且 public API 影响已记录者
+  （候选需从矩阵证据得出；不得把 image/video/translation/search/vector/embedding-only provider 混入）。
 - `non-llm-lane`：tavily、searxng、google_pse、exa_ai、firecrawl（搜索/工具）、milvus、pg_vector
-  （向量库）、deepgram、elevenlabs（语音）——先决定产品上是否保留这些能力，再决定 wire/delete。
+  （向量库）、deepgram、elevenlabs（语音）、runwayml/recraft/stability（image/video）、
+  deepl（translation）、jina/voyage 等 embedding-only/非 chat LLM 能力——先决定产品上是否保留这些能力，
+  再决定 wire/delete。
+- `exempt`：如 `custom_api` 这类不是 shared infra、但需要产品/架构单独决策的 provider；必须记录 issue、
+  owner、期限和后续 lane，不能永久静默豁免。
 
-判定脚本（附录附命令）：对每个目录 `rg "<TypeName>" src --glob '!src/core/providers/<dir>/**'`，
-零命中即不可达；结果表进附录。
+判定脚本（附录附命令）：不得使用裸 `rg "<TypeName>" src` 作为可达性证据。每目录至少记录：
+
+- native construction/dispatch evidence：`Provider` enum variant、`ProviderType` match arm、factory `Box::new(...)` /
+  `Arc::new(...)`、route selector 中的 typed dispatch，或等价 Rust symbol；
+- catalog evidence：`registry/catalog.rs` 的 `def()` 只能证明 `Provider::OpenAILike` 路径存在；
+  当同名 native 目录仍存在时，不从 native orphan set 中扣除；
+- public export evidence：`src/core/providers/mod.rs` 中 `pub mod <dir>` 与 feature gate；
+- provider implementation evidence：literal `impl LLMProvider` 与 `define_http_provider_with_hooks!` 等 macro invocation；
+- capability evidence：`ProviderCapability::*` 或 model metadata，用于把 image/video/translation/search/vector/embedding-only
+  provider 放入 non-llm-lane。
+
+文档、README、注释、tests、无关同名 struct（如 A2A 的 LangGraph 类型）只可作为参考，不可作为可达性判定。
 
 **Phase 2 — 守护测试（先行合入）**
 
-在 `registry` 增加 conformance 测试：扫描 `src/core/providers/*/` 的 `impl LLMProvider` 类型名，
-与「enum 变体 + factory 分支 + catalog 条目 + 豁免清单」求差集，非空即失败。豁免清单为带
-issue 引用的常量表，CI 可见。
+在 `registry` 增加 conformance 测试：扫描 `src/core/providers/*/` 的 literal `impl LLMProvider` 类型名与
+`define_http_provider_with_hooks!` 等 macro-generated provider 名称，与「native enum/factory/dispatch 构造点 +
+catalog-only 完成状态 + 豁免清单」求差集，非空即失败。关键规则：
+
+- catalog 条目只在 native 目录不存在、或该目录被显式豁免时，才可满足该 provider 的最终可达状态；
+- `custom_api` 等 macro provider 必须出现在扫描结果中，不能因无 literal impl 被漏掉；
+- non-LLM provider 进入独立 lane，不得被 LLM delete guard 自动要求删除；
+- 豁免清单为带 issue 引用、owner、期限和退出条件的常量表，CI 可见。
 
 **Phase 3 — 分批执行**
 
-- delete lane：按目录家族分 tranche（每 PR 一个或数个小目录），纯删除 + `pub mod` 清理。
-- demote lane：每 PR 一个 provider：加 catalog `def()` → 删目录 → smoke 验证模型列表/鉴权头等价。
+- delete lane：按目录家族分 tranche（每 PR 一个或数个小目录），纯删除 + `pub mod` 清理；每个 tranche
+  先记录 public API/semver 影响，必要时使用 breaking-change commit 或 deprecation 过渡。
+- demote lane：每 PR 一个 provider：加 catalog `def()` → 删 native 目录 → smoke 验证模型列表/鉴权头等价；
+  若 native 目录暂留，必须在豁免清单登记，不能把 catalog 当 native 可达。
 - wire lane（如维护者选择保留个别）：按 CLAUDE.md Tier-2 流程补 enum/factory/dispatch。
 
 ## Product-to-Test Mapping
@@ -56,8 +83,10 @@ issue 引用的常量表，CI 可见。
 | --- | --- | --- |
 | P2 wire 可达 | factory/enum | conformance 测试 + 单测构造 |
 | P3 delete 干净 | providers/mod.rs | `cargo check --all-features` + `rg` 无 dangling mod |
-| P4 demote 等价 | catalog.rs | catalog smoke 测试（base_url/env key/名称） |
-| P5 守护常驻 | registry conformance test | CI 上人为引入孤儿目录的负测试 |
+| P4 demote 等价 | catalog.rs + native dir removal | catalog smoke 测试（base_url/env key/名称）+ 无重复 native impl |
+| P5 守护常驻 | registry conformance test | CI 上人为引入 literal impl 与 macro provider 孤儿目录的负测试 |
+| P7 public API | providers/mod.rs / CHANGELOG | 删除导出模块前有 semver/compatibility 记录 |
+| P9 non-LLM 范围 | capability scan / matrix | image/video/translation/embedding-only provider 未进入 LLM delete lane |
 
 ## 数据流
 
@@ -72,15 +101,18 @@ issue 引用的常量表，CI 可见。
 ## 风险
 
 - Security: 无；删除减少攻击面。
-- Compatibility: 若有用户依赖未文档化的孤儿目录（不可能——无构造路径），风险为零；demote 需逐个验证 API 形状。
+- Compatibility: gateway routing 不受不可达 native module 删除影响；但 `pub mod` 导出的 provider 可能被下游 crate
+  直接 import/instantiate，删除属于潜在 public API break，必须逐 tranche 记录 semver/compatibility 决策。
 - Performance: 编译时间预期显著下降（删除数万行 + 各目录 tests）。
 - Maintenance: 主要风险是误删 keep-infra 依赖，靠 `cargo check --all-features` 与全量测试兜底。
 
 ## 测试计划
 
-- [ ] Unit tests: conformance 守护测试（含豁免清单机制）。
+- [ ] Unit tests: conformance 守护测试（含豁免清单机制、macro-generated provider fixture、
+      catalog/native duplicate fixture）。
 - [ ] Integration tests: demote 后 catalog smoke 测试。
-- [ ] Manual verification: 处置矩阵逐行与 `rg` 输出核对。
+- [ ] Manual verification: 处置矩阵逐行与 construction/dispatch/public-export/capability 证据核对；
+      raw text hits 不作为通过条件。
 
 ## 回滚方案
 
