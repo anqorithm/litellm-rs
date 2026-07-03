@@ -33,10 +33,12 @@ Link to `product.md`.
   github_copilot、fal_ai、cohere、replicate 等已有 native enum/factory/dispatch 构造点者。
 - `catalog-only-with-native-duplicate`：catalog 已支持但同名 native 目录仍存在者（当前至少 v0 / meta_llama）；
   catalog 条目不能算 native module 可达，必须转为 `demote-to-catalog` 删除 native 目录，或进入显式豁免。
-- `demote-to-catalog`：OpenAI 兼容且无自定义流式/鉴权者（候选：baseten、codestral、empower、
-  datarobot、gradient_ai、morph、predibase、vercel_ai 等，逐个验证 API 形状）；
-  Snowflake 这类自定义 endpoint/auth 的 provider 不得放入 catalog demote 候选，必须 wire/delete/exempt
-  或保留 native custom handling。demote 完成条件必须包含 native 目录删除或显式豁免。
+- `demote-to-catalog`：OpenAI 兼容且 catalog runtime 能等价表达的 provider。每个候选必须先证明
+  static base URL 足够、无 per-model/dynamic endpoint 构造、无 native-only 非 chat endpoint（如 FIM）、
+  auth env fallback 可由 catalog `ProviderDefinition` 表达、`ProviderCapability` / model metadata 与
+  native 行为等价；否则进入 wire/delete/exempt 或要求先扩展 catalog 能力。Snowflake、Baseten
+  dynamic deployment URL、Codestral FIM、需要 alternate auth env vars 的 Vercel/Codestral 等不能作为
+  plain `def()` demote 候选。demote 完成条件必须包含 native 目录删除或显式豁免。
 - `delete-native`：chat/LLM native module 非 OpenAI 兼容、无用户需求证据、无构造点，且 public API 影响已记录者
   （候选需从矩阵证据得出；不得把 image/video/translation/search/vector/embedding-only provider 混入）。
 - `non-llm-lane`：只能由 declared capability / route behavior 推导，不能按名称 seed。若 provider
@@ -52,6 +54,9 @@ Link to `product.md`.
   `Arc::new(...)`、route selector 中的 typed dispatch，或等价 Rust symbol；
 - catalog evidence：`registry/catalog.rs` 的 `def()` 只能证明 `Provider::OpenAILike` 路径存在；
   当同名 native 目录仍存在时，不从 native orphan set 中扣除；
+- endpoint/auth/capability equivalence evidence：demote 候选必须记录 base_url 是否静态、是否有
+  dynamic endpoint 或 provider-specific 非 chat endpoint、primary/alternate auth env vars、native
+  capability set 与 catalog `OpenAILikeProvider` capability set 是否等价；
 - public export evidence：`src/core/providers/mod.rs` 中 `pub mod <dir>` 与 feature gate；
 - provider implementation evidence：literal `impl LLMProvider`、`define_http_provider_with_hooks!`、
   `define_pooled_http_provider_with_hooks!` 等 macro invocation；
@@ -83,7 +88,9 @@ Link to `product.md`.
 - delete lane：按目录家族分 tranche（每 PR 一个或数个小目录），纯删除 + `pub mod` 清理；每个 tranche
   先记录 public API/semver 影响，必要时使用 breaking-change commit 或 deprecation 过渡。
 - demote lane：每 PR 一个 provider：确认已有 catalog route 或取得维护者对新增 catalog route 的产品批准 →
-  加 catalog `def()` → 删 native 目录 → smoke 验证模型列表/鉴权头等价；若 native 目录暂留，必须在豁免清单登记，
+  证明 endpoint/auth/capability/non-chat endpoint 等价 → 使用 `def()` 或完整 `ProviderDefinition`
+  （需要 alternate auth env vars 等时不得强行用 `def()`）→ 删 native 目录 → smoke 验证模型列表、
+  鉴权头、capability 与 provider-specific endpoint 等价；若 native 目录暂留，必须在豁免清单登记，
   不能把 catalog 当 native 可达。新增 catalog-backed selector 属于 runtime behavior change，不能作为纯清理默认发生。
 - wire lane（如维护者选择保留个别）：按 CLAUDE.md Tier-2 流程补 enum/factory/dispatch。
 
@@ -93,7 +100,7 @@ Link to `product.md`.
 | --- | --- | --- |
 | P2 wire 可达 | factory/enum | conformance 测试 + 单测构造 |
 | P3 delete 干净 | providers/mod.rs | `cargo check --all-features` + `rg` 无 dangling mod |
-| P4 demote 等价 | catalog.rs + native dir removal | catalog smoke 测试（base_url/env key/名称）+ 无重复 native impl |
+| P4 demote 等价 | catalog.rs + native dir removal | catalog smoke 测试（base_url/env key/alternate env/capability/non-chat endpoint）+ 无重复 native impl |
 | P5 守护常驻 | registry conformance test | CI 上人为引入 literal impl 与 macro provider 孤儿目录的负测试 |
 | P7 public API | providers/mod.rs / CHANGELOG | 删除导出模块前有 semver/compatibility 记录 |
 | P9 non-LLM 范围 | capability scan / matrix | image/video/translation/embedding-only provider 未进入 LLM delete lane |

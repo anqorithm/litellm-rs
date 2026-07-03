@@ -36,7 +36,8 @@ GH-837 / #837
 2. 「wire」处置的 native 目录：接线后存在至少一条端到端可构造路径（enum/factory/dispatch 或等价构造点），
    并有 conformance 测试覆盖；docs、tests、raw text hit 不算可达性证据。
 3. 「delete」处置的目录：删除后 `cargo check --all-features` 与全量测试通过，无 dangling `pub mod`。
-4. 「demote」处置的目录：OpenAI 兼容者转为 `registry/catalog.rs` 单行 `def()` 条目，行为经 smoke 验证等价；
+4. 「demote」处置的目录：只有在 catalog runtime 能保持 endpoint 构造、auth env fallback、provider-specific
+   endpoint、capability set 与现有 native 行为等价时，才可转为 `registry/catalog.rs` 条目；
    native 目录必须随后删除或进入带 issue/期限的豁免，不能让 catalog backing 掩盖重复 native 实现。
 5. 守护测试常驻：枚举 `src/core/providers/*/` 中的 literal `impl LLMProvider` 与
    `define_http_provider_with_hooks!` 等 macro-generated provider，断言均可达或在显式豁免清单
