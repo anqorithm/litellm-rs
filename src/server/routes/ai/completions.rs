@@ -17,8 +17,6 @@ use crate::utils::error::gateway_error::GatewayError;
 
 use super::context::get_request_context;
 use super::openai_errors;
-#[path = "completions_spend.rs"]
-mod completions_spend;
 #[path = "completions_sse.rs"]
 mod completions_sse;
 #[path = "completions_streaming.rs"]
