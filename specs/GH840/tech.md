@@ -56,8 +56,9 @@ Link to `product.md`.
    impl BudgetedExecutor {
        pub async fn run<T, F>(
            &self,
-           req: BudgetRequest<'_>,          // requested_model/capability/key/settlement_mode/pre_call_charge
+           req: BudgetRequest<'_>,          // ordered router candidates/capability/key/settlement_mode
            call: F,                          // cloneable per-attempt provider 调用
+           pre_call_charge_of: impl Fn(&SelectedDeploymentContext) -> PreCallCharge,
            usage_of: impl Fn(&T) -> Option<PricingUsage>,
        ) -> Result<T, GatewayError>
        where
@@ -68,21 +69,27 @@ Link to `product.md`.
    }
    ```
 
-   `call` 必须保持现有 retry/fallback 语义：每次尝试收到选中的 provider、model、deployment id，
-   因此 rerank、native Gemini、provider-specific proxy 仍能用 selected deployment 上下文。
+   `BudgetRequest` 必须保留当前 proxy/rerank/Gemini 的有序 `router_models` / router candidate loop；
+   `run` 不能只接收单个 `requested_model` 后跳过 provider-name wildcard 等候选。`call` 必须保持现有
+   retry/fallback 语义：每次尝试收到选中的 provider、model、deployment id。预调用定价输入通过
+   `pre_call_charge_of(SelectedDeploymentContext)` 每次 attempt 动态解析，保证 image/audio 的
+   `pricing_identity_for_provider`、variant image keys、audio pricing inputs 与实际 selected deployment 一致。
 
 2. **流式生命周期**：`run_stream` 返回 `SettledStream` / response driver，但结算不能依赖 Rust `Drop`
    来执行 async 操作。包装器内部持有预留凭据、usage 状态、`saw_upstream_output`、可选
    `StreamingDeploymentLease`，并在每条可观测终止路径中显式 `.await` finalizer：
    - usage chunk：按实际 usage settle。
-   - 正常结束且无 usage、但 `saw_upstream_output = true`：记录预留 spend（覆盖不发最终 usage 的 provider）。
+   - 正常结束且无 usage：按当前 chat/completions 路径记录预留 spend；空成功流也覆盖，不能误退款。
    - 客户端断开：按当前端点路径记录或释放，不能新增未定义扣费。
-   - 上游错误/转换错误/超时：若已经有 usage 或上游输出，沿用当前错误结算；若没有任何用户可见输出，则 cancel/drop reservation，不扣费。
+   - 上游错误/转换错误/超时：若已经有 usage 或上游输出，沿用当前错误结算；若没有任何上游 usage/output，则 cancel/drop reservation，不扣费。
+     route 自己先发出的 SSE preamble / `response.created` 不算上游输出。
    - 对当前会记录部署结果的路径继续调用 `StreamingDeploymentLease::finish_success(tokens)` 或
      `finish_failure(error)`；不能让 lease 只靠 `Drop` release 后丢失 success/failure。
 
-3. **AppState 收敛**：`AppState` 增加 `budgeted: BudgetedExecutor`（内部持 4 组件 Arc），
-   端点侧不再直接触碰 4 组件；4 个旧字段保留到全部迁移完再评估收缩（U-01：不动公开 API 的前提下）。
+3. **AppState 收敛**：`AppState` 增加 `budgeted: BudgetedExecutor`（内部持 4 组件 Arc）。
+   在声称类型强制前，旧 `pricing`、`budget_limits`、`budget_manager`、`key_manager` 字段必须被隐藏、
+   降低可见性、移入内部 wrapper，或通过 accessor 限制为 `budgeted` / `spend` 内部使用；不能保留 public
+   字段同时只靠 `rg` 约束兄弟 route。
 
 4. **迁移策略**：每 PR 一个端点家族，先 chat 非 stream（最复杂的非流式）→ chat stream →
    其余端点机械迁移。每 PR 内新旧路径不并存（该端点整体切换），端点间允许新旧并存。
@@ -97,14 +104,15 @@ Link to `product.md`.
 | --- | --- | --- |
 | P1 分支行为等价 | budgeted.rs 全分支单测 | 预算不足/成功/失败退回/settle 失败四分支 + 迁移端点现有测试全绿 |
 | P2 stream 生命周期 | SettledStream / response driver | 单测：usage 中段、正常结束无 usage 但有输出、客户端断开、预输出错误退回、错误终止五场景；覆盖 lease `finish_success` / `finish_failure` |
-| P3 类型强制 | 模块可见性 + import/call guard | `rg -n "(execution::execute_|execute_(with|stream)_selected_deployment\\()" src/server/routes/ai --glob '!budgeted.rs' --glob '!budgeted/**' --glob '!execution.rs' --glob '!*_tests.rs'` 除内部 driver 外零命中 |
+| P3 类型强制 | 模块可见性 + import/call guard | `rg -n "(execution::execute_|execute_with_selected_deployment\\(|execute_stream_with_selected_deployment\\()" src/server/routes/ai --glob '!budgeted.rs' --glob '!budgeted/**' --glob '!execution.rs' --glob '!*_tests.rs'` 除内部 driver 外零命中 |
 | P4 样板消除 | 各端点 | `rg -n "state\\.(budget_limits|pricing|key_manager|budget_manager)\\b" src/server/routes/ai --glob '!budgeted.rs' --glob '!budgeted/**' --glob '!spend.rs' --glob '!spend/**' --glob '!*_tests.rs'` 对已迁移端点零命中；不只检查 `.clone()` |
 
 ## 数据流
 
-端点 handler → 构造 `BudgetRequest`（含 capability、key 上下文、`SettlementMode`、`PreCallCharge`）
-→ `BudgetedExecutor::run{,_stream}` 选择 deployment → cloneable per-attempt callback 调用 provider
-→ usage 提取或使用预调用定价输入 → 显式 async settle/退回 → 响应。
+端点 handler → 先执行现有 response-cache lookup（cache hit 不进入 budget orchestration，除非对应 issue 明确改变语义）
+→ 构造 `BudgetRequest`（含 ordered router candidates、capability、key 上下文、`SettlementMode`）
+→ `BudgetedExecutor::run{,_stream}` 选择 deployment → 按 selected deployment 解析 `PreCallCharge`
+→ cloneable per-attempt callback 调用 provider → usage 提取或使用预调用定价输入 → 显式 async settle/退回 → 响应。
 结算细节仍走 `spend.rs` 的既有函数（#831 语义在其内，抽象只负责编排顺序与生命周期）。
 
 ### 端点模式
@@ -114,7 +122,7 @@ Link to `product.md`.
 | chat / completions / embeddings / image generation / audio / gemini / responses_stream | `Metered` | provider/model 与 API-key 预留、成功结算、失败退回语义不变 |
 | audio speech/transcription/translation | `Metered` + `PreCallCharge::PricedUsage` | 请求派生 `PricingUsage` 与 `total_time_seconds` 在 provider 调用前用于预留 |
 | image generation | `Metered` + `PreCallCharge::PricedUsage` | 图片尺寸/质量/数量派生 usage 在 provider 调用前用于预留 |
-| image edit / variation proxy | `KeyReservationThenPostSuccessRecord` + `PreCallCharge::PrecomputedCost` | provider/model 不做预调用 reservation；只预留 API key budget，成功后记录 provider/model spend |
+| image edit / variation proxy | `KeyReservationThenPostSuccessRecord` + per-attempt `PreCallCharge::PrecomputedCost` | provider/model 不做预调用 reservation；只预留 API key budget；upstream status 成功后、body conversion 前即记录 provider/model spend，以保持当前转换失败也已计费的边界 |
 | moderations / rerank | `AvailabilityOnly` | 只执行现有 `ensure_budget_available`；不新增 spend 或 key usage |
 
 ## 备选方案
