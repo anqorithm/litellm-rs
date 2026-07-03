@@ -13,12 +13,12 @@ GH-840 / #840
 
 - [ ] `SP840-T1` Owner: coordinator. Done when: `specs/GH840/` 三件套通过 SpecRail packet validation. Verify: `SPEC_RAIL=/path/to/specrail; python3 "$SPEC_RAIL/checks/check_workflow.py" --repo "$SPEC_RAIL" --spec-dir "$PWD/specs/GH840"`.
 - [ ] `SP840-T2` Owner: maintainer. Done when: #840 批复抽象形态（BudgetedExecutor + SettlementMode + SettledStream）与迁移顺序（SpecRail human gate `spec_approval`），并确认与 #831 的先后关系. Verify: #840 issue thread 明确批复。
-- [ ] `SP840-T3` Owner: coordinator. Done when: `BudgetedExecutor` + `SettlementMode` 合入，四分支（预算不足/成功结算/失败退回/settle 失败）单测覆盖，`AppState.budgeted` 就位. Verify: `cargo test server::routes::ai::budgeted --lib --all-features`。
-- [ ] `SP840-T4` Owner: coordinator. Done when: `SettledStream`（RAII 结算守卫）合入，三场景（usage 中段/无 usage 断开/错误终止）单测覆盖. Verify: `cargo test --all-features settled_stream`。
+- [ ] `SP840-T3` Owner: coordinator. Done when: `BudgetedExecutor` + `SettlementMode::{Metered,AvailabilityOnly,KeyReservationThenPostSuccessRecord}` + 重试兼容 `SelectedDeploymentContext` callback + `PreCallCharge` 合入，四分支（预算不足/成功结算/失败退回/settle 失败）单测覆盖，`AvailabilityOnly` 证明不记账，`AppState.budgeted` 就位. Verify: `cargo test server::routes::ai::budgeted --lib --all-features`。
+- [ ] `SP840-T4` Owner: coordinator. Done when: `SettledStream` / 流响应驱动合入，结算使用显式 async finalization 而不是 `Drop`；覆盖 usage 中段、正常结束无 usage 但有输出、客户端断开、预输出错误退回、错误终止，并验证当前应记录的 `StreamingDeploymentLease::finish_success` / `finish_failure` 仍发生. Verify: `cargo test --all-features settled_stream`。
 - [ ] `SP840-T5` Owner: coordinator. Done when: chat 非 stream + stream 迁移完成，现有 chat 测试全绿且流式 settle 时机与迁移前逐行对照记录进 PR body. Verify: `cargo test --all-features chat`; PR body 对照表。
-- [ ] `SP840-T6` Owner: coordinator. Done when: completions / embeddings / images / audio×3 迁移完成（可拆多 PR，每 PR 一个端点家族）. Verify: 各端点聚焦测试 + `cargo test --all-features`。
-- [ ] `SP840-T7` Owner: coordinator. Done when: gemini / responses_stream / moderations / rerank 迁移完成（moderations、rerank 用 `RecordOnly` 模式显式声明）. Verify: 各端点聚焦测试；`rg -n "RecordOnly" src/server/routes/ai/{moderations,rerank}.rs`。
-- [ ] `SP840-T8` Owner: verification owner. Done when: 样板清零——`rg "state\.(budget_limits|pricing|key_manager|budget_manager)\.clone" src/server/routes/ai` 除 budgeted.rs 外零命中；裸执行函数不再 pub. Verify: 上述 `rg` 输出进收尾 PR body。
+- [ ] `SP840-T6` Owner: coordinator. Done when: completions / embeddings / images / audio×3 迁移完成（可拆多 PR，每 PR 一个端点家族）；images/audio 使用请求派生 `PreCallCharge`，image proxy 保持「API key 预留 + 成功后 provider/model spend」而非 provider/model 预调用预留. Verify: 各端点聚焦测试 + `cargo test --all-features`。
+- [ ] `SP840-T7` Owner: coordinator. Done when: gemini / responses_stream / moderations / rerank 迁移完成；moderations、rerank 用 `AvailabilityOnly` 显式声明并证明不新增 spend/key usage. Verify: 各端点聚焦测试；`rg -n "AvailabilityOnly" src/server/routes/ai/{moderations,rerank}.rs`。
+- [ ] `SP840-T8` Owner: verification owner. Done when: 样板清零——直接预算字段访问 guard 覆盖 `state\.(budget_limits|pricing|key_manager|budget_manager)\b`（不只 `.clone`），并且兄弟 route 不能 import/call `execution::execute_*`; 允许项仅限 budgeted/spend 内部与测试中明确列出的 helper. Verify: `rg -n "state\.(budget_limits|pricing|key_manager|budget_manager)\b" src/server/routes/ai --glob '!budgeted.rs' --glob '!budgeted/**' --glob '!spend.rs' --glob '!spend/**' --glob '!*_tests.rs'`; `rg -n "(execution::execute_|execute_(with|stream)_selected_deployment\\()" src/server/routes/ai --glob '!budgeted.rs' --glob '!budgeted/**' --glob '!execution.rs' --glob '!*_tests.rs'`；输出进收尾 PR body。
 
 ## 并行拆分
 
