@@ -1,13 +1,143 @@
 //! Core rate limiter implementation
 
 use super::types::{RateLimitEntry, RateLimitResult};
-use crate::config::models::rate_limit::{RateLimitConfig, RateLimitStrategy};
+use crate::config::models::rate_limit::{RateLimitConfig, RateLimitStrategy, RedisFailureMode};
+#[cfg(feature = "gateway")]
+use crate::utils::error::gateway_error::Result;
+#[cfg(feature = "gateway")]
+use async_trait::async_trait;
 use dashmap::DashMap;
+use std::collections::BTreeMap;
+use std::fmt;
 use std::sync::Arc;
+use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 use tracing::error;
+
+static REDIS_DEGRADED_METRICS: LazyLock<
+    parking_lot::Mutex<BTreeMap<(&'static str, &'static str), u64>>,
+> = LazyLock::new(|| parking_lot::Mutex::new(BTreeMap::new()));
+
+#[derive(Debug, Clone, Copy)]
+enum RedisRateLimitOperation {
+    Check,
+    CheckAndRecord,
+    Release,
+}
+
+impl RedisRateLimitOperation {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Check => "check",
+            Self::CheckAndRecord => "check_and_record",
+            Self::Release => "release",
+        }
+    }
+}
+
 #[cfg(feature = "gateway")]
-use tracing::warn;
+#[async_trait]
+pub(crate) trait RedisRateLimitBackend: Send + Sync {
+    async fn rate_limit_status(
+        &self,
+        key: &str,
+        limit: u32,
+        window_secs: u64,
+    ) -> Result<RateLimitResult>;
+
+    async fn rate_limit_check_and_record(
+        &self,
+        key: &str,
+        limit: u32,
+        window_secs: u64,
+    ) -> Result<RateLimitResult>;
+
+    async fn rate_limit_release(&self, key: &str, reservation_ttl_secs: u64) -> Result<()>;
+
+    fn is_noop(&self) -> bool;
+}
+
+#[cfg(feature = "gateway")]
+#[async_trait]
+impl RedisRateLimitBackend for crate::storage::redis::RedisPool {
+    async fn rate_limit_status(
+        &self,
+        key: &str,
+        limit: u32,
+        window_secs: u64,
+    ) -> Result<RateLimitResult> {
+        crate::storage::redis::RedisPool::rate_limit_status(self, key, limit, window_secs).await
+    }
+
+    async fn rate_limit_check_and_record(
+        &self,
+        key: &str,
+        limit: u32,
+        window_secs: u64,
+    ) -> Result<RateLimitResult> {
+        crate::storage::redis::RedisPool::rate_limit_check_and_record(self, key, limit, window_secs)
+            .await
+    }
+
+    async fn rate_limit_release(&self, key: &str, reservation_ttl_secs: u64) -> Result<()> {
+        crate::storage::redis::RedisPool::rate_limit_release(self, key, reservation_ttl_secs).await
+    }
+
+    fn is_noop(&self) -> bool {
+        self.is_noop()
+    }
+}
+
+fn record_redis_degraded(
+    operation: RedisRateLimitOperation,
+    mode: RedisFailureMode,
+    key: &str,
+    err: &impl fmt::Display,
+) {
+    let operation = operation.as_str();
+    let mode = mode.as_str();
+
+    error!(
+        operation,
+        mode,
+        key,
+        error = %err,
+        "Redis distributed rate limiter degraded"
+    );
+
+    let mut metrics = REDIS_DEGRADED_METRICS.lock();
+    *metrics.entry((operation, mode)).or_insert(0) += 1;
+}
+
+pub fn render_degraded_metrics() -> String {
+    let metrics = REDIS_DEGRADED_METRICS.lock();
+    let mut rendered = String::from(
+        "# HELP rate_limiter_degraded_total Redis distributed rate limiter degraded operations\n\
+         # TYPE rate_limiter_degraded_total counter\n",
+    );
+
+    for ((operation, mode), value) in metrics.iter() {
+        rendered.push_str(&format!(
+            "rate_limiter_degraded_total{{operation=\"{operation}\",mode=\"{mode}\"}} {value}\n"
+        ));
+    }
+
+    rendered
+}
+
+#[cfg(test)]
+pub(crate) fn reset_degraded_metrics_for_tests() {
+    REDIS_DEGRADED_METRICS.lock().clear();
+}
+
+#[cfg(test)]
+pub(crate) fn degraded_metric_count_for_tests(operation: &str, mode: &str) -> u64 {
+    REDIS_DEGRADED_METRICS
+        .lock()
+        .get(&(operation, mode))
+        .copied()
+        .unwrap_or(0)
+}
 
 /// Backend that recorded a rate-limit reservation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -84,7 +214,7 @@ pub struct RateLimiter {
     pub(super) window: Duration,
     /// Optional distributed Redis backend
     #[cfg(feature = "gateway")]
-    pub(super) redis: Option<Arc<crate::storage::redis::RedisPool>>,
+    pub(super) redis: Option<Arc<dyn RedisRateLimitBackend>>,
 }
 
 impl RateLimiter {
@@ -154,13 +284,34 @@ impl RateLimiter {
         config: RateLimitConfig,
         redis: Arc<crate::storage::redis::RedisPool>,
     ) -> Self {
+        Self::with_redis_backend(config, redis)
+    }
+
+    #[cfg(feature = "gateway")]
+    pub(crate) fn with_redis_backend(
+        config: RateLimitConfig,
+        redis: Arc<dyn RedisRateLimitBackend>,
+    ) -> Self {
         Self::warn_unimplemented_fields(&config);
+        let redis = if redis.is_noop() { None } else { Some(redis) };
 
         Self {
             config,
             entries: Arc::new(DashMap::new()),
             window: Duration::from_secs(60),
-            redis: if redis.is_noop() { None } else { Some(redis) },
+            redis,
+        }
+    }
+
+    fn redis_fail_closed_result(&self, limit: u32) -> RateLimitResult {
+        let reset_after_secs = self.window.as_secs().max(1);
+        RateLimitResult {
+            allowed: false,
+            current_count: limit,
+            limit,
+            remaining: 0,
+            reset_after_secs,
+            retry_after_secs: Some(reset_after_secs),
         }
     }
 
@@ -181,10 +332,15 @@ impl RateLimiter {
             {
                 Ok(result) => return result,
                 Err(err) => {
-                    warn!(
-                        "Redis rate-limit status failed for key {}; falling back to in-process limiter: {}",
-                        key, err
+                    record_redis_degraded(
+                        RedisRateLimitOperation::Check,
+                        self.config.redis_failure_mode,
+                        key,
+                        &err,
                     );
+                    if self.config.redis_failure_mode == RedisFailureMode::FailClosed {
+                        return self.redis_fail_closed_result(self.config.effective_rpm());
+                    }
                 }
             }
         }
@@ -274,10 +430,23 @@ impl RateLimiter {
                     return (result, reservation);
                 }
                 Err(err) => {
-                    warn!(
-                        "Redis rate-limit check failed for key {}; falling back to in-process limiter: {}",
-                        key, err
+                    record_redis_degraded(
+                        RedisRateLimitOperation::CheckAndRecord,
+                        self.config.redis_failure_mode,
+                        key,
+                        &err,
                     );
+                    if self.config.redis_failure_mode == RedisFailureMode::FailClosed {
+                        let result = self.redis_fail_closed_result(requests_per_minute);
+                        return (
+                            result,
+                            RateLimitReservation::new(
+                                RateLimitRecordSource::Disabled,
+                                Instant::now(),
+                                0,
+                            ),
+                        );
+                    }
                 }
             }
         }
@@ -343,7 +512,12 @@ impl RateLimiter {
                 if let Some(redis) = &self.redis
                     && let Err(err) = redis.rate_limit_release(key, remaining_window_secs).await
                 {
-                    warn!("Redis rate-limit release failed for key {}: {}", key, err);
+                    record_redis_degraded(
+                        RedisRateLimitOperation::Release,
+                        self.config.redis_failure_mode,
+                        key,
+                        &err,
+                    );
                 }
             }
         }
