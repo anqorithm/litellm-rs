@@ -34,14 +34,15 @@ Link to `product.md`.
 - `catalog-only-with-native-duplicate`：catalog 已支持但同名 native 目录仍存在者（当前至少 v0 / meta_llama）；
   catalog 条目不能算 native module 可达，必须转为 `demote-to-catalog` 删除 native 目录，或进入显式豁免。
 - `demote-to-catalog`：OpenAI 兼容且无自定义流式/鉴权者（候选：baseten、codestral、empower、
-  datarobot、gradient_ai、morph、predibase、snowflake、vercel_ai 等，逐个验证 API 形状）；
-  demote 完成条件必须包含 native 目录删除或显式豁免。
+  datarobot、gradient_ai、morph、predibase、vercel_ai 等，逐个验证 API 形状）；
+  Snowflake 这类自定义 endpoint/auth 的 provider 不得放入 catalog demote 候选，必须 wire/delete/exempt
+  或保留 native custom handling。demote 完成条件必须包含 native 目录删除或显式豁免。
 - `delete-native`：chat/LLM native module 非 OpenAI 兼容、无用户需求证据、无构造点，且 public API 影响已记录者
   （候选需从矩阵证据得出；不得把 image/video/translation/search/vector/embedding-only provider 混入）。
-- `non-llm-lane`：tavily、searxng、google_pse、exa_ai、firecrawl（搜索/工具）、milvus、pg_vector
-  （向量库）、deepgram、elevenlabs（语音）、runwayml/recraft/stability（image/video）、
-  deepl（translation）、jina/voyage 等 embedding-only/非 chat LLM 能力——先决定产品上是否保留这些能力，
-  再决定 wire/delete。
+- `non-llm-lane`：只能由 declared capability / route behavior 推导，不能按名称 seed。若 provider
+  声明 `ProviderCapability::ChatCompletion`（例如某些 search/translation adapters），必须回到
+  LLM wire/delete/demote/exempt 矩阵；只有纯 search/vector/audio/image/video/embedding-only 等
+  非 chat 能力才先决定产品上是否保留，再决定 wire/delete。
 - `exempt`：如 `custom_api` 这类不是 shared infra、但需要产品/架构单独决策的 provider；必须记录 issue、
   owner、期限和后续 lane，不能永久静默豁免。
 
@@ -56,6 +57,9 @@ Link to `product.md`.
   `define_pooled_http_provider_with_hooks!` 等 macro invocation；
 - capability evidence：`ProviderCapability::*` 或 model metadata，用于把 image/video/translation/search/vector/embedding-only
   provider 放入 non-llm-lane。
+- internal dependency / metadata-use evidence：非 dispatch 运行时代码对 provider 目录内部类型的依赖
+  （例如 pricing/cost metadata registry）必须单独记录；有内部依赖的目录不能仅凭无 factory route
+  直接 delete/demote，需先迁移依赖或拆出 shared metadata。
 
 文档、README、注释、tests、无关同名 struct（如 A2A 的 LangGraph 类型）只可作为参考，不可作为可达性判定。
 
@@ -78,8 +82,9 @@ Link to `product.md`.
 
 - delete lane：按目录家族分 tranche（每 PR 一个或数个小目录），纯删除 + `pub mod` 清理；每个 tranche
   先记录 public API/semver 影响，必要时使用 breaking-change commit 或 deprecation 过渡。
-- demote lane：每 PR 一个 provider：加 catalog `def()` → 删 native 目录 → smoke 验证模型列表/鉴权头等价；
-  若 native 目录暂留，必须在豁免清单登记，不能把 catalog 当 native 可达。
+- demote lane：每 PR 一个 provider：确认已有 catalog route 或取得维护者对新增 catalog route 的产品批准 →
+  加 catalog `def()` → 删 native 目录 → smoke 验证模型列表/鉴权头等价；若 native 目录暂留，必须在豁免清单登记，
+  不能把 catalog 当 native 可达。新增 catalog-backed selector 属于 runtime behavior change，不能作为纯清理默认发生。
 - wire lane（如维护者选择保留个别）：按 CLAUDE.md Tier-2 流程补 enum/factory/dispatch。
 
 ## Product-to-Test Mapping

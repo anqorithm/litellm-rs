@@ -26,9 +26,9 @@ GH-837 / #837
 
 - 不改变 Provider dispatch 架构（enum vs trait object 归 #519 A-4）。
 - 不新增任何 provider 功能或模型目录更新。
-- 非 LLM 能力目录（search/vector/工具类、image/video/translation/embedding-only，如 tavily、searxng、
-  milvus、pg_vector、firecrawl、google_pse、exa_ai、runwayml、recraft、stability、deepl）
-  的产品定位决策单独列 lane，不默认按「LLM provider 死代码」处理。
+- 非 LLM 能力目录按实际 `ProviderCapability` / route behavior 判定；只有未声明 chat/LLM 能力者
+  才能进入 non-LLM lane。search/vector/image/video/translation/embedding-only 等产品定位决策单独列 lane，
+  不默认按「LLM provider 死代码」处理。
 
 ## Behavior Invariants
 
@@ -45,7 +45,8 @@ GH-837 / #837
 7. 删除任何 `src/core/providers/mod.rs` 导出的 `pub mod` 前，必须记录 public API / semver 影响：
    若下游 crate 可直接 import/instantiate，该 tranche 需要 breaking-change 说明或先走 deprecation lane。
 8. `custom_api` 不属于 shared infra；必须在矩阵中作为 provider lane（wire/delete/demote/exempt）单独决策。
-9. image/video/translation/embedding-only/non-chat provider 不进入 LLM delete lane，除非 non-LLM 产品决策明确批准。
+9. image/video/translation/embedding-only/non-chat provider 不进入 LLM delete lane，除非 non-LLM 产品决策明确批准；
+   任何声明 `ProviderCapability::ChatCompletion` 的 adapter 必须走 LLM wire/delete/demote/exempt 矩阵，不能靠名称归入 non-LLM。
 
 ## 验收标准
 
