@@ -17,6 +17,7 @@ use std::future::Future;
 use std::sync::OnceLock;
 use tracing::error;
 
+use super::budgeted::SettlementMode;
 use super::openai_errors;
 use super::provider_config;
 
@@ -194,9 +195,12 @@ where
     for (index, provider_config) in provider_configs.into_iter().enumerate() {
         let is_last_provider = index + 1 == provider_count;
         let provider = batch_proxy_provider_from_config(provider_config)?;
-        if let Err(error) =
-            super::spend::ensure_budget_available(&state.budget_limits, &provider.provider_name, "")
-                .map_err(GatewayError::Provider)
+        if let Err(error) = state
+            .budgeted
+            .for_selected(provider.provider_name.as_str(), "")
+            .with_settlement_mode(SettlementMode::AvailabilityOnly)
+            .ensure_available()
+            .map_err(GatewayError::Provider)
         {
             if !is_last_provider && is_retryable_batch_error(&error) {
                 last_error = Some(error);
