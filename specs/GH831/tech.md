@@ -25,7 +25,8 @@ Link to `product.md`.
 
 1. **配置**：在 gateway pricing/budget 配置中新增
    `unpriced_model_policy: reject | allow_unpriced`（默认 `reject`），
-   以及可选 `unpriced_fallback_cost_per_1k_tokens: Option<f64>`。该 fallback 是每 1k
+   以及可选 `unpriced_fallback_cost_per_1k_tokens: Option<f64>`。该 fallback 必须在 config
+   validation 拒绝负数、`NaN`、`+/-inf`，只允许有限且 `>= 0.0` 的值。该 fallback 是每 1k
    usage 单位价格，不能按固定每请求金额使用；结算金额必须为
    `fallback_per_1k * billable_usage_units / 1000.0`。
 2. **与 `pricing.allow_degraded` 的优先级**：
@@ -43,15 +44,18 @@ Link to `product.md`.
    candidate error，把不可定价 deployment 从候选中排除并继续尝试同一请求 model 的其他
    deployment。只有所有健康且有能力的候选都不可定价时，才返回 OpenAI 错误形状 4xx
    （`model_not_priced` 语义），并保证请求不发往 provider。chat / embeddings 等 response-cache
-   命中路径也必须在返回 cached response 前执行同一 policy gate，不能因跳过 routing/budget 而绕过 reject。
+   命中路径也必须在返回 cached response 前执行同一 pricing-aware candidate evaluation（不调用 provider）：
+   至少一个健康候选可定价时可返回缓存；全部候选不可定价时返回 `model_not_priced`。该 gate
+   不能依赖 `pricing_required_for_budget`，即没有 provider/model/key 预算限制时默认 `reject` 仍必须拦截。
 5. **结算语义修正**：`record_settled_spend`（spend.rs）中 pricing `Err` 分支改为：
    - `allow_unpriced` 策略：若配置了非 0 fallback，provider 调用前必须按请求可估算 usage 建立 fallback
      reservation / API-key hold；provider 返回后 `cost = usage_scaled_fallback_cost 或 0.0`，
      照常走 settle / `record_spend` / `settle_api_key_budget_reservation`，usage/spend 记录附带
      `unpriced=true` 标记，且不能让请求在无任何 per-key hold 的情况下先花费上游成本；
    - `reject` 策略下若预检后仍在 settle 才发现不可定价（例如 pricing 热更新、流式 usage
-     形状与预估不一致），不能 drop reservation。已有 reservation 时按已预留金额结算并打
-     `unpriced=true`；没有 reservation 时按 usage-scaled fallback（若配置）或 0.0 记录；
+     形状与预估不一致），不能 drop reservation，也不能直接按 `estimate.max_cost` / hold
+     全额结算。实现必须携带预检 quote/rates，或使用 usage-scaled fallback；最终金额按 provider
+     实际 usage 重新计算并打 `unpriced=true`。没有可用 usage 时才按现有失败/释放语义处理；
    - 任何策略下不再出现「有 usage 但预留被退回」。
 6. **usage/spend 存储形状**：新增一个显式 usage 写入结构或等价 API，例如
    `UsageRecord { requests, tokens, cost, unpriced, pricing_policy, provider, model }`，替代
@@ -66,8 +70,9 @@ Link to `product.md`.
    registry 名称；`model_bucket` 只能使用配置内有界 deployment id / catalog model bucket /
    `unknown`，不能直接使用任意请求 model 字符串；原始 model 可写入结构化 error 日志。
    preflight reject、routing candidate exclusion、settlement fallback 都要增加 metric。
-8. 同模式路径（`spend.rs`、`spend/pricing.rs`、`gemini/spend.rs`、`audio/budgeting.rs` 等）
-   共用同一个 policy/结算辅助函数或等价 traits，避免再次漂移。
+8. 同模式路径（`spend.rs`、`spend/pricing.rs`、`gemini/spend.rs`、`audio/budgeting.rs`、image
+   edit/variation proxy 的 `image_proxy_cost` / `record_image_proxy_spend` 等）共用同一个
+   policy/结算辅助函数或等价 traits，避免再次漂移。
 
 ## Product-to-Test Mapping
 
@@ -79,11 +84,11 @@ Link to `product.md`.
 | P4 可观测 | metrics + structured error log | 单测/集成：reject/candidate-excluded 增加 events，settlement fallback 增加 spend total，label 有界 |
 | P5 已定价不变 | 全路径 | 现有 spend 测试回归 |
 | P6 priced deployment 优先 | router candidate selection | 单测：同 model 两个 deployment 时跳过 unpriced 候选并选择 priced 候选 |
-| P7 cache 不绕过 policy | chat / embeddings response cache | 单测：cached hit 在 reject 策略下仍返回 `model_not_priced` |
+| P7 cache 不绕过 policy | chat / embeddings response cache | 单测：cached hit 使用候选定价评估；有可定价候选则返回缓存，全部不可定价才返回 `model_not_priced` |
 
 ## 数据流
 
-请求 → 根据 endpoint 构造/估算 `PricingUsage` → cache 命中前 policy gate → router 过滤不可定价候选 → 预算预留
+请求 → 根据 endpoint 构造/估算 `PricingUsage` → cache 命中前执行 pricing-aware candidate evaluation → router 过滤不可定价候选 → 预算预留
 （usage-aware pricing gate）→ provider 调用 → provider usage → `record_settled_spend`
 →（定价成功：现状不变 | 定价失败：按 policy 结算并打标）→ per-key `UsageRecord` 写入与
 `KeyUsageStats` unpriced 聚合更新。
