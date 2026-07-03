@@ -26,6 +26,7 @@ Link to `product.md`.
 1. **canonical 映射模块**：新增 `src/utils/error/http_mapping.rs`（或挂在 `gateway_error/` 下）：
 
    ```rust
+   #[cfg(feature = "gateway")]
    pub struct ErrorHttpFacts {
        pub status: StatusCode,
        pub openai_type: &'static str,   // OpenAI error.type
@@ -37,15 +38,18 @@ Link to `product.md`.
    pub fn http_facts(err: &GatewayError) -> ErrorHttpFacts;
    ```
 
-   现有两张 match 表合并为这一张；`openai_errors.rs` 与 `response.rs` 改为从 `ErrorHttpFacts`
+   该模块必须 `cfg(feature = "gateway")` 或使用 feature-neutral 状态/头类型，避免 `lite` /
+   `--no-default-features` build 拉入 actix-web。现有两张 match 表合并为这一张；`openai_errors.rs` 与 `response.rs` 改为从 `ErrorHttpFacts`
    渲染各自 JSON 形状，不再各自 match。`headers` 必须从错误实例保留当前已存在的动态头：
    provider `Retry-After`，以及 gateway `Retry-After` / `X-RateLimit-Limit-Requests` /
-   `X-RateLimit-Limit-Tokens`。#833 只负责补全更完整的 Retry-After 策略，不允许本 issue
+   `X-RateLimit-Limit-Tokens` / middleware `X-RateLimit-Limit`。#833 只负责补全更完整的 Retry-After 策略，不允许本 issue
    回退现有头。
 
    OpenAI 适配器还需要保留 `ProviderError::ApiError` 的 per-instance 覆盖：如果上游 body
    已是 OpenAI `{error:{message,type,param,code}}`，则 OpenAI JSON 的这四个字段沿用上游值；
    canonical/internal JSON 仍使用 `canonical_code` / `legacy_code` 与本地 message 策略。
+   现有 public `ProviderError::http_status` / `ContextualError::http_status` 也必须消费同一映射，
+   或在 SP839-T2 明确 deprecate/remove；不能保留第三张状态码表。
 
 2. **request_id 注入**：`ResponseError::error_response` 无法拿到中间件扩展——反转依赖：
    OpenAI-compatible AI 路由统一改用显式 `gateway_error_response(&err, &ctx)`（`ctx` 携带
@@ -57,6 +61,13 @@ Link to `product.md`.
    中间件拒绝也必须进入统一计划：`AuthMiddleware` 的 missing/bad credentials 与
    `RateLimitError::error_response` 应构造可映射错误并按请求所属路由族渲染。AI 路由使用
    OpenAI 形状并注入 request_id；管理端路由继续使用 `ApiResponse` 信封。
+   Raw upstream proxy response（batches `response_to_http_response`、image/Gemini proxy helpers）
+   必须被转换为可映射错误或显式豁免，否则 upstream 非 2xx 会绕过 request_id body 和 OpenAI
+   形状统一。
+
+   SSE 已开始后的错误不能改 HTTP status，但错误事件的 type/code classifier 必须从同一
+   `http_facts` / code facts 取得；`chat_sse.rs` 与 `responses_stream.rs` 中独立
+   `ProviderError` match 表必须迁移或删除。
 
 3. **管理端**：`src/server/routes/mod.rs:233-268` 的 `errors::*` helpers 改为携带语义状态码
    构造 `ApiResponse`。`ApiResponse::to_http_response` 是 public API，默认保留并加
@@ -104,7 +115,8 @@ canonical JSON / 管理端信封）→ HttpResponse（+ request_id 注入）。
 ## 测试计划
 
 - [ ] Unit tests: `http_facts` 全变体覆盖；一致性遍历测试；OpenAI vs canonical code 词表测试；
-      rate-limit headers 保留测试；上游 OpenAI `ApiError` 字段透传测试。
+      rate-limit headers（含 `X-RateLimit-Limit`）保留测试；上游 OpenAI `ApiError` 字段透传测试；
+      `ProviderError::http_status` / stream classifier 不再漂移。
 - [ ] Integration tests: AI 路由 extractor（JSON/query/path）/ middleware（auth/rate-limit）/
       handler 失败形状、状态码、request_id；管理端语义状态码与信封字段。
 - [ ] Manual verification: `curl` 非法 JSON、坏 key、rate-limit、未知模型、管理端 404 五类请求对照。

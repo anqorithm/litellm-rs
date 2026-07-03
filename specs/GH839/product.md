@@ -37,7 +37,8 @@ GH-839 / #839
 
 1. 任意 `(GatewayError | ProviderError)` 值经路径 1 与路径 2 产生的 HTTP status 一致（属性测试可枚举断言）。
 2. OpenAI-compatible AI 路由在 extractor 失败（JSON/query/path）、中间件拒绝（auth/rate-limit）、
-   handler 内失败三个阶段返回的 JSON 形状相同（OpenAI 形状）。
+   handler 内失败、raw upstream proxy 非 2xx 四类阶段返回的 JSON 形状相同（OpenAI 形状），
+   除非某个 passthrough 行为被维护者显式豁免并记录兼容性理由。
 3. 管理端点（keys/teams/budget/auth）即使挂在 `/v1/*` 下，也继续使用 `ApiResponse` 信封；
    NotFound → 404、冲突 → 409、内部错误 → 500；`{success,data,error}` 信封字段保持兼容。
 4. 错误响应 body 中的 `request_id` 与响应头 `X-Request-ID` 一致（可关联日志）。
@@ -56,7 +57,7 @@ GH-839 / #839
       OpenAI 适配器中保持原样透传。
 - [ ] 映射一致性测试：遍历错误变体断言两路径 status 相等（含 `Cancelled` 的漂移修复决策：400 或 499 二选一，见 tech spec）。
 - [ ] AI 路由三阶段失败形状一致的集成测试，覆盖 `JsonConfig`、`QueryConfig`、`PathConfig`
-      extractor 失败以及 auth/rate-limit 中间件拒绝。
+      extractor 失败、auth/rate-limit 中间件拒绝以及 batches/images/Gemini proxy 的 upstream 非 2xx。
 - [ ] 管理端错误状态码语义化 + 兼容性测试（信封字段不变）。
 - [ ] 错误 body `request_id` 非 null 且与头一致。
 
@@ -67,6 +68,9 @@ GH-839 / #839
   `QueryConfig` / `PathConfig`，否则会绕过统一渲染。
 - 中间件拒绝：`AuthMiddleware` 与 `RateLimitError` 发生在 handler 之前，AI 路由必须仍能进入
   OpenAI 形状渲染并注入同一个 request_id。
+- raw proxy passthrough：batches、image proxy、Gemini proxy 等若直接把 upstream `reqwest::Response`
+  转为 `HttpResponse`，必须先归一化为本地错误事实或在 spec approval 中逐路径豁免；默认不能绕过
+  `http_facts`、request_id body 注入和 OpenAI 形状测试。
 - `Cancelled` 语义决策：客户端主动断开 → 499（nginx 惯例）更准确；对外 OpenAI 兼容层无 499 先例 → 需要维护者拍板（默认建议 499 内部记录、对外 400 保持 OpenAI 兼容不成立时统一 499）。
 
 ## 发布说明
