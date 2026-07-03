@@ -55,7 +55,6 @@ pub(super) async fn handle_streaming_chat_completion(
     let pricing_config = state.config().gateway.pricing.clone();
     let api_key_id = context.api_key_id();
     let api_key_budget_id = context.api_key_budget_id();
-    let budget_manager = state.budget_manager.clone();
     match execute_stream_with_selected_deployment(
         state.unified_router.clone(),
         &requested_model,
@@ -67,7 +66,6 @@ pub(super) async fn handle_streaming_chat_completion(
             let pricing_service = pricing_service.clone();
             let budget_limits = budget_limits.clone();
             let key_manager = key_manager.clone();
-            let budget_manager = budget_manager.clone();
             let request_for_budget = request_for_budget.clone();
             let pricing_config = pricing_config.clone();
             async move {
@@ -90,9 +88,9 @@ pub(super) async fn handle_streaming_chat_completion(
                 let reserve_pricing_provider = pricing_provider.clone();
                 let reserve_pricing_model = pricing_model.clone();
                 let (stream, reservations) = budgeted
-                    .for_selected(provider_name.clone(), selected_model.clone())
-                    .with_api_key_budget(
-                        budget_manager.clone(),
+                    .for_selected_with_api_key_budget(
+                        provider_name.clone(),
+                        selected_model.clone(),
                         api_key_budget_id,
                         ApiKeyBudgetPolicy::FromProviderReservation,
                     )

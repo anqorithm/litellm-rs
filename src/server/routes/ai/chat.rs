@@ -117,99 +117,99 @@ async fn handle_chat_completion_internal(
     let key_manager = state.budgeted.key_manager();
     let api_key_id = context.api_key_id();
     let api_key_budget_id = context.api_key_budget_id();
-    let budget_manager = state.budget_manager.clone();
     let budgeted = state.budgeted.clone();
 
-    let core_response =
-        execute_with_selected_deployment(
-            unified_router,
-            &requested_model,
-            ProviderCapability::ChatCompletion,
-            move |provider, selected_model, _deployment_id| {
-                let core_request = core_request.clone();
-                let context = context_for_execution.clone();
-                let pricing_service = pricing_service.clone();
-                let key_manager = key_manager.clone();
-                let budget_manager = budget_manager.clone();
-                let budgeted = budgeted.clone();
-                let request_for_budget = request_for_budget.clone();
-                let pricing_config = pricing_config.clone();
-                async move {
-                    let provider_name = provider.name().to_string();
-                    let (pricing_provider, pricing_model) =
-                        super::spend::pricing_identity_for_provider(
-                            pricing_service.as_ref(),
-                            &provider,
-                            &selected_model,
-                        );
-                    let (request_for_provider, request_for_budget) =
-                        super::token_policy::prepare_chat_request_for_provider(
-                            context.api_key_max_tokens_per_request(),
-                            &provider_name,
-                            &selected_model,
-                            core_request.clone(),
-                            request_for_budget,
-                        )?;
-                    let reserve_pricing_service = pricing_service.clone();
-                    let settle_pricing_service = pricing_service.clone();
-                    let reserve_pricing_config = pricing_config.clone();
-                    let settle_pricing_config = pricing_config;
-                    let reserve_pricing_provider = pricing_provider.clone();
-                    let reserve_pricing_model = pricing_model.clone();
-                    let settle_pricing_provider = pricing_provider;
-                    let settle_pricing_model = pricing_model;
-                    let settle_key_manager = key_manager.clone();
-                    budgeted
-                    .for_selected(provider_name.clone(), selected_model.clone())
-                .with_api_key_budget(
-                    budget_manager.clone(),
-                    api_key_budget_id,
-                    ApiKeyBudgetPolicy::FromProviderReservation,
-                )
-                .reserve_call_settle(
-                    |budget| {
-                        super::spend::reserve_chat_completion_budget_with_split_pricing(
-                            reserve_pricing_service.as_ref(),
-                            &reserve_pricing_config,
-                            budget.budget_limits(),
-                            budget.provider(),
-                            budget.model(),
-                            &reserve_pricing_provider,
-                            &reserve_pricing_model,
-                            &request_for_budget,
-                        )
-                    },
-                    || provider.chat_completion(request_for_provider, context),
-                    |response, reservations, budget| {
-                        let (budget_reservation, key_budget_reservation) =
-                            reservations.into_parts();
-                        async move {
-                            let tokens = response
-                                .usage
-                                .as_ref()
-                                .map(|usage| u64::from(usage.total_tokens))
-                                .unwrap_or_default();
-                            super::spend::record_completion_spend_with_reservation_with_policy(
-                                settle_pricing_service.as_ref(),
-                                &settle_pricing_config,
-                                super::spend::usage_spend_settlement_with_pricing(
-                                    (budget.budget_limits(), &settle_key_manager, api_key_id),
-                                    (budget.provider(), budget.model(), response.usage.as_ref()),
-                                    (&settle_pricing_provider, &settle_pricing_model),
-                                    budget_reservation,
-                                    key_budget_reservation,
-                                ),
+    let core_response = execute_with_selected_deployment(
+        unified_router,
+        &requested_model,
+        ProviderCapability::ChatCompletion,
+        move |provider, selected_model, _deployment_id| {
+            let core_request = core_request.clone();
+            let context = context_for_execution.clone();
+            let pricing_service = pricing_service.clone();
+            let key_manager = key_manager.clone();
+            let budgeted = budgeted.clone();
+            let request_for_budget = request_for_budget.clone();
+            let pricing_config = pricing_config.clone();
+            async move {
+                let provider_name = provider.name().to_string();
+                let (pricing_provider, pricing_model) = super::spend::pricing_identity_for_provider(
+                    pricing_service.as_ref(),
+                    &provider,
+                    &selected_model,
+                );
+                let (request_for_provider, request_for_budget) =
+                    super::token_policy::prepare_chat_request_for_provider(
+                        context.api_key_max_tokens_per_request(),
+                        &provider_name,
+                        &selected_model,
+                        core_request.clone(),
+                        request_for_budget,
+                    )?;
+                let reserve_pricing_service = pricing_service.clone();
+                let settle_pricing_service = pricing_service.clone();
+                let reserve_pricing_config = pricing_config.clone();
+                let settle_pricing_config = pricing_config;
+                let reserve_pricing_provider = pricing_provider.clone();
+                let reserve_pricing_model = pricing_model.clone();
+                let settle_pricing_provider = pricing_provider;
+                let settle_pricing_model = pricing_model;
+                let settle_key_manager = key_manager.clone();
+                budgeted
+                    .for_selected_with_api_key_budget(
+                        provider_name.clone(),
+                        selected_model.clone(),
+                        api_key_budget_id,
+                        ApiKeyBudgetPolicy::FromProviderReservation,
+                    )
+                    .reserve_call_settle(
+                        |budget| {
+                            super::spend::reserve_chat_completion_budget_with_split_pricing(
+                                reserve_pricing_service.as_ref(),
+                                &reserve_pricing_config,
+                                budget.budget_limits(),
+                                budget.provider(),
+                                budget.model(),
+                                &reserve_pricing_provider,
+                                &reserve_pricing_model,
+                                &request_for_budget,
                             )
-                            .await;
-                            (response, tokens)
-                        }
-                    },
-                )
-                .await
-                }
-            },
-        )
-        .await?;
+                        },
+                        || provider.chat_completion(request_for_provider, context),
+                        |response, reservations, budget| {
+                            let (budget_reservation, key_budget_reservation) =
+                                reservations.into_parts();
+                            async move {
+                                let tokens = response
+                                    .usage
+                                    .as_ref()
+                                    .map(|usage| u64::from(usage.total_tokens))
+                                    .unwrap_or_default();
+                                super::spend::record_completion_spend_with_reservation_with_policy(
+                                    settle_pricing_service.as_ref(),
+                                    &settle_pricing_config,
+                                    super::spend::usage_spend_settlement_with_pricing(
+                                        (budget.budget_limits(), &settle_key_manager, api_key_id),
+                                        (
+                                            budget.provider(),
+                                            budget.model(),
+                                            response.usage.as_ref(),
+                                        ),
+                                        (&settle_pricing_provider, &settle_pricing_model),
+                                        budget_reservation,
+                                        key_budget_reservation,
+                                    ),
+                                )
+                                .await;
+                                (response, tokens)
+                            }
+                        },
+                    )
+                    .await
+            }
+        },
+    )
+    .await?;
 
     let response = convert_core_chat_response(core_response);
     super::response_cache::store_chat(state, &request_for_cache, &response, &context).await?;
