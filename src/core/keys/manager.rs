@@ -5,7 +5,7 @@
 use super::repository::KeyRepository;
 use super::types::{
     CreateKeyConfig, KeyInfo, KeyStatus, KeyUsageStats, ManagedApiKey, UpdateKeyConfig,
-    VerifyKeyResult,
+    UsageRecord, VerifyKeyResult,
 };
 use crate::utils::auth::crypto::keys::{extract_api_key_prefix, generate_api_key, hash_api_key};
 use crate::utils::error::gateway_error::{GatewayError, Result};
@@ -319,7 +319,13 @@ impl KeyManager {
 
     /// Record usage for a key
     pub async fn record_usage(&self, key_id: Uuid, tokens: u64, cost: f64) -> Result<()> {
-        self.repository.update_usage(key_id, tokens, cost).await
+        self.record_usage_record(key_id, UsageRecord::priced(tokens, cost))
+            .await
+    }
+
+    /// Record usage for a key from an explicit usage record.
+    pub async fn record_usage_record(&self, key_id: Uuid, record: UsageRecord) -> Result<()> {
+        self.repository.update_usage(key_id, record).await
     }
 
     /// List keys for a user

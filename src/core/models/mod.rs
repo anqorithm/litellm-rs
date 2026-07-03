@@ -133,6 +133,18 @@ pub struct UsageStats {
     pub tokens_today: u32,
     /// Cost today
     pub cost_today: f64,
+    /// Total unpriced requests
+    #[serde(default)]
+    pub unpriced_requests: u64,
+    /// Total unpriced tokens
+    #[serde(default)]
+    pub unpriced_tokens: u64,
+    /// Total unpriced cost
+    #[serde(default)]
+    pub unpriced_cost: f64,
+    /// Last unpriced usage timestamp
+    #[serde(default)]
+    pub last_unpriced_at: Option<chrono::DateTime<chrono::Utc>>,
     /// Last reset date
     pub last_reset: chrono::DateTime<chrono::Utc>,
 }

@@ -436,6 +436,8 @@ impl SeaOrmDatabase {
         requests: u64,
         tokens: u64,
         cost: f64,
+        unpriced: bool,
+        _pricing_policy: Option<&str>,
     ) -> Result<()> {
         debug!("Updating API key usage: {}", key_id);
 
@@ -458,12 +460,24 @@ impl SeaOrmDatabase {
         domain_key.usage_stats.requests_today = domain_key
             .usage_stats
             .requests_today
-            .saturating_add(requests as u32);
+            .saturating_add(requests.try_into().unwrap_or(u32::MAX));
         domain_key.usage_stats.tokens_today = domain_key
             .usage_stats
             .tokens_today
-            .saturating_add(tokens as u32);
+            .saturating_add(tokens.try_into().unwrap_or(u32::MAX));
         domain_key.usage_stats.cost_today += cost;
+        if unpriced {
+            domain_key.usage_stats.unpriced_requests = domain_key
+                .usage_stats
+                .unpriced_requests
+                .saturating_add(requests);
+            domain_key.usage_stats.unpriced_tokens = domain_key
+                .usage_stats
+                .unpriced_tokens
+                .saturating_add(tokens);
+            domain_key.usage_stats.unpriced_cost += cost;
+            domain_key.usage_stats.last_unpriced_at = Some(chrono::Utc::now());
+        }
 
         let usage_stats = serde_json::to_string(&domain_key.usage_stats)
             .map_err(|e| GatewayError::Validation(format!("Invalid usage stats: {}", e)))?;

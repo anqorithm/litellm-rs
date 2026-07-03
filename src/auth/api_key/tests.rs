@@ -394,6 +394,10 @@ fn test_usage_stats_default() {
     assert_eq!(stats.requests_today, 0);
     assert_eq!(stats.tokens_today, 0);
     assert_eq!(stats.cost_today, 0.0);
+    assert_eq!(stats.unpriced_requests, 0);
+    assert_eq!(stats.unpriced_tokens, 0);
+    assert_eq!(stats.unpriced_cost, 0.0);
+    assert!(stats.last_unpriced_at.is_none());
 }
 
 #[test]
@@ -406,6 +410,7 @@ fn test_usage_stats_with_values() {
         tokens_today: 50000,
         cost_today: 2.50,
         last_reset: Utc::now(),
+        ..UsageStats::default()
     };
 
     assert_eq!(stats.total_requests, 1000);
