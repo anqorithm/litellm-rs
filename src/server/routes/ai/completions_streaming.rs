@@ -1,0 +1,310 @@
+use std::time::Duration;
+
+use actix_web::http::header::{CACHE_CONTROL, CONTENT_TYPE};
+use actix_web::{HttpResponse, Result as ActixResult};
+use bytes::Bytes;
+use futures::StreamExt;
+use tokio::sync::mpsc;
+use tracing::{error, info, warn};
+
+use crate::core::models::openai::StreamOptions;
+use crate::core::providers::ProviderError;
+use crate::core::streaming::types::Event;
+use crate::core::types::{context::RequestContext, model::ProviderCapability};
+use crate::server::state::AppState;
+
+use super::super::budget_orchestration::{ApiKeyBudgetPolicy, BudgetedCall};
+use super::super::execution::execute_stream_with_selected_deployment;
+use super::super::{chat, openai_errors, spend, token_policy};
+use super::completions_spend::{settle_stream_spend, settle_stream_spend_if_chargeable};
+use super::completions_sse::send_stream_error;
+use super::{CompletionAdapterRequest, chunk_has_text_delta, completion_chunk_from_core};
+
+pub(super) async fn handle_streaming_completion(
+    state: &AppState,
+    adapter_request: CompletionAdapterRequest,
+    context: RequestContext,
+) -> ActixResult<HttpResponse> {
+    info!(
+        "Handling streaming text completion for model: {}",
+        adapter_request.chat_request.model
+    );
+
+    let mut request = adapter_request.chat_request;
+    let requested_model = request.model.clone();
+    let request_for_budget = request.clone();
+    request
+        .stream_options
+        .get_or_insert(StreamOptions {
+            include_usage: None,
+        })
+        .include_usage = Some(true);
+
+    let core_request = match chat::build_core_chat_request(request, requested_model.clone(), true) {
+        Ok(request) => request,
+        Err(error) => return Ok(openai_errors::gateway_error_response(&error)),
+    };
+
+    let context_for_execution = context.clone();
+    let (budget_limits, pricing_service) = (state.budget_limits.clone(), state.pricing.clone());
+    let pricing_config = state.config().gateway.pricing.clone();
+    let api_key_id = context.api_key_id();
+    let api_key_budget_id = context.api_key_budget_id();
+    let budget_manager = state.budget_manager.clone();
+
+    match execute_stream_with_selected_deployment(
+        state.unified_router.clone(),
+        &requested_model,
+        ProviderCapability::ChatCompletionStream,
+        move |provider, selected_model, _selected_deployment_id| {
+            let core_request = core_request.clone();
+            let context = context_for_execution.clone();
+            let (budget_limits, pricing_service) = (budget_limits.clone(), pricing_service.clone());
+            let budget_manager = budget_manager.clone();
+            let request_for_budget = request_for_budget.clone();
+            let pricing_config = pricing_config.clone();
+            async move {
+                let provider_name = provider.name().to_string();
+                let (pricing_provider, pricing_model) = spend::pricing_identity_for_provider(
+                    pricing_service.as_ref(),
+                    &provider,
+                    &selected_model,
+                );
+                let (request_for_provider, request_for_budget) =
+                    token_policy::prepare_chat_request_for_provider(
+                        context.api_key_max_tokens_per_request(),
+                        &provider_name,
+                        &selected_model,
+                        core_request.clone(),
+                        request_for_budget,
+                    )?;
+                let reserve_pricing_config = pricing_config.clone();
+                let reserve_pricing_provider = pricing_provider.clone();
+                let reserve_pricing_model = pricing_model.clone();
+                let (stream, reservations) = BudgetedCall::new(
+                    budget_limits.clone(),
+                    provider_name.clone(),
+                    selected_model.clone(),
+                )
+                .with_api_key_budget(
+                    budget_manager.clone(),
+                    api_key_budget_id,
+                    ApiKeyBudgetPolicy::FromProviderReservation,
+                )
+                .reserve_call(
+                    |budget| {
+                        spend::reserve_chat_completion_budget_with_split_pricing(
+                            pricing_service.as_ref(),
+                            &reserve_pricing_config,
+                            budget.budget_limits(),
+                            budget.provider(),
+                            budget.model(),
+                            &reserve_pricing_provider,
+                            &reserve_pricing_model,
+                            &request_for_budget,
+                        )
+                    },
+                    || provider.chat_completion_stream(request_for_provider, context),
+                )
+                .await?;
+                let (budget_reservation, key_budget_reservation) = reservations.into_parts();
+                Ok((
+                    stream,
+                    provider_name,
+                    selected_model,
+                    pricing_provider,
+                    pricing_model,
+                    budget_reservation,
+                    key_budget_reservation,
+                ))
+            }
+        },
+    )
+    .await
+    {
+        Ok((
+            (
+                mut stream,
+                served_provider,
+                served_model,
+                pricing_provider,
+                pricing_model,
+                mut budget_reservation,
+                mut key_budget_reservation,
+            ),
+            lease,
+        )) => {
+            let (tx, rx) = mpsc::channel::<Bytes>(8);
+            let idle_timeout_secs = state.config.load().gateway.server.stream_idle_timeout;
+            let budget_limits = state.budget_limits.clone();
+            let key_manager = state.key_manager.clone();
+            let pricing_service = state.pricing.clone();
+            let pricing_config = state.config().gateway.pricing.clone();
+            let include_usage = adapter_request.include_usage;
+            let mut echo_prefix = adapter_request.echo.then_some(adapter_request.prompt);
+
+            tokio::spawn(async move {
+                let mut lease = Some(lease);
+                let mut tokens_used = 0_u64;
+                let mut final_usage = None;
+                let mut saw_upstream_output = false;
+                macro_rules! settle_if_chargeable {
+                    () => {
+                        settle_stream_spend_if_chargeable(
+                            pricing_service.as_ref(),
+                            &pricing_config,
+                            &budget_limits,
+                            &key_manager,
+                            api_key_id,
+                            &served_provider,
+                            &served_model,
+                            &pricing_provider,
+                            &pricing_model,
+                            final_usage.as_ref(),
+                            budget_reservation.take(),
+                            key_budget_reservation.take(),
+                            saw_upstream_output,
+                        )
+                        .await
+                    };
+                }
+
+                loop {
+                    let chunk_result = if idle_timeout_secs == 0 {
+                        stream.next().await
+                    } else {
+                        match tokio::time::timeout(
+                            Duration::from_secs(idle_timeout_secs),
+                            stream.next(),
+                        )
+                        .await
+                        {
+                            Ok(result) => result,
+                            Err(_) => {
+                                warn!(
+                                    "Completion SSE stream idle timeout after {}s",
+                                    idle_timeout_secs
+                                );
+                                send_stream_error(
+                                    &tx,
+                                    "Stream idle timeout",
+                                    "server_error",
+                                    "timeout",
+                                )
+                                .await;
+                                if let Some(lease) = lease.take() {
+                                    let error = ProviderError::timeout(
+                                        "router",
+                                        format!("stream idle timeout after {}s", idle_timeout_secs),
+                                    );
+                                    lease.finish_failure(&error);
+                                }
+                                settle_if_chargeable!();
+                                return;
+                            }
+                        }
+                    };
+
+                    let Some(chunk_result) = chunk_result else {
+                        break;
+                    };
+
+                    let bytes = match chunk_result {
+                        Ok(chunk) => {
+                            saw_upstream_output = true;
+                            if let Some(usage) = &chunk.usage {
+                                tokens_used = u64::from(usage.total_tokens);
+                                final_usage = Some(usage.clone());
+                            }
+                            let prefix_for_chunk = if chunk_has_text_delta(&chunk) {
+                                echo_prefix.take()
+                            } else {
+                                None
+                            };
+                            let completion_chunk = completion_chunk_from_core(
+                                chunk,
+                                prefix_for_chunk.as_deref(),
+                                include_usage,
+                            );
+                            if !include_usage && completion_chunk.choices.is_empty() {
+                                continue;
+                            }
+                            match serde_json::to_string(&completion_chunk) {
+                                Ok(json) => Event::default().data(&json).to_bytes(),
+                                Err(error) => {
+                                    error!("Completion stream serialization error: {}", error);
+                                    send_stream_error(
+                                        &tx,
+                                        &format!("Serialization error: {}", error),
+                                        "server_error",
+                                        "internal_error",
+                                    )
+                                    .await;
+                                    if let Some(lease) = lease.take() {
+                                        let error = ProviderError::serialization(
+                                            "router",
+                                            format!("Serialization error: {}", error),
+                                        );
+                                        lease.finish_failure(&error);
+                                    }
+                                    settle_if_chargeable!();
+                                    return;
+                                }
+                            }
+                        }
+                        Err(error) => {
+                            error!("Completion stream chunk error: {}", error);
+                            let (error_type, error_code) = chat::sse_error_classification(&error);
+                            send_stream_error(&tx, &error.to_string(), error_type, error_code)
+                                .await;
+                            if let Some(lease) = lease.take() {
+                                lease.finish_failure(&error);
+                            }
+                            settle_if_chargeable!();
+                            return;
+                        }
+                    };
+
+                    if tx.send(bytes).await.is_err() {
+                        settle_if_chargeable!();
+                        return;
+                    }
+                }
+
+                let _ = tx.send(Event::default().data("[DONE]").to_bytes()).await;
+                settle_stream_spend(
+                    pricing_service.as_ref(),
+                    &pricing_config,
+                    &budget_limits,
+                    &key_manager,
+                    api_key_id,
+                    &served_provider,
+                    &served_model,
+                    &pricing_provider,
+                    &pricing_model,
+                    final_usage.as_ref(),
+                    budget_reservation.take(),
+                    key_budget_reservation.take(),
+                    saw_upstream_output,
+                )
+                .await;
+                if let Some(lease) = lease.take() {
+                    lease.finish_success(tokens_used);
+                }
+            });
+
+            let sse_stream = tokio_stream::wrappers::ReceiverStream::new(rx)
+                .map(Ok::<_, actix_web::error::Error>);
+            Ok(HttpResponse::Ok()
+                .insert_header((CONTENT_TYPE, "text/event-stream"))
+                .insert_header((CACHE_CONTROL, "no-cache"))
+                .insert_header(("Connection", "keep-alive"))
+                .insert_header(("X-Request-ID", context.request_id.as_str()))
+                .streaming(sse_stream))
+        }
+        Err(error) => {
+            error!("Failed to create streaming completion response: {}", error);
+            Ok(openai_errors::gateway_error_response(&error))
+        }
+    }
+}

@@ -78,6 +78,7 @@ pub(crate) async fn handle_streaming_response(
     let context_clone = context.clone();
     let budget_limits = state.budget_limits.clone();
     let pricing_service = state.pricing.clone();
+    let pricing_config = state.config().gateway.pricing.clone();
     let api_key_id = context.api_key_id();
     let api_key_budget_id = context.api_key_budget_id();
     let budget_manager = state.budget_manager.clone();
@@ -91,10 +92,16 @@ pub(crate) async fn handle_streaming_response(
             let ctx = context_clone.clone();
             let budget_limits = budget_limits.clone();
             let pricing_service = pricing_service.clone();
+            let pricing_config = pricing_config.clone();
             let budget_manager = budget_manager.clone();
             let request_for_budget = request_for_budget.clone();
             async move {
                 let provider_name = provider.name().to_string();
+                let (pricing_provider, pricing_model) = spend::pricing_identity_for_provider(
+                    pricing_service.as_ref(),
+                    &provider,
+                    &selected_model,
+                );
                 let (req, request_for_budget) =
                     super::token_policy::prepare_chat_request_for_provider(
                         ctx.api_key_max_tokens_per_request(),
@@ -115,11 +122,14 @@ pub(crate) async fn handle_streaming_response(
                 )
                 .reserve_call(
                     |budget| {
-                        spend::reserve_chat_completion_budget_with_pricing(
+                        spend::reserve_chat_completion_budget_with_split_pricing(
                             pricing_service.as_ref(),
+                            &pricing_config,
                             budget.budget_limits(),
                             budget.provider(),
                             budget.model(),
+                            &pricing_provider,
+                            &pricing_model,
                             &request_for_budget,
                         )
                     },
@@ -131,6 +141,8 @@ pub(crate) async fn handle_streaming_response(
                     stream,
                     provider_name,
                     selected_model,
+                    pricing_provider,
+                    pricing_model,
                     budget_reservation,
                     key_budget_reservation,
                 ))
@@ -140,18 +152,29 @@ pub(crate) async fn handle_streaming_response(
     .await
     {
         Ok((
-            (mut stream, served_provider, served_model, budget_reservation, key_budget_reservation),
+            (
+                mut stream,
+                served_provider,
+                served_model,
+                pricing_provider,
+                pricing_model,
+                budget_reservation,
+                key_budget_reservation,
+            ),
             lease,
         )) => {
             let (tx, rx) = mpsc::channel::<Bytes>(8);
             let idle_timeout = state.config.load().gateway.server.stream_idle_timeout;
             let settlement = StreamBudgetSettlement {
                 pricing_service: state.pricing.clone(),
+                pricing_config: state.config().gateway.pricing.clone(),
                 budget_limits: state.budget_limits.clone(),
                 key_manager: state.key_manager.clone(),
                 api_key_id,
                 provider: served_provider,
                 model: served_model,
+                pricing_provider,
+                pricing_model,
                 reservation: budget_reservation,
                 key_budget_reservation,
             };
@@ -160,7 +183,6 @@ pub(crate) async fn handle_streaming_response(
                 let mut lease = Some(lease);
                 let mut settlement = settlement;
 
-                // ── response.created ──────────────────────────────────────────
                 let shell = make_shell(&resp_id, created_at, &model_name, "in_progress", &original);
                 if emit(
                     &tx,
@@ -174,7 +196,6 @@ pub(crate) async fn handle_streaming_response(
                     return;
                 }
 
-                // ── streaming state ───────────────────────────────────────────
                 let mut full_text = String::new();
                 let mut text_started = false;
                 let mut text_item_id = String::new();
@@ -185,20 +206,8 @@ pub(crate) async fn handle_streaming_response(
                 let mut saw_upstream_output = false;
                 let mut next_output_index: u32 = 0;
                 let mut final_status: &'static str = "completed";
-                // Tool calls keyed by streaming index
                 let mut tool_states: HashMap<u32, ToolCallAccum> = HashMap::new();
-                // Preserves insertion order for final iteration
                 let mut tool_order: Vec<u32> = Vec::new();
-                // Reasoning-summary state (o-series / extended thinking / DeepSeek R1 / Gemini).
-                //
-                // Output-index ordering invariant: the OpenAI Responses API requires
-                // reasoning items to have a lower `output_index` than the text item.
-                // We rely on upstream providers to emit reasoning chunks before text
-                // chunks (OpenAI o-series, Anthropic extended thinking, DeepSeek R1,
-                // and Gemini thinking all conform to this protocol convention). The
-                // first-arrival assignment below preserves canonical order under that
-                // assumption. If a provider ever violates the convention, a `warn!`
-                // is emitted so operators can detect the inversion.
                 let mut full_reasoning = String::new();
                 let mut reasoning_item_id = String::new();
                 let mut reasoning_output_index: u32 = 0;
@@ -263,11 +272,6 @@ pub(crate) async fn handle_streaming_response(
                                     saw_upstream_output = true;
                                     if !reasoning_started {
                                         if text_started {
-                                            // Protocol violation: reasoning arrived after
-                                            // text claimed an output_index. The Responses API
-                                            // contract (reasoning at lower output_index than
-                                            // text) is broken for this stream. Continue
-                                            // emitting in arrival order; flag for ops.
                                             warn!(
                                                 "responses stream reasoning chunk arrived after text chunk; \
                                                  output_index ordering will be reversed from canonical \
@@ -654,7 +658,6 @@ pub(crate) async fn handle_streaming_response(
                 )
                 .await;
 
-                // Final SSE terminator
                 let _ = tx.send(Event::default().data("[DONE]").to_bytes()).await;
             });
 
@@ -674,8 +677,6 @@ pub(crate) async fn handle_streaming_response(
         }
     }
 }
-
-// ── Internal helpers ──────────────────────────────────────────────────────────
 
 fn completed_reasoning_item(
     item_id: String,

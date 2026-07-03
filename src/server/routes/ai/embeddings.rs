@@ -93,6 +93,7 @@ async fn handle_embedding_internal(
     }
     if let Some(cached) = super::response_cache::lookup_embedding(state, &request, &context).await?
     {
+        super::response_cache::ensure_embedding_cache_pricing_gate(state, &request)?;
         return Ok(cached);
     }
     let request_for_cache = request.clone();
@@ -115,6 +116,7 @@ async fn handle_embedding_internal(
     let budget_manager = state.budget_manager.clone();
     let key_manager = state.key_manager.clone();
     let pricing_service = state.pricing.clone();
+    let pricing_config = state.config().gateway.pricing.clone();
     let core_response = execute_with_selected_deployment(
         &state.unified_router,
         &requested_model,
@@ -126,6 +128,7 @@ async fn handle_embedding_internal(
             let budget_manager = budget_manager.clone();
             let key_manager = key_manager.clone();
             let pricing_service = pricing_service.clone();
+            let pricing_config = pricing_config.clone();
             async move {
                 let budget_provider = provider.name().to_string();
                 let (pricing_provider, pricing_model) = super::spend::pricing_identity_for_provider(
@@ -137,6 +140,8 @@ async fn handle_embedding_internal(
                 request_for_provider.model = selected_model.clone();
                 let reserve_pricing_service = pricing_service.clone();
                 let settle_pricing_service = pricing_service.clone();
+                let reserve_pricing_config = pricing_config.clone();
+                let settle_pricing_config = pricing_config;
                 let reserve_pricing_provider = pricing_provider.clone();
                 let reserve_pricing_model = pricing_model.clone();
                 let settle_pricing_provider = pricing_provider;
@@ -154,8 +159,9 @@ async fn handle_embedding_internal(
                 )
                 .reserve_call_settle(
                     |budget| {
-                        super::spend::reserve_embedding_budget_with_pricing(
+                        super::spend::reserve_embedding_budget_with_policy(
                             reserve_pricing_service.as_ref(),
+                            &reserve_pricing_config,
                             budget.budget_limits(),
                             budget.provider(),
                             budget.model(),
@@ -176,8 +182,9 @@ async fn handle_embedding_internal(
                                     .unwrap_or_default();
                                 if let Some(usage) = response.usage.as_ref() {
                                     let usage = PricingUsage::from(usage);
-                                    super::spend::record_pricing_usage_spend_with_reservation_with_pricing(
+                                    super::spend::record_pricing_usage_spend_with_reservation_with_policy(
                                         settle_pricing_service.as_ref(),
+                                        &settle_pricing_config,
                                         budget.budget_limits(),
                                         &settle_key_manager,
                                         api_key_id,
@@ -191,8 +198,9 @@ async fn handle_embedding_internal(
                                     )
                                     .await;
                                 } else {
-                                    super::spend::record_completion_spend_with_reservation_with_pricing(
+                                    super::spend::record_completion_spend_with_reservation_with_policy(
                                         settle_pricing_service.as_ref(),
+                                        &settle_pricing_config,
                                         super::spend::usage_spend_settlement(
                                             (
                                                 budget.budget_limits(),

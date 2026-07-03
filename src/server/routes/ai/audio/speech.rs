@@ -83,6 +83,7 @@ pub async fn audio_speech(
     let budget_limits = state.budget_limits.clone();
     let key_manager = state.key_manager.clone();
     let pricing_service = state.pricing.clone();
+    let pricing_config = state.config().gateway.pricing.clone();
 
     match execute_with_selected_deployment(
         &state.unified_router,
@@ -95,6 +96,7 @@ pub async fn audio_speech(
             let budget_limits = budget_limits.clone();
             let key_manager = key_manager.clone();
             let pricing_service = pricing_service.clone();
+            let pricing_config = pricing_config.clone();
             async move {
                 let usage = super::budgeting::speech_usage(&request.input);
                 let budget_provider = provider.name().to_string();
@@ -107,6 +109,8 @@ pub async fn audio_speech(
                 request.model = selected_model.clone();
                 let reserve_pricing_service = pricing_service.clone();
                 let settle_pricing_service = pricing_service.clone();
+                let reserve_pricing_config = pricing_config.clone();
+                let settle_pricing_config = pricing_config;
                 let reserve_pricing_provider = pricing_provider.clone();
                 let reserve_pricing_model = pricing_model.clone();
                 let settle_pricing_provider = pricing_provider;
@@ -128,6 +132,7 @@ pub async fn audio_speech(
                     |budget| {
                         super::budgeting::reserve_audio_provider_budget_with_pricing(
                             reserve_pricing_service.as_ref(),
+                            &reserve_pricing_config,
                             budget.budget_limits(),
                             budget.provider(),
                             budget.model(),
@@ -145,6 +150,7 @@ pub async fn audio_speech(
                             let tokens_used = u64::from(settle_usage.total_tokens);
                             super::budgeting::record_audio_spend(
                                 settle_pricing_service.as_ref(),
+                                &settle_pricing_config,
                                 budget.budget_limits(),
                                 &settle_key_manager,
                                 api_key_id,
