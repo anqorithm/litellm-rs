@@ -38,10 +38,10 @@ Link to `product.md`.
 
 | 子系统 | 建议 | 理由 |
 | --- | --- | --- |
-| guardrails | wire（默认开，配置可关） | 安全语义，invariant 5 |
-| ip_access | wire（中间件 + 配置） | 安全语义，代码量小 |
+| guardrails | wire（默认开，配置可关） | 安全语义，必须证明 `GuardrailEngine::check_input` / `check_output` 在真实请求路径执行并能阻断恶意内容 |
+| ip_access | wire（中间件 + 配置） | 安全语义，必须证明 denied IP 在 handler/provider 前短路，不能只返回最终 403 |
 | observability + integrations | wire（启动初始化 + 配置） | 近期仍在投入（edec83d7），删除损失最大 |
-| batch 持久化 | wire 完整化 or 删 processor（二选一） | 半接线态最误导 |
+| batch 持久化 | wire 完整化 or 删 processor（二选一） | 半接线态最误导；wire 时 batch item 必须调用真实 provider execution path 或保留 upstream proxy 语义，不能返回 mock response |
 | mcp / a2a / realtime | experimental-gate | 实现大、无路由，产品化是独立决策 |
 | webhooks / semantic_cache / analytics | remove or gate | stub 密度高，按维护者产品意向 |
 | virtual_keys | wire or gate | 已有迁移与 storage-backed CRUD，但 gateway 管理/API 路径未接线；不能按 stub-only 删除 |
@@ -49,10 +49,14 @@ Link to `product.md`.
 **Phase 3 — 执行**
 
 - wire lane：每子系统一个 PR：`GatewayConfig` 字段 + `Default` + 校验 → 启动初始化（builder.rs）→
-  中间件/路由挂载 → smoke 测试（U-26 checklist 全项）。
+  中间件/路由挂载 → 行为测试（U-26 checklist 全项 + 子系统真实执行）。guardrails PR 必须用恶意输入/输出证明
+  engine 被调用并 enforcement；ip_access PR 必须用 sentinel handler/provider 证明 denied IP 不会执行下游副作用；
+  batch wire PR 必须证明 batch item 走真实 provider execution path 或显式保留 upstream proxy 语义。
 - gate lane：`Cargo.toml` 真 feature（`mcp = []` → gate `core/mcp` 的 `pub mod`）+ README/docs
-  experimental 段；若 public import 改变，同步 semver、CHANGELOG、deprecation/迁移说明。
+  experimental 段；相关 config schema/env/example 同步 gate 或返回显式 validation error，避免用户配置 no-op knob；
+  若 public import 改变，同步 semver、CHANGELOG、deprecation/迁移说明。
 - remove lane：删除模块 + `core/mod.rs` 清理 + README/CLAUDE.md/`docs/` 同步；若 public import 改变，
+  同步删除/拒绝相关 config knobs（如 `cache.semantic_cache`、`enterprise.advanced_analytics`）并更新 examples，
   同步 semver、CHANGELOG、deprecation/迁移说明。
 
 **Phase 4 — 守护检查**
@@ -69,7 +73,7 @@ Link to `product.md`.
 
 | Product invariant | Implementation area | Verification |
 | --- | --- | --- |
-| P2 wire 三要件 | config + builder + http.rs | U-26 checklist 单测 + smoke 路由测试 |
+| P2 wire 三要件 | config + builder + http.rs + request path | U-26 checklist 单测 + 子系统真实行为测试 |
 | P3 remove 干净 | core/mod.rs + README/CLAUDE.md/`docs/` + CHANGELOG | `cargo check --all-features` + 全量测试 + public import/semver 记录 |
 | P4 gate 真实 | Cargo.toml + cfg + docs.rs feature 列表 + CHANGELOG | `cargo check --no-default-features` 组合验证 + deprecation/迁移说明 |
 | P5 安全默认 | guardrails/ip_access 配置 | 默认配置下中间件生效的集成测试 |
@@ -100,8 +104,8 @@ observability 初始化必须在 server 启动前完成（tracing 全局注册�
 
 ## 测试计划
 
-- [ ] Unit tests: 各 wire 子系统的 U-26 三要件（config load 被调用、init 被调用、路由可达）。
-- [ ] Integration tests: guardrails/ip_access 默认配置生效性。
+- [ ] Unit tests: 各 wire 子系统的 U-26 三要件（config load 被调用、init 被调用、路由可达）和真实执行断言。
+- [ ] Integration tests: guardrails 恶意输入/输出被拦截；ip_access denied IP 不到达 sentinel handler/provider；batch item 不返回 mock/fabricated result。
 - [ ] Observability integration tests: 对一条真实 chat/completion 请求注入 test integration，断言
       `on_llm_start` 与 `on_llm_end`/`on_llm_error` 被调用；`/metrics` 只能作为 HTTP middleware 辅助检查。
 - [ ] Manual verification: `curl` 冒烟被 wire 的路由；Langfuse/OTel 或 test integration 记录请求生命周期事件。
