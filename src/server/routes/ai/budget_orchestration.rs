@@ -3,10 +3,12 @@ use std::sync::Arc;
 
 use uuid::Uuid;
 
+use crate::config::models::gateway::GatewayPricingConfig;
 use crate::core::budget::{
     BudgetManager, BudgetReservation, UnifiedBudgetLimits, UnifiedBudgetReservation,
 };
 use crate::core::keys::KeyManager;
+use crate::core::models::openai::Usage;
 use crate::core::pricing_service::PricingService;
 use crate::core::providers::ProviderError;
 
@@ -252,6 +254,66 @@ impl BudgetReservations {
     }
 }
 
+pub(super) struct SettledStream {
+    pub(super) pricing_service: Arc<PricingService>,
+    pub(super) pricing_config: GatewayPricingConfig,
+    pub(super) budget_limits: Arc<UnifiedBudgetLimits>,
+    pub(super) key_manager: KeyManager,
+    pub(super) api_key_id: Option<Uuid>,
+    pub(super) provider: String,
+    pub(super) model: String,
+    pub(super) pricing_provider: String,
+    pub(super) pricing_model: String,
+    pub(super) budget_reservation: Option<UnifiedBudgetReservation>,
+    pub(super) key_budget_reservation: Option<BudgetReservation>,
+}
+
+impl SettledStream {
+    pub(super) async fn record_completion(
+        mut self,
+        usage: Option<&Usage>,
+        saw_upstream_output: bool,
+    ) {
+        spend::record_finished_stream_spend_with_reservation_with_policy(
+            self.pricing_service.as_ref(),
+            &self.pricing_config,
+            spend::StreamSpendSettlement {
+                budget_limits: self.budget_limits.as_ref(),
+                key_manager: &self.key_manager,
+                api_key_id: self.api_key_id,
+                provider: &self.provider,
+                model: &self.model,
+                pricing_provider: &self.pricing_provider,
+                pricing_model: &self.pricing_model,
+                usage,
+                saw_upstream_output,
+                budget_reservation: self.budget_reservation.take(),
+                key_budget_reservation: self.key_budget_reservation.take(),
+            },
+        )
+        .await;
+    }
+
+    pub(super) async fn record_disconnect(&mut self, usage: Option<&Usage>) {
+        spend::record_stream_disconnect_spend_with_reservation_with_policy(
+            self.pricing_service.as_ref(),
+            &self.pricing_config,
+            spend::usage_spend_settlement_with_pricing(
+                (
+                    self.budget_limits.as_ref(),
+                    &self.key_manager,
+                    self.api_key_id,
+                ),
+                (&self.provider, &self.model, usage),
+                (&self.pricing_provider, &self.pricing_model),
+                self.budget_reservation.take(),
+                self.key_budget_reservation.take(),
+            ),
+        )
+        .await;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::{
@@ -259,10 +321,15 @@ mod tests {
         atomic::{AtomicBool, Ordering},
     };
 
-    use crate::core::budget::{BudgetConfig, BudgetManager, BudgetScope, ResetPeriod};
+    use crate::config::models::gateway::GatewayPricingConfig;
+    use crate::core::budget::{
+        BudgetConfig, BudgetManager, BudgetScope, ResetPeriod, UnifiedBudgetReservation,
+    };
     use crate::core::budget::{ModelLimitConfig, ProviderLimitConfig, UnifiedBudgetLimits};
+    use crate::core::keys::{InMemoryKeyRepository, KeyManager};
+    use crate::core::pricing_service::PricingService;
 
-    use super::{ApiKeyBudgetPolicy, BudgetedCall};
+    use super::{ApiKeyBudgetPolicy, BudgetedCall, SettledStream};
 
     fn limited_budget() -> Arc<UnifiedBudgetLimits> {
         let limits = UnifiedBudgetLimits::new();
@@ -419,5 +486,69 @@ mod tests {
         assert_eq!(value, "ok");
         assert_eq!(tokens, 17);
         assert!(settled.load(Ordering::Relaxed));
+    }
+
+    fn settled_stream(
+        budget_limits: Arc<UnifiedBudgetLimits>,
+        reservation: Option<UnifiedBudgetReservation>,
+    ) -> SettledStream {
+        SettledStream {
+            pricing_service: Arc::new(
+                PricingService::with_embedded_default()
+                    .expect("embedded pricing should load for settled stream tests"),
+            ),
+            pricing_config: GatewayPricingConfig::default(),
+            budget_limits,
+            key_manager: KeyManager::new(InMemoryKeyRepository::new()),
+            api_key_id: None,
+            provider: "openai".to_string(),
+            model: "gpt-4".to_string(),
+            pricing_provider: "openai".to_string(),
+            pricing_model: "gpt-4".to_string(),
+            budget_reservation: reservation,
+            key_budget_reservation: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn settled_stream_completion_without_usage_settles_reserved_output() {
+        let limits = limited_budget();
+        let reservation = limits
+            .reserve_spend("openai", "gpt-4", 0.25)
+            .expect("reservation should fit test budget");
+
+        settled_stream(limits.clone(), Some(reservation))
+            .record_completion(None, true)
+            .await;
+
+        assert_eq!(
+            limits
+                .providers
+                .get_provider_usage("openai")
+                .expect("provider usage should be recorded")
+                .current_spend,
+            0.25
+        );
+    }
+
+    #[tokio::test]
+    async fn settled_stream_completion_without_output_settles_reserved_output() {
+        let limits = limited_budget();
+        let reservation = limits
+            .reserve_spend("openai", "gpt-4", 0.25)
+            .expect("reservation should fit test budget");
+
+        settled_stream(limits.clone(), Some(reservation))
+            .record_completion(None, false)
+            .await;
+
+        assert_eq!(
+            limits
+                .providers
+                .get_provider_usage("openai")
+                .expect("provider reservation should exist")
+                .current_spend,
+            0.25
+        );
     }
 }

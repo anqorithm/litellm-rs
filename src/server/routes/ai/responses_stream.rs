@@ -175,7 +175,7 @@ pub(crate) async fn handle_streaming_response(
                 model: served_model,
                 pricing_provider,
                 pricing_model,
-                reservation: budget_reservation,
+                budget_reservation,
                 key_budget_reservation,
             };
 
