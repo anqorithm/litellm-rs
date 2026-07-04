@@ -23,6 +23,7 @@ use std::sync::OnceLock;
 use std::time::Duration;
 use tracing::{error, info};
 
+use super::budgeted::ApiKeyBudgetPolicy;
 use super::context::handle_ai_request;
 use super::execution::execute_with_selected_deployment;
 use super::{openai_errors, provider_config};
@@ -140,10 +141,14 @@ async fn proxy_image_multipart_endpoint(
         state.config().gateway.providers.as_slice(),
         requested_model,
     )?;
+    let budgeted = state.budgeted.clone();
+    let pricing_service = budgeted.pricing();
+    let budget_limits = budgeted.budget_limits();
+    let key_manager = budgeted.key_manager();
     let router_models =
         image_proxy_router_models(state.config().gateway.providers.as_slice(), requested_model);
     let pricing_model = pricing_keys::resolve_image_pricing_model(
-        state.pricing.as_ref(),
+        pricing_service.as_ref(),
         "openai",
         requested_model,
         form_fields.size.as_deref(),
@@ -153,7 +158,7 @@ async fn proxy_image_multipart_endpoint(
     let usage = estimated_image_proxy_usage(&form_fields, "openai", &pricing_model);
     let pricing_config = state.config().gateway.pricing.clone();
     let (estimated_cost, unpriced) = image_proxy_cost(
-        state.pricing.as_ref(),
+        pricing_service.as_ref(),
         &pricing_config,
         "openai",
         &pricing_model,
@@ -174,10 +179,18 @@ async fn proxy_image_multipart_endpoint(
             &router_model,
             endpoint.capability(),
             {
+                let budgeted = budgeted.clone();
+                let budget_limits = budget_limits.clone();
+                let key_manager = key_manager.clone();
+                let pricing_config = pricing_config.clone();
                 let body = body.clone();
                 let content_type = content_type.clone();
                 let usage = usage.clone();
                 move |selected_provider, selected_model, _deployment_id| {
+                    let budgeted = budgeted.clone();
+                    let budget_limits = budget_limits.clone();
+                    let key_manager = key_manager.clone();
+                    let pricing_config = pricing_config.clone();
                     let body = body.clone();
                     let content_type = content_type.clone();
                     let usage = usage.clone();
@@ -188,81 +201,56 @@ async fn proxy_image_multipart_endpoint(
                             &selected_model,
                             requested_model,
                         )?;
-                        let mut budget_reservation = if estimated_cost > 0.0 {
-                            state
-                                .budget_limits
-                                .reserve_spend(
-                                    &provider.provider_name,
-                                    requested_model,
-                                    estimated_cost,
-                                )
-                                .map(Some)
-                                .map_err(|error| {
-                                    super::spend::reservation_error_to_provider_error(
-                                        error,
-                                        &provider.provider_name,
-                                        requested_model,
-                                    )
-                                })?
-                        } else {
-                            super::spend::ensure_budget_available(
-                                &state.budget_limits,
-                                &provider.provider_name,
-                                requested_model,
-                            )?;
-                            None
-                        };
-                        let mut key_budget_reservation =
-                            super::spend::reserve_api_key_budget_for_reservation(
-                                &state.budget_manager,
+                        let provider_for_call = provider.clone();
+                        let (response, reservations) = budgeted
+                            .for_selected_with_api_key_budget(
+                                provider.provider_name.clone(),
+                                requested_model.to_string(),
                                 api_key_budget_id,
-                                budget_reservation.as_ref(),
-                            )?;
-                        let url = image_proxy_url(&provider, endpoint)
-                            .map_err(image_proxy_gateway_error_to_provider_error)?;
-                        let response_result =
-                            apply_image_proxy_headers(image_http_client().post(url), &provider)
-                                .header(reqwest::header::CONTENT_TYPE, content_type)
-                                .body(body)
-                                .timeout(provider.timeout)
-                                .send()
-                                .await;
-                        let response = match response_result {
-                            Ok(response) => response,
-                            Err(error) => {
-                                if let Some(reservation) = budget_reservation.take() {
-                                    reservation.cancel();
-                                }
-                                if let Some(reservation) = key_budget_reservation.take() {
-                                    reservation.cancel();
-                                }
-                                return Err(ProviderError::network(
-                                    "image_proxy",
-                                    error.to_string(),
-                                ));
-                            }
-                        };
+                                ApiKeyBudgetPolicy::RequirePricedReservation,
+                            )
+                            .with_precomputed_api_key_budget_cost(Some(estimated_cost))
+                            .reserve_call(
+                                |_context| Ok(None),
+                                || async move {
+                                    let url = image_proxy_url(&provider_for_call, endpoint)
+                                        .map_err(image_proxy_gateway_error_to_provider_error)?;
+                                    let response = apply_image_proxy_headers(
+                                        image_http_client().post(url),
+                                        &provider_for_call,
+                                    )
+                                    .header(reqwest::header::CONTENT_TYPE, content_type)
+                                    .body(body)
+                                    .timeout(provider_for_call.timeout)
+                                    .send()
+                                    .await
+                                    .map_err(|error| {
+                                        ProviderError::network("image_proxy", error.to_string())
+                                    })?;
 
-                        if !response.status().is_success() {
-                            if let Some(reservation) = budget_reservation.take() {
-                                reservation.cancel();
-                            }
-                            if let Some(reservation) = key_budget_reservation.take() {
-                                reservation.cancel();
-                            }
-                            return Err(image_proxy_upstream_error(response).await);
-                        }
+                                    if !response.status().is_success() {
+                                        return Err(image_proxy_upstream_error(response).await);
+                                    }
+
+                                    Ok(response)
+                                },
+                            )
+                            .await?;
+                        let (budget_reservation, key_budget_reservation) =
+                            reservations.into_parts();
 
                         record_image_proxy_spend(
-                            state,
+                            &pricing_config,
+                            budget_limits.as_ref(),
+                            &key_manager,
                             &provider,
                             requested_model,
                             &usage,
                             estimated_cost,
                             unpriced,
-                            budget_reservation.take(),
+                            budget_reservation,
                             api_key_id,
-                            key_budget_reservation.take(),
+                            key_budget_reservation,
                         )
                         .await;
                         let tokens_used = image_proxy_tokens_used(&usage);

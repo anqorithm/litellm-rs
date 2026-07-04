@@ -1,7 +1,7 @@
 use crate::config::models::gateway::{GatewayPricingConfig, UnpricedModelPolicy};
-use crate::core::budget::{BudgetReservation, UnifiedBudgetReservation};
+use crate::core::budget::{BudgetReservation, UnifiedBudgetLimits, UnifiedBudgetReservation};
+use crate::core::keys::KeyManager;
 use crate::core::pricing_service::{PricingService, PricingUsage};
-use crate::server::state::AppState;
 use crate::utils::error::gateway_error::GatewayError;
 use tracing::error;
 
@@ -9,7 +9,9 @@ use super::ImageProxyProvider;
 
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn record_image_proxy_spend(
-    state: &AppState,
+    pricing_config: &GatewayPricingConfig,
+    budget_limits: &UnifiedBudgetLimits,
+    key_manager: &KeyManager,
     provider: &ImageProxyProvider,
     model: &str,
     usage: &PricingUsage,
@@ -20,11 +22,10 @@ pub(super) async fn record_image_proxy_spend(
     key_budget_reservation: Option<BudgetReservation>,
 ) {
     if unpriced {
-        let config = state.config();
         super::super::spend::settle_unpriced_usage(
-            &config.gateway.pricing,
-            &state.budget_limits,
-            &state.key_manager,
+            pricing_config,
+            budget_limits,
+            key_manager,
             api_key_id,
             &provider.provider_name,
             model,
@@ -45,9 +46,7 @@ pub(super) async fn record_image_proxy_spend(
             );
         }
     } else {
-        state
-            .budget_limits
-            .record_spend(&provider.provider_name, model, cost);
+        budget_limits.record_spend(&provider.provider_name, model, cost);
     }
     if let Some(api_key_id) = api_key_id {
         let total_tokens = u64::from(
@@ -55,8 +54,7 @@ pub(super) async fn record_image_proxy_spend(
                 .total_tokens
                 .saturating_add(usage.image_tokens.unwrap_or(0)),
         );
-        if let Err(error) = state
-            .key_manager
+        if let Err(error) = key_manager
             .record_usage(api_key_id, total_tokens, cost)
             .await
         {
