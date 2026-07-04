@@ -65,7 +65,7 @@ pub enum Provider {
 | Category | Providers |
 |----------|-----------|
 | **Cloud Platforms** | AWS Sagemaker, OCI, Snowflake, Databricks, WatsonX |
-| **Image/Video** | RunwayML, Fal AI, Stability, Recraft, Topaz |
+| **Image/Video** | RunwayML, Fal AI, Stability, Recraft |
 | **Audio/Speech** | ElevenLabs, Deepgram, AWS Polly |
 | **Search** | Tavily, Exa AI, Google PSE, Linkup, Searxng |
 | **Self-Hosted** | Ollama, LM Studio, vLLM, Llamafile, Triton |
