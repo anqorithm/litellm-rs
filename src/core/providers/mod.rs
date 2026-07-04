@@ -54,8 +54,6 @@ pub mod deepl;
 #[cfg(feature = "providers-extended")]
 pub mod elevenlabs;
 #[cfg(feature = "providers-extended")]
-pub mod empower;
-#[cfg(feature = "providers-extended")]
 pub mod exa_ai;
 #[cfg(feature = "providers-extended")]
 pub mod fal_ai;

@@ -103,10 +103,6 @@ pub static PROVIDER_MODULE_LIFECYCLE: &[ProviderModuleLifecycleEntry] = &[
         "specialized provider module; not wired through the LLM factory yet",
     ),
     stub(
-        "empower",
-        "specialized provider module; not wired through the LLM factory yet",
-    ),
-    stub(
         "exa_ai",
         "specialized provider module; not wired through the LLM factory yet",
     ),
@@ -306,11 +302,6 @@ pub static PROVIDER_ORPHAN_BASELINE: &[ProviderOrphanBaselineEntry] = &[
         "elevenlabs",
         "non-llm-lane",
         "audio provider module without a gateway LLM factory path",
-    ),
-    baseline(
-        "empower",
-        "delete-native",
-        "macro-generated chat provider awaiting GH837 disposition approval",
     ),
     baseline("exa_ai", "delete-native", "unwired native chat provider"),
     baseline(
