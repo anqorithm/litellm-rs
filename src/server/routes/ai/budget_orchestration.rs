@@ -93,6 +93,7 @@ pub(super) struct BudgetedCall {
     budget_limits: Arc<UnifiedBudgetLimits>,
     budget_manager: Option<Arc<BudgetManager>>,
     api_key_budget_id: Option<Uuid>,
+    api_key_estimated_cost: Option<f64>,
     provider: String,
     model: String,
     settlement_mode: SettlementMode,
@@ -117,6 +118,17 @@ impl BudgetContext {
     pub(super) fn model(&self) -> &str {
         &self.model
     }
+
+    pub(super) fn reserve_spend(
+        &self,
+        amount: f64,
+    ) -> Result<UnifiedBudgetReservation, ProviderError> {
+        self.budget_limits
+            .reserve_spend(&self.provider, &self.model, amount)
+            .map_err(|error| {
+                spend::reservation_error_to_provider_error(error, &self.provider, &self.model)
+            })
+    }
 }
 
 impl BudgetedCall {
@@ -129,6 +141,7 @@ impl BudgetedCall {
             budget_limits,
             budget_manager: None,
             api_key_budget_id: None,
+            api_key_estimated_cost: None,
             provider: provider.into(),
             model: model.into(),
             settlement_mode: SettlementMode::AvailabilityOnly,
@@ -154,6 +167,14 @@ impl BudgetedCall {
         self.budget_manager = Some(budget_manager);
         self.api_key_budget_id = api_key_budget_id;
         self.settlement_mode = mode;
+        self
+    }
+
+    pub(super) fn with_precomputed_api_key_budget_cost(
+        mut self,
+        estimated_cost: Option<f64>,
+    ) -> Self {
+        self.api_key_estimated_cost = estimated_cost;
         self
     }
 
@@ -239,12 +260,15 @@ impl BudgetedCall {
                         "API key budget manager is required for budget reservation",
                     )
                 })?;
+                let estimated_cost = self.api_key_estimated_cost.or_else(|| {
+                    budget
+                        .as_ref()
+                        .map(UnifiedBudgetReservation::reserved_amount)
+                });
                 spend::reserve_api_key_budget(
                     budget_manager.as_ref(),
                     self.api_key_budget_id,
-                    budget
-                        .as_ref()
-                        .map(UnifiedBudgetReservation::reserved_amount),
+                    estimated_cost,
                 )?
             }
         };
@@ -472,6 +496,101 @@ mod tests {
             0.0
         );
         assert_eq!(budget_manager.get_current_spend(&scope), 0.0);
+    }
+
+    #[tokio::test]
+    async fn key_reservation_mode_uses_precomputed_cost_without_provider_model_reservation() {
+        let limits = limited_budget();
+        let budget_manager = Arc::new(BudgetManager::new());
+        let scope = BudgetScope::ApiKey("image-proxy-key-budget".to_string());
+        let budget = budget_manager
+            .create_budget(
+                scope.clone(),
+                BudgetConfig::new("image proxy key budget", 1.0),
+            )
+            .await
+            .expect("key budget should be created");
+        let budget_id = uuid::Uuid::parse_str(&budget.id).expect("budget id should be UUID");
+
+        let ((), reservations) = BudgetedCall::new(limits.clone(), "openai", "gpt-image-1-mini")
+            .with_api_key_budget(
+                budget_manager.clone(),
+                Some(budget_id),
+                ApiKeyBudgetPolicy::RequirePricedReservation,
+            )
+            .with_precomputed_api_key_budget_cost(Some(0.25))
+            .reserve_call(|_context| Ok(None), {
+                let limits = limits.clone();
+                let budget_manager = budget_manager.clone();
+                let scope = scope.clone();
+                move || async move {
+                    assert_eq!(
+                        limits
+                            .providers
+                            .get_provider_usage("openai")
+                            .map(|usage| usage.current_spend)
+                            .unwrap_or_default(),
+                        0.0
+                    );
+                    assert_eq!(
+                        limits
+                            .models
+                            .get_model_usage("gpt-image-1-mini")
+                            .map(|usage| usage.current_spend)
+                            .unwrap_or_default(),
+                        0.0
+                    );
+                    assert_eq!(budget_manager.get_current_spend(&scope), 0.25);
+                    Ok::<_, crate::core::providers::ProviderError>(())
+                }
+            })
+            .await
+            .expect("precomputed key budget should reserve without provider/model reservation");
+
+        let (budget, key) = reservations.into_parts();
+        assert!(budget.is_none());
+        super::spend::settle_api_key_budget_reservation(key, 0.10, "image proxy test");
+        assert_eq!(budget_manager.get_current_spend(&scope), 0.10);
+    }
+
+    #[tokio::test]
+    async fn provider_model_reservation_blocks_concurrent_budget_overrun() {
+        let limits = limited_budget();
+
+        let first = BudgetedCall::new(limits.clone(), "openai", "gpt-4")
+            .reserve_call(|context| context.reserve_spend(0.75).map(Some), {
+                let limits = limits.clone();
+                move || async move {
+                    assert!(
+                        limits.reserve_spend("openai", "gpt-4", 0.50).is_err(),
+                        "in-flight reservation must count against remaining budget"
+                    );
+                    Ok::<_, crate::core::providers::ProviderError>(())
+                }
+            })
+            .await;
+        assert!(first.is_ok(), "first reservation should fit the budget");
+        let (_, reservations) = match first {
+            Ok(value) => value,
+            Err(error) => panic!("first reservation failed unexpectedly: {error}"),
+        };
+
+        let (reservation, key_reservation) = reservations.into_parts();
+        assert!(key_reservation.is_none());
+        let Some(reservation) = reservation else {
+            panic!("provider/model reservation should be present");
+        };
+        assert!(
+            reservation.settle(0.75).is_ok(),
+            "settlement should fit reservation"
+        );
+        assert_eq!(
+            limits
+                .providers
+                .get_provider_usage("openai")
+                .map(|usage| usage.current_spend),
+            Some(0.75)
+        );
     }
 
     #[test]

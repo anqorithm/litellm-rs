@@ -785,6 +785,60 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn image_edit_rejects_provider_budget_that_cannot_cover_estimated_cost_before_upstream() {
+        let mock = MockImageServer::start_image_mock().await;
+        let state = build_test_state(vec![image_route_provider(&mock.base_url)]).await;
+        let mut usage = PricingUsage::new(4, 0);
+        usage.image_tokens = Some(1024);
+        let estimated_cost = state
+            .pricing
+            .calculate_loaded_usage_cost_for_provider("openai", "gpt-image-1-mini", &usage)
+            .expect("image pricing should be available")
+            .total_cost;
+        assert!(estimated_cost > 0.0);
+        state.budget_limits.providers.set_provider_limit(
+            "mock-openai-compatible",
+            ProviderLimitConfig::new(estimated_cost / 2.0, ResetPeriod::Monthly),
+        );
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(state))
+                .configure(litellm_rs::server::routes::ai::configure_routes),
+        )
+        .await;
+        let boundary = "litellm-rs-image-boundary";
+
+        let resp = test::call_service(
+            &app,
+            test::TestRequest::post()
+                .uri("/v1/images/edits")
+                .insert_header((
+                    "content-type",
+                    format!("multipart/form-data; boundary={boundary}"),
+                ))
+                .set_payload(image_edit_multipart_body(boundary))
+                .to_request(),
+        )
+        .await;
+
+        assert_eq!(resp.status(), StatusCode::PAYMENT_REQUIRED);
+        let body: Value = test::read_body_json(resp).await;
+        assert_eq!(body["error"]["type"], "insufficient_quota");
+        assert!(
+            body["error"]["message"]
+                .as_str()
+                .expect("error message")
+                .contains("provider 'mock-openai-compatible' budget exceeded")
+        );
+        assert!(
+            mock.requests().is_empty(),
+            "estimated-cost budget rejection must happen before upstream call"
+        );
+
+        mock.stop_image_mock().await;
+    }
+
+    #[tokio::test]
     async fn image_edit_rejects_exhausted_model_budget_before_upstream() {
         let mock = MockImageServer::start_image_mock().await;
         let state = build_test_state(vec![image_route_provider(&mock.base_url)]).await;
