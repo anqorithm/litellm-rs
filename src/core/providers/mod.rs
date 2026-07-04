@@ -157,8 +157,6 @@ pub mod tavily;
 pub mod triton;
 #[cfg(feature = "providers-extra")]
 pub mod v0;
-#[cfg(feature = "providers-extended")]
-pub mod vercel_ai;
 #[cfg(feature = "providers-extra")]
 pub mod vertex_ai;
 // vllm: Tier 1 -> registry/catalog.rs

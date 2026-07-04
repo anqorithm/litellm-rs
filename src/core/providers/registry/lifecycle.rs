@@ -249,10 +249,6 @@ pub static PROVIDER_MODULE_LIFECYCLE: &[ProviderModuleLifecycleEntry] = &[
         "v0",
         "native V0 module retained; ProviderType::V0 currently uses a generic OpenAI-compatible adapter",
     ),
-    stub(
-        "vercel_ai",
-        "specialized provider module; not wired through the LLM factory yet",
-    ),
     provider_extra_wire(
         "vertex_ai",
         "ProviderType::VertexAI dispatches to native Vertex AI auth when providers-extra is enabled",
@@ -410,7 +406,6 @@ pub static PROVIDER_ORPHAN_BASELINE: &[ProviderOrphanBaselineEntry] = &[
         "demote-to-catalog",
         "catalog-backed duplicate with native provider retained until demote tranche",
     ),
-    baseline("vercel_ai", "delete-native", "unwired native chat provider"),
     baseline(
         "voyage",
         "non-llm-lane",
