@@ -10,8 +10,13 @@ use crate::core::budget::{
 use crate::core::keys::KeyManager;
 use crate::core::models::openai::Usage;
 use crate::core::pricing_service::PricingService;
-use crate::core::providers::ProviderError;
+use crate::core::providers::{Provider, ProviderError};
+use crate::core::router::UnifiedRouter;
+use crate::core::types::model::ProviderCapability;
+use crate::utils::error::gateway_error::GatewayError;
 
+use super::execution;
+pub(super) use super::execution::StreamingDeploymentLease;
 use super::spend;
 
 #[derive(Clone, Copy)]
@@ -87,6 +92,39 @@ impl BudgetedExecutor {
     pub(super) fn key_manager(&self) -> KeyManager {
         self.key_manager.clone()
     }
+}
+
+pub(super) async fn run_unary<T, F, Fut>(
+    router: &UnifiedRouter,
+    requested_model: &str,
+    capability: ProviderCapability,
+    operation: F,
+) -> Result<T, GatewayError>
+where
+    F: Fn(Provider, String, String) -> Fut + Clone,
+    Fut: Future<Output = Result<(T, u64), ProviderError>>,
+{
+    execution::execute_with_selected_deployment(router, requested_model, capability, operation)
+        .await
+}
+
+pub(super) async fn run_stream<T, F, Fut>(
+    router: Arc<UnifiedRouter>,
+    requested_model: &str,
+    capability: ProviderCapability,
+    operation: F,
+) -> Result<(T, StreamingDeploymentLease), GatewayError>
+where
+    F: Fn(Provider, String, String) -> Fut + Clone,
+    Fut: Future<Output = Result<T, ProviderError>>,
+{
+    execution::execute_stream_with_selected_deployment(
+        router,
+        requested_model,
+        capability,
+        operation,
+    )
+    .await
 }
 
 pub(super) struct BudgetedCall {

@@ -11,9 +11,8 @@ use crate::utils::error::gateway_error::GatewayError;
 use actix_web::{HttpRequest, HttpResponse, Result as ActixResult, web};
 use tracing::info;
 
-use super::budgeted::ApiKeyBudgetPolicy;
+use super::budgeted::{ApiKeyBudgetPolicy, run_unary};
 use super::context::handle_ai_request;
-use super::execution::execute_with_selected_deployment;
 
 fn parse_embedding_input(input: &serde_json::Value) -> Result<EmbeddingInput, GatewayError> {
     match input {
@@ -116,7 +115,7 @@ async fn handle_embedding_internal(
     let key_manager = budgeted.key_manager();
     let pricing_service = budgeted.pricing();
     let pricing_config = state.config().gateway.pricing.clone();
-    let core_response = execute_with_selected_deployment(
+    let core_response = run_unary(
         &state.unified_router,
         &requested_model,
         ProviderCapability::Embeddings,

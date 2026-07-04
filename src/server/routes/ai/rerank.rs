@@ -14,8 +14,8 @@ use std::time::Duration;
 use tracing::{error, info};
 
 use super::{
-    budgeted::SettlementMode, execution::execute_with_selected_deployment, openai_errors,
-    provider_config,
+    budgeted::{SettlementMode, run_unary},
+    openai_errors, provider_config,
 };
 
 /// Rerank documents against a query.
@@ -60,17 +60,20 @@ async fn handle_rerank_with_state(
     );
 
     let mut last_router_error = None;
+    let budgeted = state.budgeted.clone();
     for router_model in router_models {
-        let result = execute_with_selected_deployment(
+        let result = run_unary(
             &state.unified_router,
             &router_model,
             ProviderCapability::Rerank,
             {
                 let request = request.clone();
                 let requested_model = requested_model.clone();
+                let budgeted = budgeted.clone();
                 move |selected_provider, selected_model, selected_deployment_id| {
                     let request = request.clone();
                     let requested_model = requested_model.clone();
+                    let budgeted = budgeted.clone();
                     async move {
                         let selected = selected_rerank_provider(
                             state.config().gateway.providers.as_slice(),
@@ -81,8 +84,7 @@ async fn handle_rerank_with_state(
                         )?;
                         let served_model = served_rerank_model(&requested_model);
                         let budget_provider = selected.provider_name.clone();
-                        state
-                            .budgeted
+                        budgeted
                             .for_selected(budget_provider, served_model.to_string())
                             .with_settlement_mode(SettlementMode::AvailabilityOnly)
                             .reserve_call_settle(

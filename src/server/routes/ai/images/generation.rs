@@ -6,8 +6,7 @@ use crate::core::types::model::ProviderCapability;
 use crate::server::state::AppState;
 use crate::utils::error::gateway_error::GatewayError;
 
-use super::super::budgeted::ApiKeyBudgetPolicy;
-use super::super::execution::execute_with_selected_deployment;
+use super::super::budgeted::{ApiKeyBudgetPolicy, run_unary};
 
 /// Handle image generation with app state (UnifiedRouter only)
 pub async fn handle_image_generation_with_state(
@@ -41,7 +40,7 @@ pub async fn handle_image_generation_with_state(
     let key_manager = budgeted.key_manager();
     let pricing_service = budgeted.pricing();
     let pricing_config = state.config().gateway.pricing.clone();
-    let core_response = execute_with_selected_deployment(
+    let core_response = run_unary(
         &state.unified_router,
         &requested_model,
         ProviderCapability::ImageGeneration,

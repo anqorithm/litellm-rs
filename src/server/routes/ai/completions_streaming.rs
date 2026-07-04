@@ -13,8 +13,7 @@ use crate::core::streaming::types::Event;
 use crate::core::types::{context::RequestContext, model::ProviderCapability};
 use crate::server::state::AppState;
 
-use super::super::budgeted::{ApiKeyBudgetPolicy, SettledStream};
-use super::super::execution::execute_stream_with_selected_deployment;
+use super::super::budgeted::{ApiKeyBudgetPolicy, SettledStream, run_stream};
 use super::super::{chat, openai_errors, spend, token_policy};
 use super::completions_sse::send_stream_error;
 use super::{CompletionAdapterRequest, chunk_has_text_delta, completion_chunk_from_core};
@@ -53,7 +52,7 @@ pub(super) async fn handle_streaming_completion(
     let api_key_id = context.api_key_id();
     let api_key_budget_id = context.api_key_budget_id();
 
-    match execute_stream_with_selected_deployment(
+    match run_stream(
         state.unified_router.clone(),
         &requested_model,
         ProviderCapability::ChatCompletionStream,
