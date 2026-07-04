@@ -9,7 +9,6 @@ use crate::core::budget::{
 use crate::core::keys::KeyManager;
 use crate::core::pricing_service::{PricingService, PricingUsage};
 use crate::core::providers::ProviderError;
-use crate::server::state::AppState;
 use crate::utils::error::gateway_error::GatewayError;
 
 use super::provider::GeminiRouteProvider;
@@ -117,13 +116,14 @@ pub(super) async fn record_gemini_spend(
 }
 
 pub(super) fn reserve_gemini_budget(
-    state: &AppState,
+    pricing: &PricingService,
+    pricing_config: &GatewayPricingConfig,
+    budget_limits: &UnifiedBudgetLimits,
     provider: &GeminiRouteProvider,
     request: &Value,
 ) -> Result<Option<UnifiedBudgetReservation>, GatewayError> {
     let usage = estimated_gemini_request_usage(request);
-    let pricing_config = &state.config().gateway.pricing;
-    let estimate = match state.pricing.estimate_loaded_completion_cost_for_provider(
+    let estimate = match pricing.estimate_loaded_completion_cost_for_provider(
         &provider.pricing_provider,
         &provider.model,
         usage.prompt_tokens,
@@ -133,7 +133,7 @@ pub(super) fn reserve_gemini_budget(
         Err(error) => {
             return super::super::spend::reserve_unpriced_usage_budget(
                 pricing_config,
-                &state.budget_limits,
+                budget_limits,
                 &provider.provider_name,
                 &provider.model,
                 &usage,
@@ -144,14 +144,13 @@ pub(super) fn reserve_gemini_budget(
     };
     if estimate.max_cost <= 0.0 {
         super::super::spend::ensure_budget_available(
-            &state.budget_limits,
+            budget_limits,
             &provider.provider_name,
             &provider.model,
         )?;
         return Ok(None);
     }
-    state
-        .budget_limits
+    budget_limits
         .reserve_spend(&provider.provider_name, &provider.model, estimate.max_cost)
         .map(Some)
         .map_err(|error| reservation_error_to_gateway_error(error, provider))

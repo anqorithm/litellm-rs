@@ -364,11 +364,15 @@ async fn gemini_upstream_response_to_http_response(
     let body = response.bytes().await.map_err(gemini_http_error)?;
     if status.is_success() {
         let config = state.config();
+        let budgeted = state.budgeted.clone();
+        let pricing = budgeted.pricing();
+        let budget_limits = budgeted.budget_limits();
+        let key_manager = budgeted.key_manager();
         let spend_state = GeminiSpendState {
-            pricing: state.pricing.as_ref(),
+            pricing: pricing.as_ref(),
             pricing_config: &config.gateway.pricing,
-            budget_limits: &state.budget_limits,
-            key_manager: &state.key_manager,
+            budget_limits: budget_limits.as_ref(),
+            key_manager: &key_manager,
             api_key_id: context.api_key_id(),
         };
         record_gemini_spend(
@@ -410,10 +414,11 @@ fn gemini_streaming_response(state: &AppState, parts: GeminiStreamResponseParts)
         stream_lease,
     } = parts;
     let (tx, rx) = mpsc::channel::<Bytes>(8);
-    let pricing = state.pricing.clone();
+    let budgeted = state.budgeted.clone();
+    let pricing = budgeted.pricing();
     let pricing_config = state.config().gateway.pricing.clone();
-    let budget_limits = state.budget_limits.clone();
-    let key_manager = state.key_manager.clone();
+    let budget_limits = budgeted.budget_limits();
+    let key_manager = budgeted.key_manager();
     let api_key_id = context.api_key_id();
     let should_record_spend = status.is_success();
 
