@@ -118,6 +118,30 @@ impl BudgetContext {
     pub(super) fn model(&self) -> &str {
         &self.model
     }
+
+    pub(super) fn ensure_can_spend(&self, amount: f64) -> Result<(), ProviderError> {
+        if !self
+            .budget_limits
+            .providers
+            .can_provider_spend(&self.provider, amount)
+        {
+            return Err(ProviderError::quota_exceeded(
+                "budget",
+                format!("provider '{}' budget exceeded", self.provider),
+            ));
+        }
+        if !self
+            .budget_limits
+            .models
+            .can_model_spend(&self.model, amount)
+        {
+            return Err(ProviderError::quota_exceeded(
+                "budget",
+                format!("model '{}' budget exceeded", self.model),
+            ));
+        }
+        Ok(())
+    }
 }
 
 impl BudgetedCall {
