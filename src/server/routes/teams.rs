@@ -19,7 +19,7 @@ use crate::core::teams::{
     AddMemberRequest, CreateTeamRequest, Team, TeamManager, TeamRole, TeamStatus,
     UpdateRoleRequest, UpdateTeamRequest,
 };
-use crate::core::types::context::RequestContext;
+use crate::core::types::context::{RequestContext, SharedRequestContext};
 use crate::server::routes::{ApiResponse, PaginatedResponse, PaginationQuery, errors};
 use crate::server::state::AppState;
 use crate::utils::error::gateway_error::GatewayError;
@@ -129,6 +129,10 @@ fn get_request_caller(req: &HttpRequest) -> Option<RequestCaller> {
         return Some(RequestCaller::User(Box::new(user.clone())));
     }
 
+    if let Some(ctx) = req.extensions().get::<SharedRequestContext>() {
+        return ctx.team_id().map(RequestCaller::Team);
+    }
+
     req.extensions()
         .get::<RequestContext>()
         .and_then(|ctx| ctx.team_id())
@@ -213,6 +217,13 @@ async fn authorize_team_operation(
 fn resolve_invited_by(req: &HttpRequest) -> Option<Uuid> {
     if let Some(user) = req.extensions().get::<User>() {
         return Some(user.id());
+    }
+
+    if let Some(ctx) = req.extensions().get::<SharedRequestContext>() {
+        return ctx
+            .user_id
+            .as_deref()
+            .and_then(|user_id| Uuid::parse_str(user_id).ok());
     }
 
     req.extensions()

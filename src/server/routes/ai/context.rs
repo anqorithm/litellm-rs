@@ -2,11 +2,12 @@
 
 use crate::core::models::ApiKey;
 use crate::core::models::user::types::User;
-use crate::core::types::context::RequestContext;
+use crate::core::types::context::{RequestContext, SharedRequestContext};
 use crate::utils::error::gateway_error::GatewayError;
 use actix_web::{HttpMessage, HttpRequest, HttpResponse, Result as ActixResult};
 use serde::{Deserialize, Serialize};
 use std::future::Future;
+use std::sync::Arc;
 use tracing::{debug, error};
 
 const CORE_KEYS_EXTRA_NAMESPACE: &str = "__core_keys";
@@ -26,9 +27,13 @@ struct RuntimeKeyPermissions {
 }
 
 /// Get request context from headers and middleware extensions
-pub fn get_request_context(req: &HttpRequest) -> ActixResult<RequestContext> {
+pub fn get_shared_request_context(req: &HttpRequest) -> ActixResult<SharedRequestContext> {
+    if let Some(context) = req.extensions().get::<SharedRequestContext>() {
+        return Ok(Arc::clone(context));
+    }
+
     if let Some(context) = req.extensions().get::<RequestContext>() {
-        return Ok(context.clone());
+        return Ok(Arc::new(context.clone()));
     }
 
     let mut context = RequestContext::new();
@@ -49,7 +54,11 @@ pub fn get_request_context(req: &HttpRequest) -> ActixResult<RequestContext> {
 
     context.client_ip = req.connection_info().peer_addr().map(|ip| ip.to_string());
 
-    Ok(context)
+    Ok(Arc::new(context))
+}
+
+pub fn get_request_context(req: &HttpRequest) -> ActixResult<RequestContext> {
+    Ok(get_shared_request_context(req)?.as_ref().clone())
 }
 
 /// Extract user from request extensions
@@ -565,6 +574,23 @@ mod tests {
         assert!(enforce_api_key_model_and_token_limits(&req, "gpt-4o", Some(128)).is_ok());
         assert!(enforce_api_key_model_and_token_limits(&req, "gpt-4o-mini", Some(128)).is_err());
         assert!(enforce_api_key_model_and_token_limits(&req, "gpt-4o", Some(129)).is_err());
+    }
+
+    #[test]
+    fn test_get_request_context_reuses_shared_extension_handle() {
+        let api_key_id = uuid::Uuid::new_v4();
+        let context = Arc::new(RequestContext::new().with_api_key(api_key_id));
+        let req = actix_web::test::TestRequest::default().to_http_request();
+        req.extensions_mut()
+            .insert::<SharedRequestContext>(Arc::clone(&context));
+
+        let extracted = match get_shared_request_context(&req) {
+            Ok(context) => context,
+            Err(error) => panic!("shared context should be present: {error}"),
+        };
+
+        assert!(Arc::ptr_eq(&context, &extracted));
+        assert_eq!(extracted.api_key_id(), Some(api_key_id));
     }
 
     // ==================== get_authenticated_user Tests ====================

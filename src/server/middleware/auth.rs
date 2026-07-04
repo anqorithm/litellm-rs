@@ -2,7 +2,7 @@
 
 use crate::auth::AuthMethod;
 use crate::core::models::{ApiKey, user::types::User};
-use crate::core::types::context::RequestContext;
+use crate::core::types::context::{RequestContext, SharedRequestContext};
 use crate::server::middleware::auth_rate_limiter::get_auth_rate_limiter;
 use crate::server::middleware::helpers::{
     extract_auth_method_with_api_key_header, is_public_route,
@@ -22,6 +22,7 @@ use std::future::Future;
 use std::net::SocketAddr;
 use std::pin::Pin;
 use std::rc::Rc;
+use std::sync::Arc;
 use tracing::{debug, error, warn};
 
 /// Auth middleware for Actix-web
@@ -94,7 +95,7 @@ where
             let rate_limiter = get_auth_rate_limiter();
 
             if is_public {
-                req.extensions_mut().insert(context);
+                insert_request_context(&mut req, context);
                 return service
                     .call(req)
                     .await
@@ -120,7 +121,7 @@ where
                         ))
                         .map_into_right_body());
                 }
-                req.extensions_mut().insert(context);
+                insert_request_context(&mut req, context);
                 return service
                     .call(req)
                     .await
@@ -266,7 +267,7 @@ where
                         }
                     }
 
-                    req.extensions_mut().insert(result.context.clone());
+                    insert_request_context(&mut req, result.context);
                     if let Some(user) = result.user {
                         req.extensions_mut().insert::<User>(user);
                     }
@@ -354,11 +355,20 @@ fn requires_auth_verification(auth_method: &AuthMethod) -> bool {
 }
 
 /// Extract request context from request
-pub fn get_request_context(req: &HttpRequest) -> Result<RequestContext, actix_web::Error> {
+pub fn get_request_context(req: &HttpRequest) -> Result<SharedRequestContext, actix_web::Error> {
+    if let Some(context) = req.extensions().get::<SharedRequestContext>() {
+        return Ok(Arc::clone(context));
+    }
+
     req.extensions()
         .get::<RequestContext>()
-        .cloned()
+        .map(|context| Arc::new(context.clone()))
         .ok_or_else(|| actix_web::error::ErrorInternalServerError("Missing request context"))
+}
+
+fn insert_request_context(req: &mut ServiceRequest, context: RequestContext) {
+    req.extensions_mut()
+        .insert::<SharedRequestContext>(Arc::new(context));
 }
 
 /// Extract a client identifier for rate limiting
