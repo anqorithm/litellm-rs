@@ -14,7 +14,7 @@ use crate::core::providers::{Provider, ProviderError};
 use crate::server::state::AppState;
 use crate::utils::error::gateway_error::GatewayError;
 
-use super::super::budgeted::{ApiKeyBudgetPolicy, BudgetedCall};
+use super::super::budgeted::ApiKeyBudgetPolicy;
 use super::{validate_api_version, validate_method, validate_model_segment};
 use uuid::Uuid;
 
@@ -313,37 +313,44 @@ pub(super) async fn send_gemini_request(
     ),
     ProviderError,
 > {
-    let (response, reservations) = BudgetedCall::new(
-        state.budget_limits.clone(),
-        provider.provider_name.clone(),
-        provider.model.clone(),
-    )
-    .with_api_key_budget(
-        state.budget_manager.clone(),
-        api_key_budget_id,
-        ApiKeyBudgetPolicy::FromProviderReservation,
-    )
-    .reserve_call(
-        |_budget| {
-            super::spend::reserve_gemini_budget(state, provider, request)
+    let budgeted = state.budgeted.clone();
+    let pricing = budgeted.pricing();
+    let pricing_config = state.config().gateway.pricing.clone();
+    let budget_limits = budgeted.budget_limits();
+    let (response, reservations) = budgeted
+        .for_selected_with_api_key_budget(
+            provider.provider_name.clone(),
+            provider.model.clone(),
+            api_key_budget_id,
+            ApiKeyBudgetPolicy::FromProviderReservation,
+        )
+        .reserve_call(
+            |_budget| {
+                super::spend::reserve_gemini_budget(
+                    pricing.as_ref(),
+                    &pricing_config,
+                    budget_limits.as_ref(),
+                    provider,
+                    request,
+                )
                 .map_err(gemini_gateway_error_to_provider_error)
-        },
-        || async {
-            let url = gemini_url(provider, api_version, method, stream)
-                .map_err(gemini_gateway_error_to_provider_error)?;
-            let response = apply_gemini_headers(gemini_http_client().post(url), provider)
-                .header(CONTENT_TYPE, "application/json")
-                .json(request)
-                .timeout(provider.timeout)
-                .send()
-                .await
-                .map_err(|error| {
-                    gemini_gateway_error_to_provider_error(gemini_http_error(error))
-                })?;
-            gemini_response_or_provider_error(response, provider).await
-        },
-    )
-    .await?;
+            },
+            || async {
+                let url = gemini_url(provider, api_version, method, stream)
+                    .map_err(gemini_gateway_error_to_provider_error)?;
+                let response = apply_gemini_headers(gemini_http_client().post(url), provider)
+                    .header(CONTENT_TYPE, "application/json")
+                    .json(request)
+                    .timeout(provider.timeout)
+                    .send()
+                    .await
+                    .map_err(|error| {
+                        gemini_gateway_error_to_provider_error(gemini_http_error(error))
+                    })?;
+                gemini_response_or_provider_error(response, provider).await
+            },
+        )
+        .await?;
     let (budget_reservation, key_budget_reservation) = reservations.into_parts();
     Ok((budget_reservation, key_budget_reservation, response))
 }
