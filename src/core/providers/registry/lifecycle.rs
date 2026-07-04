@@ -246,10 +246,6 @@ pub static PROVIDER_MODULE_LIFECYCLE: &[ProviderModuleLifecycleEntry] = &[
     ),
     internal("thinking", "shared thinking/reasoning support"),
     stub(
-        "topaz",
-        "specialized provider module; not wired through the LLM factory yet",
-    ),
-    stub(
         "triton",
         "specialized provider module; not wired through the LLM factory yet",
     ),
@@ -413,7 +409,6 @@ pub static PROVIDER_ORPHAN_BASELINE: &[ProviderOrphanBaselineEntry] = &[
         "non-llm-lane",
         "search provider exposes LLMProvider",
     ),
-    baseline("topaz", "delete-native", "unwired native chat provider"),
     baseline("triton", "delete-native", "unwired native chat provider"),
     baseline(
         "v0",

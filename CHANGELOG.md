@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Breaking behavior: runtime requests for unpriced models now fail closed by default even when `pricing.allow_degraded=true`; deployments that intentionally allow unpriced traffic must set `pricing.unpriced_model_policy=allow_unpriced` and configure a finite `pricing.unpriced_fallback_cost_per_1k_tokens`.
 
+### Removed
+- Removed the module-only `topaz` provider implementation from the `providers-extended` surface for #837. It had no gateway factory or dispatch path, so runtime provider selection is unchanged; downstream crates directly importing `litellm_rs::core::providers::topaz` must remove that import or restore the old implementation from git history.
+
 ### Fixed
 - Redis-backed distributed rate limiting now fails closed by default when Redis commands fail, emits `rate_limiter_degraded_total{operation,mode}`, and keeps the old local fallback only behind `rate_limit.redis_failure_mode: fail_open_local`.
 
