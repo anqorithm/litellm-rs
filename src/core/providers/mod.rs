@@ -142,8 +142,6 @@ pub mod runwayml;
 pub mod sagemaker;
 // sambanova: Tier 1 -> registry/catalog.rs
 #[cfg(feature = "providers-extended")]
-pub mod sap_ai;
-#[cfg(feature = "providers-extended")]
 pub mod searxng;
 // siliconflow: Tier 1 -> registry/catalog.rs
 #[cfg(feature = "providers-extended")]

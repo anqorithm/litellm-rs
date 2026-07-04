@@ -221,10 +221,6 @@ pub static PROVIDER_MODULE_LIFECYCLE: &[ProviderModuleLifecycleEntry] = &[
         "specialized provider module; not wired through the LLM factory yet",
     ),
     stub(
-        "sap_ai",
-        "specialized provider module; not wired through the LLM factory yet",
-    ),
-    stub(
         "searxng",
         "specialized provider module; not wired through the LLM factory yet",
     ),
@@ -391,7 +387,6 @@ pub static PROVIDER_ORPHAN_BASELINE: &[ProviderOrphanBaselineEntry] = &[
         "video/image provider exposes LLMProvider",
     ),
     baseline("sagemaker", "delete-native", "unwired native chat provider"),
-    baseline("sap_ai", "delete-native", "unwired native chat provider"),
     baseline(
         "searxng",
         "non-llm-lane",
