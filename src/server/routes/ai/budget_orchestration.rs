@@ -119,28 +119,15 @@ impl BudgetContext {
         &self.model
     }
 
-    pub(super) fn ensure_can_spend(&self, amount: f64) -> Result<(), ProviderError> {
-        if !self
-            .budget_limits
-            .providers
-            .can_provider_spend(&self.provider, amount)
-        {
-            return Err(ProviderError::quota_exceeded(
-                "budget",
-                format!("provider '{}' budget exceeded", self.provider),
-            ));
-        }
-        if !self
-            .budget_limits
-            .models
-            .can_model_spend(&self.model, amount)
-        {
-            return Err(ProviderError::quota_exceeded(
-                "budget",
-                format!("model '{}' budget exceeded", self.model),
-            ));
-        }
-        Ok(())
+    pub(super) fn reserve_spend(
+        &self,
+        amount: f64,
+    ) -> Result<UnifiedBudgetReservation, ProviderError> {
+        self.budget_limits
+            .reserve_spend(&self.provider, &self.model, amount)
+            .map_err(|error| {
+                spend::reservation_error_to_provider_error(error, &self.provider, &self.model)
+            })
     }
 }
 
@@ -564,6 +551,46 @@ mod tests {
         assert!(budget.is_none());
         super::spend::settle_api_key_budget_reservation(key, 0.10, "image proxy test");
         assert_eq!(budget_manager.get_current_spend(&scope), 0.10);
+    }
+
+    #[tokio::test]
+    async fn provider_model_reservation_blocks_concurrent_budget_overrun() {
+        let limits = limited_budget();
+
+        let first = BudgetedCall::new(limits.clone(), "openai", "gpt-4")
+            .reserve_call(|context| context.reserve_spend(0.75).map(Some), {
+                let limits = limits.clone();
+                move || async move {
+                    assert!(
+                        limits.reserve_spend("openai", "gpt-4", 0.50).is_err(),
+                        "in-flight reservation must count against remaining budget"
+                    );
+                    Ok::<_, crate::core::providers::ProviderError>(())
+                }
+            })
+            .await;
+        assert!(first.is_ok(), "first reservation should fit the budget");
+        let (_, reservations) = match first {
+            Ok(value) => value,
+            Err(error) => panic!("first reservation failed unexpectedly: {error}"),
+        };
+
+        let (reservation, key_reservation) = reservations.into_parts();
+        assert!(key_reservation.is_none());
+        let Some(reservation) = reservation else {
+            panic!("provider/model reservation should be present");
+        };
+        assert!(
+            reservation.settle(0.75).is_ok(),
+            "settlement should fit reservation"
+        );
+        assert_eq!(
+            limits
+                .providers
+                .get_provider_usage("openai")
+                .map(|usage| usage.current_spend),
+            Some(0.75)
+        );
     }
 
     #[test]
