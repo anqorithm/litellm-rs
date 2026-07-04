@@ -12,8 +12,7 @@ use serde_json::Value;
 use std::time::Duration;
 use tracing::error;
 
-use super::budgeted::SettlementMode;
-use super::execution::execute_with_selected_deployment;
+use super::budgeted::{SettlementMode, run_unary};
 use super::openai_errors;
 use super::provider_config;
 
@@ -83,17 +82,20 @@ async fn proxy_moderation(
         moderation_router_models(state.config().gateway.providers.as_slice(), &resolved_model);
 
     let mut last_router_error = None;
+    let budgeted = state.budgeted.clone();
     for router_model in router_models {
-        let result = execute_with_selected_deployment(
+        let result = run_unary(
             &state.unified_router,
             &router_model,
             ProviderCapability::Moderation,
             {
                 let request = request.clone();
                 let resolved_model = resolved_model.clone();
+                let budgeted = budgeted.clone();
                 move |selected_provider, selected_model, _deployment_id| {
                     let request = request.clone();
                     let resolved_model = resolved_model.clone();
+                    let budgeted = budgeted.clone();
                     async move {
                         let provider = selected_moderation_proxy_provider(
                             state.config().gateway.providers.as_slice(),
@@ -102,8 +104,7 @@ async fn proxy_moderation(
                             &resolved_model,
                         )?;
                         let budget_provider = provider.provider_name.clone();
-                        state
-                            .budgeted
+                        budgeted
                             .for_selected(budget_provider, resolved_model.clone())
                             .with_settlement_mode(SettlementMode::AvailabilityOnly)
                             .reserve_call_settle(

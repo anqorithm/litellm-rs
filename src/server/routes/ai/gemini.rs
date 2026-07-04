@@ -14,10 +14,7 @@ use crate::core::types::model::ProviderCapability;
 use crate::server::state::AppState;
 use crate::utils::error::gateway_error::GatewayError;
 
-use super::execution::{
-    StreamingDeploymentLease, execute_stream_with_selected_deployment,
-    execute_with_selected_deployment,
-};
+use super::budgeted::{StreamingDeploymentLease, run_stream, run_unary};
 use super::openai_errors;
 
 mod provider;
@@ -150,7 +147,7 @@ async fn proxy_gemini_route_inner(
 
     let mut last_router_error = None;
     for router_model in router_models {
-        let result = execute_with_selected_deployment(
+        let result = run_unary(
             &state.unified_router,
             &router_model,
             gemini_route_capability(stream),
@@ -233,7 +230,7 @@ async fn proxy_gemini_stream_route_inner(
     let api_key_budget_id = context.api_key_budget_id();
     let mut last_router_error = None;
     for router_model in router_models {
-        let result = execute_stream_with_selected_deployment(
+        let result = run_stream(
             state.unified_router.clone(),
             &router_model,
             gemini_route_capability(true),

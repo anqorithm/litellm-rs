@@ -18,9 +18,8 @@ use actix_web::{HttpRequest, HttpResponse, Result as ActixResult, web};
 use serde_json::json;
 use tracing::{error, info, warn};
 
-use super::budgeted::ApiKeyBudgetPolicy;
+use super::budgeted::{ApiKeyBudgetPolicy, run_unary};
 use super::context::get_request_context;
-use super::execution::execute_with_selected_deployment;
 use super::openai_errors;
 #[path = "chat_delta.rs"]
 mod chat_delta;
@@ -119,7 +118,7 @@ async fn handle_chat_completion_internal(
     let api_key_budget_id = context.api_key_budget_id();
     let budgeted = state.budgeted.clone();
 
-    let core_response = execute_with_selected_deployment(
+    let core_response = run_unary(
         unified_router,
         &requested_model,
         ProviderCapability::ChatCompletion,

@@ -14,7 +14,6 @@ use crate::core::streaming::types::Event;
 use crate::core::types::responses::Usage as ChatUsage;
 use crate::core::types::{context::RequestContext, model::ProviderCapability};
 use crate::server::routes::ai::chat::build_core_chat_request;
-use crate::server::routes::ai::execution::execute_stream_with_selected_deployment;
 use crate::server::routes::ai::responses::{
     ResponseOwner, current_unix_ts, finish_reason_enum_to_status, store_response_if_requested,
     uuid_v4_hex,
@@ -30,7 +29,7 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 
-use super::budgeted::ApiKeyBudgetPolicy;
+use super::budgeted::{ApiKeyBudgetPolicy, run_stream};
 use super::{openai_errors, spend};
 #[path = "responses_stream_budget.rs"]
 mod responses_stream_budget;
@@ -83,7 +82,7 @@ pub(crate) async fn handle_streaming_response(
     let api_key_budget_id = context.api_key_budget_id();
     let settlement_budgeted = state.budgeted.clone();
 
-    match execute_stream_with_selected_deployment(
+    match run_stream(
         state.unified_router.clone(),
         &requested_model,
         ProviderCapability::ChatCompletionStream,

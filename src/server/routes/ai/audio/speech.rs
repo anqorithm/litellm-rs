@@ -7,8 +7,7 @@ use actix_web::{HttpRequest, HttpResponse, Result as ActixResult, web};
 use serde::Deserialize;
 use tracing::{error, info};
 
-use super::super::budgeted::ApiKeyBudgetPolicy;
-use super::super::execution::execute_with_selected_deployment;
+use super::super::budgeted::{ApiKeyBudgetPolicy, run_unary};
 use crate::server::routes::ai::context::{
     enforce_api_key_model_and_token_limits, get_request_context,
 };
@@ -84,7 +83,7 @@ pub async fn audio_speech(
     let pricing_service = budgeted.pricing();
     let pricing_config = state.config().gateway.pricing.clone();
 
-    match execute_with_selected_deployment(
+    match run_unary(
         &state.unified_router,
         &requested_model,
         ProviderCapability::TextToSpeech,

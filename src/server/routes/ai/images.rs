@@ -23,9 +23,8 @@ use std::sync::OnceLock;
 use std::time::Duration;
 use tracing::{error, info};
 
-use super::budgeted::ApiKeyBudgetPolicy;
+use super::budgeted::{ApiKeyBudgetPolicy, run_unary};
 use super::context::handle_ai_request;
-use super::execution::execute_with_selected_deployment;
 use super::{openai_errors, provider_config};
 use proxy_spend::{image_proxy_cost, record_image_proxy_spend};
 
@@ -174,7 +173,7 @@ async fn proxy_image_multipart_endpoint(
 
     let mut last_router_error = None;
     for router_model in router_models {
-        let result = execute_with_selected_deployment(
+        let result = run_unary(
             &state.unified_router,
             &router_model,
             endpoint.capability(),
