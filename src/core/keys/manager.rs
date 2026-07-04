@@ -29,7 +29,7 @@ pub struct KeyManager {
     /// Tracks when each key's `last_used_at` was last persisted.
     last_used_cache: Arc<DashMap<Uuid, Instant>>,
     /// Optional HMAC secret for key hashing.
-    hmac_secret: Option<String>,
+    hmac_secret: Option<Arc<str>>,
 }
 
 impl std::fmt::Debug for KeyManager {
@@ -66,7 +66,7 @@ impl KeyManager {
 
     /// Set the HMAC secret for key hashing
     pub fn with_hmac_secret(mut self, secret: Option<String>) -> Self {
-        self.hmac_secret = secret;
+        self.hmac_secret = secret.map(Arc::from);
         self
     }
 
@@ -435,6 +435,21 @@ mod manager_tests {
         manager.prune_last_used_cache(now);
 
         assert!(manager.last_used_cache.len() < LAST_USED_CACHE_MAX_ENTRIES);
+    }
+
+    #[test]
+    fn test_clone_reuses_hmac_secret_allocation() {
+        let manager = create_manager().with_hmac_secret(Some("shared-secret".to_string()));
+        let cloned = manager.clone();
+
+        let (Some(original_secret), Some(cloned_secret)) =
+            (manager.hmac_secret.as_ref(), cloned.hmac_secret.as_ref())
+        else {
+            panic!("secret should be set on both managers");
+        };
+
+        assert!(Arc::ptr_eq(original_secret, cloned_secret));
+        assert_eq!(cloned.hmac_secret(), Some("shared-secret"));
     }
 
     #[tokio::test]
