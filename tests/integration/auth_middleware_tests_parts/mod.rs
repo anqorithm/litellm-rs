@@ -3,7 +3,7 @@ use actix_web::{App, HttpMessage, HttpRequest, HttpResponse, test, web};
 use litellm_rs::Config;
 use litellm_rs::core::models::user::types::{User, UserRole, UserStatus};
 use litellm_rs::core::models::{ApiKey, Metadata, RateLimits, UsageStats};
-use litellm_rs::core::types::context::RequestContext;
+use litellm_rs::core::types::context::{RequestContext, SharedRequestContext};
 use litellm_rs::server::http::HttpServer;
 use litellm_rs::server::middleware::{AuthMiddleware, RateLimitMiddleware};
 use litellm_rs::server::state::AppState;
@@ -35,7 +35,15 @@ struct AuthProbePayload {
 async fn auth_probe(req: HttpRequest, hit_counter: web::Data<Arc<AtomicUsize>>) -> HttpResponse {
     hit_counter.fetch_add(1, Ordering::SeqCst);
 
-    let context = req.extensions().get::<RequestContext>().cloned();
+    let context = req
+        .extensions()
+        .get::<SharedRequestContext>()
+        .cloned()
+        .or_else(|| {
+            req.extensions()
+                .get::<RequestContext>()
+                .map(|context| Arc::new(context.clone()))
+        });
     let user = req.extensions().get::<User>().cloned();
     let api_key = req.extensions().get::<ApiKey>().cloned();
 

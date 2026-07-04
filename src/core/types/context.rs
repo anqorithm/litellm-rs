@@ -1,6 +1,7 @@
 //! Request context types
 
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use uuid::Uuid;
 
@@ -31,6 +32,9 @@ pub struct RequestContext {
     /// Span ID
     pub span_id: Option<String>,
 }
+
+/// Shared request context handle used between middleware and route handlers.
+pub type SharedRequestContext = Arc<RequestContext>;
 
 impl Default for RequestContext {
     fn default() -> Self {

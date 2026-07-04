@@ -2,7 +2,7 @@
 
 use super::rate_limit_key_policy::effective_requests_per_minute;
 use crate::core::rate_limiter::{RateLimitReservation, get_global_rate_limiter};
-use crate::core::types::context::RequestContext;
+use crate::core::types::context::{RequestContext, SharedRequestContext};
 use crate::server::state::AppState;
 use actix_web::body::EitherBody;
 use actix_web::dev::{Service, ServiceRequest, ServiceResponse, Transform, forward_ready};
@@ -433,8 +433,15 @@ fn extract_client_key(req: &ServiceRequest, trusted_proxies: &[String]) -> Strin
 
 fn authenticated_client_key(req: &ServiceRequest) -> Option<String> {
     let extensions = req.extensions();
-    let context = extensions.get::<RequestContext>()?;
+    if let Some(context) = extensions.get::<SharedRequestContext>() {
+        return client_key_from_context(context.as_ref());
+    }
 
+    let context = extensions.get::<RequestContext>()?;
+    client_key_from_context(context)
+}
+
+fn client_key_from_context(context: &RequestContext) -> Option<String> {
     if let Some(api_key_id) = context.api_key_id() {
         return Some(format!("api_key:{}", api_key_id));
     }
