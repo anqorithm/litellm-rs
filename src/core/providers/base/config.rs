@@ -99,7 +99,6 @@ impl BaseConfig {
             "huggingface" => "https://api-inference.huggingface.co",
             "cohere" => "https://api.cohere.ai/v1",
             "datarobot" => "https://app.datarobot.com/api/v2",
-            "empower" => "https://api.empower.dev/v1",
             "exa_ai" => "https://api.exa.ai/v1",
             "firecrawl" => "https://api.firecrawl.dev/v1",
             "deepl" => "https://api-free.deepl.com/v2",
