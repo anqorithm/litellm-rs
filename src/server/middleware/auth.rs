@@ -611,4 +611,39 @@ mod tests {
         )));
         assert!(!requires_auth_verification(&AuthMethod::None));
     }
+
+    #[test]
+    fn insert_request_context_stores_shared_extension_handle() {
+        let api_key_id = uuid::Uuid::new_v4();
+        let mut req = TestRequest::default().to_srv_request();
+
+        insert_request_context(&mut req, RequestContext::new().with_api_key(api_key_id));
+
+        let extensions = req.extensions();
+        let stored = extensions
+            .get::<SharedRequestContext>()
+            .expect("request context should be stored as a shared handle");
+        assert_eq!(stored.api_key_id(), Some(api_key_id));
+        assert!(extensions.get::<RequestContext>().is_none());
+    }
+
+    #[test]
+    fn build_request_context_excludes_sensitive_auth_headers() {
+        let mut req = TestRequest::default()
+            .insert_header(("authorization", "Bearer secret"))
+            .insert_header(("x-api-key", "sk-secret"))
+            .insert_header(("x-request-id", "req-123"))
+            .insert_header(("x-observable", "kept"))
+            .to_srv_request();
+
+        let context = build_request_context(&mut req);
+
+        assert_eq!(context.request_id, "req-123");
+        assert_eq!(
+            context.headers.get("x-observable").map(String::as_str),
+            Some("kept")
+        );
+        assert!(!context.headers.contains_key("authorization"));
+        assert!(!context.headers.contains_key("x-api-key"));
+    }
 }

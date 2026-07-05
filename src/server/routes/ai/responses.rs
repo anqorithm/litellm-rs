@@ -31,9 +31,8 @@ pub async fn create_response(
 ) -> ActixResult<HttpResponse> {
     info!("Responses API request for model: {}", payload.model);
 
-    let mut context = super::context::get_request_context(&req)?;
-    super::token_policy::attach_api_key_token_limit(&req, &mut context)?;
-    let owner = lifecycle::response_owner(&context);
+    let context = super::token_policy::shared_request_context_with_api_key_token_limit(&req)?;
+    let owner = lifecycle::response_owner(context.as_ref());
     let request = payload.into_inner();
 
     if request.model.trim().is_empty() {
@@ -85,7 +84,7 @@ pub async fn create_response(
             state.get_ref().clone(),
             chat_request,
             request,
-            context,
+            context.as_ref().clone(),
             owner,
         ))
     } else if request.stream.unwrap_or(false) {
@@ -98,7 +97,14 @@ pub async fn create_response(
         )
         .await
     } else {
-        handle_sync_response(state.get_ref(), chat_request, request, context, owner).await
+        handle_sync_response(
+            state.get_ref(),
+            chat_request,
+            request,
+            context.as_ref().clone(),
+            owner,
+        )
+        .await
     }
 }
 

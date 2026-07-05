@@ -12,7 +12,7 @@ use crate::core::models::openai::responses_api::{
 use crate::core::providers::ProviderError;
 use crate::core::streaming::types::Event;
 use crate::core::types::responses::Usage as ChatUsage;
-use crate::core::types::{context::RequestContext, model::ProviderCapability};
+use crate::core::types::{context::SharedRequestContext, model::ProviderCapability};
 use crate::server::routes::ai::chat::build_core_chat_request;
 use crate::server::routes::ai::responses::{
     ResponseOwner, current_unix_ts, finish_reason_enum_to_status, store_response_if_requested,
@@ -49,7 +49,7 @@ pub(crate) async fn handle_streaming_response(
     state: &AppState,
     mut chat_request: ChatCompletionRequest,
     original: ResponsesApiRequest,
-    context: RequestContext,
+    context: SharedRequestContext,
     owner: Option<ResponseOwner>,
 ) -> ActixResult<HttpResponse> {
     info!(
@@ -74,7 +74,7 @@ pub(crate) async fn handle_streaming_response(
     };
 
     let requested_model = core_request.model.clone();
-    let context_clone = context.clone();
+    let context_clone = std::sync::Arc::clone(&context);
     let budgeted = state.budgeted.clone();
     let pricing_service = budgeted.pricing();
     let pricing_config = state.config().gateway.pricing.clone();
@@ -88,7 +88,7 @@ pub(crate) async fn handle_streaming_response(
         ProviderCapability::ChatCompletionStream,
         move |provider, selected_model, _selected_deployment_id| {
             let core_request = core_request.clone();
-            let ctx = context_clone.clone();
+            let ctx = std::sync::Arc::clone(&context_clone);
             let budgeted = budgeted.clone();
             let pricing_service = pricing_service.clone();
             let pricing_config = pricing_config.clone();
@@ -108,6 +108,7 @@ pub(crate) async fn handle_streaming_response(
                         core_request.clone(),
                         request_for_budget,
                     )?;
+                let provider_context = ctx.as_ref().clone();
                 let reserve_pricing_service = pricing_service.clone();
                 let reserve_pricing_config = pricing_config.clone();
                 let reserve_pricing_provider = pricing_provider.clone();
@@ -132,7 +133,7 @@ pub(crate) async fn handle_streaming_response(
                                 &request_for_budget,
                             )
                         },
-                        || provider.chat_completion_stream(req, ctx),
+                        || provider.chat_completion_stream(req, provider_context),
                     )
                     .await?;
                 let (budget_reservation, key_budget_reservation) = reservations.into_parts();
