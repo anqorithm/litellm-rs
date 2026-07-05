@@ -44,7 +44,7 @@ mod contextual_error_tests {
 
 #[cfg(test)]
 mod provider_error_tests {
-    use crate::core::providers::unified_provider::ProviderError;
+    use crate::core::providers::unified_provider::{ProviderError, provider_http_error_facts};
 
     // ==================== Factory Method Tests ====================
 
@@ -112,7 +112,7 @@ mod provider_error_tests {
     fn test_network_factory() {
         let err = ProviderError::network("openai", "Connection refused");
         assert_eq!(err.provider(), "openai");
-        assert_eq!(err.http_status(), 503);
+        assert_eq!(err.http_status(), 502);
         assert!(err.is_retryable());
         assert_eq!(err.retry_delay(), Some(1));
     }
@@ -129,7 +129,7 @@ mod provider_error_tests {
     fn test_not_supported_factory() {
         let err = ProviderError::not_supported("openai", "vision");
         assert_eq!(err.provider(), "openai");
-        assert_eq!(err.http_status(), 405);
+        assert_eq!(err.http_status(), 501);
         assert!(!err.is_retryable());
     }
 
@@ -145,7 +145,7 @@ mod provider_error_tests {
     fn test_configuration_factory() {
         let err = ProviderError::configuration("openai", "Missing API key");
         assert_eq!(err.provider(), "openai");
-        assert_eq!(err.http_status(), 400);
+        assert_eq!(err.http_status(), 500);
         assert!(!err.is_retryable());
     }
 
@@ -161,7 +161,7 @@ mod provider_error_tests {
     fn test_timeout_factory() {
         let err = ProviderError::timeout("openai", "Request timed out after 30s");
         assert_eq!(err.provider(), "openai");
-        assert_eq!(err.http_status(), 503);
+        assert_eq!(err.http_status(), 504);
         assert!(err.is_retryable());
         assert_eq!(err.retry_delay(), Some(1));
     }
@@ -172,7 +172,7 @@ mod provider_error_tests {
     fn test_context_length_exceeded() {
         let err = ProviderError::context_length_exceeded("openai", 4096, 5000);
         assert_eq!(err.provider(), "openai");
-        assert_eq!(err.http_status(), 413);
+        assert_eq!(err.http_status(), 400);
         assert!(!err.is_retryable());
     }
 
@@ -202,7 +202,7 @@ mod provider_error_tests {
     fn test_token_limit_exceeded() {
         let err = ProviderError::token_limit_exceeded("openai", "Max tokens exceeded");
         assert_eq!(err.provider(), "openai");
-        assert_eq!(err.http_status(), 413);
+        assert_eq!(err.http_status(), 400);
         assert!(!err.is_retryable());
     }
 
@@ -210,7 +210,7 @@ mod provider_error_tests {
     fn test_feature_disabled() {
         let err = ProviderError::feature_disabled("vertex_ai", "code_execution");
         assert_eq!(err.provider(), "vertex_ai");
-        assert_eq!(err.http_status(), 403);
+        assert_eq!(err.http_status(), 501);
         assert!(!err.is_retryable());
     }
 
@@ -297,7 +297,7 @@ mod provider_error_tests {
             "Stream interrupted",
         );
         assert_eq!(err.provider(), "anthropic");
-        assert_eq!(err.http_status(), 500);
+        assert_eq!(err.http_status(), 502);
         assert!(err.is_retryable());
         assert_eq!(err.retry_delay(), Some(2));
     }
@@ -306,7 +306,7 @@ mod provider_error_tests {
     fn test_other_error() {
         let err = ProviderError::other("unknown", "Unknown error occurred");
         assert_eq!(err.provider(), "unknown");
-        assert_eq!(err.http_status(), 500);
+        assert_eq!(err.http_status(), 502);
         assert!(!err.is_retryable());
     }
 
@@ -380,10 +380,44 @@ mod provider_error_tests {
         assert_eq!(ProviderError::quota_exceeded("a", "b").http_status(), 402);
         assert_eq!(ProviderError::model_not_found("a", "b").http_status(), 404);
         assert_eq!(ProviderError::invalid_request("a", "b").http_status(), 400);
-        assert_eq!(ProviderError::not_supported("a", "b").http_status(), 405);
+        assert_eq!(ProviderError::not_supported("a", "b").http_status(), 501);
         assert_eq!(ProviderError::not_implemented("a", "b").http_status(), 501);
-        assert_eq!(ProviderError::network("a", "b").http_status(), 503);
+        assert_eq!(ProviderError::network("a", "b").http_status(), 502);
         assert_eq!(ProviderError::serialization("a", "b").http_status(), 500);
+    }
+
+    #[test]
+    fn test_http_status_delegates_to_canonical_facts() {
+        let cases = vec![
+            ProviderError::not_supported("a", "b"),
+            ProviderError::feature_disabled("a", "b"),
+            ProviderError::network("a", "b"),
+            ProviderError::timeout("a", "b"),
+            ProviderError::token_limit_exceeded("a", "b"),
+            ProviderError::streaming_error("a", "b", None, None, "c"),
+            ProviderError::other("a", "b"),
+        ];
+
+        for error in cases {
+            assert_eq!(
+                error.http_status(),
+                provider_http_error_facts(&error).status
+            );
+        }
+    }
+
+    #[cfg(feature = "gateway")]
+    #[test]
+    fn test_gateway_provider_mapping_uses_canonical_provider_facts() {
+        use crate::utils::error::gateway_error::{GatewayError, gateway_http_error_facts};
+
+        let provider_error = ProviderError::feature_disabled("a", "b");
+        let core_facts = provider_http_error_facts(&provider_error);
+        let gateway_facts = gateway_http_error_facts(&GatewayError::Provider(provider_error));
+
+        assert_eq!(gateway_facts.status.as_u16(), core_facts.status);
+        assert_eq!(gateway_facts.gateway_code, core_facts.gateway_code);
+        assert_eq!(gateway_facts.openai_code, core_facts.openai_code);
     }
 
     // ==================== Retryable Tests ====================

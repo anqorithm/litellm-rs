@@ -66,6 +66,21 @@ impl<T> ApiResponse<T> {
     }
 }
 
+impl<T> ApiResponse<T>
+where
+    T: serde::Serialize,
+{
+    /// Convert the API response to an HTTP response.
+    #[deprecated(note = "Use explicit route status helpers instead")]
+    pub fn to_http_response(&self) -> HttpResponse {
+        if self.success {
+            HttpResponse::Ok().json(self)
+        } else {
+            HttpResponse::BadRequest().json(self)
+        }
+    }
+}
+
 /// Pagination metadata
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct PaginationMeta {
@@ -270,6 +285,16 @@ mod tests {
         assert!(!response.success);
         assert!(response.data.is_none());
         assert_eq!(response.error, Some("test error".to_string()));
+    }
+
+    #[test]
+    #[allow(deprecated)]
+    fn test_api_response_to_http_response_remains_compatibility_shim() {
+        let success = ApiResponse::success("test data").to_http_response();
+        assert_eq!(success.status(), actix_web::http::StatusCode::OK);
+
+        let error = ApiResponse::<()>::error("test error".to_string()).to_http_response();
+        assert_eq!(error.status(), actix_web::http::StatusCode::BAD_REQUEST);
     }
 
     #[actix_web::test]

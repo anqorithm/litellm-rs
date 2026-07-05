@@ -1,7 +1,9 @@
 //! Canonical HTTP mapping for gateway/provider errors.
 
 use super::types::GatewayError;
-use crate::core::providers::unified_provider::ProviderError;
+use crate::core::providers::unified_provider::{
+    ProviderHttpErrorFacts, provider_http_error_facts as provider_core_http_error_facts,
+};
 use actix_web::http::StatusCode;
 
 /// Optional HTTP headers carried by an error mapping.
@@ -74,7 +76,9 @@ pub fn gateway_http_error_facts(error: &GatewayError) -> HttpErrorFacts {
             "permission_error",
             "permission_denied",
         ),
-        GatewayError::Provider(provider_error) => provider_http_error_facts(provider_error),
+        GatewayError::Provider(provider_error) => {
+            provider_facts_to_http_error_facts(provider_core_http_error_facts(provider_error))
+        }
         GatewayError::RateLimit {
             retry_after,
             rpm_limit,
@@ -166,197 +170,6 @@ pub fn gateway_http_error_facts(error: &GatewayError) -> HttpErrorFacts {
     }
 }
 
-pub fn provider_http_error_facts(error: &ProviderError) -> HttpErrorFacts {
-    match error {
-        ProviderError::Authentication { .. } => facts(
-            StatusCode::UNAUTHORIZED,
-            "PROVIDER_AUTH_ERROR",
-            "authentication_error",
-            "authentication_error",
-        ),
-        ProviderError::RateLimit {
-            retry_after,
-            rpm_limit,
-            tpm_limit,
-            ..
-        } => facts(
-            StatusCode::TOO_MANY_REQUESTS,
-            "PROVIDER_RATE_LIMIT",
-            "rate_limit_error",
-            "rate_limit_exceeded",
-        )
-        .with_headers(HttpErrorHeaders {
-            retry_after: *retry_after,
-            rpm_limit: *rpm_limit,
-            tpm_limit: *tpm_limit,
-        }),
-        ProviderError::QuotaExceeded { .. } => facts(
-            StatusCode::PAYMENT_REQUIRED,
-            "PROVIDER_QUOTA_EXCEEDED",
-            "insufficient_quota",
-            "insufficient_quota",
-        ),
-        ProviderError::ModelNotFound { .. } => facts(
-            StatusCode::NOT_FOUND,
-            "MODEL_NOT_FOUND",
-            "invalid_request_error",
-            "model_not_found",
-        ),
-        ProviderError::InvalidRequest { message, .. } if is_model_not_priced_message(message) => {
-            facts(
-                StatusCode::BAD_REQUEST,
-                "INVALID_REQUEST",
-                "invalid_request_error",
-                "model_not_priced",
-            )
-        }
-        ProviderError::InvalidRequest { .. } => facts(
-            StatusCode::BAD_REQUEST,
-            "INVALID_REQUEST",
-            "invalid_request_error",
-            "invalid_request",
-        ),
-        ProviderError::Network { .. } => facts(
-            StatusCode::BAD_GATEWAY,
-            "PROVIDER_NETWORK_ERROR",
-            "server_error",
-            "provider_network_error",
-        ),
-        ProviderError::ProviderUnavailable { .. } => facts(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "PROVIDER_UNAVAILABLE",
-            "server_error",
-            "provider_unavailable",
-        ),
-        ProviderError::NotSupported { .. }
-        | ProviderError::NotImplemented { .. }
-        | ProviderError::FeatureDisabled { .. } => facts(
-            StatusCode::NOT_IMPLEMENTED,
-            "PROVIDER_NOT_IMPLEMENTED",
-            "invalid_request_error",
-            "not_supported",
-        ),
-        ProviderError::Configuration { .. }
-        | ProviderError::Serialization { .. }
-        | ProviderError::TransformationError { .. } => facts(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "PROVIDER_INTERNAL_ERROR",
-            "server_error",
-            "internal_error",
-        ),
-        ProviderError::Timeout { .. } => facts(
-            StatusCode::GATEWAY_TIMEOUT,
-            "PROVIDER_TIMEOUT",
-            "server_error",
-            "timeout",
-        ),
-        ProviderError::ContextLengthExceeded { .. } => facts(
-            StatusCode::BAD_REQUEST,
-            "PROVIDER_REQUEST_ERROR",
-            "invalid_request_error",
-            "context_length_exceeded",
-        ),
-        ProviderError::ContentFiltered { .. } => facts(
-            StatusCode::BAD_REQUEST,
-            "PROVIDER_REQUEST_ERROR",
-            "invalid_request_error",
-            "content_filter",
-        ),
-        ProviderError::ApiError { status, .. } => provider_api_error_facts(*status),
-        ProviderError::TokenLimitExceeded { .. } => facts(
-            StatusCode::BAD_REQUEST,
-            "PROVIDER_REQUEST_ERROR",
-            "invalid_request_error",
-            "token_limit_exceeded",
-        ),
-        ProviderError::DeploymentError { .. } => facts(
-            StatusCode::NOT_FOUND,
-            "DEPLOYMENT_NOT_FOUND",
-            "invalid_request_error",
-            "deployment_not_found",
-        ),
-        ProviderError::ResponseParsing { .. } | ProviderError::Streaming { .. } => facts(
-            StatusCode::BAD_GATEWAY,
-            "PROVIDER_RESPONSE_ERROR",
-            "server_error",
-            "provider_response_error",
-        ),
-        ProviderError::RoutingError { .. } => facts(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "PROVIDER_ROUTING_ERROR",
-            "server_error",
-            "provider_routing_error",
-        ),
-        ProviderError::Cancelled { .. } => facts(
-            client_closed_request_status(),
-            "PROVIDER_CANCELLED",
-            "server_error",
-            "cancelled",
-        ),
-        ProviderError::Other { .. } => facts(
-            StatusCode::BAD_GATEWAY,
-            "PROVIDER_ERROR",
-            "server_error",
-            "provider_error",
-        ),
-    }
-}
-
-fn provider_api_error_facts(status: u16) -> HttpErrorFacts {
-    let status_code = StatusCode::from_u16(status).unwrap_or(StatusCode::BAD_GATEWAY);
-    match status {
-        400 => facts(
-            status_code,
-            "PROVIDER_API_ERROR",
-            "invalid_request_error",
-            "invalid_request",
-        ),
-        401 => facts(
-            status_code,
-            "PROVIDER_API_ERROR",
-            "authentication_error",
-            "authentication_error",
-        ),
-        403 => facts(
-            status_code,
-            "PROVIDER_API_ERROR",
-            "permission_error",
-            "permission_denied",
-        ),
-        404 => facts(
-            status_code,
-            "PROVIDER_API_ERROR",
-            "invalid_request_error",
-            "not_found",
-        ),
-        408 => facts(status_code, "PROVIDER_API_ERROR", "server_error", "timeout"),
-        409 => facts(
-            status_code,
-            "PROVIDER_API_ERROR",
-            "invalid_request_error",
-            "conflict",
-        ),
-        429 => facts(
-            status_code,
-            "PROVIDER_API_ERROR",
-            "rate_limit_error",
-            "rate_limit_exceeded",
-        ),
-        500..=599 => facts(
-            status_code,
-            "PROVIDER_API_ERROR",
-            "server_error",
-            "provider_api_error",
-        ),
-        _ => facts(
-            status_code,
-            "PROVIDER_API_ERROR",
-            "server_error",
-            "provider_api_error",
-        ),
-    }
-}
-
 const fn facts(
     status: StatusCode,
     gateway_code: &'static str,
@@ -366,10 +179,20 @@ const fn facts(
     HttpErrorFacts::new(status, gateway_code, openai_error_type, openai_code)
 }
 
-fn client_closed_request_status() -> StatusCode {
-    StatusCode::from_u16(499).unwrap_or(StatusCode::BAD_REQUEST)
+fn provider_facts_to_http_error_facts(core_facts: ProviderHttpErrorFacts) -> HttpErrorFacts {
+    HttpErrorFacts::new(
+        status_from_u16(core_facts.status),
+        core_facts.gateway_code,
+        core_facts.openai_error_type,
+        core_facts.openai_code,
+    )
+    .with_headers(HttpErrorHeaders {
+        retry_after: core_facts.headers.retry_after,
+        rpm_limit: core_facts.headers.rpm_limit,
+        tpm_limit: core_facts.headers.tpm_limit,
+    })
 }
 
-fn is_model_not_priced_message(message: &str) -> bool {
-    message.starts_with("model_not_priced:")
+fn status_from_u16(status: u16) -> StatusCode {
+    StatusCode::from_u16(status).unwrap_or(StatusCode::BAD_GATEWAY)
 }

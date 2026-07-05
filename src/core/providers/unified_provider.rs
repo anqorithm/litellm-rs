@@ -80,5 +80,6 @@ mod methods;
 pub use super::contextual_error::ContextualError;
 pub use error::ProviderError;
 pub use http_mapping::{
-    default_http_error_mapper, extended_http_error_mapper, parse_error_message_from_body,
+    ProviderHttpErrorFacts, ProviderHttpErrorHeaders, default_http_error_mapper,
+    extended_http_error_mapper, parse_error_message_from_body, provider_http_error_facts,
 };

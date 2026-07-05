@@ -5,9 +5,10 @@ mod support;
 #[cfg(all(test, feature = "gateway", feature = "storage"))]
 mod tests {
     use super::support::{
-        BrokenGeminiStreamServer, MockGeminiServer, api_key_with_max_tokens_per_request,
-        build_auth_required_state, build_test_state, gemini_body,
-        gemini_body_without_generation_config, gemini_provider, gemini_upstream_error_body,
+        BrokenGeminiStreamServer, MockGeminiServer, api_key_with_invalid_runtime_permissions,
+        api_key_with_max_tokens_per_request, build_auth_required_state, build_test_state,
+        gemini_body, gemini_body_without_generation_config, gemini_provider,
+        gemini_upstream_error_body,
     };
     use actix_web::{App, HttpMessage, dev::Service};
     use actix_web::{http::StatusCode, test, web};
@@ -286,6 +287,50 @@ mod tests {
             upstream_body["generationConfig"]["maxOutputTokens"],
             json!(7)
         );
+        mock.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn gemini_sdk_route_renders_invalid_api_key_policy_as_openai_error() {
+        let mock = MockGeminiServer::launch().await;
+        let state = build_auth_required_state(vec![gemini_provider(
+            "gemini",
+            &mock.base_url,
+            vec!["gemini-3.1-flash-lite".to_string()],
+        )])
+        .await;
+        let api_key = api_key_with_invalid_runtime_permissions();
+        let app = test::init_service(
+            App::new()
+                .wrap_fn(move |req, srv| {
+                    req.extensions_mut().insert::<ApiKey>(api_key.clone());
+                    srv.call(req)
+                })
+                .app_data(web::Data::new(state))
+                .configure(litellm_rs::server::routes::ai::configure_routes),
+        )
+        .await;
+
+        let response = test::call_service(
+            &app,
+            test::TestRequest::post()
+                .uri("/v1beta/models/gemini-3.1-flash-lite:generateContent")
+                .set_json(gemini_body())
+                .to_request(),
+        )
+        .await;
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        let body: Value = test::read_body_json(response).await;
+        assert_eq!(body["error"]["type"], "permission_error");
+        assert_eq!(body["error"]["code"], "permission_denied");
+        assert!(
+            body["error"]["message"]
+                .as_str()
+                .expect("error message")
+                .contains("API key runtime policy is invalid")
+        );
+        assert!(mock.requests().is_empty());
         mock.shutdown().await;
     }
 
