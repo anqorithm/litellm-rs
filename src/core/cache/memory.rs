@@ -3,29 +3,73 @@
 //! This module provides a high-performance in-memory cache using DashMap
 //! for lock-free concurrent access with LRU eviction support.
 //!
-//! The LRU order tracker uses `tokio::sync::Mutex` to avoid blocking the
-//! async executor thread under contention.
+//! Hot-path eviction metadata is maintained with per-entry atomics in sharded
+//! indexes so cache hits and writes do not serialize on a global LRU lock.
 
 use super::types::{AtomicCacheStats, CacheEntry, CacheKey, DualCacheConfig, EvictionPolicy};
 use dashmap::DashMap;
-use lru::LruCache;
-use std::num::NonZeroUsize;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
-use tokio::sync::{Mutex, Notify};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::time::{Duration, Instant};
+use tokio::sync::Notify;
 use tracing::{debug, trace};
+
+const EVICTION_SAMPLE_SIZE: usize = 64;
+const MIN_ACCESS_SHARDS: usize = 4;
+const MAX_ACCESS_SHARDS: usize = 64;
+
+#[derive(Debug)]
+struct CacheAccessMeta {
+    last_access_tick: AtomicU64,
+    access_count: AtomicU64,
+}
+
+impl CacheAccessMeta {
+    fn new(insert_tick: u64) -> Self {
+        Self {
+            last_access_tick: AtomicU64::new(insert_tick),
+            access_count: AtomicU64::new(0),
+        }
+    }
+
+    fn record_access(&self, tick: u64) -> u64 {
+        self.last_access_tick.store(tick, Ordering::Relaxed);
+        self.access_count.fetch_add(1, Ordering::Relaxed) + 1
+    }
+
+    fn reset_for_insert(&self, tick: u64) {
+        self.last_access_tick.store(tick, Ordering::Relaxed);
+        self.access_count.store(0, Ordering::Relaxed);
+    }
+
+    fn snapshot(&self) -> (u64, u64) {
+        (
+            self.last_access_tick.load(Ordering::Relaxed),
+            self.access_count.load(Ordering::Relaxed),
+        )
+    }
+}
+
+#[derive(Debug)]
+struct EvictionCandidate {
+    key: CacheKey,
+    last_access_tick: u64,
+    access_count: u64,
+    created_at: Instant,
+    remaining_ttl: Option<Duration>,
+}
 
 /// In-memory cache with LRU eviction and TTL expiration
 pub struct InMemoryCache<T> {
     /// Main cache storage using DashMap for lock-free access
     cache: Arc<DashMap<CacheKey, CacheEntry<T>>>,
-    /// LRU tracking using O(1) LruCache (used as an ordered set, value is ())
-    ///
-    /// Uses `tokio::sync::Mutex` so that waiting for the lock yields the async
-    /// executor thread instead of blocking it, preventing executor starvation
-    /// under high contention.
-    lru_order: Arc<Mutex<LruCache<CacheKey, ()>>>,
+    /// Sharded eviction metadata. Shard count defaults to available CPU
+    /// parallelism rounded to a bounded power of two.
+    access_meta: Arc<Vec<DashMap<CacheKey, CacheAccessMeta>>>,
+    /// Monotonic logical clock for access ordering.
+    access_clock: AtomicU64,
+    /// Rotates the first shard inspected by sampled eviction.
+    eviction_cursor: AtomicUsize,
     /// Configuration
     config: DualCacheConfig,
     /// Statistics
@@ -47,11 +91,17 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
         let cache = Arc::new(DashMap::with_capacity(config.max_size));
         let shutdown = Arc::new(AtomicBool::new(false));
         let shutdown_notify = Arc::new(Notify::new());
-        let lru_cap = NonZeroUsize::new(config.max_size).unwrap_or(NonZeroUsize::MIN);
+        let access_meta = Arc::new(
+            (0..default_access_shard_count())
+                .map(|_| DashMap::new())
+                .collect(),
+        );
 
         Self {
             cache,
-            lru_order: Arc::new(Mutex::new(LruCache::new(lru_cap))),
+            access_meta,
+            access_clock: AtomicU64::new(0),
+            eviction_cursor: AtomicUsize::new(0),
             config,
             stats,
             shutdown,
@@ -88,7 +138,7 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
     pub async fn get(&self, key: &CacheKey) -> Option<T> {
         // Atomically remove expired entries to avoid TOCTOU race
         if let Some((_, removed)) = self.cache.remove_if(key, |_k, v| v.is_expired()) {
-            self.remove_from_lru(key).await;
+            self.remove_access_meta(key);
             self.stats.sub_total_size(removed.size_bytes);
             self.stats.set_entry_count(self.cache.len());
             self.stats.record_memory_miss();
@@ -96,12 +146,13 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
             return None;
         }
 
-        if let Some(mut entry) = self.cache.get_mut(key) {
-            entry.touch();
-            self.update_lru(key).await;
+        if let Some(entry) = self.cache.get(key) {
+            let value = entry.value.clone();
+            drop(entry);
+            self.record_access(key);
             self.stats.record_memory_hit();
             trace!(key = %key, "Cache hit");
-            Some(entry.value.clone())
+            Some(value)
         } else {
             self.stats.record_memory_miss();
             trace!(key = %key, "Cache miss");
@@ -113,18 +164,21 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
     pub async fn get_entry(&self, key: &CacheKey) -> Option<CacheEntry<T>> {
         // Atomically remove expired entries to avoid TOCTOU race
         if let Some((_, removed)) = self.cache.remove_if(key, |_k, v| v.is_expired()) {
-            self.remove_from_lru(key).await;
+            self.remove_access_meta(key);
             self.stats.sub_total_size(removed.size_bytes);
             self.stats.set_entry_count(self.cache.len());
             self.stats.record_memory_miss();
             return None;
         }
 
-        if let Some(mut entry) = self.cache.get_mut(key) {
-            entry.touch();
-            self.update_lru(key).await;
+        if let Some(entry) = self.cache.get(key) {
+            let mut snapshot = entry.clone();
+            drop(entry);
+            let access_count = self.record_access(key);
+            snapshot.access_count = access_count;
+            snapshot.last_accessed = Instant::now();
             self.stats.record_memory_hit();
-            Some(entry.clone())
+            Some(snapshot)
         } else {
             self.stats.record_memory_miss();
             None
@@ -145,15 +199,13 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
 
         let entry = CacheEntry::new(value, ttl);
         let new_size = entry.size_bytes;
+        self.reset_access_meta_for_insert(&key);
         // Atomic insert returns the old entry if key existed (no TOCTOU gap)
         let old = self.cache.insert(key.clone(), entry);
         self.stats.record_write();
 
         if let Some(old_entry) = old {
             self.stats.sub_total_size(old_entry.size_bytes);
-            self.update_lru(&key).await;
-        } else {
-            self.add_to_lru(&key).await;
         }
 
         self.stats.add_total_size(new_size);
@@ -169,15 +221,13 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
 
         let entry = CacheEntry::with_size(value, ttl, size_bytes);
         let new_size = entry.size_bytes;
+        self.reset_access_meta_for_insert(&key);
         // Atomic insert returns the old entry if key existed (no TOCTOU gap)
         let old = self.cache.insert(key.clone(), entry);
         self.stats.record_write();
 
         if let Some(old_entry) = old {
             self.stats.sub_total_size(old_entry.size_bytes);
-            self.update_lru(&key).await;
-        } else {
-            self.add_to_lru(&key).await;
         }
 
         self.stats.add_total_size(new_size);
@@ -187,7 +237,7 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
     /// Delete a value from the cache
     pub async fn delete(&self, key: &CacheKey) -> bool {
         if let Some((_, removed)) = self.cache.remove(key) {
-            self.remove_from_lru(key).await;
+            self.remove_access_meta(key);
             self.stats.record_deletion();
             self.stats.sub_total_size(removed.size_bytes);
             self.stats.set_entry_count(self.cache.len());
@@ -202,7 +252,7 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
     pub async fn exists(&self, key: &CacheKey) -> bool {
         // Atomically remove expired entries to avoid TOCTOU race
         if self.cache.remove_if(key, |_k, v| v.is_expired()).is_some() {
-            self.remove_from_lru(key).await;
+            self.remove_access_meta(key);
             self.stats.set_entry_count(self.cache.len());
             return false;
         }
@@ -221,7 +271,11 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
     /// Clear all entries from the cache
     pub async fn clear(&self) {
         self.cache.clear();
-        self.lru_order.lock().await.clear();
+        for shard in self.access_meta.iter() {
+            shard.clear();
+        }
+        self.access_clock.store(0, Ordering::Relaxed);
+        self.eviction_cursor.store(0, Ordering::Relaxed);
         self.stats.reset();
         debug!("Cache cleared");
     }
@@ -254,25 +308,86 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
 
     // ==================== Private Methods ====================
 
-    /// Update LRU order for a key (O(1) via lru::LruCache)
-    async fn update_lru(&self, key: &CacheKey) {
-        let mut lru = self.lru_order.lock().await;
-        // promote re-inserts the key to most-recent in O(1)
-        if lru.promote(key) {
-            return;
+    fn next_access_tick(&self) -> u64 {
+        self.access_clock.fetch_add(1, Ordering::Relaxed) + 1
+    }
+
+    fn access_shard(&self, key: &CacheKey) -> &DashMap<CacheKey, CacheAccessMeta> {
+        let index = key.hash_value() as usize % self.access_meta.len();
+        &self.access_meta[index]
+    }
+
+    fn reset_access_meta_for_insert(&self, key: &CacheKey) {
+        let tick = self.next_access_tick();
+        let shard = self.access_shard(key);
+
+        if let Some(meta) = shard.get(key) {
+            meta.reset_for_insert(tick);
+        } else {
+            shard.insert(key.clone(), CacheAccessMeta::new(tick));
         }
-        // Key was not in LRU (shouldn't normally happen), add it
-        lru.push(key.clone(), ());
     }
 
-    /// Add a key to the LRU order (O(1))
-    async fn add_to_lru(&self, key: &CacheKey) {
-        self.lru_order.lock().await.push(key.clone(), ());
+    fn record_access(&self, key: &CacheKey) -> u64 {
+        let tick = self.next_access_tick();
+        let shard = self.access_shard(key);
+
+        if let Some(meta) = shard.get(key) {
+            meta.record_access(tick)
+        } else {
+            let meta = CacheAccessMeta::new(tick);
+            let count = meta.record_access(tick);
+            shard.insert(key.clone(), meta);
+            count
+        }
     }
 
-    /// Remove a key from the LRU order (O(1))
-    async fn remove_from_lru(&self, key: &CacheKey) {
-        self.lru_order.lock().await.pop_entry(key);
+    fn remove_access_meta(&self, key: &CacheKey) {
+        self.access_shard(key).remove(key);
+    }
+
+    fn eviction_candidates(&self) -> Vec<EvictionCandidate> {
+        let target = self.cache.len().min(EVICTION_SAMPLE_SIZE);
+        let mut candidates = Vec::with_capacity(target);
+        if target == 0 {
+            return candidates;
+        }
+
+        let shard_count = self.access_meta.len();
+        let start = self.eviction_cursor.fetch_add(1, Ordering::Relaxed) % shard_count;
+
+        for offset in 0..shard_count {
+            if candidates.len() >= target {
+                break;
+            }
+
+            let shard = &self.access_meta[(start + offset) % shard_count];
+            let remaining = target - candidates.len();
+            let shard_budget = remaining.min(EVICTION_SAMPLE_SIZE);
+            let mut stale_keys = Vec::new();
+
+            for meta_ref in shard.iter().take(shard_budget) {
+                let key = meta_ref.key().clone();
+                if let Some(entry) = self.cache.get(&key) {
+                    let (last_access_tick, access_count) = meta_ref.value().snapshot();
+                    candidates.push(EvictionCandidate {
+                        key,
+                        last_access_tick,
+                        access_count,
+                        created_at: entry.created_at,
+                        remaining_ttl: entry.remaining_ttl(),
+                    });
+                } else {
+                    stale_keys.push(key);
+                }
+            }
+
+            for key in stale_keys {
+                shard.remove(&key);
+            }
+        }
+
+        candidates
     }
 
     /// Evict one entry based on the eviction policy
@@ -287,95 +402,60 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
 
     /// Evict the least recently used entry
     async fn evict_lru(&self) {
-        let key = {
-            let mut lru = self.lru_order.lock().await;
-            lru.pop_lru().map(|(k, _)| k)
-        };
+        let candidate = self
+            .eviction_candidates()
+            .into_iter()
+            .min_by_key(|candidate| candidate.last_access_tick);
 
-        if let Some(key) = key {
-            if let Some((_, removed)) = self.cache.remove(&key) {
-                self.stats.sub_total_size(removed.size_bytes);
-            }
-            self.stats.record_eviction();
-            self.stats.set_entry_count(self.cache.len());
-            trace!(key = %key, "LRU eviction");
+        if let Some(candidate) = candidate {
+            self.evict_candidate(candidate, "LRU");
         }
     }
 
     /// Evict the least frequently used entry
     async fn evict_lfu(&self) {
-        // Find entry with lowest access count
-        let key_to_evict = self
-            .cache
-            .iter()
-            .min_by_key(|entry| entry.value().access_count)
-            .map(|entry| entry.key().clone());
+        let candidate = self
+            .eviction_candidates()
+            .into_iter()
+            .min_by_key(|candidate| (candidate.access_count, candidate.last_access_tick));
 
-        if let Some(key) = key_to_evict {
-            if let Some((_, removed)) = self.cache.remove(&key) {
-                self.stats.sub_total_size(removed.size_bytes);
-            }
-            self.remove_from_lru(&key).await;
-            self.stats.record_eviction();
-            self.stats.set_entry_count(self.cache.len());
-            trace!(key = %key, "LFU eviction");
+        if let Some(candidate) = candidate {
+            self.evict_candidate(candidate, "LFU");
         }
     }
 
     /// Evict entry with shortest remaining TTL
     async fn evict_ttl(&self) {
-        // First try to evict any expired entries
-        let expired_key = self
-            .cache
-            .iter()
-            .find(|entry| entry.value().is_expired())
-            .map(|entry| entry.key().clone());
+        let candidate = self
+            .eviction_candidates()
+            .into_iter()
+            .min_by_key(|candidate| candidate.remaining_ttl.unwrap_or(Duration::ZERO));
 
-        if let Some(key) = expired_key {
-            if let Some((_, removed)) = self.cache.remove(&key) {
-                self.stats.sub_total_size(removed.size_bytes);
-            }
-            self.remove_from_lru(&key).await;
-            self.stats.record_eviction();
-            self.stats.set_entry_count(self.cache.len());
-            return;
-        }
-
-        // Otherwise evict entry closest to expiration
-        let key_to_evict = self
-            .cache
-            .iter()
-            .min_by_key(|entry| entry.value().remaining_ttl().unwrap_or(Duration::ZERO))
-            .map(|entry| entry.key().clone());
-
-        if let Some(key) = key_to_evict {
-            if let Some((_, removed)) = self.cache.remove(&key) {
-                self.stats.sub_total_size(removed.size_bytes);
-            }
-            self.remove_from_lru(&key).await;
-            self.stats.record_eviction();
-            self.stats.set_entry_count(self.cache.len());
-            trace!(key = %key, "TTL eviction");
+        if let Some(candidate) = candidate {
+            self.evict_candidate(candidate, "TTL");
         }
     }
 
     /// Evict the oldest entry (FIFO)
     async fn evict_fifo(&self) {
-        let key_to_evict = self
-            .cache
-            .iter()
-            .min_by_key(|entry| entry.value().created_at)
-            .map(|entry| entry.key().clone());
+        let candidate = self
+            .eviction_candidates()
+            .into_iter()
+            .min_by_key(|candidate| candidate.created_at);
 
-        if let Some(key) = key_to_evict {
-            if let Some((_, removed)) = self.cache.remove(&key) {
-                self.stats.sub_total_size(removed.size_bytes);
-            }
-            self.remove_from_lru(&key).await;
+        if let Some(candidate) = candidate {
+            self.evict_candidate(candidate, "FIFO");
+        }
+    }
+
+    fn evict_candidate(&self, candidate: EvictionCandidate, policy: &'static str) {
+        if let Some((_, removed)) = self.cache.remove(&candidate.key) {
+            self.stats.sub_total_size(removed.size_bytes);
             self.stats.record_eviction();
             self.stats.set_entry_count(self.cache.len());
-            trace!(key = %key, "FIFO eviction");
+            trace!(key = %candidate.key, policy = policy, "Cache eviction");
         }
+        self.remove_access_meta(&candidate.key);
     }
 
     /// Clean up expired entries
@@ -393,7 +473,7 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
             if let Some((_, removed)) = self.cache.remove(&key) {
                 self.stats.sub_total_size(removed.size_bytes);
             }
-            self.remove_from_lru(&key).await;
+            self.remove_access_meta(&key);
             self.stats.record_eviction();
         }
 
@@ -402,6 +482,14 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
             self.stats.set_entry_count(self.cache.len());
         }
     }
+}
+
+fn default_access_shard_count() -> usize {
+    std::thread::available_parallelism()
+        .map(usize::from)
+        .unwrap_or(MIN_ACCESS_SHARDS)
+        .next_power_of_two()
+        .clamp(MIN_ACCESS_SHARDS, MAX_ACCESS_SHARDS)
 }
 
 impl<T> Drop for InMemoryCache<T> {
@@ -586,8 +674,47 @@ mod tests {
 
         assert!(cache.exists(&CacheKey::new("key1")).await);
         assert!(cache.exists(&CacheKey::new("key2")).await);
+        assert!(!cache.exists(&CacheKey::new("key3")).await);
         // key3 should be evicted
         assert!(cache.exists(&CacheKey::new("key4")).await);
+    }
+
+    #[tokio::test]
+    async fn test_cache_ttl_eviction_prefers_expired_entry() {
+        let config = DualCacheConfig::default()
+            .with_max_size(3)
+            .with_eviction_policy(EvictionPolicy::TTL);
+        let cache: InMemoryCache<String> = InMemoryCache::new(config);
+
+        cache
+            .set_with_ttl(
+                CacheKey::new("short"),
+                "value1".to_string(),
+                Duration::from_millis(10),
+            )
+            .await;
+        cache
+            .set_with_ttl(
+                CacheKey::new("long1"),
+                "value2".to_string(),
+                Duration::from_secs(60),
+            )
+            .await;
+        cache
+            .set_with_ttl(
+                CacheKey::new("long2"),
+                "value3".to_string(),
+                Duration::from_secs(60),
+            )
+            .await;
+
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        cache.set(CacheKey::new("new"), "value4".to_string()).await;
+
+        assert!(!cache.exists(&CacheKey::new("short")).await);
+        assert!(cache.exists(&CacheKey::new("long1")).await);
+        assert!(cache.exists(&CacheKey::new("long2")).await);
+        assert!(cache.exists(&CacheKey::new("new")).await);
     }
 
     // ==================== Statistics Tests ====================
@@ -701,6 +828,19 @@ mod tests {
         assert_eq!(entry.value, "value");
         assert_eq!(entry.size_bytes, 100);
         assert_eq!(entry.access_count, 1); // One access from get_entry
+    }
+
+    #[tokio::test]
+    async fn test_cache_get_entry_includes_prior_get_accesses() {
+        let cache: InMemoryCache<String> = InMemoryCache::with_defaults();
+        let key = CacheKey::new("entry-access-key");
+
+        cache.set(key.clone(), "value".to_string()).await;
+        cache.get(&key).await;
+        cache.get(&key).await;
+
+        let entry = cache.get_entry(&key).await.unwrap();
+        assert_eq!(entry.access_count, 3);
     }
 
     #[tokio::test]
