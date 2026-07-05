@@ -199,9 +199,9 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
 
         let entry = CacheEntry::new(value, ttl);
         let new_size = entry.size_bytes;
-        self.reset_access_meta_for_insert(&key);
         // Atomic insert returns the old entry if key existed (no TOCTOU gap)
         let old = self.cache.insert(key.clone(), entry);
+        self.reset_access_meta_for_insert(&key);
         self.stats.record_write();
 
         if let Some(old_entry) = old {
@@ -221,9 +221,9 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
 
         let entry = CacheEntry::with_size(value, ttl, size_bytes);
         let new_size = entry.size_bytes;
-        self.reset_access_meta_for_insert(&key);
         // Atomic insert returns the old entry if key existed (no TOCTOU gap)
         let old = self.cache.insert(key.clone(), entry);
+        self.reset_access_meta_for_insert(&key);
         self.stats.record_write();
 
         if let Some(old_entry) = old {
@@ -366,10 +366,14 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
             let shard_budget = remaining.min(EVICTION_SAMPLE_SIZE);
             let mut stale_keys = Vec::new();
 
-            for meta_ref in shard.iter().take(shard_budget) {
-                let key = meta_ref.key().clone();
+            let keys_and_meta: Vec<_> = shard
+                .iter()
+                .take(shard_budget)
+                .map(|meta_ref| (meta_ref.key().clone(), meta_ref.value().snapshot()))
+                .collect();
+
+            for (key, (last_access_tick, access_count)) in keys_and_meta {
                 if let Some(entry) = self.cache.get(&key) {
-                    let (last_access_tick, access_count) = meta_ref.value().snapshot();
                     candidates.push(EvictionCandidate {
                         key,
                         last_access_tick,
@@ -378,12 +382,14 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
                         remaining_ttl: entry.remaining_ttl(),
                     });
                 } else {
-                    stale_keys.push(key);
+                    stale_keys.push((key, last_access_tick, access_count));
                 }
             }
 
-            for key in stale_keys {
-                shard.remove(&key);
+            for (key, last_access_tick, access_count) in stale_keys {
+                shard.remove_if(&key, |_key, meta| {
+                    meta.snapshot() == (last_access_tick, access_count)
+                });
             }
         }
 
@@ -426,6 +432,10 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
 
     /// Evict entry with shortest remaining TTL
     async fn evict_ttl(&self) {
+        if self.evict_expired_entry("TTL") {
+            return;
+        }
+
         let candidate = self
             .eviction_candidates()
             .into_iter()
@@ -446,6 +456,28 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
         if let Some(candidate) = candidate {
             self.evict_candidate(candidate, "FIFO");
         }
+    }
+
+    fn evict_expired_entry(&self, policy: &'static str) -> bool {
+        let expired_key = self
+            .cache
+            .iter()
+            .find(|entry| entry.value().is_expired())
+            .map(|entry| entry.key().clone());
+
+        if let Some(key) = expired_key {
+            if let Some((_, removed)) = self.cache.remove_if(&key, |_key, entry| entry.is_expired())
+            {
+                self.remove_access_meta(&key);
+                self.stats.sub_total_size(removed.size_bytes);
+                self.stats.record_eviction();
+                self.stats.set_entry_count(self.cache.len());
+                trace!(key = %key, policy = policy, "Cache expired eviction");
+                return true;
+            }
+        }
+
+        false
     }
 
     fn evict_candidate(&self, candidate: EvictionCandidate, policy: &'static str) {
@@ -500,373 +532,5 @@ impl<T> Drop for InMemoryCache<T> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    // ==================== Basic Operations Tests ====================
-
-    #[test]
-    fn test_cache_new() {
-        let cache: InMemoryCache<String> = InMemoryCache::with_defaults();
-        assert!(cache.is_empty());
-        assert_eq!(cache.len(), 0);
-    }
-
-    #[tokio::test]
-    async fn test_cache_set_get() {
-        let cache: InMemoryCache<String> = InMemoryCache::with_defaults();
-        let key = CacheKey::new("test-key");
-
-        cache.set(key.clone(), "test-value".to_string()).await;
-
-        let result = cache.get(&key).await;
-        assert_eq!(result, Some("test-value".to_string()));
-    }
-
-    #[tokio::test]
-    async fn test_cache_get_nonexistent() {
-        let cache: InMemoryCache<String> = InMemoryCache::with_defaults();
-        let key = CacheKey::new("nonexistent");
-
-        let result = cache.get(&key).await;
-        assert!(result.is_none());
-    }
-
-    #[tokio::test]
-    async fn test_cache_delete() {
-        let cache: InMemoryCache<String> = InMemoryCache::with_defaults();
-        let key = CacheKey::new("to-delete");
-
-        cache.set(key.clone(), "value".to_string()).await;
-        assert!(cache.exists(&key).await);
-
-        let deleted = cache.delete(&key).await;
-        assert!(deleted);
-        assert!(!cache.exists(&key).await);
-    }
-
-    #[tokio::test]
-    async fn test_cache_delete_nonexistent() {
-        let cache: InMemoryCache<String> = InMemoryCache::with_defaults();
-        let key = CacheKey::new("nonexistent");
-
-        let deleted = cache.delete(&key).await;
-        assert!(!deleted);
-    }
-
-    #[tokio::test]
-    async fn test_cache_exists() {
-        let cache: InMemoryCache<String> = InMemoryCache::with_defaults();
-        let key = CacheKey::new("exists-key");
-
-        assert!(!cache.exists(&key).await);
-        cache.set(key.clone(), "value".to_string()).await;
-        assert!(cache.exists(&key).await);
-    }
-
-    #[tokio::test]
-    async fn test_cache_clear() {
-        let cache: InMemoryCache<String> = InMemoryCache::with_defaults();
-
-        cache.set(CacheKey::new("key1"), "value1".to_string()).await;
-        cache.set(CacheKey::new("key2"), "value2".to_string()).await;
-        cache.set(CacheKey::new("key3"), "value3".to_string()).await;
-
-        assert_eq!(cache.len(), 3);
-        cache.clear().await;
-        assert_eq!(cache.len(), 0);
-        assert!(cache.is_empty());
-    }
-
-    // ==================== TTL Tests ====================
-
-    #[tokio::test]
-    async fn test_cache_ttl_expiration() {
-        let cache: InMemoryCache<String> = InMemoryCache::with_defaults();
-        let key = CacheKey::new("expiring-key");
-
-        cache
-            .set_with_ttl(key.clone(), "value".to_string(), Duration::from_millis(10))
-            .await;
-        assert!(cache.exists(&key).await);
-
-        tokio::time::sleep(Duration::from_millis(20)).await;
-        assert!(!cache.exists(&key).await);
-    }
-
-    #[tokio::test]
-    async fn test_cache_get_expired() {
-        let cache: InMemoryCache<String> = InMemoryCache::with_defaults();
-        let key = CacheKey::new("expiring-key");
-
-        cache
-            .set_with_ttl(key.clone(), "value".to_string(), Duration::from_millis(10))
-            .await;
-        tokio::time::sleep(Duration::from_millis(20)).await;
-
-        let result = cache.get(&key).await;
-        assert!(result.is_none());
-    }
-
-    #[tokio::test]
-    async fn test_cache_ttl_remaining() {
-        let cache: InMemoryCache<String> = InMemoryCache::with_defaults();
-        let key = CacheKey::new("ttl-key");
-
-        cache
-            .set_with_ttl(key.clone(), "value".to_string(), Duration::from_secs(60))
-            .await;
-
-        let ttl = cache.ttl(&key);
-        assert!(ttl.is_some());
-        assert!(ttl.unwrap() <= Duration::from_secs(60));
-    }
-
-    // ==================== Eviction Tests ====================
-
-    #[tokio::test]
-    async fn test_cache_lru_eviction() {
-        let config = DualCacheConfig::default()
-            .with_max_size(3)
-            .with_eviction_policy(EvictionPolicy::LRU);
-        let cache: InMemoryCache<String> = InMemoryCache::new(config);
-
-        cache.set(CacheKey::new("key1"), "value1".to_string()).await;
-        cache.set(CacheKey::new("key2"), "value2".to_string()).await;
-        cache.set(CacheKey::new("key3"), "value3".to_string()).await;
-
-        // Access key1 and key2 to make them more recent
-        cache.get(&CacheKey::new("key1")).await;
-        cache.get(&CacheKey::new("key2")).await;
-
-        // Add key4, should evict key3 (least recently used)
-        cache.set(CacheKey::new("key4"), "value4".to_string()).await;
-
-        assert!(cache.exists(&CacheKey::new("key1")).await);
-        assert!(cache.exists(&CacheKey::new("key2")).await);
-        assert!(!cache.exists(&CacheKey::new("key3")).await);
-        assert!(cache.exists(&CacheKey::new("key4")).await);
-    }
-
-    #[tokio::test]
-    async fn test_cache_lfu_eviction() {
-        let config = DualCacheConfig::default()
-            .with_max_size(3)
-            .with_eviction_policy(EvictionPolicy::LFU);
-        let cache: InMemoryCache<String> = InMemoryCache::new(config);
-
-        cache.set(CacheKey::new("key1"), "value1".to_string()).await;
-        cache.set(CacheKey::new("key2"), "value2".to_string()).await;
-        cache.set(CacheKey::new("key3"), "value3".to_string()).await;
-
-        // Access key1 multiple times
-        for _ in 0..5 {
-            cache.get(&CacheKey::new("key1")).await;
-        }
-        // Access key2 a few times
-        for _ in 0..2 {
-            cache.get(&CacheKey::new("key2")).await;
-        }
-        // key3 has lowest access count
-
-        // Add key4, should evict key3 (least frequently used)
-        cache.set(CacheKey::new("key4"), "value4".to_string()).await;
-
-        assert!(cache.exists(&CacheKey::new("key1")).await);
-        assert!(cache.exists(&CacheKey::new("key2")).await);
-        assert!(!cache.exists(&CacheKey::new("key3")).await);
-        // key3 should be evicted
-        assert!(cache.exists(&CacheKey::new("key4")).await);
-    }
-
-    #[tokio::test]
-    async fn test_cache_ttl_eviction_prefers_expired_entry() {
-        let config = DualCacheConfig::default()
-            .with_max_size(3)
-            .with_eviction_policy(EvictionPolicy::TTL);
-        let cache: InMemoryCache<String> = InMemoryCache::new(config);
-
-        cache
-            .set_with_ttl(
-                CacheKey::new("short"),
-                "value1".to_string(),
-                Duration::from_millis(10),
-            )
-            .await;
-        cache
-            .set_with_ttl(
-                CacheKey::new("long1"),
-                "value2".to_string(),
-                Duration::from_secs(60),
-            )
-            .await;
-        cache
-            .set_with_ttl(
-                CacheKey::new("long2"),
-                "value3".to_string(),
-                Duration::from_secs(60),
-            )
-            .await;
-
-        tokio::time::sleep(Duration::from_millis(20)).await;
-        cache.set(CacheKey::new("new"), "value4".to_string()).await;
-
-        assert!(!cache.exists(&CacheKey::new("short")).await);
-        assert!(cache.exists(&CacheKey::new("long1")).await);
-        assert!(cache.exists(&CacheKey::new("long2")).await);
-        assert!(cache.exists(&CacheKey::new("new")).await);
-    }
-
-    // ==================== Statistics Tests ====================
-
-    #[tokio::test]
-    async fn test_cache_stats_hits_misses() {
-        let cache: InMemoryCache<String> = InMemoryCache::with_defaults();
-        let key = CacheKey::new("stats-key");
-
-        cache.set(key.clone(), "value".to_string()).await;
-
-        // Generate hits
-        cache.get(&key).await;
-        cache.get(&key).await;
-
-        // Generate misses
-        cache.get(&CacheKey::new("nonexistent1")).await;
-        cache.get(&CacheKey::new("nonexistent2")).await;
-
-        let stats = cache.stats().snapshot();
-        assert_eq!(stats.memory_hits, 2);
-        assert_eq!(stats.memory_misses, 2);
-    }
-
-    #[tokio::test]
-    async fn test_cache_stats_writes() {
-        let cache: InMemoryCache<String> = InMemoryCache::with_defaults();
-
-        cache.set(CacheKey::new("key1"), "value1".to_string()).await;
-        cache.set(CacheKey::new("key2"), "value2".to_string()).await;
-
-        let stats = cache.stats().snapshot();
-        assert_eq!(stats.writes, 2);
-    }
-
-    #[tokio::test]
-    async fn test_cache_stats_deletions() {
-        let cache: InMemoryCache<String> = InMemoryCache::with_defaults();
-        let key = CacheKey::new("to-delete");
-
-        cache.set(key.clone(), "value".to_string()).await;
-        cache.delete(&key).await;
-
-        let stats = cache.stats().snapshot();
-        assert_eq!(stats.deletions, 1);
-    }
-
-    // ==================== Concurrent Access Tests ====================
-
-    #[tokio::test]
-    async fn test_cache_concurrent_read_write() {
-        use std::sync::Arc;
-
-        let cache = Arc::new(InMemoryCache::<i32>::with_defaults());
-        let mut handles = vec![];
-
-        // Writers
-        for i in 0..4 {
-            let cache_clone = Arc::clone(&cache);
-            let handle = tokio::spawn(async move {
-                for j in 0..25 {
-                    let key = CacheKey::new(format!("key-{}-{}", i, j));
-                    cache_clone.set(key, i * 25 + j).await;
-                }
-            });
-            handles.push(handle);
-        }
-
-        // Readers
-        for _ in 0..4 {
-            let cache_clone = Arc::clone(&cache);
-            let handle = tokio::spawn(async move {
-                for i in 0..4 {
-                    for j in 0..25 {
-                        let key = CacheKey::new(format!("key-{}-{}", i, j));
-                        let _ = cache_clone.get(&key).await;
-                    }
-                }
-            });
-            handles.push(handle);
-        }
-
-        for handle in handles {
-            handle.await.unwrap();
-        }
-
-        // Just verify no panics occurred
-        assert!(cache.len() <= 100);
-    }
-
-    // ==================== Entry Metadata Tests ====================
-
-    #[tokio::test]
-    async fn test_cache_get_entry() {
-        let cache: InMemoryCache<String> = InMemoryCache::with_defaults();
-        let key = CacheKey::new("entry-key");
-
-        cache
-            .set_with_size(
-                key.clone(),
-                "value".to_string(),
-                Duration::from_secs(60),
-                100,
-            )
-            .await;
-
-        let entry = cache.get_entry(&key).await;
-        assert!(entry.is_some());
-
-        let entry = entry.unwrap();
-        assert_eq!(entry.value, "value");
-        assert_eq!(entry.size_bytes, 100);
-        assert_eq!(entry.access_count, 1); // One access from get_entry
-    }
-
-    #[tokio::test]
-    async fn test_cache_get_entry_includes_prior_get_accesses() {
-        let cache: InMemoryCache<String> = InMemoryCache::with_defaults();
-        let key = CacheKey::new("entry-access-key");
-
-        cache.set(key.clone(), "value".to_string()).await;
-        cache.get(&key).await;
-        cache.get(&key).await;
-
-        let entry = cache.get_entry(&key).await.unwrap();
-        assert_eq!(entry.access_count, 3);
-    }
-
-    #[tokio::test]
-    async fn test_cache_keys() {
-        let cache: InMemoryCache<String> = InMemoryCache::with_defaults();
-
-        cache.set(CacheKey::new("key1"), "value1".to_string()).await;
-        cache.set(CacheKey::new("key2"), "value2".to_string()).await;
-        cache.set(CacheKey::new("key3"), "value3".to_string()).await;
-
-        let keys = cache.keys();
-        assert_eq!(keys.len(), 3);
-    }
-
-    // ==================== Update Tests ====================
-
-    #[tokio::test]
-    async fn test_cache_update_existing() {
-        let cache: InMemoryCache<String> = InMemoryCache::with_defaults();
-        let key = CacheKey::new("update-key");
-
-        cache.set(key.clone(), "initial".to_string()).await;
-        cache.set(key.clone(), "updated".to_string()).await;
-
-        let result = cache.get(&key).await;
-        assert_eq!(result, Some("updated".to_string()));
-        assert_eq!(cache.len(), 1);
-    }
-}
+#[path = "memory_tests.rs"]
+mod tests;
