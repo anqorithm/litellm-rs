@@ -91,7 +91,7 @@ async fn completions_inner(
         return completions_streaming::handle_streaming_completion(
             state.get_ref(),
             adapter_request,
-            std::sync::Arc::clone(&context),
+            context,
         )
         .await;
     }

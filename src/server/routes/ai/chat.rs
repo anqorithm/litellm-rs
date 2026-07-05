@@ -66,7 +66,7 @@ pub async fn chat_completions(
         chat_streaming::handle_streaming_chat_completion(
             state.get_ref(),
             request.into_inner(),
-            std::sync::Arc::clone(&context),
+            context,
         )
         .await
     } else {
