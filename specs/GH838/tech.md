@@ -32,6 +32,38 @@ Link to `product.md`.
 `library_only` 分类：若模块通过 `src/lib.rs`、prelude、provider trait 或 crate 内部 API 合法暴露
 （例如 `completion`、`function_calling`、`traits`、`secret_managers`），不得仅因 server/main 零命中判为违规。
 
+### Appendix A — SP838-T2 可达性证据表（2026-07-05）
+
+判定命令模板：
+
+```bash
+rg -n "core::<module>|<PrimaryType>" src/server src/main.rs src/bin
+rg -n "core::<module>|<PrimaryType>" src/config config
+rg -n "#\[(tokio::test|test)\]" src/core/<module>
+git log --since=2026-04-06 --format='%h' -- src/core/<module>
+```
+
+说明：`src/config`、`config/`、admin/status 响应中的配置字段或说明文案不算运行时接线证据；
+只有在 `src/server`、`src/main.rs`、`src/bin` 中构造主类型、注册中间件/路由、或挂入后台任务才算可达。
+下表的 `runtime refs` 使用 `core::<module>|<PrimaryType>` 查询 `src/server src/main.rs src/bin`，
+结果均为 0，表示当前没有启动装配或请求路径引用这些主类型。
+
+| 子系统 | 主类型查询 | runtime refs | config refs | 依赖/耦合 | Rust 文件数 | 测试数 | 90 天 churn | 判定 |
+| --- | --- | ---: | ---: | --- | ---: | ---: | ---: | --- |
+| `guardrails` | `GuardrailEngine` | 0 | 0 | completion 热路径、安全策略 | 10 | 94 | 2 | 未接线；若保留需默认接线或显式配置关闭 |
+| `ip_access` | `IpAccessMiddleware` | 0 | 0 | Actix middleware、CIDR/IP 规则 | 6 | 52 | 1 | 未接线；若保留需中间件短路测试 |
+| `mcp` | `McpGateway` | 0 | 0 | SSRF 校验、tool schema、transport | 10 | 116 | 2 | 未接线；产品化应独立 gate/wire 决策 |
+| `a2a` | `A2AGateway` | 0 | 0 | SSRF 校验、agent registry/provider | 7 | 132 | 2 | 未接线；产品化应独立 gate/wire 决策 |
+| `realtime` | `RealtimeSession` | 0 | 0 | WebSocket/realtime session state | 4 | 17 | 1 | 未接线；仅 feature-gated module API 存在 |
+| `observability` | `MetricsCollector` | 0 | 0 | tracing/metrics/export destinations | 11 | 124 | 3 | 未接线；现有基础 tracing/metrics 在其他模块 |
+| `integrations` | `IntegrationManager` | 0 | 0 | Langfuse/OTel/Helicone/Arize clients | 21 | 110 | 4 | 未接线；未进入真实 LLM request lifecycle |
+| `webhooks` | `WebhookManager` | 0 | 0 | delivery processor、signing、HTTP POST | 6 | 36 | 1 | 未接线；不是 stub-only，需 wire 或 gate |
+| `semantic_cache` | `SemanticCache` | 0 | 0 | storage/vector、embedding provider | 6 | 83 | 1 | 配置拒绝；`cache.semantic_cache` 不能作为可达证据 |
+| `analytics` | `AnalyticsEngine` | 0 | 0 | storage-backed metrics/reporting | 16 | 75 | 3 | feature-gated 但无 runtime collector/route |
+| `virtual_keys` | `VirtualKeyManager` | 0 | 0 | SeaORM CRUD、key policy/rate limits | 6 | 83 | 2 | 未接线；不是 stub-only，需 gateway/API 决策 |
+| `audit` | `AuditMiddleware` | 0 | 0 | enterprise config、audit logger/output | 8 | 52 | 1 | 配置拒绝；`enterprise.audit_logging` 不能 no-op |
+| `batch` | `BatchProcessor` | 0 | 0 | storage/database、batch route/proxy | 9 | 70 | 1 | 半接线；HTTP route 存在但 processor 未构造 |
+
 **Phase 2 — 处置矩阵（人工批复）**
 
 预填建议（维护者可改）：
