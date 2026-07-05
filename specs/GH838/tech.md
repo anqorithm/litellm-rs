@@ -39,6 +39,7 @@ Link to `product.md`.
 ```bash
 rg -n "core::<module>|<PrimaryType>" src/server src/main.rs src/bin
 rg -n "core::<module>|<PrimaryType>" src/config config
+rg -n "<config.path>|<knob_name>" src/config config/gateway*.yaml.example
 rg -n "#\[(tokio::)?test" src/core/<module>
 git log --since=2026-04-06 --format='%h' -- src/core/<module>
 ```
@@ -46,23 +47,25 @@ git log --since=2026-04-06 --format='%h' -- src/core/<module>
 说明：`src/config`、`config/`、admin/status 响应中的配置字段或说明文案不算运行时接线证据；
 只有在 `src/server`、`src/main.rs`、`src/bin` 中构造主类型、注册中间件/路由、或挂入后台任务才算可达。
 下表的 `runtime refs` 使用 `core::<module>|<PrimaryType>` 查询 `src/server src/main.rs src/bin`，
-结果均为 0，表示当前没有启动装配或请求路径引用这些主类型。
+结果均为 0，表示当前没有启动装配或请求路径引用这些主类型。`primary config refs` 只统计主类型查询在
+`src/config config` 的命中；`config knob refs` 单独统计已解析/校验/示例化但不能作为可达证据的配置开关命中。
 
-| 子系统 | 主类型查询 | runtime refs | config refs | 依赖/耦合 | Rust 文件数 | 测试数 | 90 天 churn | 判定 |
-| --- | --- | ---: | ---: | --- | ---: | ---: | ---: | --- |
-| `guardrails` | `GuardrailEngine` | 0 | 0 | completion 热路径、安全策略 | 10 | 94 | 2 | 未接线；若保留需默认接线或显式配置关闭 |
-| `ip_access` | `IpAccessMiddleware` | 0 | 0 | Actix middleware、CIDR/IP 规则 | 6 | 52 | 1 | 未接线；若保留需中间件短路测试 |
-| `mcp` | `McpGateway` | 0 | 0 | SSRF 校验、tool schema、transport | 10 | 116 | 2 | 未接线；产品化应独立 gate/wire 决策 |
-| `a2a` | `A2AGateway` | 0 | 0 | SSRF 校验、agent registry/provider | 7 | 132 | 2 | 未接线；产品化应独立 gate/wire 决策 |
-| `realtime` | `RealtimeSession` | 0 | 0 | WebSocket/realtime session state | 4 | 17 | 1 | 未接线；仅 feature-gated module API 存在 |
-| `observability` | `MetricsCollector` | 0 | 0 | tracing/metrics/export destinations | 11 | 124 | 3 | 未接线；现有基础 tracing/metrics 在其他模块 |
-| `integrations` | `IntegrationManager` | 0 | 0 | Langfuse/OTel/Helicone/Arize clients | 21 | 110 | 4 | 未接线；未进入真实 LLM request lifecycle |
-| `webhooks` | `WebhookManager` | 0 | 0 | delivery processor、signing、HTTP POST | 6 | 36 | 1 | 未接线；不是 stub-only，需 wire 或 gate |
-| `semantic_cache` | `SemanticCache` | 0 | 0 | storage/vector、embedding provider | 6 | 83 | 1 | 配置拒绝；`cache.semantic_cache` 不能作为可达证据 |
-| `analytics` | `AnalyticsEngine` | 0 | 0 | storage-backed metrics/reporting | 16 | 75 | 3 | feature-gated 但无 runtime collector/route |
-| `virtual_keys` | `VirtualKeyManager` | 0 | 0 | SeaORM CRUD、key policy/rate limits | 6 | 83 | 2 | 未接线；不是 stub-only，需 gateway/API 决策 |
-| `audit` | `AuditMiddleware` | 0 | 0 | enterprise config、audit logger/output | 8 | 52 | 1 | 配置拒绝；`enterprise.audit_logging` 不能 no-op |
-| `batch` | `BatchProcessor` | 0 | 0 | storage/database、batch route/proxy | 9 | 70 | 1 | 半接线；HTTP route 存在但 processor 未构造 |
+| 子系统 | 主类型查询 | runtime refs | primary config refs | config knob refs | 依赖/耦合 | Rust 文件数 | 测试数 | 90 天 churn | 判定 |
+| --- | --- | ---: | ---: | ---: | --- | ---: | ---: | ---: | --- |
+| `guardrails` | `GuardrailEngine` | 0 | 0 | 0 | completion 热路径、安全策略 | 10 | 94 | 2 | 未接线；若保留需默认接线或显式配置关闭 |
+| `ip_access` | `IpAccessMiddleware` | 0 | 0 | 0 | Actix middleware、CIDR/IP 规则 | 6 | 52 | 1 | 未接线；若保留需中间件短路测试 |
+| `mcp` | `McpGateway` | 0 | 0 | 0 | SSRF 校验、tool schema、transport | 10 | 116 | 2 | 未接线；产品化应独立 gate/wire 决策 |
+| `a2a` | `A2AGateway` | 0 | 0 | 0 | SSRF 校验、agent registry/provider | 7 | 132 | 2 | 未接线；产品化应独立 gate/wire 决策 |
+| `realtime` | `RealtimeSession` | 0 | 0 | 0 | WebSocket/realtime session state | 4 | 17 | 1 | 未接线；仅 feature-gated module API 存在 |
+| `observability` | `MetricsCollector` | 0 | 0 | 0 | tracing/metrics/export destinations | 11 | 124 | 3 | 未接线；现有基础 tracing/metrics 在其他模块 |
+| `integrations` | `IntegrationManager` | 0 | 0 | 0 | Langfuse/OTel/Helicone/Arize clients | 21 | 110 | 4 | 未接线；未进入真实 LLM request lifecycle |
+| `webhooks` | `WebhookManager` | 0 | 0 | 0 | delivery processor、signing、HTTP POST | 6 | 36 | 1 | 未接线；不是 stub-only，需 wire 或 gate |
+| `semantic_cache` | `SemanticCache` | 0 | 0 | 38 | storage/vector、embedding provider | 6 | 83 | 1 | 配置拒绝；`cache.semantic_cache` 已解析/校验但不能作为可达证据 |
+| `analytics` | `AnalyticsEngine` | 0 | 0 | 27 | storage-backed metrics/reporting | 16 | 75 | 3 | feature-gated 但无 runtime collector/route；`enterprise.advanced_analytics` 已解析/校验 |
+| `virtual_keys` | `VirtualKeyManager` | 0 | 0 | 0 | SeaORM CRUD、key policy/rate limits | 6 | 83 | 2 | 未接线；不是 stub-only，需 gateway/API 决策 |
+| `audit` | `AuditMiddleware` | 0 | 0 | 29 | enterprise config、audit logger/output | 8 | 52 | 1 | 配置拒绝；`enterprise.audit_logging` 已解析/校验但不能 no-op |
+| `batch` | `BatchProcessor` | 0 | 0 | 0 | storage/database、batch route/proxy | 9 | 70 | 1 | 半接线；HTTP route 存在但 processor 未构造 |
+| `user_management` | `UserManager` | 0 | 0 | 0 | storage-backed user/team/org domain | 9 | 69 | 2 | 未接线；GH838 豁免清单记录其未由 gateway 构造 |
 
 **Phase 2 — 处置矩阵（人工批复）**
 
@@ -79,6 +82,7 @@ git log --since=2026-04-06 --format='%h' -- src/core/<module>
 | semantic_cache / analytics | remove or gate | 默认路径不可达；按维护者产品意向 |
 | virtual_keys | wire or gate | 已有迁移与 storage-backed CRUD，但 gateway 管理/API 路径未接线；不能按 stub-only 删除 |
 | audit logging | wire or gate | 有 `AuditLogger` / `AuditMiddleware` 与 `enterprise.audit_logging` 配置示例，但未证明挂入 server/main；必须进入矩阵与 no-op knob 检查 |
+| user_management | wire or gate | `UserManager` 有 storage-backed 用户/团队/组织域能力，但 gateway 未构造；需与现有 `teams`/key 路由边界统一决策 |
 
 **Phase 3 — 执行**
 
