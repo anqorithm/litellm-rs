@@ -39,7 +39,7 @@ Link to `product.md`.
 ```bash
 rg -n "core::<module>|<PrimaryType>" src/server src/main.rs src/bin
 rg -n "core::<module>|<PrimaryType>" src/config config
-rg -n "#\[(tokio::test|test)\]" src/core/<module>
+rg -n "#\[(tokio::)?test" src/core/<module>
 git log --since=2026-04-06 --format='%h' -- src/core/<module>
 ```
 
