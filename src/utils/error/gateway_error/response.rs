@@ -1,44 +1,31 @@
 //! HTTP response handling for errors
 
 use super::types::GatewayError;
-use crate::core::providers::unified_provider::ProviderError;
-use crate::utils::error::canonical::CanonicalError;
+use crate::utils::error::canonical::{
+    CanonicalError, HttpHeaderFacts, gateway_http_error_facts, gateway_http_header_facts,
+};
 use actix_web::{HttpResponse, HttpResponseBuilder, ResponseError};
+use std::future::Future;
 
-#[derive(Debug, Clone, Copy, Default)]
-struct RateLimitHeaderFacts {
-    retry_after: Option<u64>,
-    rpm_limit: Option<u32>,
-    tpm_limit: Option<u32>,
+tokio::task_local! {
+    static CURRENT_GATEWAY_ERROR_REQUEST_ID: String;
 }
 
-fn rate_limit_headers(error: &GatewayError) -> Option<RateLimitHeaderFacts> {
-    match error {
-        GatewayError::RateLimit {
-            retry_after,
-            rpm_limit,
-            tpm_limit,
-            ..
-        } => Some(RateLimitHeaderFacts {
-            retry_after: *retry_after,
-            rpm_limit: *rpm_limit,
-            tpm_limit: *tpm_limit,
-        }),
-        GatewayError::Provider(ProviderError::RateLimit {
-            retry_after,
-            rpm_limit,
-            tpm_limit,
-            ..
-        }) => Some(RateLimitHeaderFacts {
-            retry_after: *retry_after,
-            rpm_limit: *rpm_limit,
-            tpm_limit: *tpm_limit,
-        }),
-        _ => None,
-    }
+/// Run a request future with the request ID available to `GatewayError` bodies.
+pub async fn with_gateway_error_request_id<F>(request_id: String, future: F) -> F::Output
+where
+    F: Future,
+{
+    CURRENT_GATEWAY_ERROR_REQUEST_ID
+        .scope(request_id, future)
+        .await
 }
 
-fn insert_rate_limit_headers(builder: &mut HttpResponseBuilder, facts: RateLimitHeaderFacts) {
+fn current_gateway_error_request_id() -> Option<String> {
+    CURRENT_GATEWAY_ERROR_REQUEST_ID.try_with(Clone::clone).ok()
+}
+
+fn insert_http_headers(builder: &mut HttpResponseBuilder, facts: HttpHeaderFacts) {
     if let Some(secs) = facts.retry_after {
         builder.insert_header(("Retry-After", secs.to_string()));
     }
@@ -50,214 +37,42 @@ fn insert_rate_limit_headers(builder: &mut HttpResponseBuilder, facts: RateLimit
     }
 }
 
-impl ResponseError for GatewayError {
-    fn error_response(&self) -> HttpResponse {
-        let (status_code, error_code, message) = match self {
-            GatewayError::Config(_) => (
-                actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
-                "CONFIG_ERROR",
-                self.to_string(),
-            ),
-            GatewayError::Storage(_) => (
-                actix_web::http::StatusCode::SERVICE_UNAVAILABLE,
-                "STORAGE_ERROR",
-                self.to_string(),
-            ),
-            GatewayError::Auth(_) => (
-                actix_web::http::StatusCode::UNAUTHORIZED,
-                "AUTH_ERROR",
-                self.to_string(),
-            ),
-            GatewayError::Forbidden(_) => (
-                actix_web::http::StatusCode::FORBIDDEN,
-                "FORBIDDEN",
-                self.to_string(),
-            ),
-            GatewayError::Provider(provider_error) => match provider_error {
-                ProviderError::RateLimit { .. } => (
-                    actix_web::http::StatusCode::TOO_MANY_REQUESTS,
-                    "PROVIDER_RATE_LIMIT",
-                    provider_error.to_string(),
-                ),
-                ProviderError::QuotaExceeded { .. } => (
-                    actix_web::http::StatusCode::PAYMENT_REQUIRED,
-                    "PROVIDER_QUOTA_EXCEEDED",
-                    provider_error.to_string(),
-                ),
-                ProviderError::ModelNotFound { .. } => (
-                    actix_web::http::StatusCode::NOT_FOUND,
-                    "MODEL_NOT_FOUND",
-                    provider_error.to_string(),
-                ),
-                ProviderError::InvalidRequest { .. } => (
-                    actix_web::http::StatusCode::BAD_REQUEST,
-                    "INVALID_REQUEST",
-                    provider_error.to_string(),
-                ),
-                ProviderError::Timeout { .. } => (
-                    actix_web::http::StatusCode::GATEWAY_TIMEOUT,
-                    "PROVIDER_TIMEOUT",
-                    provider_error.to_string(),
-                ),
-                ProviderError::ProviderUnavailable { .. } => (
-                    actix_web::http::StatusCode::SERVICE_UNAVAILABLE,
-                    "PROVIDER_UNAVAILABLE",
-                    provider_error.to_string(),
-                ),
-                ProviderError::Authentication { .. } => (
-                    actix_web::http::StatusCode::UNAUTHORIZED,
-                    "PROVIDER_AUTH_ERROR",
-                    provider_error.to_string(),
-                ),
-                ProviderError::Network { .. } => (
-                    actix_web::http::StatusCode::BAD_GATEWAY,
-                    "PROVIDER_NETWORK_ERROR",
-                    provider_error.to_string(),
-                ),
-                ProviderError::Configuration { .. }
-                | ProviderError::Serialization { .. }
-                | ProviderError::TransformationError { .. } => (
-                    actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
-                    "PROVIDER_INTERNAL_ERROR",
-                    provider_error.to_string(),
-                ),
-                ProviderError::ContextLengthExceeded { .. }
-                | ProviderError::ContentFiltered { .. }
-                | ProviderError::TokenLimitExceeded { .. } => (
-                    actix_web::http::StatusCode::BAD_REQUEST,
-                    "PROVIDER_REQUEST_ERROR",
-                    provider_error.to_string(),
-                ),
-                ProviderError::NotSupported { .. }
-                | ProviderError::NotImplemented { .. }
-                | ProviderError::FeatureDisabled { .. } => (
-                    actix_web::http::StatusCode::NOT_IMPLEMENTED,
-                    "PROVIDER_NOT_IMPLEMENTED",
-                    provider_error.to_string(),
-                ),
-                ProviderError::DeploymentError { .. } => (
-                    actix_web::http::StatusCode::NOT_FOUND,
-                    "DEPLOYMENT_NOT_FOUND",
-                    provider_error.to_string(),
-                ),
-                ProviderError::ResponseParsing { .. } | ProviderError::Streaming { .. } => (
-                    actix_web::http::StatusCode::BAD_GATEWAY,
-                    "PROVIDER_RESPONSE_ERROR",
-                    provider_error.to_string(),
-                ),
-                ProviderError::RoutingError { .. } => (
-                    actix_web::http::StatusCode::SERVICE_UNAVAILABLE,
-                    "PROVIDER_ROUTING_ERROR",
-                    provider_error.to_string(),
-                ),
-                ProviderError::ApiError { status, .. } => (
-                    actix_web::http::StatusCode::from_u16(*status)
-                        .unwrap_or(actix_web::http::StatusCode::BAD_GATEWAY),
-                    "PROVIDER_API_ERROR",
-                    provider_error.to_string(),
-                ),
-                ProviderError::Cancelled { .. } => (
-                    actix_web::http::StatusCode::from_u16(499)
-                        .unwrap_or(actix_web::http::StatusCode::BAD_REQUEST),
-                    "PROVIDER_CANCELLED",
-                    provider_error.to_string(),
-                ),
-                ProviderError::Other { .. } => (
-                    actix_web::http::StatusCode::BAD_GATEWAY,
-                    "PROVIDER_ERROR",
-                    provider_error.to_string(),
-                ),
-            },
-            GatewayError::RateLimit { .. } => (
-                actix_web::http::StatusCode::TOO_MANY_REQUESTS,
-                "RATE_LIMIT_EXCEEDED",
-                self.to_string(),
-            ),
-            GatewayError::Validation(_) => (
-                actix_web::http::StatusCode::BAD_REQUEST,
-                "VALIDATION_ERROR",
-                self.to_string(),
-            ),
-            GatewayError::NotFound(_) => (
-                actix_web::http::StatusCode::NOT_FOUND,
-                "NOT_FOUND",
-                self.to_string(),
-            ),
-            GatewayError::Conflict(_) => (
-                actix_web::http::StatusCode::CONFLICT,
-                "CONFLICT",
-                self.to_string(),
-            ),
-            GatewayError::BadRequest(_) => (
-                actix_web::http::StatusCode::BAD_REQUEST,
-                "BAD_REQUEST",
-                self.to_string(),
-            ),
-            GatewayError::Timeout(_) => (
-                actix_web::http::StatusCode::REQUEST_TIMEOUT,
-                "TIMEOUT",
-                self.to_string(),
-            ),
-            GatewayError::Unavailable(_) => (
-                actix_web::http::StatusCode::SERVICE_UNAVAILABLE,
-                "SERVICE_UNAVAILABLE",
-                self.to_string(),
-            ),
-            GatewayError::Network(_) => (
-                actix_web::http::StatusCode::BAD_GATEWAY,
-                "NETWORK_ERROR",
-                self.to_string(),
-            ),
-            GatewayError::Internal(_) => (
-                actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
-                "INTERNAL_ERROR",
-                self.to_string(),
-            ),
-            GatewayError::NotImplemented(_) => (
-                actix_web::http::StatusCode::NOT_IMPLEMENTED,
-                "NOT_IMPLEMENTED",
-                self.to_string(),
-            ),
-            GatewayError::Serialization(_) => (
-                actix_web::http::StatusCode::BAD_REQUEST,
-                "SERIALIZATION_ERROR",
-                self.to_string(),
-            ),
-            GatewayError::HttpClient(_) => (
-                actix_web::http::StatusCode::BAD_GATEWAY,
-                "HTTP_CLIENT_ERROR",
-                self.to_string(),
-            ),
-            GatewayError::Io(_) => (
-                actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
-                "IO_ERROR",
-                self.to_string(),
-            ),
-        };
+impl GatewayError {
+    /// Build the gateway JSON error body with a request ID supplied by middleware.
+    pub fn error_response_with_request_id(&self, request_id: Option<String>) -> HttpResponse {
+        self.error_response_with_optional_request_id(request_id)
+    }
 
+    fn error_response_with_optional_request_id(&self, request_id: Option<String>) -> HttpResponse {
+        let request_id = request_id.or_else(current_gateway_error_request_id);
+        let facts = gateway_http_error_facts(self);
         let canonical_code = self.canonical_code().as_str().to_string();
         let retryable = self.canonical_retryable();
 
         let error_response = GatewayErrorResponse {
             error: GatewayErrorDetail {
-                code: error_code.to_string(),
+                code: facts.gateway_code.to_string(),
                 canonical_code,
                 retryable,
-                message,
+                message: self.to_string(),
                 timestamp: chrono::Utc::now().timestamp(),
-                request_id: None, // This should be set by middleware
+                request_id,
             },
         };
 
-        let mut builder = HttpResponse::build(status_code);
+        let mut builder = HttpResponse::build(facts.status);
 
-        // Keep 429 header facts in one helper so the future #839 HTTP facts
-        // consolidation cannot drop Retry-After / X-RateLimit metadata.
-        if let Some(facts) = rate_limit_headers(self) {
-            insert_rate_limit_headers(&mut builder, facts);
+        if let Some(header_facts) = gateway_http_header_facts(self) {
+            insert_http_headers(&mut builder, header_facts);
         }
 
         builder.json(error_response)
+    }
+}
+
+impl ResponseError for GatewayError {
+    fn error_response(&self) -> HttpResponse {
+        self.error_response_with_optional_request_id(None)
     }
 }
 

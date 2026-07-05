@@ -13,5 +13,5 @@ mod tests;
 mod types;
 
 #[cfg(feature = "gateway")]
-pub use response::{GatewayErrorDetail, GatewayErrorResponse};
+pub use response::{GatewayErrorDetail, GatewayErrorResponse, with_gateway_error_request_id};
 pub use types::{GatewayError, Result};

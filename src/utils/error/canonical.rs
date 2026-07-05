@@ -7,6 +7,8 @@ use super::gateway_error::GatewayError;
 use crate::core::a2a::error::A2AError;
 use crate::core::mcp::error::McpError;
 use crate::core::providers::unified_provider::ProviderError;
+#[cfg(feature = "gateway")]
+use actix_web::http::StatusCode;
 
 /// Canonical error code shared across protocol boundaries.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -64,6 +66,370 @@ pub trait CanonicalError {
     fn canonical_retryable(&self) -> bool {
         self.canonical_code().is_retryable()
     }
+}
+
+/// Canonical HTTP facts shared by gateway and OpenAI-compatible adapters.
+#[cfg(feature = "gateway")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HttpErrorFacts {
+    pub status: StatusCode,
+    pub gateway_code: &'static str,
+    pub openai_error_type: &'static str,
+    pub openai_code: &'static str,
+}
+
+#[cfg(feature = "gateway")]
+impl HttpErrorFacts {
+    fn new(
+        status: StatusCode,
+        gateway_code: &'static str,
+        openai_error_type: &'static str,
+        openai_code: &'static str,
+    ) -> Self {
+        Self {
+            status,
+            gateway_code,
+            openai_error_type,
+            openai_code,
+        }
+    }
+}
+
+/// HTTP header facts that are part of canonical error-to-HTTP mapping.
+#[cfg(feature = "gateway")]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct HttpHeaderFacts {
+    pub retry_after: Option<u64>,
+    pub rpm_limit: Option<u32>,
+    pub tpm_limit: Option<u32>,
+}
+
+/// Map any gateway error to the canonical HTTP status and adapter codes.
+#[cfg(feature = "gateway")]
+pub fn gateway_http_error_facts(error: &GatewayError) -> HttpErrorFacts {
+    match error {
+        GatewayError::Config(_) => http_facts(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "CONFIG_ERROR",
+            "server_error",
+            "internal_error",
+        ),
+        GatewayError::Storage(_) => http_facts(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "STORAGE_ERROR",
+            "server_error",
+            "service_unavailable",
+        ),
+        GatewayError::HttpClient(_) => http_facts(
+            StatusCode::BAD_GATEWAY,
+            "HTTP_CLIENT_ERROR",
+            "server_error",
+            "network_error",
+        ),
+        GatewayError::Serialization(_) => http_facts(
+            StatusCode::BAD_REQUEST,
+            "SERIALIZATION_ERROR",
+            "invalid_request_error",
+            "invalid_request",
+        ),
+        GatewayError::Io(_) => http_facts(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "IO_ERROR",
+            "server_error",
+            "internal_error",
+        ),
+        GatewayError::Auth(_) => http_facts(
+            StatusCode::UNAUTHORIZED,
+            "AUTH_ERROR",
+            "authentication_error",
+            "authentication_error",
+        ),
+        GatewayError::Provider(provider_error) => provider_http_error_facts(provider_error),
+        GatewayError::RateLimit { .. } => http_facts(
+            StatusCode::TOO_MANY_REQUESTS,
+            "RATE_LIMIT_EXCEEDED",
+            "rate_limit_error",
+            "rate_limit_exceeded",
+        ),
+        GatewayError::Validation(_) => http_facts(
+            StatusCode::BAD_REQUEST,
+            "VALIDATION_ERROR",
+            "invalid_request_error",
+            "invalid_request",
+        ),
+        GatewayError::Timeout(_) => http_facts(
+            StatusCode::REQUEST_TIMEOUT,
+            "TIMEOUT",
+            "server_error",
+            "timeout",
+        ),
+        GatewayError::NotFound(_) => http_facts(
+            StatusCode::NOT_FOUND,
+            "NOT_FOUND",
+            "invalid_request_error",
+            "not_found",
+        ),
+        GatewayError::Conflict(_) => http_facts(
+            StatusCode::CONFLICT,
+            "CONFLICT",
+            "invalid_request_error",
+            "conflict",
+        ),
+        GatewayError::BadRequest(_) => http_facts(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            "invalid_request_error",
+            "invalid_request",
+        ),
+        GatewayError::Internal(_) => http_facts(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "INTERNAL_ERROR",
+            "server_error",
+            "internal_error",
+        ),
+        GatewayError::Unavailable(_) => http_facts(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "SERVICE_UNAVAILABLE",
+            "server_error",
+            "service_unavailable",
+        ),
+        GatewayError::Network(_) => http_facts(
+            StatusCode::BAD_GATEWAY,
+            "NETWORK_ERROR",
+            "server_error",
+            "network_error",
+        ),
+        GatewayError::Forbidden(_) => http_facts(
+            StatusCode::FORBIDDEN,
+            "FORBIDDEN",
+            "permission_error",
+            "permission_denied",
+        ),
+        GatewayError::NotImplemented(_) => http_facts(
+            StatusCode::NOT_IMPLEMENTED,
+            "NOT_IMPLEMENTED",
+            "invalid_request_error",
+            "not_implemented",
+        ),
+    }
+}
+
+/// Map provider errors to canonical HTTP status and adapter codes.
+#[cfg(feature = "gateway")]
+pub fn provider_http_error_facts(error: &ProviderError) -> HttpErrorFacts {
+    match error {
+        ProviderError::Authentication { .. } => http_facts(
+            StatusCode::UNAUTHORIZED,
+            "PROVIDER_AUTH_ERROR",
+            "authentication_error",
+            "authentication_error",
+        ),
+        ProviderError::RateLimit { .. } => http_facts(
+            StatusCode::TOO_MANY_REQUESTS,
+            "PROVIDER_RATE_LIMIT",
+            "rate_limit_error",
+            "rate_limit_exceeded",
+        ),
+        ProviderError::QuotaExceeded { .. } => http_facts(
+            StatusCode::PAYMENT_REQUIRED,
+            "PROVIDER_QUOTA_EXCEEDED",
+            "insufficient_quota",
+            "insufficient_quota",
+        ),
+        ProviderError::ModelNotFound { .. } => http_facts(
+            StatusCode::NOT_FOUND,
+            "MODEL_NOT_FOUND",
+            "invalid_request_error",
+            "model_not_found",
+        ),
+        ProviderError::InvalidRequest { .. } => http_facts(
+            StatusCode::BAD_REQUEST,
+            "INVALID_REQUEST",
+            "invalid_request_error",
+            "invalid_request",
+        ),
+        ProviderError::Network { .. } => http_facts(
+            StatusCode::BAD_GATEWAY,
+            "PROVIDER_NETWORK_ERROR",
+            "server_error",
+            "provider_network_error",
+        ),
+        ProviderError::ProviderUnavailable { .. } => http_facts(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "PROVIDER_UNAVAILABLE",
+            "server_error",
+            "provider_unavailable",
+        ),
+        ProviderError::NotSupported { .. }
+        | ProviderError::NotImplemented { .. }
+        | ProviderError::FeatureDisabled { .. } => http_facts(
+            StatusCode::NOT_IMPLEMENTED,
+            "PROVIDER_NOT_IMPLEMENTED",
+            "invalid_request_error",
+            "not_supported",
+        ),
+        ProviderError::Configuration { .. }
+        | ProviderError::Serialization { .. }
+        | ProviderError::TransformationError { .. } => http_facts(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "PROVIDER_INTERNAL_ERROR",
+            "server_error",
+            "internal_error",
+        ),
+        ProviderError::Timeout { .. } => http_facts(
+            StatusCode::GATEWAY_TIMEOUT,
+            "PROVIDER_TIMEOUT",
+            "server_error",
+            "timeout",
+        ),
+        ProviderError::ContextLengthExceeded { .. } => http_facts(
+            StatusCode::BAD_REQUEST,
+            "PROVIDER_REQUEST_ERROR",
+            "invalid_request_error",
+            "context_length_exceeded",
+        ),
+        ProviderError::ContentFiltered { .. } => http_facts(
+            StatusCode::BAD_REQUEST,
+            "PROVIDER_REQUEST_ERROR",
+            "invalid_request_error",
+            "content_filter",
+        ),
+        ProviderError::ApiError { status, .. } => provider_api_error_http_facts(*status),
+        ProviderError::TokenLimitExceeded { .. } => http_facts(
+            StatusCode::BAD_REQUEST,
+            "PROVIDER_REQUEST_ERROR",
+            "invalid_request_error",
+            "token_limit_exceeded",
+        ),
+        ProviderError::DeploymentError { .. } => http_facts(
+            StatusCode::NOT_FOUND,
+            "DEPLOYMENT_NOT_FOUND",
+            "invalid_request_error",
+            "deployment_not_found",
+        ),
+        ProviderError::ResponseParsing { .. } | ProviderError::Streaming { .. } => http_facts(
+            StatusCode::BAD_GATEWAY,
+            "PROVIDER_RESPONSE_ERROR",
+            "server_error",
+            "provider_response_error",
+        ),
+        ProviderError::RoutingError { .. } => http_facts(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "PROVIDER_ROUTING_ERROR",
+            "server_error",
+            "provider_routing_error",
+        ),
+        ProviderError::Cancelled { .. } => http_facts(
+            client_closed_request(),
+            "PROVIDER_CANCELLED",
+            "server_error",
+            "cancelled",
+        ),
+        ProviderError::Other { .. } => http_facts(
+            StatusCode::BAD_GATEWAY,
+            "PROVIDER_ERROR",
+            "server_error",
+            "provider_error",
+        ),
+    }
+}
+
+#[cfg(feature = "gateway")]
+pub fn gateway_http_header_facts(error: &GatewayError) -> Option<HttpHeaderFacts> {
+    match error {
+        GatewayError::RateLimit {
+            retry_after,
+            rpm_limit,
+            tpm_limit,
+            ..
+        } => Some(HttpHeaderFacts {
+            retry_after: *retry_after,
+            rpm_limit: *rpm_limit,
+            tpm_limit: *tpm_limit,
+        }),
+        GatewayError::Provider(ProviderError::RateLimit {
+            retry_after,
+            rpm_limit,
+            tpm_limit,
+            ..
+        }) => Some(HttpHeaderFacts {
+            retry_after: *retry_after,
+            rpm_limit: *rpm_limit,
+            tpm_limit: *tpm_limit,
+        }),
+        _ => None,
+    }
+}
+
+#[cfg(feature = "gateway")]
+fn provider_api_error_http_facts(status: u16) -> HttpErrorFacts {
+    let status_code = StatusCode::from_u16(status).unwrap_or(StatusCode::BAD_GATEWAY);
+    match status {
+        400 => http_facts(
+            status_code,
+            "PROVIDER_API_ERROR",
+            "invalid_request_error",
+            "invalid_request",
+        ),
+        401 => http_facts(
+            status_code,
+            "PROVIDER_API_ERROR",
+            "authentication_error",
+            "authentication_error",
+        ),
+        403 => http_facts(
+            status_code,
+            "PROVIDER_API_ERROR",
+            "permission_error",
+            "permission_denied",
+        ),
+        404 => http_facts(
+            status_code,
+            "PROVIDER_API_ERROR",
+            "invalid_request_error",
+            "not_found",
+        ),
+        408 => http_facts(status_code, "PROVIDER_API_ERROR", "server_error", "timeout"),
+        409 => http_facts(
+            status_code,
+            "PROVIDER_API_ERROR",
+            "invalid_request_error",
+            "conflict",
+        ),
+        429 => http_facts(
+            status_code,
+            "PROVIDER_API_ERROR",
+            "rate_limit_error",
+            "rate_limit_exceeded",
+        ),
+        500..=599 => http_facts(
+            status_code,
+            "PROVIDER_API_ERROR",
+            "server_error",
+            "provider_api_error",
+        ),
+        _ => http_facts(
+            status_code,
+            "PROVIDER_API_ERROR",
+            "server_error",
+            "provider_api_error",
+        ),
+    }
+}
+
+#[cfg(feature = "gateway")]
+fn http_facts(
+    status: StatusCode,
+    gateway_code: &'static str,
+    openai_error_type: &'static str,
+    openai_code: &'static str,
+) -> HttpErrorFacts {
+    HttpErrorFacts::new(status, gateway_code, openai_error_type, openai_code)
+}
+
+#[cfg(feature = "gateway")]
+fn client_closed_request() -> StatusCode {
+    StatusCode::from_u16(499).unwrap_or(StatusCode::BAD_REQUEST)
 }
 
 impl CanonicalError for ProviderError {

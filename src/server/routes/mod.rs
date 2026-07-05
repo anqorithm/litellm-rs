@@ -66,22 +66,6 @@ impl<T> ApiResponse<T> {
     }
 }
 
-impl<T> ApiResponse<T>
-where
-    T: serde::Serialize,
-{
-    /// Convert the API response to an HTTP response
-    ///
-    /// Returns HTTP 200 for successful responses and HTTP 400 for error responses
-    pub fn to_http_response(&self) -> HttpResponse {
-        if self.success {
-            HttpResponse::Ok().json(self)
-        } else {
-            HttpResponse::BadRequest().json(self)
-        }
-    }
-}
-
 /// Pagination metadata
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct PaginationMeta {
