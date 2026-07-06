@@ -15,7 +15,6 @@ use crate::server::state::AppState;
 use crate::utils::data::validation::RequestValidator;
 use crate::utils::error::gateway_error::GatewayError;
 
-use super::context::get_request_context;
 use super::openai_errors;
 #[path = "completions_sse.rs"]
 mod completions_sse;
@@ -65,10 +64,10 @@ async fn completions_inner(
     path_model: Option<String>,
     request: Value,
 ) -> ActixResult<HttpResponse> {
-    let mut context = get_request_context(&req)?;
-    if let Err(error) = super::token_policy::attach_api_key_token_limit(&req, &mut context) {
-        return Ok(openai_errors::gateway_error_response(&error));
-    }
+    let context = match super::token_policy::shared_request_context_with_api_key_token_limit(&req) {
+        Ok(context) => context,
+        Err(error) => return Ok(openai_errors::gateway_error_response(&error)),
+    };
     let adapter_request = match completion_request_from_value(request, path_model) {
         Ok(request) => request,
         Err(error) => return Ok(openai_errors::gateway_error_response(&error)),
@@ -100,7 +99,7 @@ async fn completions_inner(
         .await;
     }
 
-    match super::chat::handle_chat_completion_with_state(
+    match super::chat::handle_chat_completion_with_shared_state(
         state.get_ref(),
         adapter_request.chat_request,
         context,

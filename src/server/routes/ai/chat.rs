@@ -9,7 +9,10 @@ use crate::core::streaming::types::{
     ChatCompletionChunk, ChatCompletionChunkChoice, ChatCompletionDelta,
 };
 use crate::core::types::{
-    self, chat::ChatRequest as CoreChatRequest, context::RequestContext, model::ProviderCapability,
+    self,
+    chat::ChatRequest as CoreChatRequest,
+    context::{RequestContext, SharedRequestContext},
+    model::ProviderCapability,
 };
 use crate::server::state::AppState;
 use crate::utils::data::validation::RequestValidator;
@@ -19,7 +22,6 @@ use serde_json::json;
 use tracing::{error, info, warn};
 
 use super::budgeted::{ApiKeyBudgetPolicy, run_unary};
-use super::context::get_request_context;
 use super::openai_errors;
 #[path = "chat_delta.rs"]
 mod chat_delta;
@@ -41,10 +43,10 @@ pub async fn chat_completions(
 ) -> ActixResult<HttpResponse> {
     info!("Chat completion request for model: {}", request.model);
 
-    let mut context = get_request_context(&req)?;
-    if let Err(error) = super::token_policy::attach_api_key_token_limit(&req, &mut context) {
-        return Ok(openai_errors::gateway_error_response(&error));
-    }
+    let context = match super::token_policy::shared_request_context_with_api_key_token_limit(&req) {
+        Ok(context) => context,
+        Err(error) => return Ok(openai_errors::gateway_error_response(&error)),
+    };
 
     if let Err(e) = RequestValidator::validate_chat_completion_request(
         &request.model,
@@ -71,8 +73,12 @@ pub async fn chat_completions(
         )
         .await
     } else {
-        match handle_chat_completion_with_state(state.get_ref(), request.into_inner(), context)
-            .await
+        match handle_chat_completion_with_shared_state(
+            state.get_ref(),
+            request.into_inner(),
+            context,
+        )
+        .await
         {
             Ok(response) => Ok(HttpResponse::Ok().json(response)),
             Err(e) => {
@@ -89,13 +95,21 @@ pub async fn handle_chat_completion_with_state(
     request: ChatCompletionRequest,
     context: RequestContext,
 ) -> Result<ChatCompletionResponse, GatewayError> {
+    handle_chat_completion_with_shared_state(state, request, std::sync::Arc::new(context)).await
+}
+
+pub async fn handle_chat_completion_with_shared_state(
+    state: &AppState,
+    request: ChatCompletionRequest,
+    context: SharedRequestContext,
+) -> Result<ChatCompletionResponse, GatewayError> {
     handle_chat_completion_internal(state, request, context).await
 }
 
 async fn handle_chat_completion_internal(
     state: &AppState,
     request: ChatCompletionRequest,
-    context: RequestContext,
+    context: SharedRequestContext,
 ) -> Result<ChatCompletionResponse, GatewayError> {
     let unified_router = &state.unified_router;
     let requested_model = request.model.clone();
@@ -103,13 +117,13 @@ async fn handle_chat_completion_internal(
     let request_for_cache = request.clone();
     let core_request = build_core_chat_request(request, requested_model, false)?;
     if let Some(cached) =
-        super::response_cache::lookup_chat(state, &request_for_cache, &context).await?
+        super::response_cache::lookup_chat(state, &request_for_cache, context.as_ref()).await?
     {
         super::response_cache::ensure_chat_cache_pricing_gate(state, &request_for_cache)?;
         return Ok(cached);
     }
     let requested_model = core_request.model.clone();
-    let context_for_execution = context.clone();
+    let context_for_execution = std::sync::Arc::clone(&context);
 
     // Owned handles captured into the (retryable) execution closure so that the
     // successful attempt records budget spend and per-key usage.
@@ -126,7 +140,7 @@ async fn handle_chat_completion_internal(
         ProviderCapability::ChatCompletion,
         move |provider, selected_model, _deployment_id| {
             let core_request = core_request.clone();
-            let context = context_for_execution.clone();
+            let context = std::sync::Arc::clone(&context_for_execution);
             let pricing_service = pricing_service.clone();
             let key_manager = key_manager.clone();
             let budgeted = budgeted.clone();
@@ -147,6 +161,7 @@ async fn handle_chat_completion_internal(
                         core_request.clone(),
                         request_for_budget,
                     )?;
+                let provider_context = context.as_ref().clone();
                 let reserve_pricing_service = pricing_service.clone();
                 let settle_pricing_service = pricing_service.clone();
                 let reserve_pricing_config = pricing_config.clone();
@@ -176,7 +191,7 @@ async fn handle_chat_completion_internal(
                                 &request_for_budget,
                             )
                         },
-                        || provider.chat_completion(request_for_provider, context),
+                        || provider.chat_completion(request_for_provider, provider_context),
                         |response, reservations, budget| {
                             let (budget_reservation, key_budget_reservation) =
                                 reservations.into_parts();
@@ -213,7 +228,8 @@ async fn handle_chat_completion_internal(
     .await?;
 
     let response = convert_core_chat_response(core_response);
-    super::response_cache::store_chat(state, &request_for_cache, &response, &context).await?;
+    super::response_cache::store_chat(state, &request_for_cache, &response, context.as_ref())
+        .await?;
     Ok(response)
 }
 
