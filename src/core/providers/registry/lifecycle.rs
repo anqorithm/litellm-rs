@@ -124,10 +124,6 @@ pub static PROVIDER_MODULE_LIFECYCLE: &[ProviderModuleLifecycleEntry] = &[
         "ProviderType::GitHubCopilot dispatches to native GitHub Copilot auth when providers-extended is enabled",
     ),
     stub(
-        "gigachat",
-        "specialized provider module; not wired through the LLM factory yet",
-    ),
-    stub(
         "google_pse",
         "specialized provider module; not wired through the LLM factory yet",
     ),
@@ -300,7 +296,6 @@ pub static PROVIDER_ORPHAN_BASELINE: &[ProviderOrphanBaselineEntry] = &[
         "audio provider module without a gateway LLM factory path",
     ),
     baseline("exa_ai", "delete-native", "unwired native chat provider"),
-    baseline("gigachat", "delete-native", "unwired native chat provider"),
     baseline(
         "github",
         "demote-to-catalog",
