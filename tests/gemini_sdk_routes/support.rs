@@ -313,6 +313,32 @@ pub(crate) fn api_key_with_max_tokens_per_request(limit: u32) -> ApiKey {
     }
 }
 
+pub(crate) fn api_key_with_invalid_runtime_permissions() -> ApiKey {
+    let mut metadata = Metadata::new();
+    metadata.extra.insert(
+        "__core_keys".to_string(),
+        json!({
+            "permissions": {
+                "allowed_models": "gemini-*"
+            }
+        }),
+    );
+    ApiKey {
+        metadata,
+        name: "gemini-invalid-policy-key".to_string(),
+        key_hash: "hash".to_string(),
+        key_prefix: "gw-gemini-invalid".to_string(),
+        user_id: None,
+        team_id: None,
+        permissions: Vec::new(),
+        rate_limits: None,
+        expires_at: None,
+        is_active: true,
+        last_used_at: None,
+        usage_stats: UsageStats::default(),
+    }
+}
+
 pub(crate) fn gemini_upstream_error_body() -> Value {
     let mut body = gemini_body();
     body["forceUpstreamError"] = json!(true);

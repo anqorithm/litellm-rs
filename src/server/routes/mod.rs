@@ -70,9 +70,8 @@ impl<T> ApiResponse<T>
 where
     T: serde::Serialize,
 {
-    /// Convert the API response to an HTTP response
-    ///
-    /// Returns HTTP 200 for successful responses and HTTP 400 for error responses
+    /// Convert the API response to an HTTP response.
+    #[deprecated(note = "Use explicit route status helpers instead")]
     pub fn to_http_response(&self) -> HttpResponse {
         if self.success {
             HttpResponse::Ok().json(self)
@@ -288,6 +287,16 @@ mod tests {
         assert_eq!(response.error, Some("test error".to_string()));
     }
 
+    #[test]
+    #[allow(deprecated)]
+    fn test_api_response_to_http_response_remains_compatibility_shim() {
+        let success = ApiResponse::success("test data").to_http_response();
+        assert_eq!(success.status(), actix_web::http::StatusCode::OK);
+
+        let error = ApiResponse::<()>::error("test error".to_string()).to_http_response();
+        assert_eq!(error.status(), actix_web::http::StatusCode::BAD_REQUEST);
+    }
+
     #[actix_web::test]
     async fn test_gateway_error_helpers_keep_api_response_envelope() {
         let response = errors::validation_error("test validation error");
@@ -301,6 +310,26 @@ mod tests {
         assert_eq!(json["success"], false);
         assert_eq!(json["error"], "test validation error");
         assert!(json["data"].is_null());
+    }
+
+    #[test]
+    fn test_error_helpers_preserve_specific_http_statuses() {
+        assert_eq!(
+            errors::unauthorized_error("unauthorized").status(),
+            actix_web::http::StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            errors::forbidden_error("forbidden").status(),
+            actix_web::http::StatusCode::FORBIDDEN
+        );
+        assert_eq!(
+            errors::not_found_error("missing").status(),
+            actix_web::http::StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            errors::internal_error("internal").status(),
+            actix_web::http::StatusCode::INTERNAL_SERVER_ERROR
+        );
     }
 
     #[test]

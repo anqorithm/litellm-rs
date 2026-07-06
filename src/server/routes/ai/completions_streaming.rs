@@ -10,7 +10,7 @@ use tracing::{error, info, warn};
 use crate::core::models::openai::StreamOptions;
 use crate::core::providers::ProviderError;
 use crate::core::streaming::types::Event;
-use crate::core::types::{context::RequestContext, model::ProviderCapability};
+use crate::core::types::{context::SharedRequestContext, model::ProviderCapability};
 use crate::server::state::AppState;
 
 use super::super::budgeted::{ApiKeyBudgetPolicy, SettledStream, run_stream};
@@ -21,7 +21,7 @@ use super::{CompletionAdapterRequest, chunk_has_text_delta, completion_chunk_fro
 pub(super) async fn handle_streaming_completion(
     state: &AppState,
     adapter_request: CompletionAdapterRequest,
-    context: RequestContext,
+    context: SharedRequestContext,
 ) -> ActixResult<HttpResponse> {
     info!(
         "Handling streaming text completion for model: {}",
@@ -43,7 +43,7 @@ pub(super) async fn handle_streaming_completion(
         Err(error) => return Ok(openai_errors::gateway_error_response(&error)),
     };
 
-    let context_for_execution = context.clone();
+    let context_for_execution = std::sync::Arc::clone(&context);
     let budgeted = state.budgeted.clone();
     let pricing_service = state.budgeted.pricing();
     let budget_limits = state.budgeted.budget_limits();
@@ -58,7 +58,7 @@ pub(super) async fn handle_streaming_completion(
         ProviderCapability::ChatCompletionStream,
         move |provider, selected_model, _selected_deployment_id| {
             let core_request = core_request.clone();
-            let context = context_for_execution.clone();
+            let context = std::sync::Arc::clone(&context_for_execution);
             let budgeted = budgeted.clone();
             let pricing_service = pricing_service.clone();
             let budget_limits = budget_limits.clone();
@@ -80,6 +80,7 @@ pub(super) async fn handle_streaming_completion(
                         core_request.clone(),
                         request_for_budget,
                     )?;
+                let provider_context = context.as_ref().clone();
                 let reserve_pricing_config = pricing_config.clone();
                 let reserve_pricing_provider = pricing_provider.clone();
                 let reserve_pricing_model = pricing_model.clone();
@@ -103,7 +104,7 @@ pub(super) async fn handle_streaming_completion(
                                 &request_for_budget,
                             )
                         },
-                        || provider.chat_completion_stream(request_for_provider, context),
+                        || provider.chat_completion_stream(request_for_provider, provider_context),
                     )
                     .await?;
                 let (budget_reservation, key_budget_reservation) = reservations.into_parts();

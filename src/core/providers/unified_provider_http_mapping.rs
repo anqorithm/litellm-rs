@@ -1,5 +1,175 @@
 use super::ProviderError;
 
+/// Optional HTTP headers carried by canonical provider error mapping.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ProviderHttpErrorHeaders {
+    pub retry_after: Option<u64>,
+    pub rpm_limit: Option<u32>,
+    pub tpm_limit: Option<u32>,
+}
+
+/// Feature-neutral provider HTTP facts shared by core and gateway adapters.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProviderHttpErrorFacts {
+    pub status: u16,
+    pub gateway_code: &'static str,
+    pub openai_error_type: &'static str,
+    pub openai_code: &'static str,
+    pub headers: ProviderHttpErrorHeaders,
+}
+
+impl ProviderHttpErrorFacts {
+    const fn new(
+        status: u16,
+        gateway_code: &'static str,
+        openai_error_type: &'static str,
+        openai_code: &'static str,
+    ) -> Self {
+        Self {
+            status,
+            gateway_code,
+            openai_error_type,
+            openai_code,
+            headers: ProviderHttpErrorHeaders {
+                retry_after: None,
+                rpm_limit: None,
+                tpm_limit: None,
+            },
+        }
+    }
+
+    const fn with_headers(mut self, headers: ProviderHttpErrorHeaders) -> Self {
+        self.headers = headers;
+        self
+    }
+}
+
+/// Canonical `ProviderError` to HTTP status/code facts.
+pub fn provider_http_error_facts(error: &ProviderError) -> ProviderHttpErrorFacts {
+    match error {
+        ProviderError::Authentication { .. } => facts(
+            401,
+            "PROVIDER_AUTH_ERROR",
+            "authentication_error",
+            "authentication_error",
+        ),
+        ProviderError::RateLimit {
+            retry_after,
+            rpm_limit,
+            tpm_limit,
+            ..
+        } => facts(
+            429,
+            "PROVIDER_RATE_LIMIT",
+            "rate_limit_error",
+            "rate_limit_exceeded",
+        )
+        .with_headers(ProviderHttpErrorHeaders {
+            retry_after: *retry_after,
+            rpm_limit: *rpm_limit,
+            tpm_limit: *tpm_limit,
+        }),
+        ProviderError::QuotaExceeded { .. } => facts(
+            402,
+            "PROVIDER_QUOTA_EXCEEDED",
+            "insufficient_quota",
+            "insufficient_quota",
+        ),
+        ProviderError::ModelNotFound { .. } => facts(
+            404,
+            "MODEL_NOT_FOUND",
+            "invalid_request_error",
+            "model_not_found",
+        ),
+        ProviderError::InvalidRequest { message, .. } if is_model_not_priced_message(message) => {
+            facts(
+                400,
+                "INVALID_REQUEST",
+                "invalid_request_error",
+                "model_not_priced",
+            )
+        }
+        ProviderError::InvalidRequest { .. } => facts(
+            400,
+            "INVALID_REQUEST",
+            "invalid_request_error",
+            "invalid_request",
+        ),
+        ProviderError::Network { .. } => facts(
+            502,
+            "PROVIDER_NETWORK_ERROR",
+            "server_error",
+            "provider_network_error",
+        ),
+        ProviderError::ProviderUnavailable { .. } => facts(
+            503,
+            "PROVIDER_UNAVAILABLE",
+            "server_error",
+            "provider_unavailable",
+        ),
+        ProviderError::NotSupported { .. }
+        | ProviderError::NotImplemented { .. }
+        | ProviderError::FeatureDisabled { .. } => facts(
+            501,
+            "PROVIDER_NOT_IMPLEMENTED",
+            "invalid_request_error",
+            "not_supported",
+        ),
+        ProviderError::Configuration { .. }
+        | ProviderError::Serialization { .. }
+        | ProviderError::TransformationError { .. } => facts(
+            500,
+            "PROVIDER_INTERNAL_ERROR",
+            "server_error",
+            "internal_error",
+        ),
+        ProviderError::Timeout { .. } => facts(504, "PROVIDER_TIMEOUT", "server_error", "timeout"),
+        ProviderError::ContextLengthExceeded { .. } => facts(
+            400,
+            "PROVIDER_REQUEST_ERROR",
+            "invalid_request_error",
+            "context_length_exceeded",
+        ),
+        ProviderError::ContentFiltered { .. } => facts(
+            400,
+            "PROVIDER_REQUEST_ERROR",
+            "invalid_request_error",
+            "content_filter",
+        ),
+        ProviderError::ApiError { status, .. } => provider_api_error_facts(*status),
+        ProviderError::TokenLimitExceeded { .. } => facts(
+            400,
+            "PROVIDER_REQUEST_ERROR",
+            "invalid_request_error",
+            "token_limit_exceeded",
+        ),
+        ProviderError::DeploymentError { .. } => facts(
+            404,
+            "DEPLOYMENT_NOT_FOUND",
+            "invalid_request_error",
+            "deployment_not_found",
+        ),
+        ProviderError::ResponseParsing { .. } | ProviderError::Streaming { .. } => facts(
+            502,
+            "PROVIDER_RESPONSE_ERROR",
+            "server_error",
+            "provider_response_error",
+        ),
+        ProviderError::RoutingError { .. } => facts(
+            503,
+            "PROVIDER_ROUTING_ERROR",
+            "server_error",
+            "provider_routing_error",
+        ),
+        ProviderError::Cancelled { .. } => {
+            facts(499, "PROVIDER_CANCELLED", "server_error", "cancelled")
+        }
+        ProviderError::Other { .. } => {
+            facts(502, "PROVIDER_ERROR", "server_error", "provider_error")
+        }
+    }
+}
+
 /// Default HTTP status-code → `ProviderError` mapping shared by most providers.
 ///
 /// Providers with custom handling (e.g. Gemini, LangGraph, Databricks) should
@@ -62,4 +232,80 @@ pub fn extended_http_error_mapper(
         502 | 503 => ProviderError::provider_unavailable(provider, response_body),
         _ => ProviderError::api_error(provider, status_code, response_body),
     }
+}
+
+fn provider_api_error_facts(status: u16) -> ProviderHttpErrorFacts {
+    let status = valid_status_or_bad_gateway(status);
+    match status {
+        400 => facts(
+            status,
+            "PROVIDER_API_ERROR",
+            "invalid_request_error",
+            "invalid_request",
+        ),
+        401 => facts(
+            status,
+            "PROVIDER_API_ERROR",
+            "authentication_error",
+            "authentication_error",
+        ),
+        403 => facts(
+            status,
+            "PROVIDER_API_ERROR",
+            "permission_error",
+            "permission_denied",
+        ),
+        404 => facts(
+            status,
+            "PROVIDER_API_ERROR",
+            "invalid_request_error",
+            "not_found",
+        ),
+        408 => facts(status, "PROVIDER_API_ERROR", "server_error", "timeout"),
+        409 => facts(
+            status,
+            "PROVIDER_API_ERROR",
+            "invalid_request_error",
+            "conflict",
+        ),
+        429 => facts(
+            status,
+            "PROVIDER_API_ERROR",
+            "rate_limit_error",
+            "rate_limit_exceeded",
+        ),
+        500..=599 => facts(
+            status,
+            "PROVIDER_API_ERROR",
+            "server_error",
+            "provider_api_error",
+        ),
+        _ => facts(
+            status,
+            "PROVIDER_API_ERROR",
+            "server_error",
+            "provider_api_error",
+        ),
+    }
+}
+
+const fn facts(
+    status: u16,
+    gateway_code: &'static str,
+    openai_error_type: &'static str,
+    openai_code: &'static str,
+) -> ProviderHttpErrorFacts {
+    ProviderHttpErrorFacts::new(status, gateway_code, openai_error_type, openai_code)
+}
+
+const fn valid_status_or_bad_gateway(status: u16) -> u16 {
+    if status >= 100 && status < 1000 {
+        status
+    } else {
+        502
+    }
+}
+
+fn is_model_not_priced_message(message: &str) -> bool {
+    message.starts_with("model_not_priced:")
 }

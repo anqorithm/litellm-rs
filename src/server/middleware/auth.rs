@@ -5,14 +5,15 @@ use crate::core::models::{ApiKey, user::types::User};
 use crate::core::types::context::{RequestContext, SharedRequestContext};
 use crate::server::middleware::auth_rate_limiter::get_auth_rate_limiter;
 use crate::server::middleware::helpers::{
-    extract_auth_method_with_api_key_header, is_public_route,
+    extract_auth_method_with_api_key_header, is_public_route, middleware_gateway_error_response,
 };
 use crate::server::middleware::rate_limit::{
-    AuthRateLimitReservation, enforce_rate_limit_for_rejected_auth,
+    AuthRateLimitReservation, RateLimitError, enforce_rate_limit_for_rejected_auth,
     reserve_rate_limit_for_auth_attempt,
 };
-use crate::server::routes::ai::{api_key_allows_endpoint, check_permission};
+use crate::server::routes::ai::{self, api_key_allows_endpoint, check_permission};
 use crate::server::state::AppState;
+use crate::utils::error::gateway_error::GatewayError;
 use actix_web::body::EitherBody;
 use actix_web::dev::{Service, ServiceRequest, ServiceResponse, Transform, forward_ready};
 use actix_web::{HttpMessage, HttpRequest, web};
@@ -115,11 +116,10 @@ where
                          rejecting request to non-public route. Enable JWT or API key auth, or \
                          set allow_anonymous: true (development only)."
                     );
-                    return Ok(req
-                        .error_response(actix_web::error::ErrorUnauthorized(
-                            "Authentication is not configured",
-                        ))
-                        .map_into_right_body());
+                    return Ok(unauthorized_response(
+                        req,
+                        "Authentication is not configured",
+                    ));
                 }
                 insert_request_context(&mut req, context);
                 return service
@@ -137,14 +137,9 @@ where
                 )
                 .await
                 {
-                    return Ok(req.error_response(error).map_into_right_body());
+                    return Ok(rate_limit_response(req, error));
                 }
-                return Ok(req
-                    .error_response(actix_web::error::ErrorTooManyRequests(format!(
-                        "Too many failed attempts. Try again in {} seconds",
-                        wait_seconds
-                    )))
-                    .map_into_right_body());
+                return Ok(failed_attempt_rate_limit_response(req, wait_seconds));
             }
 
             let auth_method = match auth_method {
@@ -158,13 +153,9 @@ where
                     )
                     .await
                     {
-                        return Ok(req.error_response(error).map_into_right_body());
+                        return Ok(rate_limit_response(req, error));
                     }
-                    return Ok(req
-                        .error_response(actix_web::error::ErrorUnauthorized(
-                            "JWT authentication disabled",
-                        ))
-                        .map_into_right_body());
+                    return Ok(unauthorized_response(req, "JWT authentication disabled"));
                 }
                 AuthMethod::ApiKey(_) if !enable_api_key => {
                     rate_limiter.record_failure(&client_id);
@@ -176,13 +167,12 @@ where
                     )
                     .await
                     {
-                        return Ok(req.error_response(error).map_into_right_body());
+                        return Ok(rate_limit_response(req, error));
                     }
-                    return Ok(req
-                        .error_response(actix_web::error::ErrorUnauthorized(
-                            "API key authentication disabled",
-                        ))
-                        .map_into_right_body());
+                    return Ok(unauthorized_response(
+                        req,
+                        "API key authentication disabled",
+                    ));
                 }
                 other => other,
             };
@@ -197,13 +187,9 @@ where
                 )
                 .await
                 {
-                    return Ok(req.error_response(error).map_into_right_body());
+                    return Ok(rate_limit_response(req, error));
                 }
-                return Ok(req
-                    .error_response(actix_web::error::ErrorUnauthorized(
-                        "Missing authentication",
-                    ))
-                    .map_into_right_body());
+                return Ok(unauthorized_response(req, "Missing authentication"));
             }
 
             let mut auth_rate_limit_reservation = if requires_auth_verification(&auth_method) {
@@ -216,9 +202,7 @@ where
                 .await
                 {
                     Ok(reservation) => Some(reservation),
-                    Err(error) => {
-                        return Ok(req.error_response(error).map_into_right_body());
-                    }
+                    Err(error) => return Ok(rate_limit_response(req, error)),
                 }
             } else {
                 None
@@ -232,7 +216,7 @@ where
                     rate_limiter.record_success(&client_id);
                     debug!("Authentication succeeded");
 
-                    if let Some(operation) = ai_operation_for_path(req.path())
+                    if let Some(operation) = ai::operation_for_path(req.path())
                         && !check_permission(
                             result.user.as_ref(),
                             result.api_key.as_ref(),
@@ -243,27 +227,23 @@ where
                             "Authenticated caller is not permitted to access AI operation '{}'",
                             operation
                         );
-                        return Ok(req
-                            .error_response(actix_web::error::ErrorForbidden(
-                                "API key is not permitted for this operation",
-                            ))
-                            .map_into_right_body());
+                        return Ok(forbidden_response(
+                            req,
+                            "API key is not permitted for this operation",
+                        ));
                     }
                     match api_key_allows_endpoint(result.api_key.as_ref(), req.path()) {
                         Ok(true) => {}
                         Ok(false) => {
                             warn!("Authenticated API key is not permitted to access this endpoint");
-                            return Ok(req
-                                .error_response(actix_web::error::ErrorForbidden(
-                                    "API key is not permitted for this endpoint",
-                                ))
-                                .map_into_right_body());
+                            return Ok(forbidden_response(
+                                req,
+                                "API key is not permitted for this endpoint",
+                            ));
                         }
                         Err(error) => {
                             warn!("Authenticated API key policy is invalid: {}", error);
-                            return Ok(req
-                                .error_response(actix_web::error::ErrorForbidden(error.to_string()))
-                                .map_into_right_body());
+                            return Ok(forbidden_response(req, error.to_string()));
                         }
                     }
 
@@ -298,13 +278,12 @@ where
                         )
                         .await
                     {
-                        return Ok(req.error_response(error).map_into_right_body());
+                        return Ok(rate_limit_response(req, error));
                     }
-                    Ok(req
-                        .error_response(actix_web::error::ErrorUnauthorized(
-                            result.error.unwrap_or_else(|| "Unauthorized".to_string()),
-                        ))
-                        .map_into_right_body())
+                    Ok(unauthorized_response(
+                        req,
+                        result.error.unwrap_or_else(|| "Unauthorized".to_string()),
+                    ))
                 }
                 Err(err) => {
                     if let Some(reservation) = auth_rate_limit_reservation.take() {
@@ -326,7 +305,7 @@ async fn enforce_gateway_rate_limit_for_auth_rejection(
     enabled: bool,
     requests_per_minute: u32,
     trusted_proxies: &[String],
-) -> Result<(), actix_web::Error> {
+) -> Result<(), RateLimitError> {
     if !enabled {
         return Ok(());
     }
@@ -339,7 +318,7 @@ async fn reserve_gateway_rate_limit_before_auth(
     enabled: bool,
     requests_per_minute: u32,
     trusted_proxies: &[String],
-) -> Result<AuthRateLimitReservation, actix_web::Error> {
+) -> Result<AuthRateLimitReservation, RateLimitError> {
     if !enabled {
         return Ok(AuthRateLimitReservation::noop());
     }
@@ -351,6 +330,58 @@ fn requires_auth_verification(auth_method: &AuthMethod) -> bool {
     matches!(
         auth_method,
         AuthMethod::Jwt(_) | AuthMethod::ApiKey(_) | AuthMethod::Session(_)
+    )
+}
+
+fn unauthorized_response<B>(
+    req: ServiceRequest,
+    message: impl Into<String>,
+) -> ServiceResponse<EitherBody<B>> {
+    let message = message.into();
+    middleware_gateway_error_response(
+        req,
+        actix_web::error::ErrorUnauthorized(message.clone()),
+        GatewayError::Auth(message),
+    )
+}
+
+fn forbidden_response<B>(
+    req: ServiceRequest,
+    message: impl Into<String>,
+) -> ServiceResponse<EitherBody<B>> {
+    let message = message.into();
+    middleware_gateway_error_response(
+        req,
+        actix_web::error::ErrorForbidden(message.clone()),
+        GatewayError::Forbidden(message),
+    )
+}
+
+fn rate_limit_response<B>(
+    req: ServiceRequest,
+    error: RateLimitError,
+) -> ServiceResponse<EitherBody<B>> {
+    let gateway_error = error.gateway_error();
+    middleware_gateway_error_response(req, actix_web::Error::from(error), gateway_error)
+}
+
+fn failed_attempt_rate_limit_response<B>(
+    req: ServiceRequest,
+    wait_seconds: u64,
+) -> ServiceResponse<EitherBody<B>> {
+    let message = format!(
+        "Too many failed attempts. Try again in {} seconds",
+        wait_seconds
+    );
+    middleware_gateway_error_response(
+        req,
+        actix_web::error::ErrorTooManyRequests(message.clone()),
+        GatewayError::RateLimit {
+            message,
+            retry_after: Some(wait_seconds),
+            rpm_limit: None,
+            tpm_limit: None,
+        },
     )
 }
 
@@ -398,74 +429,6 @@ fn parse_peer_ip(peer: &str) -> String {
 fn hash_credential(credential: &str) -> String {
     use sha2::{Digest, Sha256};
     format!("{:x}", Sha256::digest(credential.as_bytes()))
-}
-
-fn ai_operation_for_path(path: &str) -> Option<&'static str> {
-    let normalized = path.trim_end_matches('/');
-
-    if normalized == "/v1/chat/completions"
-        || (normalized.starts_with("/v1/engines/") && normalized.ends_with("/chat/completions"))
-        || (normalized.starts_with("/openai/deployments/")
-            && normalized.ends_with("/chat/completions"))
-    {
-        return Some("chat");
-    }
-    if normalized == "/completions"
-        || normalized == "/v1/completions"
-        || (normalized.starts_with("/engines/") && normalized.ends_with("/completions"))
-        || (normalized.starts_with("/v1/engines/") && normalized.ends_with("/completions"))
-        || (normalized.starts_with("/openai/deployments/") && normalized.ends_with("/completions"))
-    {
-        return Some("completions");
-    }
-    if normalized == "/v1/embeddings"
-        || (normalized.starts_with("/v1/engines/") && normalized.ends_with("/embeddings"))
-        || (normalized.starts_with("/openai/deployments/") && normalized.ends_with("/embeddings"))
-    {
-        return Some("embeddings");
-    }
-    if normalized.starts_with("/v1/images/") {
-        return Some("images");
-    }
-    if normalized.starts_with("/v1/audio/") {
-        return Some("audio");
-    }
-    if normalized == "/moderations" || normalized == "/v1/moderations" {
-        return Some("moderations");
-    }
-    if normalized == "/rerank" || normalized == "/v1/rerank" {
-        return Some("rerank");
-    }
-    if normalized == "/v1/files" || normalized.starts_with("/v1/files/") {
-        return Some("files");
-    }
-    if normalized == "/v1/fine_tuning/jobs" || normalized.starts_with("/v1/fine_tuning/jobs/") {
-        return Some("fine_tuning");
-    }
-    if normalized == "/v1/models" || normalized == "/v1/engines" {
-        return Some("models");
-    }
-    if normalized.starts_with("/v1/models/") || normalized.starts_with("/v1/engines/") {
-        if normalized.contains(":generateContent") || normalized.contains(":streamGenerateContent")
-        {
-            return Some("chat");
-        }
-        return Some("models");
-    }
-    if normalized == "/v1/responses" || normalized.starts_with("/v1/responses/") {
-        return Some("responses");
-    }
-    if normalized == "/v1/batches" || normalized.starts_with("/v1/batches/") {
-        return Some("batches");
-    }
-    if normalized.starts_with("/v1beta/models/")
-        || normalized.starts_with("/gemini/v1beta/models/")
-        || normalized.starts_with("/gemini/v1/models/")
-    {
-        return Some("chat");
-    }
-
-    None
 }
 
 fn build_request_context(req: &mut ServiceRequest) -> RequestContext {
@@ -610,5 +573,40 @@ mod tests {
             "session-id".to_string()
         )));
         assert!(!requires_auth_verification(&AuthMethod::None));
+    }
+
+    #[test]
+    fn insert_request_context_stores_shared_extension_handle() {
+        let api_key_id = uuid::Uuid::new_v4();
+        let mut req = TestRequest::default().to_srv_request();
+
+        insert_request_context(&mut req, RequestContext::new().with_api_key(api_key_id));
+
+        let extensions = req.extensions();
+        let stored = extensions
+            .get::<SharedRequestContext>()
+            .expect("request context should be stored as a shared handle");
+        assert_eq!(stored.api_key_id(), Some(api_key_id));
+        assert!(extensions.get::<RequestContext>().is_none());
+    }
+
+    #[test]
+    fn build_request_context_excludes_sensitive_auth_headers() {
+        let mut req = TestRequest::default()
+            .insert_header(("authorization", "Bearer secret"))
+            .insert_header(("x-api-key", "sk-secret"))
+            .insert_header(("x-request-id", "req-123"))
+            .insert_header(("x-observable", "kept"))
+            .to_srv_request();
+
+        let context = build_request_context(&mut req);
+
+        assert_eq!(context.request_id, "req-123");
+        assert_eq!(
+            context.headers.get("x-observable").map(String::as_str),
+            Some("kept")
+        );
+        assert!(!context.headers.contains_key("authorization"));
+        assert!(!context.headers.contains_key("x-api-key"));
     }
 }
