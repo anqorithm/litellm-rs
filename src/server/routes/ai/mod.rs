@@ -61,10 +61,7 @@ use actix_web::{HttpRequest, HttpResponse, Result as ActixResult, error::Interna
 
 /// Configure AI API routes
 pub fn configure_routes(cfg: &mut web::ServiceConfig) {
-    cfg.app_data(openai_json_error_config())
-        .app_data(openai_query_error_config())
-        .app_data(openai_path_error_config())
-        .route("/completions", web::post().to(completions))
+    cfg.route("/completions", web::post().to(completions))
         .route("/moderations", web::post().to(create_moderation))
         .route("/rerank", web::post().to(rerank))
         .route(
@@ -77,6 +74,9 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
         );
     cfg.service(
         web::scope("/v1")
+            .app_data(openai_json_error_config())
+            .app_data(openai_query_error_config())
+            .app_data(openai_path_error_config())
             // Legacy text completions
             .route("/completions", web::post().to(completions))
             .route(
@@ -167,6 +167,9 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
     );
     cfg.service(
         web::scope("/v1beta")
+            .app_data(openai_json_error_config())
+            .app_data(openai_query_error_config())
+            .app_data(openai_path_error_config())
             .route(
                 "/models/{model}:generateContent",
                 web::post().to(gemini_generate_content_v1beta),
@@ -178,6 +181,9 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
     );
     cfg.service(
         web::scope("/gemini/v1beta")
+            .app_data(openai_json_error_config())
+            .app_data(openai_query_error_config())
+            .app_data(openai_path_error_config())
             .route(
                 "/models/{model}:generateContent",
                 web::post().to(gemini_generate_content_v1beta),
@@ -189,6 +195,9 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
     );
     cfg.service(
         web::scope("/gemini/v1")
+            .app_data(openai_json_error_config())
+            .app_data(openai_query_error_config())
+            .app_data(openai_path_error_config())
             .route(
                 "/models/{model}:generateContent",
                 web::post().to(gemini_generate_content_v1),
@@ -241,6 +250,7 @@ mod tests {
     use crate::server::HttpServer as GatewayHttpServer;
     use crate::server::middleware::RequestIdMiddleware;
     use actix_web::{App, HttpResponse, http::StatusCode, test, web};
+    use serde::Deserialize;
     use serde_json::Value;
 
     async fn build_no_provider_state() -> crate::server::state::AppState {
@@ -509,5 +519,40 @@ mod tests {
                 .as_str()
                 .is_some_and(|message| message.contains("Invalid path parameters"))
         );
+    }
+
+    #[allow(dead_code)]
+    #[derive(Deserialize)]
+    struct NonAiJsonPayload {
+        value: u32,
+    }
+
+    async fn non_ai_json_route(_payload: web::Json<NonAiJsonPayload>) -> HttpResponse {
+        HttpResponse::Ok().finish()
+    }
+
+    #[actix_web::test]
+    async fn openai_extractor_configs_do_not_leak_to_later_non_ai_routes() {
+        let state = build_no_provider_state().await;
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(state))
+                .configure(super::configure_routes)
+                .route("/non-ai-json", web::post().to(non_ai_json_route)),
+        )
+        .await;
+
+        let req = test::TestRequest::post()
+            .uri("/non-ai-json")
+            .insert_header(("content-type", "application/json"))
+            .set_payload(r#"{"value":"not-a-number"}"#)
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        let body = test::read_body(resp).await;
+        let body = String::from_utf8_lossy(&body);
+        assert!(!body.contains("invalid_request_error"));
+        assert!(!body.contains("invalid_request"));
     }
 }
