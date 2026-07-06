@@ -262,6 +262,49 @@ async fn test_cache_ttl_eviction_prefers_expired_entry_outside_sample() {
 }
 
 #[tokio::test]
+async fn test_cache_lru_eviction_considers_entries_past_sample_size() {
+    let config = DualCacheConfig::default()
+        .with_max_size(EVICTION_SAMPLE_SIZE + 1)
+        .with_eviction_policy(EvictionPolicy::LRU);
+    let cache: InMemoryCache<String> = InMemoryCache::new(config);
+    let shard_count = cache.access_meta.len();
+    let target_shard = 0;
+
+    let mut keys = Vec::with_capacity(EVICTION_SAMPLE_SIZE + 1);
+    let mut attempt = 0;
+    while keys.len() < EVICTION_SAMPLE_SIZE + 1 {
+        let key = CacheKey::new(format!("lru-same-shard-{attempt}"));
+        if key.hash_value() as usize % shard_count == target_shard {
+            keys.push(key);
+        }
+        attempt += 1;
+    }
+
+    for key in &keys {
+        cache
+            .set_with_ttl(key.clone(), "value".to_string(), Duration::from_secs(60))
+            .await;
+    }
+
+    let Some(true_lru) = keys.last().cloned() else {
+        panic!("test should create one key beyond the historical sample");
+    };
+    for key in keys.iter().take(EVICTION_SAMPLE_SIZE) {
+        cache.get(key).await;
+    }
+
+    cache.eviction_cursor.store(target_shard, Ordering::Relaxed);
+    cache
+        .set(CacheKey::new("new-after-lru"), "new".to_string())
+        .await;
+
+    assert!(
+        !cache.exists(&true_lru).await,
+        "LRU eviction should consider entries past the first sample"
+    );
+}
+
+#[tokio::test]
 async fn test_cache_stale_eviction_candidate_keeps_reinserted_metadata() {
     let config = DualCacheConfig::default()
         .with_max_size(2)
@@ -290,7 +333,10 @@ async fn test_cache_stale_eviction_candidate_keeps_reinserted_metadata() {
 
     cache.cache.remove(&key);
     cache.set(key.clone(), "new".to_string()).await;
-    cache.evict_candidate(stale_candidate, "LRU");
+    assert!(
+        !cache.evict_candidate(stale_candidate, "LRU"),
+        "stale eviction candidate should report that no live entry was removed"
+    );
 
     assert_eq!(cache.get(&key).await, Some("new".to_string()));
     assert!(

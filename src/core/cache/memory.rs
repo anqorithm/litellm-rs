@@ -358,9 +358,8 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
     }
 
     fn eviction_candidates(&self) -> Vec<EvictionCandidate> {
-        let target = self.cache.len().min(EVICTION_SAMPLE_SIZE);
-        let mut candidates = Vec::with_capacity(target);
-        if target == 0 {
+        let mut candidates = Vec::with_capacity(self.cache.len());
+        if self.cache.is_empty() {
             return candidates;
         }
 
@@ -368,18 +367,11 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
         let start = self.eviction_cursor.fetch_add(1, Ordering::Relaxed) % shard_count;
 
         for offset in 0..shard_count {
-            if candidates.len() >= target {
-                break;
-            }
-
             let shard = &self.access_meta[(start + offset) % shard_count];
-            let remaining = target - candidates.len();
-            let shard_budget = remaining.min(EVICTION_SAMPLE_SIZE);
             let mut stale_keys = Vec::new();
 
             let keys_and_meta: Vec<_> = shard
                 .iter()
-                .take(shard_budget)
                 .map(|meta_ref| (meta_ref.key().clone(), meta_ref.value().snapshot()))
                 .collect();
 
@@ -416,7 +408,6 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
             let mut stale_keys = Vec::new();
             let keys_and_meta: Vec<_> = shard
                 .iter()
-                .take(EVICTION_SAMPLE_SIZE)
                 .map(|meta_ref| (meta_ref.key().clone(), meta_ref.value().snapshot()))
                 .collect();
 
@@ -447,44 +438,54 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
     }
 
     /// Evict one entry based on the eviction policy
-    async fn evict_one(&self) {
-        match self.config.eviction_policy {
-            EvictionPolicy::LRU => self.evict_lru().await,
-            EvictionPolicy::LFU => self.evict_lfu().await,
-            EvictionPolicy::TTL => self.evict_ttl().await,
-            EvictionPolicy::FIFO => self.evict_fifo().await,
+    async fn evict_one(&self) -> bool {
+        for _ in 0..EVICTION_SAMPLE_SIZE {
+            let removed = match self.config.eviction_policy {
+                EvictionPolicy::LRU => self.evict_lru().await,
+                EvictionPolicy::LFU => self.evict_lfu().await,
+                EvictionPolicy::TTL => self.evict_ttl().await,
+                EvictionPolicy::FIFO => self.evict_fifo().await,
+            };
+            if removed || self.cache.len() < self.config.max_size {
+                return removed;
+            }
         }
+
+        false
     }
 
     /// Evict the least recently used entry
-    async fn evict_lru(&self) {
+    async fn evict_lru(&self) -> bool {
         let candidate = self
             .eviction_candidates()
             .into_iter()
             .min_by_key(|candidate| candidate.last_access_tick);
 
         if let Some(candidate) = candidate {
-            self.evict_candidate(candidate, "LRU");
+            return self.evict_candidate(candidate, "LRU");
         }
+
+        false
     }
 
     /// Evict the least frequently used entry
-    async fn evict_lfu(&self) {
+    async fn evict_lfu(&self) -> bool {
         let candidate = self
             .eviction_candidates()
             .into_iter()
             .min_by_key(|candidate| (candidate.access_count, candidate.last_access_tick));
 
         if let Some(candidate) = candidate {
-            self.evict_candidate(candidate, "LFU");
+            return self.evict_candidate(candidate, "LFU");
         }
+
+        false
     }
 
     /// Evict entry with shortest remaining TTL
-    async fn evict_ttl(&self) {
+    async fn evict_ttl(&self) -> bool {
         if let Some(candidate) = self.expired_eviction_candidate() {
-            self.evict_candidate(candidate, "TTL");
-            return;
+            return self.evict_candidate(candidate, "TTL");
         }
 
         let candidate = self
@@ -493,23 +494,27 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
             .min_by_key(|candidate| candidate.remaining_ttl.unwrap_or(Duration::ZERO));
 
         if let Some(candidate) = candidate {
-            self.evict_candidate(candidate, "TTL");
+            return self.evict_candidate(candidate, "TTL");
         }
+
+        false
     }
 
     /// Evict the oldest entry (FIFO)
-    async fn evict_fifo(&self) {
+    async fn evict_fifo(&self) -> bool {
         let candidate = self
             .eviction_candidates()
             .into_iter()
             .min_by_key(|candidate| candidate.created_at);
 
         if let Some(candidate) = candidate {
-            self.evict_candidate(candidate, "FIFO");
+            return self.evict_candidate(candidate, "FIFO");
         }
+
+        false
     }
 
-    fn evict_candidate(&self, candidate: EvictionCandidate, policy: &'static str) {
+    fn evict_candidate(&self, candidate: EvictionCandidate, policy: &'static str) -> bool {
         if let Some((_, removed)) = self.cache.remove_if(&candidate.key, |_key, entry| {
             entry.created_at == candidate.created_at
         }) {
@@ -517,12 +522,20 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
             self.stats.record_eviction();
             self.stats.set_entry_count(self.cache.len());
             trace!(key = %candidate.key, policy = policy, "Cache eviction");
+            self.remove_access_meta_if_unchanged(
+                &candidate.key,
+                candidate.last_access_tick,
+                candidate.access_count,
+            );
+            return true;
         }
+
         self.remove_access_meta_if_unchanged(
             &candidate.key,
             candidate.last_access_tick,
             candidate.access_count,
         );
+        false
     }
 
     /// Clean up expired entries
