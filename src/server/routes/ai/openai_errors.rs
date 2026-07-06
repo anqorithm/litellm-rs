@@ -2,7 +2,8 @@
 
 use crate::core::providers::ProviderError;
 use crate::utils::error::gateway_error::{
-    GatewayError, HttpErrorFacts, HttpErrorHeaders, gateway_http_error_facts,
+    GatewayError, HttpErrorFacts, HttpErrorHeaders, current_error_response_request_id,
+    gateway_http_error_facts,
 };
 use actix_web::http::StatusCode;
 use actix_web::{HttpResponse, http::header};
@@ -20,6 +21,8 @@ struct OpenAiErrorDetail {
     error_type: String,
     param: Option<String>,
     code: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    request_id: Option<String>,
 }
 
 struct OpenAiErrorSpec {
@@ -82,6 +85,7 @@ pub(crate) fn gateway_error_response(error: &GatewayError) -> HttpResponse {
         spec.error_type,
         spec.param,
         spec.code,
+        current_error_response_request_id(),
     ))
 }
 
@@ -124,6 +128,7 @@ fn build_response(spec: OpenAiErrorSpec) -> HttpResponse {
         spec.error_type,
         spec.param,
         spec.code,
+        current_error_response_request_id(),
     ))
 }
 
@@ -132,6 +137,7 @@ fn response_body(
     error_type: String,
     param: Option<String>,
     code: Option<String>,
+    request_id: Option<String>,
 ) -> OpenAiErrorResponse {
     OpenAiErrorResponse {
         error: OpenAiErrorDetail {
@@ -139,6 +145,7 @@ fn response_body(
             error_type,
             param,
             code,
+            request_id,
         },
     }
 }

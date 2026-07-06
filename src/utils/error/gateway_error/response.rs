@@ -17,7 +17,7 @@ where
     CURRENT_REQUEST_ID.scope(request_id, future).await
 }
 
-fn current_request_id() -> Option<String> {
+pub fn current_error_response_request_id() -> Option<String> {
     CURRENT_REQUEST_ID.try_with(Clone::clone).ok()
 }
 
@@ -64,7 +64,7 @@ impl GatewayError {
 
 impl ResponseError for GatewayError {
     fn error_response(&self) -> HttpResponse {
-        self.error_response_with_request_id(current_request_id())
+        self.error_response_with_request_id(current_error_response_request_id())
     }
 }
 

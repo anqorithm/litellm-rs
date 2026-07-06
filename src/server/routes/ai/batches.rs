@@ -9,6 +9,7 @@ use crate::core::router::execution::is_retryable_error;
 use crate::server::state::AppState;
 use crate::utils::error::gateway_error::GatewayError;
 use actix_web::{HttpResponse, Result as ActixResult, http::StatusCode, http::header, web};
+use bytes::Bytes;
 use reqwest::header::{HeaderName, HeaderValue};
 use reqwest::{Client, RequestBuilder, Url};
 use serde::Deserialize;
@@ -239,6 +240,10 @@ async fn response_to_http_response(
         .unwrap_or("application/json")
         .to_string();
     let body = response.bytes().await?;
+    if !status.is_success() {
+        let error = batch_upstream_gateway_error_from_body(status.as_u16(), &body);
+        return Ok(openai_errors::gateway_error_response(&error));
+    }
 
     Ok(HttpResponse::build(status)
         .insert_header((header::CONTENT_TYPE, content_type))
@@ -266,23 +271,21 @@ fn should_try_next_batch_provider(status: reqwest::StatusCode) -> bool {
 
 async fn batch_upstream_gateway_error(response: reqwest::Response) -> GatewayError {
     let status = response.status().as_u16();
-    let body = response
-        .text()
-        .await
-        .unwrap_or_else(|error| format!("failed to read batch upstream error body: {error}"));
+    let body = response.bytes().await.unwrap_or_else(|error| {
+        Bytes::from(format!("failed to read batch upstream error body: {error}"))
+    });
+    batch_upstream_gateway_error_from_body(status, &body)
+}
+
+fn batch_upstream_gateway_error_from_body(status: u16, body: &[u8]) -> GatewayError {
+    let body = String::from_utf8_lossy(body);
     let message = if body.trim().is_empty() {
         format!("Batch upstream returned HTTP {status}")
     } else {
-        format!("Batch upstream returned HTTP {status}: {body}")
+        body.to_string()
     };
 
-    let provider_error = match status {
-        408 | 504 => ProviderError::timeout("batch_proxy", message),
-        429 => ProviderError::rate_limit_with_retry("batch_proxy", message, None),
-        502 | 503 => ProviderError::provider_unavailable("batch_proxy", message),
-        _ => ProviderError::api_error("batch_proxy", status, message),
-    };
-    GatewayError::Provider(provider_error)
+    GatewayError::Provider(ProviderError::api_error("batch_proxy", status, message))
 }
 
 #[cfg(test)]

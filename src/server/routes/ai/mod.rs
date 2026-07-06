@@ -57,11 +57,14 @@ pub use responses::{
 
 use crate::core::models::openai::EmbeddingRequest;
 use crate::server::state::AppState;
-use actix_web::{HttpRequest, HttpResponse, Result as ActixResult, web};
+use actix_web::{HttpRequest, HttpResponse, Result as ActixResult, error::InternalError, web};
 
 /// Configure AI API routes
 pub fn configure_routes(cfg: &mut web::ServiceConfig) {
-    cfg.route("/completions", web::post().to(completions))
+    cfg.app_data(openai_json_error_config())
+        .app_data(openai_query_error_config())
+        .app_data(openai_path_error_config())
+        .route("/completions", web::post().to(completions))
         .route("/moderations", web::post().to(create_moderation))
         .route("/rerank", web::post().to(rerank))
         .route(
@@ -197,6 +200,29 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
     );
 }
 
+fn openai_json_error_config() -> web::JsonConfig {
+    web::JsonConfig::default().error_handler(|error, _req| {
+        let response =
+            openai_errors::validation_error(format!("Invalid JSON request body: {error}"));
+        InternalError::from_response(error, response).into()
+    })
+}
+
+fn openai_query_error_config() -> web::QueryConfig {
+    web::QueryConfig::default().error_handler(|error, _req| {
+        let response =
+            openai_errors::validation_error(format!("Invalid query parameters: {error}"));
+        InternalError::from_response(error, response).into()
+    })
+}
+
+fn openai_path_error_config() -> web::PathConfig {
+    web::PathConfig::default().error_handler(|error, _req| {
+        let response = openai_errors::validation_error(format!("Invalid path parameters: {error}"));
+        InternalError::from_response(error, response).into()
+    })
+}
+
 async fn engine_embeddings(
     state: web::Data<AppState>,
     req: HttpRequest,
@@ -213,7 +239,8 @@ mod tests {
     use crate::Config;
     use crate::core::types::context::RequestContext;
     use crate::server::HttpServer as GatewayHttpServer;
-    use actix_web::{App, http::StatusCode, test, web};
+    use crate::server::middleware::RequestIdMiddleware;
+    use actix_web::{App, HttpResponse, http::StatusCode, test, web};
     use serde_json::Value;
 
     async fn build_no_provider_state() -> crate::server::state::AppState {
@@ -389,5 +416,98 @@ mod tests {
         let req = test::TestRequest::get().uri("/engines").to_request();
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[actix_web::test]
+    async fn openai_routes_use_openai_shape_for_json_extractor_errors() {
+        let state = build_no_provider_state().await;
+        let app = test::init_service(
+            App::new()
+                .wrap(RequestIdMiddleware)
+                .app_data(web::Data::new(state))
+                .configure(super::configure_routes),
+        )
+        .await;
+
+        let req = test::TestRequest::post()
+            .uri("/v1/chat/completions")
+            .insert_header(("x-request-id", "req-json-error"))
+            .insert_header(("content-type", "application/json"))
+            .set_payload(r#"{"model":"gpt-4o","#)
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            resp.headers()
+                .get("x-request-id")
+                .and_then(|value| value.to_str().ok()),
+            Some("req-json-error")
+        );
+        let body: Value = test::read_body_json(resp).await;
+        assert_eq!(body["error"]["type"], "invalid_request_error");
+        assert_eq!(body["error"]["code"], "invalid_request");
+        assert_eq!(body["error"]["request_id"], "req-json-error");
+        assert!(body.get("success").is_none());
+    }
+
+    #[actix_web::test]
+    async fn openai_routes_use_openai_shape_for_query_extractor_errors() {
+        let state = build_no_provider_state().await;
+        let app = test::init_service(
+            App::new()
+                .wrap(RequestIdMiddleware)
+                .app_data(web::Data::new(state))
+                .configure(super::configure_routes),
+        )
+        .await;
+
+        let req = test::TestRequest::get()
+            .uri("/v1/batches?limit=not-a-number")
+            .insert_header(("x-request-id", "req-query-error"))
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        let body: Value = test::read_body_json(resp).await;
+        assert_eq!(body["error"]["type"], "invalid_request_error");
+        assert_eq!(body["error"]["code"], "invalid_request");
+        assert_eq!(body["error"]["request_id"], "req-query-error");
+        assert!(
+            body["error"]["message"]
+                .as_str()
+                .is_some_and(|message| message.contains("Invalid query parameters"))
+        );
+    }
+
+    #[actix_web::test]
+    async fn openai_path_config_uses_openai_shape_for_path_extractor_errors() {
+        let app = test::init_service(
+            App::new()
+                .wrap(RequestIdMiddleware)
+                .app_data(super::openai_path_error_config())
+                .route(
+                    "/v1/test/{id}",
+                    web::get().to(|_: web::Path<u32>| async { HttpResponse::Ok().finish() }),
+                ),
+        )
+        .await;
+
+        let req = test::TestRequest::get()
+            .uri("/v1/test/not-a-number")
+            .insert_header(("x-request-id", "req-path-error"))
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        let body: Value = test::read_body_json(resp).await;
+        assert_eq!(body["error"]["type"], "invalid_request_error");
+        assert_eq!(body["error"]["code"], "invalid_request");
+        assert_eq!(body["error"]["request_id"], "req-path-error");
+        assert!(
+            body["error"]["message"]
+                .as_str()
+                .is_some_and(|message| message.contains("Invalid path parameters"))
+        );
     }
 }

@@ -473,6 +473,41 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn route_normalizes_last_batch_upstream_error_to_openai_shape() {
+        let mock_server =
+            MockBatchServer::start_failing_batch_mock(StatusCode::SERVICE_UNAVAILABLE).await;
+        let state = build_test_app_state(vec![batch_route_provider(
+            "only-batch",
+            &mock_server.base_url,
+        )])
+        .await;
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(state))
+                .configure(litellm_rs::server::routes::ai::configure_routes),
+        )
+        .await;
+
+        let response = test::call_service(
+            &app,
+            test::TestRequest::get()
+                .uri("/v1/batches?after=batch_prev&limit=7")
+                .to_request(),
+        )
+        .await;
+
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        let body: Value = test::read_body_json(response).await;
+        assert_eq!(body["error"]["type"], "server_error");
+        assert_eq!(body["error"]["code"], "provider_api_error");
+        assert!(body["error"]["message"].as_str().is_some_and(|message| {
+            message.contains("forced upstream 503 Service Unavailable")
+        }));
+
+        mock_server.stop_batch_mock().await;
+    }
+
+    #[tokio::test]
     async fn route_does_not_validate_unreached_batch_fallback_provider() {
         let primary = MockBatchServer::start_batch_mock().await;
         let mut broken_fallback =
