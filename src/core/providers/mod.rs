@@ -10,8 +10,6 @@ pub mod base;
 
 // Provider modules - alphabetically ordered
 // Tier 1 providers removed in favor of registry/catalog.rs are commented with their tier.
-#[cfg(feature = "providers-extended")]
-pub mod ai21;
 // aiml_api: Tier 1 -> registry/catalog.rs
 // aleph_alpha: Tier 1 -> registry/catalog.rs
 #[cfg(feature = "providers-extended")]
