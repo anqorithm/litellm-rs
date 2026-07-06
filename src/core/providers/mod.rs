@@ -21,8 +21,6 @@ pub mod azure;
 #[cfg(feature = "providers-extra")]
 pub mod azure_ai;
 // baichuan: Tier 1 -> registry/catalog.rs
-#[cfg(feature = "providers-extended")]
-pub mod baseten;
 pub mod bedrock;
 // bytez: Tier 1 -> registry/catalog.rs
 // cerebras: Tier 1 -> registry/catalog.rs

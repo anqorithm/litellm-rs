@@ -56,10 +56,6 @@ pub static PROVIDER_MODULE_LIFECYCLE: &[ProviderModuleLifecycleEntry] = &[
         "native Provider enum variant when providers-extra is enabled; otherwise unsupported without generic fallback",
     ),
     internal("base", "shared provider infrastructure"),
-    stub(
-        "baseten",
-        "specialized provider module; not wired through the LLM factory yet",
-    ),
     wire("bedrock", "native Provider enum variant"),
     stub(
         "clarifai",
@@ -249,7 +245,6 @@ pub static PROVIDER_ORPHAN_BASELINE: &[ProviderOrphanBaselineEntry] = &[
         "demote-to-catalog",
         "catalog-backed duplicate with native macro provider retained until demote tranche",
     ),
-    baseline("baseten", "delete-native", "unwired native chat provider"),
     baseline("clarifai", "delete-native", "unwired native chat provider"),
     baseline("codestral", "delete-native", "unwired native chat provider"),
     baseline(
