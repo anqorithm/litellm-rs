@@ -43,10 +43,6 @@ pub struct ProviderOrphanBaselineEntry {
 
 pub static PROVIDER_MODULE_LIFECYCLE: &[ProviderModuleLifecycleEntry] = &[
     stub(
-        "ai21",
-        "specialized provider module; not wired through the LLM factory yet",
-    ),
-    stub(
         "amazon_nova",
         "native module retained; ProviderType::AmazonNova currently uses a generic OpenAI-compatible adapter",
     ),
@@ -252,11 +248,6 @@ pub static PROVIDER_MODULE_LIFECYCLE: &[ProviderModuleLifecycleEntry] = &[
 ];
 
 pub static PROVIDER_ORPHAN_BASELINE: &[ProviderOrphanBaselineEntry] = &[
-    baseline(
-        "ai21",
-        "delete-native",
-        "macro-generated chat provider awaiting GH837 disposition approval",
-    ),
     baseline(
         "amazon_nova",
         "demote-to-catalog",
