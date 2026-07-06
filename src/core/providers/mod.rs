@@ -24,8 +24,6 @@ pub mod azure_ai;
 pub mod bedrock;
 // bytez: Tier 1 -> registry/catalog.rs
 // cerebras: Tier 1 -> registry/catalog.rs
-#[cfg(feature = "providers-extended")]
-pub mod clarifai;
 pub mod cloudflare;
 #[cfg(feature = "providers-extended")]
 pub mod codestral;
