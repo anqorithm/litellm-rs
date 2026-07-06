@@ -70,7 +70,7 @@ mod tests {
         }
 
         async fn stop_rerank_mock(self) {
-            self.handle.stop(true).await;
+            self.handle.stop(false).await;
             let result = self.task.await.expect("mock server task should join");
             if let Err(error) = result {
                 panic!("mock server should stop cleanly: {error}");
