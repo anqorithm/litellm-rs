@@ -57,21 +57,46 @@ pub use responses::{
 
 use crate::core::models::openai::EmbeddingRequest;
 use crate::server::state::AppState;
+use crate::utils::error::gateway_error::GatewayError;
 use actix_web::{HttpRequest, HttpResponse, Result as ActixResult, error::InternalError, web};
 
 /// Configure AI API routes
 pub fn configure_routes(cfg: &mut web::ServiceConfig) {
-    cfg.route("/completions", web::post().to(completions))
-        .route("/moderations", web::post().to(create_moderation))
-        .route("/rerank", web::post().to(rerank))
-        .route(
-            "/engines/{model_id}/completions",
-            web::post().to(engine_completions),
-        )
-        .route(
-            "/openai/deployments/{model_id}/completions",
-            web::post().to(engine_completions),
-        );
+    cfg.service(
+        web::resource("/completions")
+            .app_data(openai_json_error_config())
+            .app_data(openai_query_error_config())
+            .app_data(openai_path_error_config())
+            .route(web::post().to(completions)),
+    )
+    .service(
+        web::resource("/moderations")
+            .app_data(openai_json_error_config())
+            .app_data(openai_query_error_config())
+            .app_data(openai_path_error_config())
+            .route(web::post().to(create_moderation)),
+    )
+    .service(
+        web::resource("/rerank")
+            .app_data(openai_json_error_config())
+            .app_data(openai_query_error_config())
+            .app_data(openai_path_error_config())
+            .route(web::post().to(rerank)),
+    )
+    .service(
+        web::resource("/engines/{model_id}/completions")
+            .app_data(openai_json_error_config())
+            .app_data(openai_query_error_config())
+            .app_data(openai_path_error_config())
+            .route(web::post().to(engine_completions)),
+    )
+    .service(
+        web::resource("/openai/deployments/{model_id}/completions")
+            .app_data(openai_json_error_config())
+            .app_data(openai_query_error_config())
+            .app_data(openai_path_error_config())
+            .route(web::post().to(engine_completions)),
+    );
     cfg.service(
         web::scope("/v1")
             .app_data(openai_json_error_config())
@@ -207,6 +232,82 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
                 web::post().to(gemini_stream_generate_content_v1),
             ),
     );
+}
+
+pub(crate) fn operation_for_path(path: &str) -> Option<&'static str> {
+    let normalized = path.trim_end_matches('/');
+
+    if normalized == "/v1/chat/completions"
+        || (normalized.starts_with("/v1/engines/") && normalized.ends_with("/chat/completions"))
+        || (normalized.starts_with("/openai/deployments/")
+            && normalized.ends_with("/chat/completions"))
+    {
+        return Some("chat");
+    }
+    if normalized == "/completions"
+        || normalized == "/v1/completions"
+        || (normalized.starts_with("/engines/") && normalized.ends_with("/completions"))
+        || (normalized.starts_with("/v1/engines/") && normalized.ends_with("/completions"))
+        || (normalized.starts_with("/openai/deployments/") && normalized.ends_with("/completions"))
+    {
+        return Some("completions");
+    }
+    if normalized == "/v1/embeddings"
+        || (normalized.starts_with("/v1/engines/") && normalized.ends_with("/embeddings"))
+        || (normalized.starts_with("/openai/deployments/") && normalized.ends_with("/embeddings"))
+    {
+        return Some("embeddings");
+    }
+    if normalized.starts_with("/v1/images/") {
+        return Some("images");
+    }
+    if normalized.starts_with("/v1/audio/") {
+        return Some("audio");
+    }
+    if normalized == "/moderations" || normalized == "/v1/moderations" {
+        return Some("moderations");
+    }
+    if normalized == "/rerank" || normalized == "/v1/rerank" {
+        return Some("rerank");
+    }
+    if normalized == "/v1/files" || normalized.starts_with("/v1/files/") {
+        return Some("files");
+    }
+    if normalized == "/v1/fine_tuning/jobs" || normalized.starts_with("/v1/fine_tuning/jobs/") {
+        return Some("fine_tuning");
+    }
+    if normalized == "/v1/models" || normalized == "/v1/engines" {
+        return Some("models");
+    }
+    if normalized.starts_with("/v1/models/") || normalized.starts_with("/v1/engines/") {
+        if normalized.contains(":generateContent") || normalized.contains(":streamGenerateContent")
+        {
+            return Some("chat");
+        }
+        return Some("models");
+    }
+    if normalized == "/v1/responses" || normalized.starts_with("/v1/responses/") {
+        return Some("responses");
+    }
+    if normalized == "/v1/batches" || normalized.starts_with("/v1/batches/") {
+        return Some("batches");
+    }
+    if normalized.starts_with("/v1beta/models/")
+        || normalized.starts_with("/gemini/v1beta/models/")
+        || normalized.starts_with("/gemini/v1/models/")
+    {
+        return Some("chat");
+    }
+
+    None
+}
+
+pub(crate) fn is_openai_compatible_path(path: &str) -> bool {
+    operation_for_path(path).is_some()
+}
+
+pub(crate) fn openai_gateway_error_response(error: &GatewayError) -> HttpResponse {
+    openai_errors::gateway_error_response(error)
 }
 
 fn openai_json_error_config() -> web::JsonConfig {
