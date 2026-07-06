@@ -195,10 +195,7 @@ async fn test_auth_attempt_reservation_blocks_next_attempt_before_auth_result() 
         Ok(_) => panic!("second auth attempt should see the existing reservation"),
         Err(err) => err,
     };
-    assert_eq!(
-        rejected.as_response_error().status_code(),
-        StatusCode::TOO_MANY_REQUESTS
-    );
+    assert_eq!(rejected.status_code(), StatusCode::TOO_MANY_REQUESTS);
 }
 
 #[test]

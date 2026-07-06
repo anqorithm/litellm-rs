@@ -88,7 +88,6 @@ impl BaseConfig {
             "vertex_ai" => "https://generativelanguage.googleapis.com",
             "ai21" => "https://api.ai21.com/studio/v1",
             "cerebras" => "https://api.cerebras.ai/v1",
-            "gigachat" => "https://gigachat.devices.sberbank.ru/api/v1",
             "nlp_cloud" => "https://api.nlpcloud.io/v1",
             "voyage" => "https://api.voyageai.com/v1",
             "github" => "https://models.inference.ai.azure.com",

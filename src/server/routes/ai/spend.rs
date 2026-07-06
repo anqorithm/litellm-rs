@@ -41,8 +41,8 @@ pub(super) use pricing::{
     reserve_embedding_budget_with_policy, reserve_pricing_usage_budget_with_policy,
 };
 pub(super) use unpriced::{
-    fallback_cost_for_usage, is_model_not_priced_error, is_model_not_priced_message,
-    model_not_priced_error, reserve_unpriced_usage_budget, settle_unpriced_usage,
+    fallback_cost_for_usage, is_model_not_priced_error, model_not_priced_error,
+    reserve_unpriced_usage_budget, settle_unpriced_usage,
 };
 
 /// Reject a request before it reaches the upstream provider when the served

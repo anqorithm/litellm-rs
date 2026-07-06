@@ -117,7 +117,9 @@ async fn proxy_gemini_route_inner(
     request: Value,
 ) -> Result<HttpResponse, GatewayError> {
     let mut context = ensure_gemini_route_authorized(state, req)?;
-    super::token_policy::attach_api_key_token_limit(req, &mut context)?;
+    if let Err(error) = super::token_policy::attach_api_key_token_limit(req, &mut context) {
+        return Ok(openai_errors::gateway_error_response(&error));
+    }
     let request =
         apply_gemini_api_key_output_token_limit(context.api_key_max_tokens_per_request(), request)?;
     validate_api_version(api_version)?;

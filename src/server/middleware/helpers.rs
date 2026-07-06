@@ -1,6 +1,10 @@
 //! Helper functions for middleware
 
 use crate::auth::AuthMethod;
+use crate::server::routes::ai;
+use crate::utils::error::gateway_error::GatewayError;
+use actix_web::body::EitherBody;
+use actix_web::dev::{ServiceRequest, ServiceResponse};
 use actix_web::http::header::HeaderMap;
 use actix_web::http::header::HeaderName;
 
@@ -116,6 +120,20 @@ pub fn is_api_route(path: &str) -> bool {
     ];
 
     API_ROUTES.iter().any(|&route| path.starts_with(route))
+}
+
+pub(super) fn middleware_gateway_error_response<B>(
+    req: ServiceRequest,
+    fallback_error: actix_web::Error,
+    openai_error: GatewayError,
+) -> ServiceResponse<EitherBody<B>> {
+    if ai::is_openai_compatible_path(req.path()) {
+        return req
+            .into_response(ai::openai_gateway_error_response(&openai_error))
+            .map_into_right_body();
+    }
+
+    req.error_response(fallback_error).map_into_right_body()
 }
 
 #[cfg(test)]

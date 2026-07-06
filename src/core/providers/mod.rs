@@ -64,8 +64,6 @@ pub mod fal_ai;
 #[cfg(feature = "providers-extended")]
 pub mod gemini;
 #[cfg(feature = "providers-extended")]
-pub mod gigachat;
-#[cfg(feature = "providers-extended")]
 pub mod github;
 #[cfg(feature = "providers-extended")]
 pub mod github_copilot;

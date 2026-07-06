@@ -224,6 +224,10 @@ harness = false
 name = "e2e_benchmarks"
 harness = false
 
+[[bench]]
+name = "in_memory_cache_benchmarks"
+harness = false
+
 [[example]]
 name = "azure_ai_chat"
 required-features = ["providers-extra"]

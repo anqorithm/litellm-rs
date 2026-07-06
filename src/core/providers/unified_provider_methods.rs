@@ -445,32 +445,6 @@ impl ProviderError {
 
     /// Get HTTP status code for this error
     pub fn http_status(&self) -> u16 {
-        match self {
-            Self::Authentication { .. } => 401,
-            Self::RateLimit { .. } => 429,
-            Self::QuotaExceeded { .. } => 402, // Payment Required
-            Self::ModelNotFound { .. } => 404,
-            Self::InvalidRequest { .. } => 400,
-            Self::Configuration { .. } => 400,
-            Self::NotSupported { .. } => 405,
-            Self::NotImplemented { .. } => 501,
-            Self::Network { .. } | Self::Timeout { .. } | Self::ProviderUnavailable { .. } => 503,
-            Self::Serialization { .. } => 500,
-
-            // Enhanced error variants with appropriate HTTP status codes
-            Self::ContextLengthExceeded { .. } => 413, // Payload Too Large
-            Self::ContentFiltered { .. } => 400,       // Bad Request (content policy violation)
-            Self::ApiError { status, .. } => *status,  // Use the actual API status
-            Self::TokenLimitExceeded { .. } => 413,    // Payload Too Large
-            Self::FeatureDisabled { .. } => 403,       // Forbidden (feature not available)
-            Self::DeploymentError { .. } => 404,       // Not Found (deployment not found)
-            Self::ResponseParsing { .. } => 502,       // Bad Gateway (upstream response invalid)
-            Self::RoutingError { .. } => 503, // Service Unavailable (no providers available)
-            Self::TransformationError { .. } => 500, // Internal Server Error (conversion failed)
-            Self::Cancelled { .. } => 499,    // Client Closed Request
-            Self::Streaming { .. } => 500,    // Internal Server Error (streaming failed)
-
-            Self::Other { .. } => 500,
-        }
+        super::provider_http_error_facts(self).status
     }
 }
