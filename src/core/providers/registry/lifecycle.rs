@@ -172,10 +172,6 @@ pub static PROVIDER_MODULE_LIFECYCLE: &[ProviderModuleLifecycleEntry] = &[
     wire("openai", "native Provider enum variant"),
     wire("openai_like", "shared OpenAI-compatible runtime provider"),
     stub(
-        "petals",
-        "specialized provider module; not wired through the LLM factory yet",
-    ),
-    stub(
         "pg_vector",
         "vector-store provider module, outside LLM factory dispatch",
     ),
@@ -332,7 +328,6 @@ pub static PROVIDER_ORPHAN_BASELINE: &[ProviderOrphanBaselineEntry] = &[
         "demote-to-catalog",
         "local OpenAI-compatible candidate",
     ),
-    baseline("petals", "delete-native", "unwired native chat provider"),
     baseline(
         "pg_vector",
         "non-llm-lane",

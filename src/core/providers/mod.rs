@@ -115,8 +115,6 @@ pub mod openai_like;
 // ovhcloud: Tier 1 -> registry/catalog.rs
 // perplexity: Tier 1 -> registry/catalog.rs
 #[cfg(feature = "providers-extended")]
-pub mod petals;
-#[cfg(feature = "providers-extended")]
 pub mod pg_vector;
 // poe: Tier 1 -> registry/catalog.rs
 #[cfg(feature = "providers-extended")]
