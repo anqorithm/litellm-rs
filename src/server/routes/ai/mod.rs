@@ -57,23 +57,51 @@ pub use responses::{
 
 use crate::core::models::openai::EmbeddingRequest;
 use crate::server::state::AppState;
-use actix_web::{HttpRequest, HttpResponse, Result as ActixResult, web};
+use crate::utils::error::gateway_error::GatewayError;
+use actix_web::{HttpRequest, HttpResponse, Result as ActixResult, error::InternalError, web};
 
 /// Configure AI API routes
 pub fn configure_routes(cfg: &mut web::ServiceConfig) {
-    cfg.route("/completions", web::post().to(completions))
-        .route("/moderations", web::post().to(create_moderation))
-        .route("/rerank", web::post().to(rerank))
-        .route(
-            "/engines/{model_id}/completions",
-            web::post().to(engine_completions),
-        )
-        .route(
-            "/openai/deployments/{model_id}/completions",
-            web::post().to(engine_completions),
-        );
+    cfg.service(
+        web::resource("/completions")
+            .app_data(openai_json_error_config())
+            .app_data(openai_query_error_config())
+            .app_data(openai_path_error_config())
+            .route(web::post().to(completions)),
+    )
+    .service(
+        web::resource("/moderations")
+            .app_data(openai_json_error_config())
+            .app_data(openai_query_error_config())
+            .app_data(openai_path_error_config())
+            .route(web::post().to(create_moderation)),
+    )
+    .service(
+        web::resource("/rerank")
+            .app_data(openai_json_error_config())
+            .app_data(openai_query_error_config())
+            .app_data(openai_path_error_config())
+            .route(web::post().to(rerank)),
+    )
+    .service(
+        web::resource("/engines/{model_id}/completions")
+            .app_data(openai_json_error_config())
+            .app_data(openai_query_error_config())
+            .app_data(openai_path_error_config())
+            .route(web::post().to(engine_completions)),
+    )
+    .service(
+        web::resource("/openai/deployments/{model_id}/completions")
+            .app_data(openai_json_error_config())
+            .app_data(openai_query_error_config())
+            .app_data(openai_path_error_config())
+            .route(web::post().to(engine_completions)),
+    );
     cfg.service(
         web::scope("/v1")
+            .app_data(openai_json_error_config())
+            .app_data(openai_query_error_config())
+            .app_data(openai_path_error_config())
             // Legacy text completions
             .route("/completions", web::post().to(completions))
             .route(
@@ -164,6 +192,9 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
     );
     cfg.service(
         web::scope("/v1beta")
+            .app_data(openai_json_error_config())
+            .app_data(openai_query_error_config())
+            .app_data(openai_path_error_config())
             .route(
                 "/models/{model}:generateContent",
                 web::post().to(gemini_generate_content_v1beta),
@@ -175,6 +206,9 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
     );
     cfg.service(
         web::scope("/gemini/v1beta")
+            .app_data(openai_json_error_config())
+            .app_data(openai_query_error_config())
+            .app_data(openai_path_error_config())
             .route(
                 "/models/{model}:generateContent",
                 web::post().to(gemini_generate_content_v1beta),
@@ -186,6 +220,9 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
     );
     cfg.service(
         web::scope("/gemini/v1")
+            .app_data(openai_json_error_config())
+            .app_data(openai_query_error_config())
+            .app_data(openai_path_error_config())
             .route(
                 "/models/{model}:generateContent",
                 web::post().to(gemini_generate_content_v1),
@@ -195,6 +232,105 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
                 web::post().to(gemini_stream_generate_content_v1),
             ),
     );
+}
+
+pub(crate) fn operation_for_path(path: &str) -> Option<&'static str> {
+    let normalized = path.trim_end_matches('/');
+
+    if normalized == "/v1/chat/completions"
+        || (normalized.starts_with("/v1/engines/") && normalized.ends_with("/chat/completions"))
+        || (normalized.starts_with("/openai/deployments/")
+            && normalized.ends_with("/chat/completions"))
+    {
+        return Some("chat");
+    }
+    if normalized == "/completions"
+        || normalized == "/v1/completions"
+        || (normalized.starts_with("/engines/") && normalized.ends_with("/completions"))
+        || (normalized.starts_with("/v1/engines/") && normalized.ends_with("/completions"))
+        || (normalized.starts_with("/openai/deployments/") && normalized.ends_with("/completions"))
+    {
+        return Some("completions");
+    }
+    if normalized == "/v1/embeddings"
+        || (normalized.starts_with("/v1/engines/") && normalized.ends_with("/embeddings"))
+        || (normalized.starts_with("/openai/deployments/") && normalized.ends_with("/embeddings"))
+    {
+        return Some("embeddings");
+    }
+    if normalized.starts_with("/v1/images/") {
+        return Some("images");
+    }
+    if normalized.starts_with("/v1/audio/") {
+        return Some("audio");
+    }
+    if normalized == "/moderations" || normalized == "/v1/moderations" {
+        return Some("moderations");
+    }
+    if normalized == "/rerank" || normalized == "/v1/rerank" {
+        return Some("rerank");
+    }
+    if normalized == "/v1/files" || normalized.starts_with("/v1/files/") {
+        return Some("files");
+    }
+    if normalized == "/v1/fine_tuning/jobs" || normalized.starts_with("/v1/fine_tuning/jobs/") {
+        return Some("fine_tuning");
+    }
+    if normalized == "/v1/models" || normalized == "/v1/engines" {
+        return Some("models");
+    }
+    if normalized.starts_with("/v1/models/") || normalized.starts_with("/v1/engines/") {
+        if normalized.contains(":generateContent") || normalized.contains(":streamGenerateContent")
+        {
+            return Some("chat");
+        }
+        return Some("models");
+    }
+    if normalized == "/v1/responses" || normalized.starts_with("/v1/responses/") {
+        return Some("responses");
+    }
+    if normalized == "/v1/batches" || normalized.starts_with("/v1/batches/") {
+        return Some("batches");
+    }
+    if normalized.starts_with("/v1beta/models/")
+        || normalized.starts_with("/gemini/v1beta/models/")
+        || normalized.starts_with("/gemini/v1/models/")
+    {
+        return Some("chat");
+    }
+
+    None
+}
+
+pub(crate) fn is_openai_compatible_path(path: &str) -> bool {
+    operation_for_path(path).is_some()
+}
+
+pub(crate) fn openai_gateway_error_response(error: &GatewayError) -> HttpResponse {
+    openai_errors::gateway_error_response(error)
+}
+
+fn openai_json_error_config() -> web::JsonConfig {
+    web::JsonConfig::default().error_handler(|error, _req| {
+        let response =
+            openai_errors::validation_error(format!("Invalid JSON request body: {error}"));
+        InternalError::from_response(error, response).into()
+    })
+}
+
+fn openai_query_error_config() -> web::QueryConfig {
+    web::QueryConfig::default().error_handler(|error, _req| {
+        let response =
+            openai_errors::validation_error(format!("Invalid query parameters: {error}"));
+        InternalError::from_response(error, response).into()
+    })
+}
+
+fn openai_path_error_config() -> web::PathConfig {
+    web::PathConfig::default().error_handler(|error, _req| {
+        let response = openai_errors::validation_error(format!("Invalid path parameters: {error}"));
+        InternalError::from_response(error, response).into()
+    })
 }
 
 async fn engine_embeddings(
@@ -213,7 +349,9 @@ mod tests {
     use crate::Config;
     use crate::core::types::context::RequestContext;
     use crate::server::HttpServer as GatewayHttpServer;
-    use actix_web::{App, http::StatusCode, test, web};
+    use crate::server::middleware::RequestIdMiddleware;
+    use actix_web::{App, HttpResponse, http::StatusCode, test, web};
+    use serde::Deserialize;
     use serde_json::Value;
 
     async fn build_no_provider_state() -> crate::server::state::AppState {
@@ -389,5 +527,133 @@ mod tests {
         let req = test::TestRequest::get().uri("/engines").to_request();
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[actix_web::test]
+    async fn openai_routes_use_openai_shape_for_json_extractor_errors() {
+        let state = build_no_provider_state().await;
+        let app = test::init_service(
+            App::new()
+                .wrap(RequestIdMiddleware)
+                .app_data(web::Data::new(state))
+                .configure(super::configure_routes),
+        )
+        .await;
+
+        let req = test::TestRequest::post()
+            .uri("/v1/chat/completions")
+            .insert_header(("x-request-id", "req-json-error"))
+            .insert_header(("content-type", "application/json"))
+            .set_payload(r#"{"model":"gpt-4o","#)
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            resp.headers()
+                .get("x-request-id")
+                .and_then(|value| value.to_str().ok()),
+            Some("req-json-error")
+        );
+        let body: Value = test::read_body_json(resp).await;
+        assert_eq!(body["error"]["type"], "invalid_request_error");
+        assert_eq!(body["error"]["code"], "invalid_request");
+        assert_eq!(body["error"]["request_id"], "req-json-error");
+        assert!(body.get("success").is_none());
+    }
+
+    #[actix_web::test]
+    async fn openai_routes_use_openai_shape_for_query_extractor_errors() {
+        let state = build_no_provider_state().await;
+        let app = test::init_service(
+            App::new()
+                .wrap(RequestIdMiddleware)
+                .app_data(web::Data::new(state))
+                .configure(super::configure_routes),
+        )
+        .await;
+
+        let req = test::TestRequest::get()
+            .uri("/v1/batches?limit=not-a-number")
+            .insert_header(("x-request-id", "req-query-error"))
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        let body: Value = test::read_body_json(resp).await;
+        assert_eq!(body["error"]["type"], "invalid_request_error");
+        assert_eq!(body["error"]["code"], "invalid_request");
+        assert_eq!(body["error"]["request_id"], "req-query-error");
+        assert!(
+            body["error"]["message"]
+                .as_str()
+                .is_some_and(|message| message.contains("Invalid query parameters"))
+        );
+    }
+
+    #[actix_web::test]
+    async fn openai_path_config_uses_openai_shape_for_path_extractor_errors() {
+        let app = test::init_service(
+            App::new()
+                .wrap(RequestIdMiddleware)
+                .app_data(super::openai_path_error_config())
+                .route(
+                    "/v1/test/{id}",
+                    web::get().to(|_: web::Path<u32>| async { HttpResponse::Ok().finish() }),
+                ),
+        )
+        .await;
+
+        let req = test::TestRequest::get()
+            .uri("/v1/test/not-a-number")
+            .insert_header(("x-request-id", "req-path-error"))
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        let body: Value = test::read_body_json(resp).await;
+        assert_eq!(body["error"]["type"], "invalid_request_error");
+        assert_eq!(body["error"]["code"], "invalid_request");
+        assert_eq!(body["error"]["request_id"], "req-path-error");
+        assert!(
+            body["error"]["message"]
+                .as_str()
+                .is_some_and(|message| message.contains("Invalid path parameters"))
+        );
+    }
+
+    #[allow(dead_code)]
+    #[derive(Deserialize)]
+    struct NonAiJsonPayload {
+        value: u32,
+    }
+
+    async fn non_ai_json_route(_payload: web::Json<NonAiJsonPayload>) -> HttpResponse {
+        HttpResponse::Ok().finish()
+    }
+
+    #[actix_web::test]
+    async fn openai_extractor_configs_do_not_leak_to_later_non_ai_routes() {
+        let state = build_no_provider_state().await;
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(state))
+                .configure(super::configure_routes)
+                .route("/non-ai-json", web::post().to(non_ai_json_route)),
+        )
+        .await;
+
+        let req = test::TestRequest::post()
+            .uri("/non-ai-json")
+            .insert_header(("content-type", "application/json"))
+            .set_payload(r#"{"value":"not-a-number"}"#)
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        let body = test::read_body(resp).await;
+        let body = String::from_utf8_lossy(&body);
+        assert!(!body.contains("invalid_request_error"));
+        assert!(!body.contains("invalid_request"));
     }
 }

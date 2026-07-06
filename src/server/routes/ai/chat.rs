@@ -42,7 +42,9 @@ pub async fn chat_completions(
     info!("Chat completion request for model: {}", request.model);
 
     let mut context = get_request_context(&req)?;
-    super::token_policy::attach_api_key_token_limit(&req, &mut context)?;
+    if let Err(error) = super::token_policy::attach_api_key_token_limit(&req, &mut context) {
+        return Ok(openai_errors::gateway_error_response(&error));
+    }
 
     if let Err(e) = RequestValidator::validate_chat_completion_request(
         &request.model,

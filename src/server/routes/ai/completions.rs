@@ -66,7 +66,9 @@ async fn completions_inner(
     request: Value,
 ) -> ActixResult<HttpResponse> {
     let mut context = get_request_context(&req)?;
-    super::token_policy::attach_api_key_token_limit(&req, &mut context)?;
+    if let Err(error) = super::token_policy::attach_api_key_token_limit(&req, &mut context) {
+        return Ok(openai_errors::gateway_error_response(&error));
+    }
     let adapter_request = match completion_request_from_value(request, path_model) {
         Ok(request) => request,
         Err(error) => return Ok(openai_errors::gateway_error_response(&error)),

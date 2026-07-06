@@ -2,12 +2,15 @@
 
 #[cfg(all(test, feature = "gateway", feature = "storage"))]
 mod tests {
-    use actix_web::{App, HttpMessage, HttpResponse, HttpServer, http::StatusCode, test, web};
+    use actix_web::{
+        App, HttpMessage, HttpResponse, HttpServer, dev::Service, http::StatusCode, test, web,
+    };
     use bytes::Bytes;
     use futures::stream;
     use litellm_rs::Config;
     use litellm_rs::config::models::provider::ProviderConfig;
     use litellm_rs::core::budget::{ModelLimitConfig, ProviderLimitConfig, ResetPeriod};
+    use litellm_rs::core::models::{ApiKey, Metadata, UsageStats};
     use litellm_rs::core::types::context::RequestContext;
     use litellm_rs::server::HttpServer as GatewayHttpServer;
     use litellm_rs::server::state::AppState;
@@ -213,6 +216,33 @@ mod tests {
         })
     }
 
+    fn api_key_with_invalid_runtime_permissions() -> ApiKey {
+        let mut metadata = Metadata::new();
+        metadata.extra.insert(
+            "__core_keys".to_string(),
+            json!({
+                "permissions": {
+                    "allowed_models": "gpt-*"
+                }
+            }),
+        );
+
+        ApiKey {
+            metadata,
+            name: "completion-invalid-policy-key".to_string(),
+            key_hash: "hash".to_string(),
+            key_prefix: "gw-completion-invalid".to_string(),
+            user_id: None,
+            team_id: None,
+            permissions: Vec::new(),
+            rate_limits: None,
+            expires_at: None,
+            is_active: true,
+            last_used_at: None,
+            usage_stats: UsageStats::default(),
+        }
+    }
+
     #[tokio::test]
     async fn test_completions_non_stream_success_openai_envelope() {
         let mock_server = MockOpenAIServer::start(MockScenario::NonStreamingSuccess).await;
@@ -336,6 +366,88 @@ mod tests {
             "Responses API calls should not reuse chat-completion cache entries"
         );
 
+        mock_server.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn test_completions_runtime_policy_errors_use_openai_shape() {
+        let mock_server = MockOpenAIServer::start(MockScenario::NonStreamingSuccess).await;
+        let state = build_test_app_state(&mock_server.base_url).await;
+        let api_key = api_key_with_invalid_runtime_permissions();
+
+        let app = test::init_service(
+            App::new()
+                .wrap_fn(move |req, srv| {
+                    req.extensions_mut().insert::<ApiKey>(api_key.clone());
+                    srv.call(req)
+                })
+                .app_data(web::Data::new(state))
+                .configure(litellm_rs::server::routes::ai::configure_routes),
+        )
+        .await;
+
+        let req = test::TestRequest::post()
+            .uri("/v1/completions")
+            .set_json(completion_request(None))
+            .to_request();
+
+        let resp = test::call_service(&app, req).await;
+
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+        let body: Value = test::read_body_json(resp).await;
+        assert!(body.get("success").is_none());
+        assert_eq!(body["error"]["type"], "permission_error");
+        assert_eq!(body["error"]["code"], "permission_denied");
+        assert!(
+            body["error"]["message"]
+                .as_str()
+                .expect("error message")
+                .contains("API key runtime policy is invalid")
+        );
+        assert!(mock_server.requests().is_empty());
+        mock_server.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn test_responses_runtime_policy_errors_use_openai_shape() {
+        let mock_server = MockOpenAIServer::start(MockScenario::NonStreamingSuccess).await;
+        let state = build_test_app_state(&mock_server.base_url).await;
+        let api_key = api_key_with_invalid_runtime_permissions();
+
+        let app = test::init_service(
+            App::new()
+                .wrap_fn(move |req, srv| {
+                    req.extensions_mut().insert::<ApiKey>(api_key.clone());
+                    srv.call(req)
+                })
+                .app_data(web::Data::new(state))
+                .configure(litellm_rs::server::routes::ai::configure_routes),
+        )
+        .await;
+
+        let req = test::TestRequest::post()
+            .uri("/v1/responses")
+            .set_json(json!({
+                "model": "gpt-4o",
+                "input": "Hello",
+                "max_output_tokens": 16
+            }))
+            .to_request();
+
+        let resp = test::call_service(&app, req).await;
+
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+        let body: Value = test::read_body_json(resp).await;
+        assert!(body.get("success").is_none());
+        assert_eq!(body["error"]["type"], "permission_error");
+        assert_eq!(body["error"]["code"], "permission_denied");
+        assert!(
+            body["error"]["message"]
+                .as_str()
+                .expect("error message")
+                .contains("API key runtime policy is invalid")
+        );
+        assert!(mock_server.requests().is_empty());
         mock_server.shutdown().await;
     }
 

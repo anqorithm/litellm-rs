@@ -32,7 +32,9 @@ pub async fn create_response(
     info!("Responses API request for model: {}", payload.model);
 
     let mut context = super::context::get_request_context(&req)?;
-    super::token_policy::attach_api_key_token_limit(&req, &mut context)?;
+    if let Err(error) = super::token_policy::attach_api_key_token_limit(&req, &mut context) {
+        return Ok(openai_errors::gateway_error_response(&error));
+    }
     let owner = lifecycle::response_owner(&context);
     let request = payload.into_inner();
 

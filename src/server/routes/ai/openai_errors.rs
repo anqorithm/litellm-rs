@@ -1,7 +1,10 @@
 //! OpenAI-compatible error response helpers for `/v1/*` endpoints.
 
 use crate::core::providers::ProviderError;
-use crate::utils::error::gateway_error::GatewayError;
+use crate::utils::error::gateway_error::{
+    GatewayError, HttpErrorFacts, HttpErrorHeaders, current_error_response_request_id,
+    gateway_http_error_facts,
+};
 use actix_web::http::StatusCode;
 use actix_web::{HttpResponse, http::header};
 use serde::{Deserialize, Serialize};
@@ -18,6 +21,8 @@ struct OpenAiErrorDetail {
     error_type: String,
     param: Option<String>,
     code: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    request_id: Option<String>,
 }
 
 struct OpenAiErrorSpec {
@@ -26,6 +31,7 @@ struct OpenAiErrorSpec {
     error_type: String,
     param: Option<String>,
     code: Option<String>,
+    headers: HttpErrorHeaders,
 }
 
 #[derive(Deserialize)]
@@ -61,43 +67,17 @@ pub(crate) fn unauthorized_error(message: impl Into<String>) -> HttpResponse {
 }
 
 pub(crate) fn gateway_error_response(error: &GatewayError) -> HttpResponse {
-    let spec = gateway_error_spec(error);
+    let spec = openai_error_spec(error);
     let mut builder = HttpResponse::build(spec.status);
 
-    match error {
-        GatewayError::RateLimit {
-            retry_after,
-            rpm_limit,
-            tpm_limit,
-            ..
-        } => {
-            if let Some(secs) = retry_after {
-                builder.insert_header((header::RETRY_AFTER, secs.to_string()));
-            }
-            if let Some(rpm) = rpm_limit {
-                builder.insert_header(("X-RateLimit-Limit-Requests", rpm.to_string()));
-            }
-            if let Some(tpm) = tpm_limit {
-                builder.insert_header(("X-RateLimit-Limit-Tokens", tpm.to_string()));
-            }
-        }
-        GatewayError::Provider(ProviderError::RateLimit {
-            retry_after,
-            rpm_limit,
-            tpm_limit,
-            ..
-        }) => {
-            if let Some(secs) = retry_after {
-                builder.insert_header((header::RETRY_AFTER, secs.to_string()));
-            }
-            if let Some(rpm) = rpm_limit {
-                builder.insert_header(("X-RateLimit-Limit-Requests", rpm.to_string()));
-            }
-            if let Some(tpm) = tpm_limit {
-                builder.insert_header(("X-RateLimit-Limit-Tokens", tpm.to_string()));
-            }
-        }
-        _ => {}
+    if let Some(secs) = spec.headers.retry_after {
+        builder.insert_header((header::RETRY_AFTER, secs.to_string()));
+    }
+    if let Some(rpm) = spec.headers.rpm_limit {
+        builder.insert_header(("X-RateLimit-Limit-Requests", rpm.to_string()));
+    }
+    if let Some(tpm) = spec.headers.tpm_limit {
+        builder.insert_header(("X-RateLimit-Limit-Tokens", tpm.to_string()));
     }
 
     builder.json(response_body(
@@ -105,279 +85,18 @@ pub(crate) fn gateway_error_response(error: &GatewayError) -> HttpResponse {
         spec.error_type,
         spec.param,
         spec.code,
+        current_error_response_request_id(),
     ))
 }
 
-fn build_response(spec: OpenAiErrorSpec) -> HttpResponse {
-    HttpResponse::build(spec.status).json(response_body(
-        spec.message,
-        spec.error_type,
-        spec.param,
-        spec.code,
-    ))
-}
+fn openai_error_spec(error: &GatewayError) -> OpenAiErrorSpec {
+    let facts = gateway_http_error_facts(error);
+    let message = openai_error_message(error);
+    let mut spec = spec_from_facts(facts, message);
 
-fn response_body(
-    message: String,
-    error_type: String,
-    param: Option<String>,
-    code: Option<String>,
-) -> OpenAiErrorResponse {
-    OpenAiErrorResponse {
-        error: OpenAiErrorDetail {
-            message,
-            error_type,
-            param,
-            code,
-        },
-    }
-}
-
-fn gateway_error_spec(error: &GatewayError) -> OpenAiErrorSpec {
-    match error {
-        GatewayError::Config(_) | GatewayError::Internal(_) | GatewayError::Io(_) => spec(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            error.to_string(),
-            "server_error",
-            "internal_error",
-        ),
-        GatewayError::Storage(_) => spec(
-            StatusCode::SERVICE_UNAVAILABLE,
-            error.to_string(),
-            "server_error",
-            "service_unavailable",
-        ),
-        GatewayError::HttpClient(_) | GatewayError::Network(_) => spec(
-            StatusCode::BAD_GATEWAY,
-            error.to_string(),
-            "server_error",
-            "network_error",
-        ),
-        GatewayError::Serialization(_)
-        | GatewayError::Validation(_)
-        | GatewayError::BadRequest(_) => spec(
-            StatusCode::BAD_REQUEST,
-            error.to_string(),
-            "invalid_request_error",
-            "invalid_request",
-        ),
-        GatewayError::Auth(_) => spec(
-            StatusCode::UNAUTHORIZED,
-            error.to_string(),
-            "authentication_error",
-            "authentication_error",
-        ),
-        GatewayError::Forbidden(_) => spec(
-            StatusCode::FORBIDDEN,
-            error.to_string(),
-            "permission_error",
-            "permission_denied",
-        ),
-        GatewayError::Provider(provider_error) => provider_error_spec(provider_error),
-        GatewayError::RateLimit { .. } => spec(
-            StatusCode::TOO_MANY_REQUESTS,
-            error.to_string(),
-            "rate_limit_error",
-            "rate_limit_exceeded",
-        ),
-        GatewayError::Timeout(_) => spec(
-            StatusCode::REQUEST_TIMEOUT,
-            error.to_string(),
-            "server_error",
-            "timeout",
-        ),
-        GatewayError::NotFound(_) => spec(
-            StatusCode::NOT_FOUND,
-            error.to_string(),
-            "invalid_request_error",
-            "not_found",
-        ),
-        GatewayError::Conflict(_) => spec(
-            StatusCode::CONFLICT,
-            error.to_string(),
-            "invalid_request_error",
-            "conflict",
-        ),
-        GatewayError::Unavailable(_) => spec(
-            StatusCode::SERVICE_UNAVAILABLE,
-            error.to_string(),
-            "server_error",
-            "service_unavailable",
-        ),
-        GatewayError::NotImplemented(_) => spec(
-            StatusCode::NOT_IMPLEMENTED,
-            error.to_string(),
-            "invalid_request_error",
-            "not_implemented",
-        ),
-    }
-}
-
-fn provider_error_spec(error: &ProviderError) -> OpenAiErrorSpec {
-    match error {
-        ProviderError::Authentication { .. } => spec(
-            StatusCode::UNAUTHORIZED,
-            error.to_string(),
-            "authentication_error",
-            "authentication_error",
-        ),
-        ProviderError::RateLimit { .. } => spec(
-            StatusCode::TOO_MANY_REQUESTS,
-            error.to_string(),
-            "rate_limit_error",
-            "rate_limit_exceeded",
-        ),
-        ProviderError::QuotaExceeded { .. } => spec(
-            StatusCode::PAYMENT_REQUIRED,
-            error.to_string(),
-            "insufficient_quota",
-            "insufficient_quota",
-        ),
-        ProviderError::ModelNotFound { .. } => spec(
-            StatusCode::NOT_FOUND,
-            error.to_string(),
-            "invalid_request_error",
-            "model_not_found",
-        ),
-        ProviderError::InvalidRequest { message, .. }
-            if super::spend::is_model_not_priced_message(message) =>
-        {
-            spec(
-                StatusCode::BAD_REQUEST,
-                error.to_string(),
-                "invalid_request_error",
-                "model_not_priced",
-            )
-        }
-        ProviderError::InvalidRequest { .. } => spec(
-            StatusCode::BAD_REQUEST,
-            error.to_string(),
-            "invalid_request_error",
-            "invalid_request",
-        ),
-        ProviderError::Network { .. } => spec(
-            StatusCode::BAD_GATEWAY,
-            error.to_string(),
-            "server_error",
-            "provider_network_error",
-        ),
-        ProviderError::ProviderUnavailable { .. } => spec(
-            StatusCode::SERVICE_UNAVAILABLE,
-            error.to_string(),
-            "server_error",
-            "provider_unavailable",
-        ),
-        ProviderError::NotSupported { .. }
-        | ProviderError::NotImplemented { .. }
-        | ProviderError::FeatureDisabled { .. } => spec(
-            StatusCode::NOT_IMPLEMENTED,
-            error.to_string(),
-            "invalid_request_error",
-            "not_supported",
-        ),
-        ProviderError::Configuration { .. }
-        | ProviderError::Serialization { .. }
-        | ProviderError::TransformationError { .. } => spec(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            error.to_string(),
-            "server_error",
-            "internal_error",
-        ),
-        ProviderError::Timeout { .. } => spec(
-            StatusCode::GATEWAY_TIMEOUT,
-            error.to_string(),
-            "server_error",
-            "timeout",
-        ),
-        ProviderError::ContextLengthExceeded { .. } => spec(
-            StatusCode::BAD_REQUEST,
-            error.to_string(),
-            "invalid_request_error",
-            "context_length_exceeded",
-        ),
-        ProviderError::ContentFiltered { .. } => spec(
-            StatusCode::BAD_REQUEST,
-            error.to_string(),
-            "invalid_request_error",
-            "content_filter",
-        ),
-        ProviderError::ApiError {
-            status, message, ..
-        } => api_error_spec(*status, message.clone()),
-        ProviderError::TokenLimitExceeded { .. } => spec(
-            StatusCode::BAD_REQUEST,
-            error.to_string(),
-            "invalid_request_error",
-            "token_limit_exceeded",
-        ),
-        ProviderError::DeploymentError { .. } => spec(
-            StatusCode::NOT_FOUND,
-            error.to_string(),
-            "invalid_request_error",
-            "deployment_not_found",
-        ),
-        ProviderError::ResponseParsing { .. } | ProviderError::Streaming { .. } => spec(
-            StatusCode::BAD_GATEWAY,
-            error.to_string(),
-            "server_error",
-            "provider_response_error",
-        ),
-        ProviderError::RoutingError { .. } => spec(
-            StatusCode::SERVICE_UNAVAILABLE,
-            error.to_string(),
-            "server_error",
-            "provider_routing_error",
-        ),
-        ProviderError::Cancelled { .. } => spec(
-            StatusCode::BAD_REQUEST,
-            error.to_string(),
-            "server_error",
-            "cancelled",
-        ),
-        ProviderError::Other { .. } => spec(
-            StatusCode::BAD_GATEWAY,
-            error.to_string(),
-            "server_error",
-            "provider_error",
-        ),
-    }
-}
-
-fn api_error_spec(status: u16, message: String) -> OpenAiErrorSpec {
-    let status_code = StatusCode::from_u16(status).unwrap_or(StatusCode::BAD_GATEWAY);
-    let mut spec = match status {
-        400 => spec(
-            status_code,
-            message,
-            "invalid_request_error",
-            "invalid_request",
-        ),
-        401 => spec(
-            status_code,
-            message,
-            "authentication_error",
-            "authentication_error",
-        ),
-        403 => spec(
-            status_code,
-            message,
-            "permission_error",
-            "permission_denied",
-        ),
-        404 => spec(status_code, message, "invalid_request_error", "not_found"),
-        408 => spec(status_code, message, "server_error", "timeout"),
-        409 => spec(status_code, message, "invalid_request_error", "conflict"),
-        429 => spec(
-            status_code,
-            message,
-            "rate_limit_error",
-            "rate_limit_exceeded",
-        ),
-        500..=599 => spec(status_code, message, "server_error", "provider_api_error"),
-        _ => spec(status_code, message, "server_error", "provider_api_error"),
-    };
-
-    if let Some(upstream) = parse_upstream_error_detail(&spec.message) {
+    if let GatewayError::Provider(ProviderError::ApiError { .. }) = error
+        && let Some(upstream) = parse_upstream_error_detail(&spec.message)
+    {
         if let Some(message) = upstream.message {
             spec.message = message;
         }
@@ -395,6 +114,42 @@ fn api_error_spec(status: u16, message: String) -> OpenAiErrorSpec {
     spec
 }
 
+fn openai_error_message(error: &GatewayError) -> String {
+    match error {
+        GatewayError::Provider(ProviderError::ApiError { message, .. }) => message.clone(),
+        GatewayError::Provider(provider_error) => provider_error.to_string(),
+        _ => error.to_string(),
+    }
+}
+
+fn build_response(spec: OpenAiErrorSpec) -> HttpResponse {
+    HttpResponse::build(spec.status).json(response_body(
+        spec.message,
+        spec.error_type,
+        spec.param,
+        spec.code,
+        current_error_response_request_id(),
+    ))
+}
+
+fn response_body(
+    message: String,
+    error_type: String,
+    param: Option<String>,
+    code: Option<String>,
+    request_id: Option<String>,
+) -> OpenAiErrorResponse {
+    OpenAiErrorResponse {
+        error: OpenAiErrorDetail {
+            message,
+            error_type,
+            param,
+            code,
+            request_id,
+        },
+    }
+}
+
 fn parse_upstream_error_detail(message: &str) -> Option<UpstreamErrorDetail> {
     serde_json::from_str::<UpstreamErrorEnvelope>(message)
         .ok()
@@ -406,6 +161,17 @@ fn error_code_to_string(value: serde_json::Value) -> Option<String> {
         serde_json::Value::String(value) if !value.is_empty() => Some(value),
         serde_json::Value::Number(value) => Some(value.to_string()),
         _ => None,
+    }
+}
+
+fn spec_from_facts(facts: HttpErrorFacts, message: String) -> OpenAiErrorSpec {
+    OpenAiErrorSpec {
+        status: facts.status,
+        message,
+        error_type: facts.openai_error_type.to_string(),
+        param: None,
+        code: Some(facts.openai_code.to_string()),
+        headers: facts.headers,
     }
 }
 
@@ -421,12 +187,14 @@ fn spec(
         error_type: error_type.to_string(),
         param: None,
         code: Some(code.to_string()),
+        headers: HttpErrorHeaders::default(),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use actix_web::ResponseError;
     use actix_web::body::to_bytes;
     use serde_json::Value;
 
@@ -576,6 +344,36 @@ mod tests {
         assert_eq!(body["error"]["type"], "invalid_request_error");
         assert_eq!(body["error"]["param"], "messages");
         assert_eq!(body["error"]["code"], "context_length_exceeded");
+    }
+
+    #[test]
+    fn openai_adapter_and_response_error_share_http_status_mapping() {
+        let cases = vec![
+            GatewayError::Auth("bad token".to_string()),
+            GatewayError::Forbidden("denied".to_string()),
+            GatewayError::RateLimit {
+                message: "limited".to_string(),
+                retry_after: Some(10),
+                rpm_limit: Some(100),
+                tpm_limit: Some(1000),
+            },
+            GatewayError::Provider(ProviderError::cancelled(
+                "openai",
+                "chat",
+                Some("client disconnected".to_string()),
+            )),
+            GatewayError::Provider(ProviderError::api_error("openai", 418, "teapot")),
+            GatewayError::Provider(ProviderError::api_error("openai", 0, "invalid status")),
+            GatewayError::Provider(ProviderError::timeout("openai", "timeout")),
+        ];
+
+        for error in cases {
+            assert_eq!(
+                gateway_error_response(&error).status(),
+                error.error_response().status(),
+                "status mapping drifted for {error:?}"
+            );
+        }
     }
 
     async fn to_json(response: HttpResponse) -> Value {

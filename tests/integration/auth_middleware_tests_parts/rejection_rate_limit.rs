@@ -1,4 +1,128 @@
 use super::*;
+use serde_json::Value;
+
+#[tokio::test]
+async fn test_openai_missing_auth_uses_openai_error_shape() {
+    let state = build_test_state(true, true).await;
+
+    let app = test::init_service(
+        App::new()
+            .app_data(web::Data::new(state))
+            .wrap(AuthMiddleware)
+            .wrap(RequestIdMiddleware)
+            .configure(routes::ai::configure_routes),
+    )
+    .await;
+
+    let response = test::call_service(
+        &app,
+        test::TestRequest::post()
+            .uri("/v1/chat/completions")
+            .peer_addr("203.0.113.231:1000".parse().unwrap())
+            .insert_header(("x-request-id", "req-openai-auth-missing"))
+            .set_json(serde_json::json!({
+                "model": "gpt-4o",
+                "messages": []
+            }))
+            .to_request(),
+    )
+    .await;
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(
+        response
+            .headers()
+            .get("x-request-id")
+            .and_then(|value| value.to_str().ok()),
+        Some("req-openai-auth-missing")
+    );
+    let body: Value = test::read_body_json(response).await;
+    assert_eq!(body["error"]["type"], "authentication_error");
+    assert_eq!(body["error"]["code"], "authentication_error");
+    assert_eq!(body["error"]["request_id"], "req-openai-auth-missing");
+    assert!(body.get("success").is_none());
+}
+
+#[tokio::test]
+async fn test_openai_rate_limit_middleware_uses_openai_error_shape() {
+    let state = build_test_state_with_rate_limit(false, false, true, None).await;
+
+    let app = test::init_service(
+        App::new()
+            .app_data(web::Data::new(state))
+            .wrap(RateLimitMiddleware::new(1))
+            .wrap(RequestIdMiddleware)
+            .configure(routes::ai::configure_routes),
+    )
+    .await;
+
+    let first = test::TestRequest::post()
+        .uri("/v1/chat/completions")
+        .peer_addr("203.0.113.232:1000".parse().unwrap())
+        .set_json(serde_json::json!({
+            "model": "gpt-4o",
+            "messages": []
+        }))
+        .to_request();
+    let first_response = test::call_service(&app, first).await;
+    assert_ne!(first_response.status(), StatusCode::TOO_MANY_REQUESTS);
+
+    let second = test::TestRequest::post()
+        .uri("/v1/chat/completions")
+        .peer_addr("203.0.113.232:1001".parse().unwrap())
+        .insert_header(("x-request-id", "req-openai-rate-limit"))
+        .set_json(serde_json::json!({
+            "model": "gpt-4o",
+            "messages": []
+        }))
+        .to_request();
+    let second_response = test::call_service(&app, second).await;
+
+    assert_eq!(second_response.status(), StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(
+        second_response
+            .headers()
+            .get("x-request-id")
+            .and_then(|value| value.to_str().ok()),
+        Some("req-openai-rate-limit")
+    );
+    let body: Value = test::read_body_json(second_response).await;
+    assert_eq!(body["error"]["type"], "rate_limit_error");
+    assert_eq!(body["error"]["code"], "rate_limit_exceeded");
+    assert_eq!(body["error"]["request_id"], "req-openai-rate-limit");
+    assert!(body.get("success").is_none());
+}
+
+#[tokio::test]
+async fn test_legacy_openai_alias_json_errors_use_openai_shape() {
+    let state = build_test_state_with_rate_limit(false, false, true, None).await;
+
+    let app = test::init_service(
+        App::new()
+            .app_data(web::Data::new(state))
+            .wrap(RequestIdMiddleware)
+            .configure(routes::ai::configure_routes),
+    )
+    .await;
+
+    let response = test::call_service(
+        &app,
+        test::TestRequest::post()
+            .uri("/completions")
+            .insert_header(("x-request-id", "req-openai-legacy-json"))
+            .insert_header(("content-type", "application/json"))
+            .set_payload(r#"{"model":"gpt-4o","#)
+            .to_request(),
+    )
+    .await;
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let body: Value = test::read_body_json(response).await;
+    assert_eq!(body["error"]["type"], "invalid_request_error");
+    assert_eq!(body["error"]["code"], "invalid_request");
+    assert_eq!(body["error"]["request_id"], "req-openai-legacy-json");
+    assert!(body.get("success").is_none());
+}
 
 #[tokio::test]
 async fn test_auth_middleware_rejects_missing_auth() {

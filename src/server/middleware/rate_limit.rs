@@ -1,9 +1,11 @@
 //! Rate limiting middleware
 
+use super::helpers::middleware_gateway_error_response;
 use super::rate_limit_key_policy::effective_requests_per_minute;
 use crate::core::rate_limiter::{RateLimitReservation, get_global_rate_limiter};
 use crate::core::types::context::{RequestContext, SharedRequestContext};
 use crate::server::state::AppState;
+use crate::utils::error::gateway_error::GatewayError;
 use actix_web::body::EitherBody;
 use actix_web::dev::{Service, ServiceRequest, ServiceResponse, Transform, forward_ready};
 use actix_web::http::StatusCode;
@@ -247,7 +249,7 @@ pub(super) async fn reserve_rate_limit_for_auth_attempt(
     req: &ServiceRequest,
     requests_per_minute: u32,
     trusted_proxies: &[String],
-) -> Result<AuthRateLimitReservation, actix_web::Error> {
+) -> Result<AuthRateLimitReservation, RateLimitError> {
     let key = extract_client_key(req, trusted_proxies);
     let fallback_store = gateway_fallback_store();
 
@@ -280,10 +282,7 @@ pub(super) async fn reserve_rate_limit_for_auth_attempt(
                 rejection.source,
                 rejection.retry_after
             );
-            Err(actix_web::Error::from(RateLimitError {
-                retry_after: rejection.retry_after,
-                limit: rejection.limit,
-            }))
+            Err(RateLimitError::new(rejection.retry_after, rejection.limit))
         }
     }
 }
@@ -292,7 +291,7 @@ pub(super) async fn enforce_rate_limit_for_rejected_auth(
     req: &ServiceRequest,
     requests_per_minute: u32,
     trusted_proxies: &[String],
-) -> Result<(), actix_web::Error> {
+) -> Result<(), RateLimitError> {
     let key = extract_client_key(req, trusted_proxies);
     let fallback_store = gateway_fallback_store();
 
@@ -314,19 +313,31 @@ pub(super) async fn enforce_rate_limit_for_rejected_auth(
                 rejection.source,
                 rejection.retry_after
             );
-            Err(actix_web::Error::from(RateLimitError {
-                retry_after: rejection.retry_after,
-                limit: rejection.limit,
-            }))
+            Err(RateLimitError::new(rejection.retry_after, rejection.limit))
         }
     }
 }
 
 /// Lightweight in-process rate limit error for 429 responses
-#[derive(Debug)]
-struct RateLimitError {
+#[derive(Debug, Clone, Copy)]
+pub(super) struct RateLimitError {
     retry_after: u64,
     limit: u32,
+}
+
+impl RateLimitError {
+    fn new(retry_after: u64, limit: u32) -> Self {
+        Self { retry_after, limit }
+    }
+
+    pub(super) fn gateway_error(&self) -> GatewayError {
+        GatewayError::RateLimit {
+            message: "Rate limit exceeded. Please retry after the indicated seconds.".to_string(),
+            retry_after: Some(self.retry_after),
+            rpm_limit: Some(self.limit),
+            tpm_limit: None,
+        }
+    }
 }
 
 impl fmt::Display for RateLimitError {
@@ -516,13 +527,13 @@ where
                                 rejection.source,
                                 rejection.retry_after
                             );
-                            let err = RateLimitError {
-                                retry_after: rejection.retry_after,
-                                limit: rejection.limit,
-                            };
-                            return Ok(req
-                                .error_response(actix_web::Error::from(err))
-                                .map_into_right_body());
+                            let err = RateLimitError::new(rejection.retry_after, rejection.limit);
+                            let gateway_error = err.gateway_error();
+                            return Ok(middleware_gateway_error_response(
+                                req,
+                                actix_web::Error::from(err),
+                                gateway_error,
+                            ));
                         }
                     };
 

@@ -1,5 +1,6 @@
 //! Request ID middleware
 
+use crate::utils::error::gateway_error::{GatewayError, with_error_response_request_id};
 use actix_web::body::{BoxBody, MessageBody};
 use actix_web::dev::{Service, ServiceRequest, ServiceResponse, Transform, forward_ready};
 use actix_web::http::header::HeaderValue;
@@ -69,21 +70,31 @@ where
 
         let fut = self.service.call(req);
         Box::pin(async move {
-            let header_name = actix_web::http::header::HeaderName::from_static("x-request-id");
-            let header_value = HeaderValue::from_str(&request_id)
-                .unwrap_or_else(|_| HeaderValue::from_static("invalid"));
+            let scoped_request_id = request_id.clone();
+            with_error_response_request_id(scoped_request_id, async move {
+                let header_name = actix_web::http::header::HeaderName::from_static("x-request-id");
+                let header_value = HeaderValue::from_str(&request_id)
+                    .unwrap_or_else(|_| HeaderValue::from_static("invalid"));
 
-            match fut.await {
-                Ok(mut res) => {
-                    res.headers_mut().insert(header_name, header_value);
-                    Ok(res.map_into_boxed_body())
+                match fut.await {
+                    Ok(mut res) => {
+                        res.headers_mut().insert(header_name, header_value);
+                        Ok(res.map_into_boxed_body())
+                    }
+                    Err(err) => {
+                        let mut response = if let Some(gateway_error) =
+                            err.as_error::<GatewayError>()
+                        {
+                            gateway_error.error_response_with_request_id(Some(request_id.clone()))
+                        } else {
+                            err.error_response()
+                        };
+                        response.headers_mut().insert(header_name, header_value);
+                        Err(actix_web::error::InternalError::from_response(err, response).into())
+                    }
                 }
-                Err(err) => {
-                    let mut response = err.error_response();
-                    response.headers_mut().insert(header_name, header_value);
-                    Err(actix_web::error::InternalError::from_response(err, response).into())
-                }
-            }
+            })
+            .await
         })
     }
 }
@@ -92,6 +103,7 @@ where
 mod tests {
     use super::*;
     use actix_web::{App, HttpResponse, http::StatusCode, test, web};
+    use serde_json::Value;
 
     #[actix_web::test]
     async fn middleware_does_not_clone_request_before_routing() {
@@ -123,5 +135,35 @@ mod tests {
 
         assert_eq!(res.status(), StatusCode::INTERNAL_SERVER_ERROR);
         assert!(res.headers().contains_key("x-request-id"));
+    }
+
+    #[actix_web::test]
+    async fn middleware_adds_request_id_to_gateway_error_body() {
+        let app = test::init_service(App::new().wrap(RequestIdMiddleware).route(
+            "/error",
+            web::get().to(|| async {
+                Err::<HttpResponse, actix_web::Error>(
+                    GatewayError::BadRequest("bad request".to_string()).into(),
+                )
+            }),
+        ))
+        .await;
+
+        let req = test::TestRequest::get()
+            .uri("/error")
+            .insert_header(("x-request-id", "req-test-123"))
+            .to_request();
+        let res = test::call_service(&app, req).await;
+
+        assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            res.headers()
+                .get("x-request-id")
+                .and_then(|value| value.to_str().ok()),
+            Some("req-test-123")
+        );
+        let body = test::read_body(res).await;
+        let json: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["error"]["request_id"], "req-test-123");
     }
 }
