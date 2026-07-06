@@ -77,8 +77,6 @@ pub mod langgraph;
 // linkup: Tier 1 -> registry/catalog.rs
 // llamafile: Tier 1 -> registry/catalog.rs
 // lm_studio: Tier 1 -> registry/catalog.rs
-#[cfg(feature = "providers-extended")]
-pub mod manus;
 // maritalk: Tier 1 -> registry/catalog.rs
 #[cfg(feature = "providers-extra")]
 pub mod meta_llama;

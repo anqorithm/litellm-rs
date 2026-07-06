@@ -125,10 +125,6 @@ pub static PROVIDER_MODULE_LIFECYCLE: &[ProviderModuleLifecycleEntry] = &[
     ),
     internal("macros", "provider macro infrastructure"),
     stub(
-        "manus",
-        "specialized provider module; not wired through the LLM factory yet",
-    ),
-    stub(
         "meta_llama",
         "native Meta Llama module retained; ProviderType::MetaLlama currently uses a generic OpenAI-compatible adapter",
     ),
@@ -285,7 +281,6 @@ pub static PROVIDER_ORPHAN_BASELINE: &[ProviderOrphanBaselineEntry] = &[
         "embedding/rerank provider exposes LLMProvider",
     ),
     baseline("langgraph", "delete-native", "unwired native chat provider"),
-    baseline("manus", "delete-native", "unwired native chat provider"),
     baseline(
         "meta_llama",
         "demote-to-catalog",
