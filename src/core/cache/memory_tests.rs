@@ -262,6 +262,44 @@ async fn test_cache_ttl_eviction_prefers_expired_entry_outside_sample() {
 }
 
 #[tokio::test]
+async fn test_cache_stale_eviction_candidate_keeps_reinserted_metadata() {
+    let config = DualCacheConfig::default()
+        .with_max_size(2)
+        .with_eviction_policy(EvictionPolicy::LRU);
+    let cache: InMemoryCache<String> = InMemoryCache::new(config);
+    let key = CacheKey::new("stale-candidate");
+
+    cache.set(key.clone(), "old".to_string()).await;
+    let Some(old_entry) = cache.cache.get(&key).map(|entry| entry.clone()) else {
+        panic!("old entry should exist before stale candidate");
+    };
+    let Some((last_access_tick, access_count)) = cache
+        .access_shard(&key)
+        .get(&key)
+        .map(|meta| meta.snapshot())
+    else {
+        panic!("old metadata should exist");
+    };
+    let stale_candidate = EvictionCandidate {
+        key: key.clone(),
+        last_access_tick,
+        access_count,
+        created_at: old_entry.created_at,
+        remaining_ttl: old_entry.remaining_ttl(),
+    };
+
+    cache.cache.remove(&key);
+    cache.set(key.clone(), "new".to_string()).await;
+    cache.evict_candidate(stale_candidate, "LRU");
+
+    assert_eq!(cache.get(&key).await, Some("new".to_string()));
+    assert!(
+        cache.access_shard(&key).contains_key(&key),
+        "metadata for the reinserted generation must remain"
+    );
+}
+
+#[tokio::test]
 async fn test_cache_stats_hits_misses() {
     let cache: InMemoryCache<String> = InMemoryCache::with_defaults();
     let key = CacheKey::new("stats-key");

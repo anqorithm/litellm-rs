@@ -346,6 +346,17 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
         self.access_shard(key).remove(key);
     }
 
+    fn remove_access_meta_if_unchanged(
+        &self,
+        key: &CacheKey,
+        last_access_tick: u64,
+        access_count: u64,
+    ) {
+        self.access_shard(key).remove_if(key, |_key, meta| {
+            meta.snapshot() == (last_access_tick, access_count)
+        });
+    }
+
     fn eviction_candidates(&self) -> Vec<EvictionCandidate> {
         let target = self.cache.len().min(EVICTION_SAMPLE_SIZE);
         let mut candidates = Vec::with_capacity(target);
@@ -396,6 +407,45 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
         candidates
     }
 
+    fn expired_eviction_candidate(&self) -> Option<EvictionCandidate> {
+        let shard_count = self.access_meta.len();
+        let start = self.eviction_cursor.fetch_add(1, Ordering::Relaxed) % shard_count;
+
+        for offset in 0..shard_count {
+            let shard = &self.access_meta[(start + offset) % shard_count];
+            let mut stale_keys = Vec::new();
+            let keys_and_meta: Vec<_> = shard
+                .iter()
+                .take(EVICTION_SAMPLE_SIZE)
+                .map(|meta_ref| (meta_ref.key().clone(), meta_ref.value().snapshot()))
+                .collect();
+
+            for (key, (last_access_tick, access_count)) in keys_and_meta {
+                if let Some(entry) = self.cache.get(&key) {
+                    if entry.is_expired() {
+                        return Some(EvictionCandidate {
+                            key,
+                            last_access_tick,
+                            access_count,
+                            created_at: entry.created_at,
+                            remaining_ttl: entry.remaining_ttl(),
+                        });
+                    }
+                } else {
+                    stale_keys.push((key, last_access_tick, access_count));
+                }
+            }
+
+            for (key, last_access_tick, access_count) in stale_keys {
+                shard.remove_if(&key, |_key, meta| {
+                    meta.snapshot() == (last_access_tick, access_count)
+                });
+            }
+        }
+
+        None
+    }
+
     /// Evict one entry based on the eviction policy
     async fn evict_one(&self) {
         match self.config.eviction_policy {
@@ -432,7 +482,8 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
 
     /// Evict entry with shortest remaining TTL
     async fn evict_ttl(&self) {
-        if self.evict_expired_entry("TTL") {
+        if let Some(candidate) = self.expired_eviction_candidate() {
+            self.evict_candidate(candidate, "TTL");
             return;
         }
 
@@ -458,36 +509,20 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
         }
     }
 
-    fn evict_expired_entry(&self, policy: &'static str) -> bool {
-        let expired_key = self
-            .cache
-            .iter()
-            .find(|entry| entry.value().is_expired())
-            .map(|entry| entry.key().clone());
-
-        if let Some(key) = expired_key {
-            if let Some((_, removed)) = self.cache.remove_if(&key, |_key, entry| entry.is_expired())
-            {
-                self.remove_access_meta(&key);
-                self.stats.sub_total_size(removed.size_bytes);
-                self.stats.record_eviction();
-                self.stats.set_entry_count(self.cache.len());
-                trace!(key = %key, policy = policy, "Cache expired eviction");
-                return true;
-            }
-        }
-
-        false
-    }
-
     fn evict_candidate(&self, candidate: EvictionCandidate, policy: &'static str) {
-        if let Some((_, removed)) = self.cache.remove(&candidate.key) {
+        if let Some((_, removed)) = self.cache.remove_if(&candidate.key, |_key, entry| {
+            entry.created_at == candidate.created_at
+        }) {
             self.stats.sub_total_size(removed.size_bytes);
             self.stats.record_eviction();
             self.stats.set_entry_count(self.cache.len());
             trace!(key = %candidate.key, policy = policy, "Cache eviction");
         }
-        self.remove_access_meta(&candidate.key);
+        self.remove_access_meta_if_unchanged(
+            &candidate.key,
+            candidate.last_access_tick,
+            candidate.access_count,
+        );
     }
 
     /// Clean up expired entries
