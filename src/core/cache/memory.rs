@@ -8,8 +8,9 @@
 
 use super::types::{AtomicCacheStats, CacheEntry, CacheKey, DualCacheConfig, EvictionPolicy};
 use dashmap::DashMap;
-use std::sync::Arc;
+use std::collections::{HashSet, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 use tokio::sync::Notify;
 use tracing::{debug, trace};
@@ -66,6 +67,9 @@ pub struct InMemoryCache<T> {
     /// Sharded eviction metadata. Shard count defaults to available CPU
     /// parallelism rounded to a bounded power of two.
     access_meta: Arc<Vec<DashMap<CacheKey, CacheAccessMeta>>>,
+    /// Per-shard bounded candidate queues for sampled eviction. Duplicates are
+    /// allowed; candidates are validated against `access_meta` and `cache`.
+    access_queue: Arc<Vec<Mutex<VecDeque<CacheKey>>>>,
     /// Monotonic logical clock for access ordering.
     access_clock: AtomicU64,
     /// Rotates the first shard inspected by sampled eviction.
@@ -91,15 +95,19 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
         let cache = Arc::new(DashMap::with_capacity(config.max_size));
         let shutdown = Arc::new(AtomicBool::new(false));
         let shutdown_notify = Arc::new(Notify::new());
-        let access_meta = Arc::new(
-            (0..default_access_shard_count())
-                .map(|_| DashMap::new())
+        let access_shards = default_access_shard_count();
+        let access_meta: Arc<Vec<DashMap<CacheKey, CacheAccessMeta>>> =
+            Arc::new((0..access_shards).map(|_| DashMap::new()).collect());
+        let access_queue: Arc<Vec<Mutex<VecDeque<CacheKey>>>> = Arc::new(
+            (0..access_shards)
+                .map(|_| Mutex::new(VecDeque::new()))
                 .collect(),
         );
 
         Self {
             cache,
             access_meta,
+            access_queue,
             access_clock: AtomicU64::new(0),
             eviction_cursor: AtomicUsize::new(0),
             config,
@@ -274,6 +282,9 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
         for shard in self.access_meta.iter() {
             shard.clear();
         }
+        for queue in self.access_queue.iter() {
+            lock_queue(queue).clear();
+        }
         self.access_clock.store(0, Ordering::Relaxed);
         self.eviction_cursor.store(0, Ordering::Relaxed);
         self.stats.reset();
@@ -312,9 +323,17 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
         self.access_clock.fetch_add(1, Ordering::Relaxed) + 1
     }
 
+    fn access_shard_index(&self, key: &CacheKey) -> usize {
+        key.hash_value() as usize % self.access_meta.len()
+    }
+
     fn access_shard(&self, key: &CacheKey) -> &DashMap<CacheKey, CacheAccessMeta> {
-        let index = key.hash_value() as usize % self.access_meta.len();
-        &self.access_meta[index]
+        &self.access_meta[self.access_shard_index(key)]
+    }
+
+    fn enqueue_eviction_key(&self, key: &CacheKey) {
+        let index = self.access_shard_index(key);
+        lock_queue(&self.access_queue[index]).push_back(key.clone());
     }
 
     fn reset_access_meta_for_insert(&self, key: &CacheKey) {
@@ -326,20 +345,23 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
         } else {
             shard.insert(key.clone(), CacheAccessMeta::new(tick));
         }
+        self.enqueue_eviction_key(key);
     }
 
     fn record_access(&self, key: &CacheKey) -> u64 {
         let tick = self.next_access_tick();
         let shard = self.access_shard(key);
 
-        if let Some(meta) = shard.get(key) {
+        let count = if let Some(meta) = shard.get(key) {
             meta.record_access(tick)
         } else {
             let meta = CacheAccessMeta::new(tick);
             let count = meta.record_access(tick);
             shard.insert(key.clone(), meta);
             count
-        }
+        };
+        self.enqueue_eviction_key(key);
+        count
     }
 
     fn remove_access_meta(&self, key: &CacheKey) {
@@ -358,42 +380,56 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
     }
 
     fn eviction_candidates(&self) -> Vec<EvictionCandidate> {
-        let mut candidates = Vec::with_capacity(self.cache.len());
+        let target = self.cache.len().min(EVICTION_SAMPLE_SIZE);
+        let mut candidates = Vec::with_capacity(target);
         if self.cache.is_empty() {
             return candidates;
         }
 
         let shard_count = self.access_meta.len();
         let start = self.eviction_cursor.fetch_add(1, Ordering::Relaxed) % shard_count;
+        let mut seen = HashSet::with_capacity(target);
 
         for offset in 0..shard_count {
+            if candidates.len() >= target {
+                break;
+            }
+
+            let shard_index = (start + offset) % shard_count;
+            let sampled = self.sample_eviction_keys(shard_index, target - candidates.len());
+            if sampled.is_empty() {
+                continue;
+            }
             let shard = &self.access_meta[(start + offset) % shard_count];
-            let mut stale_keys = Vec::new();
 
-            let keys_and_meta: Vec<_> = shard
-                .iter()
-                .map(|meta_ref| (meta_ref.key().clone(), meta_ref.value().snapshot()))
-                .collect();
-
-            for (key, (last_access_tick, access_count)) in keys_and_meta {
-                if let Some(entry) = self.cache.get(&key) {
-                    candidates.push(EvictionCandidate {
-                        key,
-                        last_access_tick,
-                        access_count,
-                        created_at: entry.created_at,
-                        remaining_ttl: entry.remaining_ttl(),
-                    });
-                } else {
-                    stale_keys.push((key, last_access_tick, access_count));
+            let mut requeue = Vec::new();
+            for key in sampled {
+                if !seen.insert(key.clone()) {
+                    requeue.push(key);
+                    continue;
+                }
+                if let Some(meta) = shard.get(&key) {
+                    let (last_access_tick, access_count) = meta.snapshot();
+                    if let Some(entry) = self.cache.get(&key) {
+                        if candidates.len() < target {
+                            candidates.push(EvictionCandidate {
+                                key: key.clone(),
+                                last_access_tick,
+                                access_count,
+                                created_at: entry.created_at,
+                                remaining_ttl: entry.remaining_ttl(),
+                            });
+                        }
+                        requeue.push(key);
+                    } else {
+                        shard.remove_if(&key, |_key, meta| {
+                            meta.snapshot() == (last_access_tick, access_count)
+                        });
+                    }
                 }
             }
 
-            for (key, last_access_tick, access_count) in stale_keys {
-                shard.remove_if(&key, |_key, meta| {
-                    meta.snapshot() == (last_access_tick, access_count)
-                });
-            }
+            self.requeue_eviction_keys(shard_index, requeue);
         }
 
         candidates
@@ -402,39 +438,81 @@ impl<T: Clone + Send + Sync + 'static> InMemoryCache<T> {
     fn expired_eviction_candidate(&self) -> Option<EvictionCandidate> {
         let shard_count = self.access_meta.len();
         let start = self.eviction_cursor.fetch_add(1, Ordering::Relaxed) % shard_count;
+        let mut inspected = 0;
 
         for offset in 0..shard_count {
-            let shard = &self.access_meta[(start + offset) % shard_count];
-            let mut stale_keys = Vec::new();
-            let keys_and_meta: Vec<_> = shard
-                .iter()
-                .map(|meta_ref| (meta_ref.key().clone(), meta_ref.value().snapshot()))
-                .collect();
+            if inspected >= EVICTION_SAMPLE_SIZE {
+                break;
+            }
 
-            for (key, (last_access_tick, access_count)) in keys_and_meta {
-                if let Some(entry) = self.cache.get(&key) {
-                    if entry.is_expired() {
-                        return Some(EvictionCandidate {
-                            key,
-                            last_access_tick,
-                            access_count,
-                            created_at: entry.created_at,
-                            remaining_ttl: entry.remaining_ttl(),
+            let shard_index = (start + offset) % shard_count;
+            let sampled = self.sample_eviction_keys(shard_index, EVICTION_SAMPLE_SIZE - inspected);
+            inspected += sampled.len();
+            if sampled.is_empty() {
+                continue;
+            }
+
+            let shard = &self.access_meta[shard_index];
+            let mut requeue = Vec::new();
+            let mut expired = None;
+
+            for key in sampled {
+                if let Some(meta) = shard.get(&key) {
+                    let (last_access_tick, access_count) = meta.snapshot();
+                    if let Some(entry) = self.cache.get(&key) {
+                        if entry.is_expired() && expired.is_none() {
+                            expired = Some(EvictionCandidate {
+                                key: key.clone(),
+                                last_access_tick,
+                                access_count,
+                                created_at: entry.created_at,
+                                remaining_ttl: entry.remaining_ttl(),
+                            });
+                        }
+                        requeue.push(key);
+                    } else {
+                        shard.remove_if(&key, |_key, meta| {
+                            meta.snapshot() == (last_access_tick, access_count)
                         });
                     }
-                } else {
-                    stale_keys.push((key, last_access_tick, access_count));
                 }
             }
 
-            for (key, last_access_tick, access_count) in stale_keys {
-                shard.remove_if(&key, |_key, meta| {
-                    meta.snapshot() == (last_access_tick, access_count)
-                });
+            self.requeue_eviction_keys(shard_index, requeue);
+            if expired.is_some() {
+                return expired;
             }
         }
 
         None
+    }
+
+    fn sample_eviction_keys(&self, shard_index: usize, budget: usize) -> Vec<CacheKey> {
+        if budget == 0 {
+            return Vec::new();
+        }
+
+        let attempts = budget.saturating_mul(2).min(EVICTION_SAMPLE_SIZE);
+        let mut sampled = Vec::with_capacity(attempts);
+        let mut queue = lock_queue(&self.access_queue[shard_index]);
+        for _ in 0..attempts {
+            let Some(key) = queue.pop_front() else {
+                break;
+            };
+            sampled.push(key);
+        }
+        sampled
+    }
+
+    fn requeue_eviction_keys(&self, shard_index: usize, keys: Vec<CacheKey>) {
+        if keys.is_empty() {
+            return;
+        }
+
+        let mut queue = lock_queue(&self.access_queue[shard_index]);
+        for key in keys {
+            queue.push_back(key);
+        }
     }
 
     /// Evict one entry based on the eviction policy
@@ -570,6 +648,12 @@ fn default_access_shard_count() -> usize {
         .unwrap_or(MIN_ACCESS_SHARDS)
         .next_power_of_two()
         .clamp(MIN_ACCESS_SHARDS, MAX_ACCESS_SHARDS)
+}
+
+fn lock_queue(queue: &Mutex<VecDeque<CacheKey>>) -> MutexGuard<'_, VecDeque<CacheKey>> {
+    queue
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 impl<T> Drop for InMemoryCache<T> {
