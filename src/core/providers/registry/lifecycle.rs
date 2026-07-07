@@ -75,10 +75,6 @@ pub static PROVIDER_MODULE_LIFECYCLE: &[ProviderModuleLifecycleEntry] = &[
         "specialized provider module; not wired through the LLM factory yet",
     ),
     stub(
-        "deepl",
-        "specialized provider module; not wired through the LLM factory yet",
-    ),
-    stub(
         "elevenlabs",
         "specialized provider module; not wired through the LLM factory yet",
     ),
@@ -203,11 +199,6 @@ pub static PROVIDER_ORPHAN_BASELINE: &[ProviderOrphanBaselineEntry] = &[
         "deepgram",
         "non-llm-lane",
         "audio provider module without a gateway LLM factory path",
-    ),
-    baseline(
-        "deepl",
-        "delete-native",
-        "translation provider declares ChatCompletion and awaits GH837 disposition approval",
     ),
     baseline(
         "elevenlabs",
