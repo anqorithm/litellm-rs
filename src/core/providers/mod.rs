@@ -85,8 +85,6 @@ pub mod milvus;
 // minimax: Tier 1 -> registry/catalog.rs
 pub mod mistral;
 // moonshot: Tier 1 -> registry/catalog.rs
-#[cfg(feature = "providers-extended")]
-pub mod morph;
 // nanogpt: Tier 1 -> registry/catalog.rs
 // nebius: Tier 1 -> registry/catalog.rs
 #[cfg(feature = "providers-extended")]
