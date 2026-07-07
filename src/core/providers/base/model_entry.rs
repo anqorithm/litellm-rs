@@ -5,7 +5,7 @@
 //! `{model_id, display_name, max_context_length, max_output_length,
 //!   supports_tools, supports_multimodal, input_cost_per_million,
 //!   output_cost_per_million}`. The struct used to be copy-pasted into each
-//! provider's `model_info.rs` (nlp_cloud, predibase, ragflow). This module is
+//! provider's `model_info.rs` (nlp_cloud, predibase). This module is
 //! the shared definition.
 
 /// Static catalog entry describing one model supported by a provider.
