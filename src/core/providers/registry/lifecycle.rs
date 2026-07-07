@@ -190,10 +190,6 @@ pub static PROVIDER_MODULE_LIFECYCLE: &[ProviderModuleLifecycleEntry] = &[
     ),
     internal("thinking", "shared thinking/reasoning support"),
     stub(
-        "triton",
-        "specialized provider module; not wired through the LLM factory yet",
-    ),
-    stub(
         "v0",
         "native V0 module retained; ProviderType::V0 currently uses a generic OpenAI-compatible adapter",
     ),
@@ -319,7 +315,6 @@ pub static PROVIDER_ORPHAN_BASELINE: &[ProviderOrphanBaselineEntry] = &[
         "non-llm-lane",
         "search provider exposes LLMProvider",
     ),
-    baseline("triton", "delete-native", "unwired native chat provider"),
     baseline(
         "v0",
         "demote-to-catalog",
