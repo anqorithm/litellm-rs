@@ -105,8 +105,6 @@ pub mod openai_like;
 #[cfg(feature = "providers-extended")]
 pub mod pg_vector;
 // poe: Tier 1 -> registry/catalog.rs
-#[cfg(feature = "providers-extended")]
-pub mod predibase;
 // qwen: Tier 1 -> registry/catalog.rs
 #[cfg(feature = "providers-extended")]
 pub mod recraft;

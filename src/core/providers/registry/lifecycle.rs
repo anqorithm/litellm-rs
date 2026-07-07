@@ -152,10 +152,6 @@ pub static PROVIDER_MODULE_LIFECYCLE: &[ProviderModuleLifecycleEntry] = &[
         "vector-store provider module, outside LLM factory dispatch",
     ),
     stub(
-        "predibase",
-        "specialized provider module; not wired through the LLM factory yet",
-    ),
-    stub(
         "recraft",
         "specialized provider module; not wired through the LLM factory yet",
     ),
@@ -295,7 +291,6 @@ pub static PROVIDER_ORPHAN_BASELINE: &[ProviderOrphanBaselineEntry] = &[
         "non-llm-lane",
         "vector provider module without a gateway LLM factory path",
     ),
-    baseline("predibase", "delete-native", "unwired native chat provider"),
     baseline(
         "recraft",
         "non-llm-lane",
