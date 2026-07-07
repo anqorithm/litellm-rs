@@ -37,8 +37,6 @@ pub mod custom_api;
 #[cfg(feature = "providers-extended")]
 pub mod deepgram;
 // deepinfra: Tier 1 -> registry/catalog.rs
-#[cfg(feature = "providers-extended")]
-pub mod deepl;
 // deepseek: Tier 1 -> registry/catalog.rs
 // docker_model_runner: Tier 1 -> registry/catalog.rs
 #[cfg(feature = "providers-extended")]

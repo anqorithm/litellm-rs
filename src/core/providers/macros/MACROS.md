@@ -7,7 +7,7 @@ provider registry/catalog wiring plus normal Rust modules.
 ## Active In-Tree Macros
 
 - `define_http_provider_with_hooks!`
-  - Used by `custom_api` and `deepl`.
+  - Used by `custom_api`.
   - Keep until those providers are converted to explicit modules.
 - `define_pooled_http_provider_with_hooks!`
   - Used by `ai21` and `amazon_nova`.
