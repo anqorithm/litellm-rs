@@ -34,9 +34,6 @@ pub mod cohere;
 #[cfg(feature = "providers-extended")]
 pub mod custom_api;
 // dashscope: Tier 1 -> registry/catalog.rs
-#[cfg(feature = "providers-extended")]
-pub mod datarobot;
-#[cfg(feature = "providers-extended")]
 pub mod deepgram;
 // deepinfra: Tier 1 -> registry/catalog.rs
 #[cfg(feature = "providers-extended")]

@@ -97,7 +97,6 @@ impl BaseConfig {
             "replicate" => "https://api.replicate.com/v1",
             "huggingface" => "https://api-inference.huggingface.co",
             "cohere" => "https://api.cohere.ai/v1",
-            "datarobot" => "https://app.datarobot.com/api/v2",
             "exa_ai" => "https://api.exa.ai/v1",
             "deepl" => "https://api-free.deepl.com/v2",
             "fal_ai" => "https://fal.run",
