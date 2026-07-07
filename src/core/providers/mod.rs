@@ -115,8 +115,6 @@ pub mod searxng;
 #[cfg(feature = "providers-extended")]
 pub mod snowflake;
 #[cfg(feature = "providers-extended")]
-pub mod spark;
-#[cfg(feature = "providers-extended")]
 pub mod stability;
 #[cfg(feature = "providers-extended")]
 pub mod tavily;

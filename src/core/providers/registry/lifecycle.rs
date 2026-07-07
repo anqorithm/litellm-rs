@@ -165,10 +165,6 @@ pub static PROVIDER_MODULE_LIFECYCLE: &[ProviderModuleLifecycleEntry] = &[
         "specialized provider module; not wired through the LLM factory yet",
     ),
     stub(
-        "spark",
-        "specialized provider module used for model metadata but not wired through the LLM factory",
-    ),
-    stub(
         "stability",
         "specialized provider module; not wired through the LLM factory yet",
     ),
@@ -281,7 +277,6 @@ pub static PROVIDER_ORPHAN_BASELINE: &[ProviderOrphanBaselineEntry] = &[
         "search provider exposes LLMProvider",
     ),
     baseline("snowflake", "delete-native", "unwired native chat provider"),
-    baseline("spark", "delete-native", "unwired native chat provider"),
     baseline(
         "stability",
         "non-llm-lane",
