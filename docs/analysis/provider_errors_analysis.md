@@ -3,6 +3,8 @@
 **Date**: 2026-01-15
 **Analyzed by**: Codex & Claude Code
 **Scope**: `src/core/providers/*/error_mapper.rs` and `src/core/providers/*/provider.rs`
+**Status**: Historical scan snapshot. Provider lists in this document are not
+the current source of truth after GH837 provider-disposition cleanup.
 
 ## Executive Summary
 
@@ -568,9 +570,9 @@ src/core/providers/yi/error_mapper.rs
 
 ---
 
-## Appendix B: Providers Without error_mapper.rs
+## Appendix B: Historical Providers Without error_mapper.rs
 
-Total: 102 providers
+Historical total on 2026-01-15: 102 providers
 
 ```
 ai21, amazon_nova, anthropic, azure, azure_ai, baichuan, base, baseten,

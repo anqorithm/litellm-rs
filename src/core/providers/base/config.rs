@@ -422,18 +422,18 @@ macro_rules! define_provider_config {
 ///
 /// # Example
 /// ```ignore
-/// define_standalone_provider_config!(MorphConfig,
-///     provider: "morph",
-///     env_prefix: "MORPH",
-///     default_base_url: "https://api.morph.so/v1",
+/// define_standalone_provider_config!(ExampleConfig,
+///     provider: "example",
+///     env_prefix: "EXAMPLE",
+///     default_base_url: "https://api.example.com/v1",
 ///     default_timeout: 60,
 /// );
 ///
 /// // With extra fields:
-/// define_standalone_provider_config!(BasetenConfig,
-///     provider: "baseten",
-///     env_prefix: "BASETEN",
-///     default_base_url: "https://inference.baseten.co/v1",
+/// define_standalone_provider_config!(ExampleDeploymentConfig,
+///     provider: "example_deployment",
+///     env_prefix: "EXAMPLE_DEPLOYMENT",
+///     default_base_url: "https://deployments.example.com/v1",
 ///     default_timeout: 30,
 ///     extra_fields: { debug: bool = false },
 /// );
