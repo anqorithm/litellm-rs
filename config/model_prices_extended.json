@@ -19513,11 +19513,6 @@
     "supports_system_messages": true,
     "supports_vision": true
   },
-  "google_pse/search": {
-    "input_cost_per_query": 0.005,
-    "litellm_provider": "google_pse",
-    "mode": "search"
-  },
   "global.anthropic.claude-sonnet-4-5-20250929-v1:0": {
     "cache_creation_input_token_cost": 3.75e-06,
     "cache_creation_input_token_cost_above_1hr": 6e-06,

@@ -104,10 +104,6 @@ pub static PROVIDER_MODULE_LIFECYCLE: &[ProviderModuleLifecycleEntry] = &[
         "ProviderType::GitHubCopilot dispatches to native GitHub Copilot auth when providers-extended is enabled",
     ),
     stub(
-        "google_pse",
-        "specialized provider module; not wired through the LLM factory yet",
-    ),
-    stub(
         "gradient_ai",
         "specialized provider module; not wired through the LLM factory yet",
     ),
@@ -239,11 +235,6 @@ pub static PROVIDER_ORPHAN_BASELINE: &[ProviderOrphanBaselineEntry] = &[
         "github",
         "demote-to-catalog",
         "catalog-backed duplicate with native provider retained until demote tranche",
-    ),
-    baseline(
-        "google_pse",
-        "delete-native",
-        "search provider declares ChatCompletion and awaits GH837 disposition approval",
     ),
     baseline(
         "gradient_ai",
