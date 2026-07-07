@@ -25,6 +25,7 @@ use bytes::Bytes;
 use futures::StreamExt;
 use serde_json::json;
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
 use tracing::{error, info, warn};
@@ -61,20 +62,22 @@ pub(crate) async fn handle_streaming_response(
     chat_request.stream_options = Some(StreamOptions {
         include_usage: Some(true),
     });
-    let request_for_budget = chat_request.clone();
+    let chat_request = Arc::new(chat_request);
     let model_name = chat_request.model.clone();
     let resp_id = format!("resp_{}", uuid_v4_hex());
     let created_at = current_unix_ts();
 
-    let core_request = match build_core_chat_request(chat_request, model_name.clone(), true) {
-        Ok(r) => r,
-        Err(e) => {
-            return Ok(openai_errors::gateway_error_response(&e));
-        }
-    };
+    let core_request =
+        match build_core_chat_request(chat_request.as_ref(), model_name.clone(), true) {
+            Ok(r) => r,
+            Err(e) => {
+                return Ok(openai_errors::gateway_error_response(&e));
+            }
+        };
 
     let requested_model = core_request.model.clone();
-    let context_clone = std::sync::Arc::clone(&context);
+    let context_clone = Arc::clone(&context);
+    let request_for_execution = Arc::clone(&chat_request);
     let budgeted = state.budgeted.clone();
     let pricing_service = budgeted.pricing();
     let pricing_config = state.config().gateway.pricing.clone();
@@ -88,11 +91,11 @@ pub(crate) async fn handle_streaming_response(
         ProviderCapability::ChatCompletionStream,
         move |provider, selected_model, _selected_deployment_id| {
             let core_request = core_request.clone();
-            let ctx = std::sync::Arc::clone(&context_clone);
+            let ctx = Arc::clone(&context_clone);
+            let original_request = Arc::clone(&request_for_execution);
             let budgeted = budgeted.clone();
             let pricing_service = pricing_service.clone();
             let pricing_config = pricing_config.clone();
-            let request_for_budget = request_for_budget.clone();
             async move {
                 let provider_name = provider.name().to_string();
                 let (pricing_provider, pricing_model) = spend::pricing_identity_for_provider(
@@ -100,14 +103,15 @@ pub(crate) async fn handle_streaming_response(
                     &provider,
                     &selected_model,
                 );
-                let (req, request_for_budget) =
-                    super::token_policy::prepare_chat_request_for_provider(
-                        ctx.api_key_max_tokens_per_request(),
-                        &provider_name,
-                        &selected_model,
-                        core_request.clone(),
-                        request_for_budget,
-                    )?;
+                let req = super::token_policy::prepare_chat_request_for_provider(
+                    ctx.api_key_max_tokens_per_request(),
+                    &provider_name,
+                    &selected_model,
+                    core_request.clone(),
+                )?;
+                let request_for_budget =
+                    spend::ChatCompletionBudgetRequest::from(original_request.as_ref())
+                        .with_output_limits(req.max_tokens, req.max_completion_tokens);
                 let provider_context = ctx.as_ref().clone();
                 let reserve_pricing_service = pricing_service.clone();
                 let reserve_pricing_config = pricing_config.clone();
@@ -130,7 +134,7 @@ pub(crate) async fn handle_streaming_response(
                                 budget.model(),
                                 &reserve_pricing_provider,
                                 &reserve_pricing_model,
-                                &request_for_budget,
+                                request_for_budget,
                             )
                         },
                         || provider.chat_completion_stream(req, provider_context),

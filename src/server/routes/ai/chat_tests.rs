@@ -291,7 +291,7 @@ fn test_build_core_chat_request_minimal() {
         ..Default::default()
     };
 
-    let core_request = build_core_chat_request(request, "gpt-4".to_string(), false).unwrap();
+    let core_request = build_core_chat_request(&request, "gpt-4".to_string(), false).unwrap();
     assert_eq!(core_request.model, "gpt-4");
     assert_eq!(core_request.messages.len(), 1);
 }
@@ -363,7 +363,7 @@ fn test_build_core_chat_request_preserves_transport_fields() {
         ..Default::default()
     };
 
-    let core_request = build_core_chat_request(request, "gpt-4".to_string(), false).unwrap();
+    let core_request = build_core_chat_request(&request, "gpt-4".to_string(), false).unwrap();
     assert_eq!(core_request.parallel_tool_calls, Some(false));
     assert_eq!(core_request.seed, Some(123));
     assert_eq!(
@@ -440,6 +440,51 @@ fn test_build_core_chat_request_preserves_transport_fields() {
 }
 
 #[test]
+fn test_build_core_chat_request_usage_override_does_not_mutate_original() {
+    let request = ChatCompletionRequest {
+        model: "gpt-4".to_string(),
+        messages: vec![ChatMessage {
+            role: MessageRole::User,
+            content: Some(MessageContent::Text("Hello".to_string())),
+            name: None,
+            function_call: None,
+            tool_calls: None,
+            tool_call_id: None,
+            audio: None,
+        }],
+        stream_options: Some(crate::core::models::openai::StreamOptions {
+            include_usage: Some(false),
+        }),
+        ..Default::default()
+    };
+
+    let core_request = match build_core_chat_request_with_stream_usage(
+        &request,
+        "gpt-4".to_string(),
+        true,
+        Some(true),
+    ) {
+        Ok(core_request) => core_request,
+        Err(error) => panic!("valid stream request should build: {error}"),
+    };
+
+    assert_eq!(
+        core_request
+            .stream_options
+            .as_ref()
+            .and_then(|options| options.include_usage),
+        Some(true)
+    );
+    assert_eq!(
+        request
+            .stream_options
+            .as_ref()
+            .and_then(|options| options.include_usage),
+        Some(false)
+    );
+}
+
+#[test]
 fn test_build_core_chat_request_rejects_seed_overflow() {
     let request = ChatCompletionRequest {
         model: "gpt-4".to_string(),
@@ -456,6 +501,6 @@ fn test_build_core_chat_request_rejects_seed_overflow() {
         ..Default::default()
     };
 
-    let err = build_core_chat_request(request, "gpt-4".to_string(), false).unwrap_err();
+    let err = build_core_chat_request(&request, "gpt-4".to_string(), false).unwrap_err();
     assert!(format!("{err}").contains("seed"));
 }

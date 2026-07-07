@@ -22,15 +22,16 @@ use crate::core::types::responses::Usage;
 #[cfg(test)]
 use std::sync::LazyLock;
 
+pub(super) use completion::{
+    ChatCompletionBudgetRequest, estimate_chat_prompt_tokens,
+    reserve_chat_completion_budget_with_split_pricing,
+};
 #[cfg(test)]
 pub(super) use completion::{
     IMAGE_HIGH_DETAIL_PROMPT_TOKENS, catalog_max_output_tokens,
     provider_effective_max_output_tokens, reserve_chat_completion_budget,
     reserve_completion_budget, reserve_completion_budget_with_policy,
     reserve_completion_budget_with_pricing,
-};
-pub(super) use completion::{
-    estimate_chat_prompt_tokens, reserve_chat_completion_budget_with_split_pricing,
 };
 pub(in crate::server::routes::ai) use key_budget::{
     reserve_api_key_budget, reserve_api_key_budget_for_reservation,

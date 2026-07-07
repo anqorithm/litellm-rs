@@ -19,6 +19,7 @@ use crate::utils::data::validation::RequestValidator;
 use crate::utils::error::gateway_error::GatewayError;
 use actix_web::{HttpRequest, HttpResponse, Result as ActixResult, web};
 use serde_json::json;
+use std::sync::Arc;
 use tracing::{error, info, warn};
 
 use super::budgeted::{ApiKeyBudgetPolicy, run_unary};
@@ -65,21 +66,12 @@ pub async fn chat_completions(
         return Ok(openai_errors::gateway_error_response(&error));
     }
 
+    let request = Arc::new(request.into_inner());
+
     if request.stream.unwrap_or(false) {
-        chat_streaming::handle_streaming_chat_completion(
-            state.get_ref(),
-            request.into_inner(),
-            context,
-        )
-        .await
+        chat_streaming::handle_streaming_chat_completion(state.get_ref(), request, context).await
     } else {
-        match handle_chat_completion_with_shared_state(
-            state.get_ref(),
-            request.into_inner(),
-            context,
-        )
-        .await
-        {
+        match handle_chat_completion_with_shared_state(state.get_ref(), request, context).await {
             Ok(response) => Ok(HttpResponse::Ok().json(response)),
             Err(e) => {
                 error!("Chat completion error: {}", e);
@@ -95,12 +87,12 @@ pub async fn handle_chat_completion_with_state(
     request: ChatCompletionRequest,
     context: RequestContext,
 ) -> Result<ChatCompletionResponse, GatewayError> {
-    handle_chat_completion_with_shared_state(state, request, std::sync::Arc::new(context)).await
+    handle_chat_completion_with_shared_state(state, Arc::new(request), Arc::new(context)).await
 }
 
 pub async fn handle_chat_completion_with_shared_state(
     state: &AppState,
-    request: ChatCompletionRequest,
+    request: Arc<ChatCompletionRequest>,
     context: SharedRequestContext,
 ) -> Result<ChatCompletionResponse, GatewayError> {
     handle_chat_completion_internal(state, request, context).await
@@ -108,22 +100,21 @@ pub async fn handle_chat_completion_with_shared_state(
 
 async fn handle_chat_completion_internal(
     state: &AppState,
-    request: ChatCompletionRequest,
+    request: Arc<ChatCompletionRequest>,
     context: SharedRequestContext,
 ) -> Result<ChatCompletionResponse, GatewayError> {
     let unified_router = &state.unified_router;
     let requested_model = request.model.clone();
-    let request_for_budget = request.clone();
-    let request_for_cache = request.clone();
-    let core_request = build_core_chat_request(request, requested_model, false)?;
+    let core_request = build_core_chat_request(request.as_ref(), requested_model, false)?;
     if let Some(cached) =
-        super::response_cache::lookup_chat(state, &request_for_cache, context.as_ref()).await?
+        super::response_cache::lookup_chat(state, request.as_ref(), context.as_ref()).await?
     {
-        super::response_cache::ensure_chat_cache_pricing_gate(state, &request_for_cache)?;
+        super::response_cache::ensure_chat_cache_pricing_gate(state, request.as_ref())?;
         return Ok(cached);
     }
     let requested_model = core_request.model.clone();
-    let context_for_execution = std::sync::Arc::clone(&context);
+    let context_for_execution = Arc::clone(&context);
+    let request_for_execution = Arc::clone(&request);
 
     // Owned handles captured into the (retryable) execution closure so that the
     // successful attempt records budget spend and per-key usage.
@@ -140,11 +131,11 @@ async fn handle_chat_completion_internal(
         ProviderCapability::ChatCompletion,
         move |provider, selected_model, _deployment_id| {
             let core_request = core_request.clone();
-            let context = std::sync::Arc::clone(&context_for_execution);
+            let context = Arc::clone(&context_for_execution);
+            let original_request = Arc::clone(&request_for_execution);
             let pricing_service = pricing_service.clone();
             let key_manager = key_manager.clone();
             let budgeted = budgeted.clone();
-            let request_for_budget = request_for_budget.clone();
             let pricing_config = pricing_config.clone();
             async move {
                 let provider_name = provider.name().to_string();
@@ -153,14 +144,18 @@ async fn handle_chat_completion_internal(
                     &provider,
                     &selected_model,
                 );
-                let (request_for_provider, request_for_budget) =
-                    super::token_policy::prepare_chat_request_for_provider(
-                        context.api_key_max_tokens_per_request(),
-                        &provider_name,
-                        &selected_model,
-                        core_request.clone(),
-                        request_for_budget,
-                    )?;
+                let request_for_provider = super::token_policy::prepare_chat_request_for_provider(
+                    context.api_key_max_tokens_per_request(),
+                    &provider_name,
+                    &selected_model,
+                    core_request.clone(),
+                )?;
+                let request_for_budget =
+                    super::spend::ChatCompletionBudgetRequest::from(original_request.as_ref())
+                        .with_output_limits(
+                            request_for_provider.max_tokens,
+                            request_for_provider.max_completion_tokens,
+                        );
                 let provider_context = context.as_ref().clone();
                 let reserve_pricing_service = pricing_service.clone();
                 let settle_pricing_service = pricing_service.clone();
@@ -188,7 +183,7 @@ async fn handle_chat_completion_internal(
                                 budget.model(),
                                 &reserve_pricing_provider,
                                 &reserve_pricing_model,
-                                &request_for_budget,
+                                request_for_budget,
                             )
                         },
                         || provider.chat_completion(request_for_provider, provider_context),
@@ -228,23 +223,31 @@ async fn handle_chat_completion_internal(
     .await?;
 
     let response = convert_core_chat_response(core_response);
-    super::response_cache::store_chat(state, &request_for_cache, &response, context.as_ref())
-        .await?;
+    super::response_cache::store_chat(state, request.as_ref(), &response, context.as_ref()).await?;
     Ok(response)
 }
 
 pub(crate) fn build_core_chat_request(
-    request: ChatCompletionRequest,
+    request: &ChatCompletionRequest,
     model: String,
     stream: bool,
+) -> Result<CoreChatRequest, GatewayError> {
+    build_core_chat_request_with_stream_usage(request, model, stream, None)
+}
+
+pub(crate) fn build_core_chat_request_with_stream_usage(
+    request: &ChatCompletionRequest,
+    model: String,
+    stream: bool,
+    include_usage_override: Option<bool>,
 ) -> Result<CoreChatRequest, GatewayError> {
     // This is the OpenAI transport DTO -> internal provider request boundary.
     // Keep field forwarding explicit so new OpenAI-compatible parameters cannot
     // disappear silently while routing through the canonical ChatRequest tree.
-    let tools = match request.tools {
+    let tools = match request.tools.as_ref() {
         Some(tools) => {
             let mut converted = Vec::with_capacity(tools.len());
-            for tool in tools {
+            for tool in tools.iter().cloned() {
                 converted.push(convert_tool(tool)?);
             }
             Some(converted)
@@ -252,9 +255,9 @@ pub(crate) fn build_core_chat_request(
         None => None,
     };
 
-    let tool_choice = request.tool_choice.map(convert_tool_choice);
+    let tool_choice = request.tool_choice.clone().map(convert_tool_choice);
 
-    let functions = match request.functions {
+    let functions = match request.functions.as_ref() {
         Some(funcs) => {
             let mut values = Vec::with_capacity(funcs.len());
             for function in funcs {
@@ -267,20 +270,22 @@ pub(crate) fn build_core_chat_request(
         None => None,
     };
 
-    let function_call = match request.function_call {
+    let function_call = match request.function_call.as_ref() {
         Some(call) => Some(serde_json::to_value(call).map_err(|e| {
             GatewayError::internal(format!("Failed to serialize function call: {}", e))
         })?),
         None => None,
     };
 
-    let response_format = request
-        .response_format
-        .map(|format| types::tools::ResponseFormat {
-            format_type: format.format_type,
-            json_schema: format.json_schema,
-            response_type: format.response_type,
-        });
+    let response_format =
+        request
+            .response_format
+            .as_ref()
+            .map(|format| types::tools::ResponseFormat {
+                format_type: format.format_type.clone(),
+                json_schema: format.json_schema.clone(),
+                response_type: format.response_type.clone(),
+            });
 
     let seed = request
         .seed
@@ -295,58 +300,65 @@ pub(crate) fn build_core_chat_request(
         })
         .transpose()?;
 
-    let mut extra_params = request.extra_body;
-    if let Some(modalities) = request.modalities {
+    let mut extra_params = request.extra_body.clone();
+    if let Some(modalities) = request.modalities.as_ref() {
         extra_params.insert("modalities".to_string(), json!(modalities));
     }
-    if let Some(audio) = request.audio {
+    if let Some(audio) = request.audio.as_ref() {
         extra_params.insert("audio".to_string(), json!(audio));
     }
-    if let Some(prediction) = request.prediction {
-        extra_params.insert("prediction".to_string(), prediction);
+    if let Some(prediction) = request.prediction.as_ref() {
+        extra_params.insert("prediction".to_string(), prediction.clone());
     }
-    if let Some(safety_settings) = request.safety_settings {
-        extra_params.insert("safety_settings".to_string(), safety_settings);
+    if let Some(safety_settings) = request.safety_settings.as_ref() {
+        extra_params.insert("safety_settings".to_string(), safety_settings.clone());
     }
-    if let Some(cache_control) = request.cache_control {
-        extra_params.insert("cache_control".to_string(), cache_control);
+    if let Some(cache_control) = request.cache_control.as_ref() {
+        extra_params.insert("cache_control".to_string(), cache_control.clone());
     }
 
-    let stream_options = request
-        .stream_options
-        .map(|so| crate::core::types::chat::StreamOptions {
-            include_usage: so.include_usage,
-        });
+    let stream_options = match (request.stream_options.as_ref(), include_usage_override) {
+        (Some(_), Some(include_usage)) => Some(crate::core::types::chat::StreamOptions {
+            include_usage: Some(include_usage),
+        }),
+        (None, Some(include_usage)) => Some(crate::core::types::chat::StreamOptions {
+            include_usage: Some(include_usage),
+        }),
+        (Some(options), None) => Some(crate::core::types::chat::StreamOptions {
+            include_usage: options.include_usage,
+        }),
+        (None, None) => None,
+    };
 
     Ok(CoreChatRequest {
         model,
-        messages: request.messages.into_iter().map(Into::into).collect(),
+        messages: request.messages.iter().cloned().map(Into::into).collect(),
         temperature: request.temperature,
         max_tokens: request.max_tokens,
         max_completion_tokens: request.max_completion_tokens,
         top_p: request.top_p,
         frequency_penalty: request.frequency_penalty,
         presence_penalty: request.presence_penalty,
-        stop: request.stop,
+        stop: request.stop.clone(),
         stream,
         stream_options,
         tools,
         tool_choice,
         parallel_tool_calls: request.parallel_tool_calls,
         response_format,
-        user: request.user,
+        user: request.user.clone(),
         seed,
         n: request.n,
-        logit_bias: request.logit_bias,
+        logit_bias: request.logit_bias.clone(),
         functions,
         function_call,
         logprobs: request.logprobs,
         top_logprobs: request.top_logprobs,
         thinking: None,
-        reasoning_effort: request.reasoning_effort,
+        reasoning_effort: request.reasoning_effort.clone(),
         store: request.store,
-        metadata: request.metadata,
-        service_tier: request.service_tier,
+        metadata: request.metadata.clone(),
+        service_tier: request.service_tier.clone(),
         extra_params,
     })
 }
