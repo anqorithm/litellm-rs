@@ -71,10 +71,6 @@ pub static PROVIDER_MODULE_LIFECYCLE: &[ProviderModuleLifecycleEntry] = &[
         "specialized provider module; not wired through the LLM factory yet",
     ),
     stub(
-        "datarobot",
-        "specialized provider module; not wired through the LLM factory yet",
-    ),
-    stub(
         "deepgram",
         "specialized provider module; not wired through the LLM factory yet",
     ),
@@ -202,11 +198,6 @@ pub static PROVIDER_ORPHAN_BASELINE: &[ProviderOrphanBaselineEntry] = &[
         "custom_api",
         "exempt",
         "macro-generated custom provider needs explicit product/architecture decision",
-    ),
-    baseline(
-        "datarobot",
-        "delete-native",
-        "macro-generated chat provider awaiting GH837 disposition approval",
     ),
     baseline(
         "deepgram",
