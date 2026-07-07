@@ -109,8 +109,6 @@ pub mod pg_vector;
 pub mod predibase;
 // qwen: Tier 1 -> registry/catalog.rs
 #[cfg(feature = "providers-extended")]
-pub mod ragflow;
-#[cfg(feature = "providers-extended")]
 pub mod recraft;
 #[cfg(feature = "providers-extended")]
 pub mod replicate;
