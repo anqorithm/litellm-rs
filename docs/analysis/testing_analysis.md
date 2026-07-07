@@ -3,6 +3,9 @@
 **Analysis Date:** 2026-01-15
 **Tool Used:** OpenAI Codex CLI + Manual Review
 **Codebase:** litellm-rs (Rust AI Gateway)
+**Status:** Historical scan snapshot. Provider examples and file paths in this
+document are not the current source of truth after GH837 provider-disposition
+cleanup.
 
 ## Executive Summary
 
