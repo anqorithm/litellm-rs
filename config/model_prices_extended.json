@@ -22455,6 +22455,208 @@
     "supports_system_messages": true,
     "supports_tool_choice": true
   },
+  "gradient_ai/alibaba-qwen3-32b": {
+    "litellm_provider": "gradient_ai",
+    "max_tokens": 40960,
+    "mode": "chat",
+    "supported_endpoints": [
+      "/v1/chat/completions"
+    ],
+    "supported_modalities": [
+      "text"
+    ],
+    "supports_tool_choice": false,
+    "max_input_tokens": 131072,
+    "max_output_tokens": 40960
+  },
+  "gradient_ai/anthropic-claude-3-opus": {
+    "input_cost_per_token": 1.5e-05,
+    "litellm_provider": "gradient_ai",
+    "max_tokens": 1024,
+    "mode": "chat",
+    "output_cost_per_token": 7.5e-05,
+    "supported_endpoints": [
+      "/v1/chat/completions"
+    ],
+    "supported_modalities": [
+      "text"
+    ],
+    "supports_tool_choice": false,
+    "max_input_tokens": 200000,
+    "max_output_tokens": 1024
+  },
+  "gradient_ai/anthropic-claude-3.5-haiku": {
+    "input_cost_per_token": 8e-07,
+    "litellm_provider": "gradient_ai",
+    "max_tokens": 1024,
+    "mode": "chat",
+    "output_cost_per_token": 4e-06,
+    "supported_endpoints": [
+      "/v1/chat/completions"
+    ],
+    "supported_modalities": [
+      "text"
+    ],
+    "supports_tool_choice": false,
+    "max_input_tokens": 200000,
+    "max_output_tokens": 1024
+  },
+  "gradient_ai/anthropic-claude-3.5-sonnet": {
+    "input_cost_per_token": 3e-06,
+    "litellm_provider": "gradient_ai",
+    "max_tokens": 1024,
+    "mode": "chat",
+    "output_cost_per_token": 1.5e-05,
+    "supported_endpoints": [
+      "/v1/chat/completions"
+    ],
+    "supported_modalities": [
+      "text"
+    ],
+    "supports_tool_choice": false,
+    "max_input_tokens": 200000,
+    "max_output_tokens": 1024
+  },
+  "gradient_ai/anthropic-claude-3.7-sonnet": {
+    "input_cost_per_token": 3e-06,
+    "litellm_provider": "gradient_ai",
+    "max_tokens": 1024,
+    "mode": "chat",
+    "output_cost_per_token": 1.5e-05,
+    "supported_endpoints": [
+      "/v1/chat/completions"
+    ],
+    "supported_modalities": [
+      "text"
+    ],
+    "supports_tool_choice": false,
+    "max_input_tokens": 200000,
+    "max_output_tokens": 1024
+  },
+  "gradient_ai/deepseek-r1-distill-llama-70b": {
+    "input_cost_per_token": 9.9e-07,
+    "litellm_provider": "gradient_ai",
+    "max_tokens": 8000,
+    "mode": "chat",
+    "output_cost_per_token": 9.9e-07,
+    "supported_endpoints": [
+      "/v1/chat/completions"
+    ],
+    "supported_modalities": [
+      "text"
+    ],
+    "supports_tool_choice": false,
+    "max_input_tokens": 32768,
+    "max_output_tokens": 8000
+  },
+  "gradient_ai/llama3-8b-instruct": {
+    "input_cost_per_token": 2e-07,
+    "litellm_provider": "gradient_ai",
+    "max_tokens": 512,
+    "mode": "chat",
+    "output_cost_per_token": 2e-07,
+    "supported_endpoints": [
+      "/v1/chat/completions"
+    ],
+    "supported_modalities": [
+      "text"
+    ],
+    "supports_tool_choice": false,
+    "max_input_tokens": 8192,
+    "max_output_tokens": 512
+  },
+  "gradient_ai/llama3.3-70b-instruct": {
+    "input_cost_per_token": 6.5e-07,
+    "litellm_provider": "gradient_ai",
+    "max_tokens": 2048,
+    "mode": "chat",
+    "output_cost_per_token": 6.5e-07,
+    "supported_endpoints": [
+      "/v1/chat/completions"
+    ],
+    "supported_modalities": [
+      "text"
+    ],
+    "supports_tool_choice": false,
+    "max_input_tokens": 128000,
+    "max_output_tokens": 2048
+  },
+  "gradient_ai/mistral-nemo-instruct-2407": {
+    "input_cost_per_token": 3e-07,
+    "litellm_provider": "gradient_ai",
+    "max_tokens": 512,
+    "mode": "chat",
+    "output_cost_per_token": 3e-07,
+    "supported_endpoints": [
+      "/v1/chat/completions"
+    ],
+    "supported_modalities": [
+      "text"
+    ],
+    "supports_tool_choice": false,
+    "max_input_tokens": 128000,
+    "max_output_tokens": 512
+  },
+  "gradient_ai/openai-gpt-4o": {
+    "litellm_provider": "gradient_ai",
+    "max_tokens": 16384,
+    "mode": "chat",
+    "supported_endpoints": [
+      "/v1/chat/completions"
+    ],
+    "supported_modalities": [
+      "text"
+    ],
+    "supports_tool_choice": false,
+    "max_input_tokens": 128000,
+    "max_output_tokens": 16384
+  },
+  "gradient_ai/openai-gpt-4o-mini": {
+    "litellm_provider": "gradient_ai",
+    "max_tokens": 16384,
+    "mode": "chat",
+    "supported_endpoints": [
+      "/v1/chat/completions"
+    ],
+    "supported_modalities": [
+      "text"
+    ],
+    "supports_tool_choice": false,
+    "max_input_tokens": 128000,
+    "max_output_tokens": 16384
+  },
+  "gradient_ai/openai-o3": {
+    "input_cost_per_token": 2e-06,
+    "litellm_provider": "gradient_ai",
+    "max_tokens": 100000,
+    "mode": "chat",
+    "output_cost_per_token": 8e-06,
+    "supported_endpoints": [
+      "/v1/chat/completions"
+    ],
+    "supported_modalities": [
+      "text"
+    ],
+    "supports_tool_choice": false,
+    "max_input_tokens": 200000,
+    "max_output_tokens": 100000
+  },
+  "gradient_ai/openai-o3-mini": {
+    "input_cost_per_token": 1.1e-06,
+    "litellm_provider": "gradient_ai",
+    "max_tokens": 100000,
+    "mode": "chat",
+    "output_cost_per_token": 4.4e-06,
+    "supported_endpoints": [
+      "/v1/chat/completions"
+    ],
+    "supported_modalities": [
+      "text"
+    ],
+    "supports_tool_choice": false,
+    "max_input_tokens": 200000,
+    "max_output_tokens": 100000
+  },
   "lemonade/Qwen3-Coder-30B-A3B-Instruct-GGUF": {
     "input_cost_per_token": 0,
     "litellm_provider": "lemonade",
