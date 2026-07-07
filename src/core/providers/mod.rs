@@ -87,8 +87,6 @@ pub mod mistral;
 // moonshot: Tier 1 -> registry/catalog.rs
 // nanogpt: Tier 1 -> registry/catalog.rs
 // nebius: Tier 1 -> registry/catalog.rs
-#[cfg(feature = "providers-extended")]
-pub mod nlp_cloud;
 // novita: Tier 1 -> registry/catalog.rs
 // nscale: Tier 1 -> registry/catalog.rs
 // nvidia_nim: Tier 1 -> registry/catalog.rs
