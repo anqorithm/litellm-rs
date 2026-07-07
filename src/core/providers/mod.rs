@@ -127,8 +127,6 @@ pub mod stability;
 #[cfg(feature = "providers-extended")]
 pub mod tavily;
 // together: Tier 1 -> registry/catalog.rs
-#[cfg(feature = "providers-extended")]
-pub mod triton;
 #[cfg(feature = "providers-extra")]
 pub mod v0;
 #[cfg(feature = "providers-extra")]
