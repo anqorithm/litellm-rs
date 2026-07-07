@@ -4,6 +4,7 @@ use actix_web::{HttpRequest, HttpResponse, Result as ActixResult, web};
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::HashMap;
+use std::sync::Arc;
 use tracing::{error, warn};
 
 use crate::core::models::openai::{
@@ -101,7 +102,7 @@ async fn completions_inner(
 
     match super::chat::handle_chat_completion_with_shared_state(
         state.get_ref(),
-        adapter_request.chat_request,
+        Arc::new(adapter_request.chat_request),
         context,
     )
     .await

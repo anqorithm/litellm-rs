@@ -4,10 +4,10 @@ use actix_web::http::header::{CACHE_CONTROL, CONTENT_TYPE};
 use actix_web::{HttpResponse, Result as ActixResult};
 use bytes::Bytes;
 use futures::StreamExt;
+use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 
-use crate::core::models::openai::StreamOptions;
 use crate::core::providers::ProviderError;
 use crate::core::streaming::types::Event;
 use crate::core::types::{context::SharedRequestContext, model::ProviderCapability};
@@ -28,22 +28,21 @@ pub(super) async fn handle_streaming_completion(
         adapter_request.chat_request.model
     );
 
-    let mut request = adapter_request.chat_request;
+    let request = Arc::new(adapter_request.chat_request);
     let requested_model = request.model.clone();
-    let request_for_budget = request.clone();
-    request
-        .stream_options
-        .get_or_insert(StreamOptions {
-            include_usage: None,
-        })
-        .include_usage = Some(true);
 
-    let core_request = match chat::build_core_chat_request(request, requested_model.clone(), true) {
+    let core_request = match chat::build_core_chat_request_with_stream_usage(
+        request.as_ref(),
+        requested_model.clone(),
+        true,
+        Some(true),
+    ) {
         Ok(request) => request,
         Err(error) => return Ok(openai_errors::gateway_error_response(&error)),
     };
 
-    let context_for_execution = std::sync::Arc::clone(&context);
+    let context_for_execution = Arc::clone(&context);
+    let request_for_execution = Arc::clone(&request);
     let budgeted = state.budgeted.clone();
     let pricing_service = state.budgeted.pricing();
     let budget_limits = state.budgeted.budget_limits();
@@ -58,12 +57,12 @@ pub(super) async fn handle_streaming_completion(
         ProviderCapability::ChatCompletionStream,
         move |provider, selected_model, _selected_deployment_id| {
             let core_request = core_request.clone();
-            let context = std::sync::Arc::clone(&context_for_execution);
+            let context = Arc::clone(&context_for_execution);
+            let original_request = Arc::clone(&request_for_execution);
             let budgeted = budgeted.clone();
             let pricing_service = pricing_service.clone();
             let budget_limits = budget_limits.clone();
             let key_manager = key_manager.clone();
-            let request_for_budget = request_for_budget.clone();
             let pricing_config = pricing_config.clone();
             async move {
                 let provider_name = provider.name().to_string();
@@ -72,14 +71,18 @@ pub(super) async fn handle_streaming_completion(
                     &provider,
                     &selected_model,
                 );
-                let (request_for_provider, request_for_budget) =
-                    token_policy::prepare_chat_request_for_provider(
-                        context.api_key_max_tokens_per_request(),
-                        &provider_name,
-                        &selected_model,
-                        core_request.clone(),
-                        request_for_budget,
-                    )?;
+                let request_for_provider = token_policy::prepare_chat_request_for_provider(
+                    context.api_key_max_tokens_per_request(),
+                    &provider_name,
+                    &selected_model,
+                    core_request.clone(),
+                )?;
+                let request_for_budget =
+                    spend::ChatCompletionBudgetRequest::from(original_request.as_ref())
+                        .with_output_limits(
+                            request_for_provider.max_tokens,
+                            request_for_provider.max_completion_tokens,
+                        );
                 let provider_context = context.as_ref().clone();
                 let reserve_pricing_config = pricing_config.clone();
                 let reserve_pricing_provider = pricing_provider.clone();
@@ -101,7 +104,7 @@ pub(super) async fn handle_streaming_completion(
                                 budget.model(),
                                 &reserve_pricing_provider,
                                 &reserve_pricing_model,
-                                &request_for_budget,
+                                request_for_budget,
                             )
                         },
                         || provider.chat_completion_stream(request_for_provider, provider_context),

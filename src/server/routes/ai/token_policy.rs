@@ -82,13 +82,10 @@ pub(super) fn prepare_chat_request_for_provider(
     provider: &str,
     model: &str,
     mut core_request: ChatRequest,
-    mut budget_request: ChatCompletionRequest,
-) -> Result<(ChatRequest, ChatCompletionRequest), ProviderError> {
+) -> Result<ChatRequest, ProviderError> {
     core_request.model = model.to_string();
     apply_api_key_output_token_limit(max_tokens_per_request, provider, model, &mut core_request)?;
-    budget_request.max_tokens = core_request.max_tokens;
-    budget_request.max_completion_tokens = core_request.max_completion_tokens;
-    Ok((core_request, budget_request))
+    Ok(core_request)
 }
 
 fn provider_effective_output_cap(

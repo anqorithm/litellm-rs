@@ -15,6 +15,45 @@ const DOCUMENT_PROMPT_BASE_TOKENS: u32 = 1_000;
 const TOOL_RESULT_BASE_TOKENS: u32 = 50;
 const TOOL_USE_BASE_TOKENS: u32 = 100;
 
+#[derive(Clone, Copy)]
+pub(in crate::server::routes::ai) struct ChatCompletionBudgetRequest<'a> {
+    messages: &'a [ChatMessage],
+    tools: Option<&'a [Tool]>,
+    functions: Option<&'a [Function]>,
+    function_call: Option<&'a FunctionCall>,
+    response_format: Option<&'a ResponseFormat>,
+    max_tokens: Option<u32>,
+    max_completion_tokens: Option<u32>,
+    n: Option<u32>,
+}
+
+impl<'a> ChatCompletionBudgetRequest<'a> {
+    pub(in crate::server::routes::ai) fn with_output_limits(
+        mut self,
+        max_tokens: Option<u32>,
+        max_completion_tokens: Option<u32>,
+    ) -> Self {
+        self.max_tokens = max_tokens;
+        self.max_completion_tokens = max_completion_tokens;
+        self
+    }
+}
+
+impl<'a> From<&'a ChatCompletionRequest> for ChatCompletionBudgetRequest<'a> {
+    fn from(request: &'a ChatCompletionRequest) -> Self {
+        Self {
+            messages: &request.messages,
+            tools: request.tools.as_deref(),
+            functions: request.functions.as_deref(),
+            function_call: request.function_call.as_ref(),
+            response_format: request.response_format.as_ref(),
+            max_tokens: request.max_tokens,
+            max_completion_tokens: request.max_completion_tokens,
+            n: request.n,
+        }
+    }
+}
+
 #[cfg(test)]
 pub(in crate::server::routes::ai) fn reserve_completion_budget(
     budget_limits: &UnifiedBudgetLimits,
@@ -182,7 +221,7 @@ pub(in crate::server::routes::ai) fn reserve_chat_completion_budget_with_policy(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(in crate::server::routes::ai) fn reserve_chat_completion_budget_with_split_pricing(
+pub(in crate::server::routes::ai) fn reserve_chat_completion_budget_with_split_pricing<'a>(
     pricing_service: &PricingService,
     pricing_config: &GatewayPricingConfig,
     budget_limits: &UnifiedBudgetLimits,
@@ -190,15 +229,16 @@ pub(in crate::server::routes::ai) fn reserve_chat_completion_budget_with_split_p
     budget_model: &str,
     pricing_provider: &str,
     pricing_model: &str,
-    request: &ChatCompletionRequest,
+    request: impl Into<ChatCompletionBudgetRequest<'a>>,
 ) -> Result<Option<UnifiedBudgetReservation>, ProviderError> {
+    let request = request.into();
     let prompt_tokens = estimate_chat_prompt_tokens(
         pricing_model,
-        &request.messages,
-        request.tools.as_deref(),
-        request.functions.as_deref(),
-        request.function_call.as_ref(),
-        request.response_format.as_ref(),
+        request.messages,
+        request.tools,
+        request.functions,
+        request.function_call,
+        request.response_format,
     );
     reserve_completion_budget_with_split_pricing(
         pricing_service,
@@ -214,7 +254,7 @@ pub(in crate::server::routes::ai) fn reserve_chat_completion_budget_with_split_p
             pricing_provider,
             pricing_model,
             prompt_tokens,
-            provider_effective_max_output_tokens(budget_provider, budget_model, request),
+            provider_effective_max_output_tokens_for_budget(budget_provider, budget_model, request),
             request.n.unwrap_or(1),
         ),
     )
@@ -325,10 +365,19 @@ fn catalog_max_output_tokens_with_pricing(
     pricing_service.max_output_tokens_for_provider(provider, model)
 }
 
+#[cfg(test)]
 pub(in crate::server::routes::ai) fn provider_effective_max_output_tokens(
     provider: &str,
     model: &str,
     request: &ChatCompletionRequest,
+) -> Option<u32> {
+    provider_effective_max_output_tokens_for_budget(provider, model, request.into())
+}
+
+fn provider_effective_max_output_tokens_for_budget(
+    provider: &str,
+    model: &str,
+    request: ChatCompletionBudgetRequest<'_>,
 ) -> Option<u32> {
     let provider = crate::core::pricing::normalize_pricing_provider(provider);
     match provider.as_str() {
@@ -346,7 +395,7 @@ pub(in crate::server::routes::ai) fn provider_effective_max_output_tokens(
 
 fn bedrock_effective_max_output_tokens(
     model: &str,
-    request: &ChatCompletionRequest,
+    request: ChatCompletionBudgetRequest<'_>,
 ) -> Option<u32> {
     use crate::core::providers::bedrock::BedrockApiType;
 
@@ -467,4 +516,48 @@ fn fallback_message_tokens(messages: &[ChatMessage]) -> u32 {
         .sum::<usize>();
     let overhead = messages.len().saturating_mul(4).saturating_add(8);
     u32::try_from(chars.div_ceil(4).saturating_add(overhead)).unwrap_or(u32::MAX)
+}
+
+#[cfg(test)]
+mod budget_request_tests {
+    use super::*;
+
+    #[test]
+    fn budget_request_view_borrows_large_request_parts() {
+        let request = ChatCompletionRequest {
+            messages: vec![ChatMessage {
+                role: crate::core::models::openai::MessageRole::User,
+                content: Some(MessageContent::Text("x".repeat(64 * 1024))),
+                name: None,
+                function_call: None,
+                tool_calls: None,
+                tool_call_id: None,
+                audio: None,
+            }],
+            tools: Some(vec![Tool {
+                tool_type: "function".to_string(),
+                function: crate::core::models::openai::Function {
+                    name: "lookup".to_string(),
+                    description: None,
+                    parameters: Some(serde_json::json!({"type": "object"})),
+                },
+            }]),
+            max_tokens: Some(1024),
+            ..Default::default()
+        };
+
+        let view =
+            ChatCompletionBudgetRequest::from(&request).with_output_limits(Some(128), Some(64));
+
+        assert!(std::ptr::eq(
+            view.messages.as_ptr(),
+            request.messages.as_ptr()
+        ));
+        assert!(std::ptr::eq(
+            view.tools.expect("tools").as_ptr(),
+            request.tools.as_ref().expect("tools").as_ptr()
+        ));
+        assert_eq!(view.max_tokens, Some(128));
+        assert_eq!(view.max_completion_tokens, Some(64));
+    }
 }
