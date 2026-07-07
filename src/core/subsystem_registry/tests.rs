@@ -145,19 +145,15 @@ fn rust_code_without_comments_and_literals(source: &str) -> String {
             continue;
         }
 
-        if bytes[index] == b'b'
-            && bytes
-                .get(index + 1)
-                .is_some_and(|quote| matches!(quote, b'"' | b'\''))
-        {
-            let end = quoted_literal_end(bytes, index + 1, bytes[index + 1]);
+        if bytes[index..].starts_with(b"b\"") {
+            let end = quoted_literal_end(bytes, index + 1, b'"');
             strip_source_range(&mut sanitized, index, end);
             index = end;
             continue;
         }
 
-        if matches!(bytes[index], b'"' | b'\'') {
-            let end = quoted_literal_end(bytes, index, bytes[index]);
+        if bytes[index] == b'"' {
+            let end = quoted_literal_end(bytes, index, b'"');
             if end > index + 1 {
                 strip_source_range(&mut sanitized, index, end);
                 index = end;
@@ -265,9 +261,20 @@ fn cargo_features() -> BTreeMap<String, Vec<String>> {
 fn parse_cargo_features(manifest: &str) -> BTreeMap<String, Vec<String>> {
     let mut features = BTreeMap::new();
     let mut in_features = false;
+    let mut pending_feature: Option<(String, String)> = None;
 
     for raw_line in manifest.lines() {
         let line = raw_line.trim();
+        if let Some((name, values)) = &mut pending_feature {
+            values.push(' ');
+            values.push_str(line);
+            if line.contains(']') {
+                features.insert(name.clone(), quoted_toml_values(values));
+                pending_feature = None;
+            }
+            continue;
+        }
+
         if line.starts_with('[') && line.ends_with(']') {
             in_features = line == "[features]";
             continue;
@@ -279,7 +286,13 @@ fn parse_cargo_features(manifest: &str) -> BTreeMap<String, Vec<String>> {
         let Some((name, values)) = line.split_once('=') else {
             continue;
         };
-        features.insert(name.trim().to_string(), quoted_toml_values(values));
+        let name = name.trim().to_string();
+        let values = values.trim();
+        if values.starts_with('[') && !values.contains(']') {
+            pending_feature = Some((name, values.to_string()));
+        } else {
+            features.insert(name, quoted_toml_values(values));
+        }
     }
 
     features
@@ -442,6 +455,20 @@ fn runtime_reference_check_matches_real_core_module_paths() {
 }
 
 #[test]
+fn runtime_reference_check_keeps_paths_between_lifetimes() {
+    let source = r#"
+        fn build<'a>(manager: crate::core::semantic_cache::SemanticCache, label: &'a str) {
+            let _ = (manager, label);
+        }
+    "#;
+
+    assert!(runtime_source_has_core_module_reference(
+        source,
+        "semantic_cache"
+    ));
+}
+
+#[test]
 fn feature_gated_decisions_use_real_default_off_module_gates() {
     let module_cfg_features = exported_core_module_cfgs();
     let manifest_features = cargo_features();
@@ -500,9 +527,17 @@ fn cargo_feature_parser_expands_default_feature_closure() {
     let features = parse_cargo_features(
         r#"
         [features]
-        default = ["sqlite"]
-        sqlite = ["storage", "sea-orm/sqlx-sqlite"]
-        storage = ["gateway", "dep:sea-orm"]
+        default = [
+            "sqlite",
+        ]
+        sqlite = [
+            "storage",
+            "sea-orm/sqlx-sqlite",
+        ]
+        storage = [
+            "gateway",
+            "dep:sea-orm",
+        ]
         gateway = []
         analytics = ["storage"]
         "#,
