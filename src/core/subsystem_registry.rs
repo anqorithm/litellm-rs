@@ -412,6 +412,10 @@ mod tests {
         ch == '_' || ch.is_ascii_alphanumeric()
     }
 
+    fn feature_from_runtime_path(runtime_path: &str) -> Option<&str> {
+        runtime_path.strip_prefix("Cargo feature: ")
+    }
+
     #[test]
     fn registry_is_sorted_by_module_name() {
         let mut previous = "";
@@ -442,6 +446,68 @@ mod tests {
                 subsystem.has_gateway_reference_exemption(),
                 "core::{module} is exported but not referenced by server/main/bin and has no exemption"
             );
+        }
+    }
+
+    #[test]
+    fn runtime_reference_check_ignores_config_and_admin_text() {
+        let source = r#"
+            let semantic_cache_enabled = cfg.gateway.cache.semantic_cache;
+            let body = json!({"semantic_cache_enabled": semantic_cache_enabled});
+            let warning = "core::semantic_cache_extra is not a module path match";
+        "#;
+
+        assert!(!runtime_source_has_core_module_reference(
+            source,
+            "semantic_cache"
+        ));
+    }
+
+    #[test]
+    fn runtime_reference_check_matches_real_core_module_paths() {
+        let source = r#"
+            let _manager = crate::core::semantic_cache::SemanticCache::new(config);
+        "#;
+
+        assert!(runtime_source_has_core_module_reference(
+            source,
+            "semantic_cache"
+        ));
+    }
+
+    #[test]
+    fn feature_gated_decisions_do_not_use_default_support_features() {
+        let disallowed_support_features = ["gateway", "postgres", "redis", "sqlite", "storage"];
+
+        for subsystem in CORE_SUBSYSTEMS {
+            if subsystem.decision != SubsystemDecision::FeatureGated {
+                continue;
+            }
+
+            let feature = subsystem
+                .runtime_path
+                .and_then(feature_from_runtime_path)
+                .unwrap_or_else(|| panic!("{} must name its cargo feature", subsystem.name));
+            assert!(
+                !disallowed_support_features.contains(&feature),
+                "{} must not use default-on/support feature '{}' as an experimental gate",
+                subsystem.name,
+                feature
+            );
+        }
+    }
+
+    #[test]
+    fn known_library_only_modules_are_positive_exemptions() {
+        for name in [
+            "completion",
+            "embedding",
+            "function_calling",
+            "secret_managers",
+        ] {
+            let subsystem = subsystem_for(name).expect("library-only subsystem exists");
+            assert_eq!(subsystem.decision, SubsystemDecision::LibraryOnly);
+            assert!(subsystem.has_gateway_reference_exemption());
         }
     }
 

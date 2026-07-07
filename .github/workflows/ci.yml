@@ -55,6 +55,9 @@ jobs:
       - name: API/runtime boundary guard
         run: bash scripts/guards/check_api_runtime_boundary.sh
 
+      - name: Core subsystem registry guard
+        run: bash scripts/guards/check_core_subsystem_registry.sh
+
       - name: PR scope guard
         if: github.event_name == 'pull_request'
         run: |
