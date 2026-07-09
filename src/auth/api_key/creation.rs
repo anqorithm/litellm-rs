@@ -74,9 +74,6 @@ fn validate_create_key_input(name: &str, permissions: &[String]) -> Result<()> {
 /// Minimum interval between DB writes for the same key's last_used timestamp.
 const LAST_USED_THROTTLE: Duration = Duration::from_secs(5 * 60);
 
-/// TTL for cached API keys in Redis (seconds).
-const API_KEY_CACHE_TTL: u64 = 300;
-
 /// Build the Redis cache key for an API key hash.
 fn api_key_cache_key(key_hash: &str) -> String {
     format!("api_key:hash:{}", key_hash)
@@ -186,54 +183,12 @@ impl ApiKeyHandler {
         Ok((stored_key, raw_key))
     }
 
-    /// Look up an API key by hash, checking Redis cache first and falling back
-    /// to PostgreSQL. On a cache miss the result is populated into Redis with a
-    /// 5-minute TTL.
-    async fn find_api_key_cached(&self, key_hash: &str) -> Result<Option<ApiKey>> {
-        let cache_key = api_key_cache_key(key_hash);
-
-        // 1. Try Redis cache
-        match self.storage.cache_get(&cache_key).await {
-            Ok(Some(cached)) => {
-                debug!("API key cache hit");
-                match serde_json::from_str::<ApiKey>(&cached) {
-                    Ok(api_key) => return Ok(Some(api_key)),
-                    Err(e) => {
-                        warn!(
-                            "Failed to deserialize cached API key, falling back to DB: {}",
-                            e
-                        );
-                        // Stale/corrupt entry – delete and continue to DB
-                        if let Err(del_err) = self.storage.cache_delete(&cache_key).await {
-                            warn!("Failed to delete corrupt API key cache entry: {}", del_err);
-                        }
-                    }
-                }
-            }
-            Ok(None) => {
-                debug!("API key cache miss");
-            }
-            Err(e) => {
-                // Redis unavailable – degrade gracefully
-                warn!("Redis cache_get failed, falling back to DB: {}", e);
-            }
-        }
-
-        // 2. Fall back to PostgreSQL
-        let api_key = self.storage.db().find_api_key_by_hash(key_hash).await?;
-
-        // 3. Populate cache on DB hit
-        if let Some(ref key) = api_key
-            && let Ok(serialized) = serde_json::to_string(key)
-            && let Err(e) = self
-                .storage
-                .cache_set(&cache_key, &serialized, Some(API_KEY_CACHE_TTL))
-                .await
-        {
-            warn!("Failed to populate API key cache: {}", e);
-        }
-
-        Ok(api_key)
+    /// Look up an API key from the authoritative lifecycle store.
+    ///
+    /// Authentication intentionally does not read Redis snapshots: a stale
+    /// active value must not outlive a database revoke or owner-state change.
+    async fn find_api_key_authoritative(&self, key_hash: &str) -> Result<Option<ApiKey>> {
+        self.storage.db().find_api_key_by_hash(key_hash).await
     }
 
     /// Invalidate the Redis cache entry for the given key hash.
@@ -250,52 +205,21 @@ impl ApiKeyHandler {
     /// Verify an API key
     pub async fn verify_key(&self, raw_key: &str) -> Result<Option<(ApiKey, Option<User>)>> {
         debug!("Verifying API key");
-
-        // Hash the provided key
-        let key_hash = hash_api_key(raw_key, self.hmac_secret());
-
-        // Find API key (cache-aside: Redis → PostgreSQL → populate Redis)
-        let api_key = match self.find_api_key_cached(&key_hash).await? {
-            Some(key) => key,
-            None => {
-                debug!("API key not found");
-                return Ok(None);
-            }
-        };
-
-        // Check if key is active
-        if !api_key.is_active {
-            debug!("API key is inactive");
-            return Ok(None);
-        }
-
-        // Check if key is expired
-        if let Some(expires_at) = api_key.expires_at
-            && Utc::now() > expires_at
-        {
-            debug!("API key is expired");
-            return Ok(None);
-        }
-
-        // Get associated user if any
-        let user = if let Some(user_id) = api_key.user_id {
-            self.storage.db().find_user_by_id(user_id).await?
+        let verification = self.verify_key_detailed(raw_key).await?;
+        if verification.is_valid {
+            debug!("API key verified successfully");
+            Ok(Some((verification.api_key, verification.user)))
         } else {
-            None
-        };
-
-        // Update last used timestamp
-        self.update_last_used(api_key.metadata.id).await?;
-
-        debug!("API key verified successfully");
-        Ok(Some((api_key, user)))
+            debug!(reason = ?verification.invalid_reason, "API key rejected");
+            Ok(None)
+        }
     }
 
     /// Verify API key with detailed result
     pub async fn verify_key_detailed(&self, raw_key: &str) -> Result<ApiKeyVerification> {
         let key_hash = hash_api_key(raw_key, self.hmac_secret());
 
-        let api_key = match self.find_api_key_cached(&key_hash).await? {
+        let api_key = match self.find_api_key_authoritative(&key_hash).await? {
             Some(key) => key,
             None => {
                 return Ok(ApiKeyVerification {
@@ -349,15 +273,12 @@ impl ApiKeyHandler {
             None
         };
 
-        // Check if user is active (if associated)
-        if let Some(ref user) = user
-            && !user.is_active()
-        {
+        if let Some(reason) = api_key_owner_invalid_reason(&api_key, user.as_ref()) {
             return Ok(ApiKeyVerification {
                 api_key,
-                user: Some(user.clone()),
+                user,
                 is_valid: false,
-                invalid_reason: Some("Associated user is inactive".to_string()),
+                invalid_reason: Some(reason.to_string()),
             });
         }
 
@@ -397,9 +318,32 @@ impl ApiKeyHandler {
     }
 }
 
+fn api_key_owner_invalid_reason(api_key: &ApiKey, user: Option<&User>) -> Option<&'static str> {
+    api_key.user_id?;
+    match user {
+        None => Some("Associated user was not found"),
+        Some(user) if !user.is_active() => Some("Associated user is inactive"),
+        Some(_) => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::models::storage::StorageConfig;
+    use crate::core::models::user::types::UserStatus;
+
+    async fn test_handler() -> ApiKeyHandler {
+        let mut config = StorageConfig::default();
+        config.database.enabled = false;
+        config.redis.enabled = false;
+        let storage = StorageLayer::new(&config)
+            .await
+            .expect("test storage should initialize");
+        ApiKeyHandler::new(Arc::new(storage), None)
+            .await
+            .expect("API key handler should initialize")
+    }
 
     // ==================== validate_create_key_input ====================
 
@@ -490,5 +434,91 @@ mod tests {
         let perms = vec!["api.chat".to_string(), "not.a.perm".to_string()];
         let result = validate_create_key_input("My Key", &perms);
         assert!(matches!(result, Err(GatewayError::Validation(_))));
+    }
+
+    #[test]
+    fn owner_validation_rejects_missing_owner() {
+        let api_key = ApiKey {
+            metadata: Metadata::new(),
+            name: "missing-owner".to_string(),
+            key_hash: "hash".to_string(),
+            key_prefix: "gw-test".to_string(),
+            user_id: Some(Uuid::new_v4()),
+            team_id: None,
+            permissions: vec![],
+            rate_limits: None,
+            expires_at: None,
+            is_active: true,
+            last_used_at: None,
+            usage_stats: UsageStats::default(),
+        };
+
+        assert_eq!(
+            api_key_owner_invalid_reason(&api_key, None),
+            Some("Associated user was not found")
+        );
+    }
+
+    #[tokio::test]
+    async fn live_and_detailed_verification_reject_inactive_owner() {
+        let handler = test_handler().await;
+        let mut user = User::new(
+            format!("inactive-{}", Uuid::new_v4()),
+            format!("inactive-{}@example.com", Uuid::new_v4()),
+            "unused-hash".to_string(),
+        );
+        user.status = UserStatus::Inactive;
+        handler
+            .storage
+            .db()
+            .create_user(&user)
+            .await
+            .expect("inactive user should be stored");
+        let (_, raw_key) = handler
+            .create_key(
+                Some(user.id()),
+                None,
+                "inactive-owner".to_string(),
+                vec!["api.chat".to_string()],
+            )
+            .await
+            .expect("key creation should succeed");
+
+        assert!(handler.verify_key(&raw_key).await.unwrap().is_none());
+        let detailed = handler.verify_key_detailed(&raw_key).await.unwrap();
+        assert!(!detailed.is_valid);
+        assert_eq!(
+            detailed.invalid_reason.as_deref(),
+            Some("Associated user is inactive")
+        );
+    }
+
+    #[tokio::test]
+    async fn database_revoke_is_authoritative_without_cache_invalidation() {
+        let handler = test_handler().await;
+        let (api_key, raw_key) = handler
+            .create_key(
+                None,
+                None,
+                "revoked-without-invalidation".to_string(),
+                vec!["api.chat".to_string()],
+            )
+            .await
+            .expect("key creation should succeed");
+
+        handler
+            .storage
+            .db()
+            .deactivate_api_key(api_key.metadata.id)
+            .await
+            .expect("database revoke should succeed");
+
+        assert!(handler.verify_key(&raw_key).await.unwrap().is_none());
+        let detailed = handler.verify_key_detailed(&raw_key).await.unwrap();
+        assert!(!detailed.is_valid);
+        assert_eq!(
+            detailed.invalid_reason.as_deref(),
+            Some("API key is inactive")
+        );
     }
 }

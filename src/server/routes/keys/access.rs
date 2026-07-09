@@ -104,10 +104,15 @@ pub(super) async fn authenticate_request(
         }
         Err(e) => {
             error!("Authentication error: {}", e);
-            let error_response = KeyErrorResponse::unauthorized("Authentication error");
-            Err(HttpResponse::Unauthorized().json(ApiResponse::<()>::error(error_response.error)))
+            Err(authentication_unavailable_response())
         }
     }
+}
+
+fn authentication_unavailable_response() -> HttpResponse {
+    let error_response =
+        KeyErrorResponse::internal("Authentication service temporarily unavailable");
+    HttpResponse::InternalServerError().json(ApiResponse::<()>::error(error_response.error))
 }
 
 pub(super) fn resolve_create_key_scope(
@@ -227,6 +232,23 @@ pub(super) fn filter_and_paginate_keys(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[actix_web::test]
+    async fn authentication_unavailable_response_is_generic_server_error() {
+        let response = authentication_unavailable_response();
+
+        assert_eq!(
+            response.status(),
+            actix_web::http::StatusCode::INTERNAL_SERVER_ERROR
+        );
+        let body = actix_web::body::to_bytes(response.into_body())
+            .await
+            .expect("generic key-route authentication error should render");
+        let body = String::from_utf8_lossy(&body);
+        assert!(body.contains("Authentication service temporarily unavailable"));
+        assert!(!body.contains("Storage error"));
+        assert!(!body.contains("Redis error"));
+    }
 
     #[test]
     fn accepts_unset_or_rpm_only_key_rate_limits() {

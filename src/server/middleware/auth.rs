@@ -290,10 +290,8 @@ where
                         reservation.release().await;
                     }
                     rate_limiter.record_failure(&client_id);
-                    Err(actix_web::error::ErrorInternalServerError(format!(
-                        "Authentication error: {}",
-                        err
-                    )))
+                    error!(error = %err, "Authentication infrastructure failure");
+                    Ok(authentication_unavailable_response(req))
                 }
             }
         })
@@ -354,6 +352,15 @@ fn forbidden_response<B>(
         req,
         actix_web::error::ErrorForbidden(message.clone()),
         GatewayError::Forbidden(message),
+    )
+}
+
+fn authentication_unavailable_response<B>(req: ServiceRequest) -> ServiceResponse<EitherBody<B>> {
+    const MESSAGE: &str = "Authentication service temporarily unavailable";
+    middleware_gateway_error_response(
+        req,
+        actix_web::error::ErrorInternalServerError(MESSAGE),
+        GatewayError::Internal(MESSAGE.to_string()),
     )
 }
 
@@ -608,5 +615,23 @@ mod tests {
         );
         assert!(!context.headers.contains_key("authorization"));
         assert!(!context.headers.contains_key("x-api-key"));
+    }
+
+    #[actix_web::test]
+    async fn authentication_unavailable_response_is_generic_server_error() {
+        let req = TestRequest::with_uri("/v1/chat/completions").to_srv_request();
+        let response = authentication_unavailable_response::<actix_web::body::BoxBody>(req);
+
+        assert_eq!(
+            response.status(),
+            actix_web::http::StatusCode::INTERNAL_SERVER_ERROR
+        );
+        let body = actix_web::body::to_bytes(response.into_body())
+            .await
+            .expect("generic authentication error body should render");
+        let body = String::from_utf8_lossy(&body);
+        assert!(body.contains("Authentication service temporarily unavailable"));
+        assert!(!body.contains("Storage error"));
+        assert!(!body.contains("Redis error"));
     }
 }
