@@ -731,10 +731,10 @@ mod tests {
     #[tokio::test]
     async fn test_create_provider_openai_compatible_factory() {
         let mut config = crate::config::models::provider::ProviderConfig {
-            name: "local-openai-like".to_string(),
+            name: "test-openai-like".to_string(),
             provider_type: "openai_compatible".to_string(),
             api_key: "".to_string(),
-            base_url: Some("http://localhost:11434/v1".to_string()),
+            base_url: Some("https://api.example.com/v1".to_string()),
             ..Default::default()
         };
         config

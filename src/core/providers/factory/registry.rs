@@ -637,9 +637,9 @@ mod tests {
     #[tokio::test]
     async fn test_from_config_async_openai_compatible_accepts_api_base_alias() {
         let config = serde_json::json!({
-            "api_base": "http://localhost:11434/v1",
+            "api_base": "https://api.example.com/v1",
             "skip_api_key": true,
-            "provider_name": "local-openai-like"
+            "provider_name": "test-openai-like"
         });
 
         let provider = Provider::from_config_async(ProviderType::OpenAICompatible, config)
