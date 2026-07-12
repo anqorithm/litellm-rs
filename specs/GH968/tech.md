@@ -72,21 +72,28 @@ Link to `product.md`.
 7. Config-construction normalization PR (`Refs #968`): 将四处全字段 `OpenAIConfig` 字面量改为保留
    `Default` 的构造方式，并把不发请求的 factory 单测改用公网形态 URL；保持现有运行时行为不变，为后续新增
    默认 public-only 字段消除机械传播文件。
-8. Gateway/shared-runtime core PR (`Refs #968`): Gateway config/default/env/validation/builder 与 factory 将顶层
+8. Runtime-fixture preparation PR (`Refs #968`): 将 6 个仍直接构造 OpenAI/OpenAI-like loopback runtime config
+   的 crate/internal tests 收敛到 3 个 test-only helper；不声明 access 字段，不改变测试断言、listener 或运行时行为。
+9. Gateway/shared-runtime core PR (`Refs #968`): Gateway config/default/env/validation/builder 与 factory 将顶层
    access 传播到 OpenAI/OpenAI-like config；`GlobalPoolManager` 为两者普通、流式与 health 路径构造 policy
    client；共享 loopback fixture 显式 private opt-in，self-hosted 无 opt-in 失败，已迁移路径无普通 fallback。
-9. Shared-runtime extras PR (`Refs #968`): `ProviderConfig` trait、`BaseConfig`、BaseHttpClient、live provider macros、
+10. Shared-runtime extras PR (`Refs #968`): `ProviderConfig` trait、`BaseConfig`、BaseHttpClient、live provider macros、
    OpenAI multipart 与自定义 health/no-redirect 路径接入 policy client，并清除已迁移 shared 路径的 raw client
    escape。
-10. Native-route PR (`Fixes #968`): Anthropic/Gemini/Azure/AzureAI/Vertex 及 Gemini/batches/images/moderations/
+11. Native-route PR (`Fixes #968`): Anthropic/Gemini/Azure/AzureAI/Vertex 及 Gemini/batches/images/moderations/
    fine-tuning/rerank route 旁路接入，拒绝不安全 proxy，并增加源码架构 guard。
 
 7cf23695 基线上的直接 shared-runtime 尝试在 15 文件边界内完成生产接线后，全量测试暴露 14 个分散的
 loopback provider fixture 文件，其中 3 个又超过 800 行。移动代码按 additions + deletions 计入 800 行 scope，
 因此三个大文件必须各自成片。第 3 至 7 段先机械拆分、收敛测试构造和 Rust 字面量，且不声明未接线的安全配置；
-第八段随后一次完成配置到执行的闭环。
+33a39ab8 基线上的第二次 file:line 审计发现第八段仍需至少 18 个非文档文件：12 个 Gateway/runtime
+production 文件与 6 个直接 loopback runtime fixture，无法满足 15 文件 hard guard。第八段因此先把这 6 个
+fixture 收敛到 OpenAI、OpenAI-like 与 integration 三个 test-only helper；第九段随后以精确 15 文件一次完成
+Gateway config 到普通、流式、health 执行的闭环。access 字段不在 fixture preparation 段声明，避免
+declaration-execution gap；第九段对尚归第十/十一段所有的 provider family 显式拒绝 access 配置，后续 owner
+只在同一 PR 接入 runtime consumer 时解除拒绝。
 
-每个 PR 独立满足 scope hard guard、current-head reviewer、CI 和 PR gate；只有第十段在全量矩阵通过后关闭 issue。
+每个 PR 独立满足 scope hard guard、current-head reviewer、CI 和 PR gate；只有第十一段在全量矩阵通过后关闭 issue。
 
 ### 5. Architecture guard
 

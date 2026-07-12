@@ -5,6 +5,8 @@ use crate::core::types::message::{MessageContent, MessageRole};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
+const TEST_PUBLIC_API_BASE: &str = "https://api.example.com/v1";
+
 async fn read_full_http_request(socket: &mut TcpStream) -> std::io::Result<()> {
     let mut request_bytes = Vec::new();
     let mut buffer = [0_u8; 1024];
@@ -73,7 +75,7 @@ fn openai_like_chat_stream_request() -> ChatRequest {
 
 #[tokio::test]
 async fn test_provider_creation_with_api_base() {
-    let provider = OpenAILikeProvider::with_api_base("http://localhost:8000/v1").await;
+    let provider = OpenAILikeProvider::with_api_base(TEST_PUBLIC_API_BASE).await;
     assert!(provider.is_ok());
 
     let provider = provider.unwrap();
@@ -84,7 +86,7 @@ async fn test_provider_creation_with_api_base() {
 async fn generic_openai_like_declares_only_catalog_executable_capabilities() {
     use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 
-    let provider = OpenAILikeProvider::with_api_base("http://localhost:8000/v1")
+    let provider = OpenAILikeProvider::with_api_base(TEST_PUBLIC_API_BASE)
         .await
         .expect("OpenAI-like provider should build");
 
@@ -103,7 +105,7 @@ async fn generic_openai_like_declares_only_catalog_executable_capabilities() {
 async fn openai_compatible_declares_executable_proxy_capabilities() {
     use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 
-    let config = OpenAILikeConfig::new("http://localhost:8000/v1").with_skip_api_key(true);
+    let config = OpenAILikeConfig::new(TEST_PUBLIC_API_BASE).with_skip_api_key(true);
     let provider = OpenAILikeProvider::new_openai_compatible(config)
         .await
         .expect("OpenAI-compatible provider should build");
@@ -123,7 +125,7 @@ async fn openai_like_catalog_rejects_invalid_capability_profiles() {
     ];
     static UNIMPLEMENTED: &[ProviderCapability] = &[ProviderCapability::ImageEdit];
 
-    let config = OpenAILikeConfig::new("http://localhost:8000/v1").with_skip_api_key(true);
+    let config = OpenAILikeConfig::new(TEST_PUBLIC_API_BASE).with_skip_api_key(true);
     for (profile, expected) in [
         (EMPTY, "cannot be empty"),
         (DUPLICATE, "duplicate ChatCompletion"),
@@ -147,7 +149,8 @@ async fn test_openai_like_streaming_maps_non_success_status_before_sse()
 
     let body = r#"{"error":{"type":"rate_limit_error","message":"slow down","retry_after":5}}"#;
     let api_base = openai_like_stream_response_url("429 Too Many Requests", body).await?;
-    let provider = OpenAILikeProvider::with_api_base(api_base).await?;
+    let config = crate::core::providers::openai_like::config::test_openai_like_config(api_base);
+    let provider = OpenAILikeProvider::new(config).await?;
 
     let err = match LLMProvider::chat_completion_stream(
         &provider,
@@ -177,13 +180,13 @@ async fn test_openai_like_streaming_maps_non_success_status_before_sse()
 
 #[tokio::test]
 async fn test_provider_creation_with_api_key() {
-    let provider = OpenAILikeProvider::with_api_key("http://localhost:8000/v1", "sk-test123").await;
+    let provider = OpenAILikeProvider::with_api_key(TEST_PUBLIC_API_BASE, "sk-test123").await;
     assert!(provider.is_ok());
 }
 
 #[tokio::test]
 async fn test_provider_supports_any_model() {
-    let provider = OpenAILikeProvider::with_api_base("http://localhost:8000/v1")
+    let provider = OpenAILikeProvider::with_api_base(TEST_PUBLIC_API_BASE)
         .await
         .unwrap_or_else(|err| panic!("OpenAI-like test provider should initialize: {err}"));
 
@@ -195,7 +198,7 @@ async fn test_provider_supports_any_model() {
 
 #[tokio::test]
 async fn test_model_info_for_any_model() {
-    let provider = OpenAILikeProvider::with_api_base("http://localhost:8000/v1")
+    let provider = OpenAILikeProvider::with_api_base(TEST_PUBLIC_API_BASE)
         .await
         .unwrap_or_else(|err| panic!("OpenAI-like test provider should initialize: {err}"));
 
@@ -207,7 +210,7 @@ async fn test_model_info_for_any_model() {
 
 #[tokio::test]
 async fn test_request_transformation() {
-    let provider = OpenAILikeProvider::with_api_base("http://localhost:8000/v1")
+    let provider = OpenAILikeProvider::with_api_base(TEST_PUBLIC_API_BASE)
         .await
         .unwrap();
 
@@ -234,7 +237,7 @@ async fn test_request_transformation() {
 async fn test_supported_params_advertise_forwarded_chat_fields() {
     use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 
-    let provider = OpenAILikeProvider::with_api_base("http://localhost:8000/v1")
+    let provider = OpenAILikeProvider::with_api_base(TEST_PUBLIC_API_BASE)
         .await
         .unwrap_or_else(|err| panic!("OpenAI-like test provider should initialize: {err}"));
     let params = LLMProvider::get_supported_openai_params(&provider, "test-model");
@@ -368,7 +371,7 @@ async fn test_xai_reasoning_effort_rejects_incompatible_params() {
 
 #[tokio::test]
 async fn test_model_prefix_stripping() {
-    let config = OpenAILikeConfig::new("http://localhost:8000/v1")
+    let config = OpenAILikeConfig::new(TEST_PUBLIC_API_BASE)
         .with_model_prefix("custom/")
         .with_skip_api_key(true);
 
@@ -398,7 +401,7 @@ fn test_error_mapping() {
 
 #[tokio::test]
 async fn test_non_json_upstream_error_body_is_not_forwarded() {
-    let provider = OpenAILikeProvider::with_api_base("http://localhost:8000/v1")
+    let provider = OpenAILikeProvider::with_api_base(TEST_PUBLIC_API_BASE)
         .await
         .unwrap();
     let err = provider.map_error_response(
@@ -443,7 +446,7 @@ fn test_error_mapper_non_json_body_is_not_forwarded() {
 
 #[tokio::test]
 async fn test_name_returns_default_for_default_config() {
-    let provider = OpenAILikeProvider::with_api_base("http://localhost:8000/v1")
+    let provider = OpenAILikeProvider::with_api_base(TEST_PUBLIC_API_BASE)
         .await
         .unwrap();
     assert_eq!(provider.name(), "openai_like");

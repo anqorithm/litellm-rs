@@ -233,6 +233,17 @@ impl ProviderConfig for OpenAIConfig {
 }
 
 #[cfg(test)]
+pub(crate) fn test_openai_config(
+    api_base: impl Into<String>,
+    api_key: impl Into<String>,
+) -> OpenAIConfig {
+    let mut config = OpenAIConfig::default();
+    config.base.api_base = Some(api_base.into());
+    config.base.api_key = Some(api_key.into());
+    config
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
