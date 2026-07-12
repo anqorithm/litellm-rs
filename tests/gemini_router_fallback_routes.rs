@@ -1,5 +1,10 @@
 #[cfg(all(test, feature = "gateway", feature = "storage"))]
+#[path = "common/providers.rs"]
+pub mod provider_fixtures;
+
+#[cfg(all(test, feature = "gateway", feature = "storage"))]
 mod tests {
+    use super::provider_fixtures::mock_provider_config;
     use actix_web::{App, HttpRequest, HttpResponse, HttpServer, http::StatusCode, test, web};
     use bytes::Bytes;
     use litellm_rs::Config;
@@ -163,14 +168,13 @@ mod tests {
     }
 
     fn gemini_provider(name: &str, base_url: &str) -> ProviderConfig {
-        ProviderConfig {
-            name: name.to_string(),
-            provider_type: "openai_compatible".to_string(),
-            api_key: GEMINI_API_KEY.to_string(),
-            base_url: Some(base_url.to_string()),
-            models: vec![GEMINI_MODEL.to_string()],
-            ..ProviderConfig::default()
-        }
+        mock_provider_config(
+            name,
+            "openai_compatible",
+            GEMINI_API_KEY,
+            base_url,
+            vec![GEMINI_MODEL.to_string()],
+        )
     }
 
     fn gemini_body() -> Value {
