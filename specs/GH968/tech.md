@@ -64,7 +64,7 @@ Link to `product.md`.
 2. HTTP client foundation PR (`Refs #968`): 不暴露裸 client 的可用 request builder、普通/streaming/no-redirect
    policy client，以及 deterministic DNS rebinding/literal/redirect/private 未建连测试。
 3. Image-edit fixture decomposition PR (`Refs #968`): 将超过 800 行的 image-edit integration tests 按连续
-   测试组拆到 include 文件；不改变代码、断言、顺序或运行时行为。
+   测试组拆到标准子模块；不改变测试主体、断言、覆盖集合或运行时行为。
 4. Image-router fixture decomposition PR (`Refs #968`): 对 image-router tests 做同样的单文件拆分。
 5. Completions fixture decomposition PR (`Refs #968`): 对 completions integration tests 做同样的单文件拆分。
 6. Test-fixture consolidation PR (`Refs #968`): 将 14 处 OpenAI/OpenAI-like loopback mock config 收敛到

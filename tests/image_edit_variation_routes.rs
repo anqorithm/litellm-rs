@@ -651,5 +651,6 @@ mod tests {
         mock.stop_image_mock().await;
     }
 
-    include!("image_edit_variation_routes/budget_tests.rs");
+    #[path = "image_edit_variation_routes_budget_tests.rs"]
+    mod budget_tests;
 }

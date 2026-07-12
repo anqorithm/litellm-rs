@@ -1,3 +1,5 @@
+use super::*;
+
 #[tokio::test]
 async fn image_variation_rejects_missing_model_before_upstream() {
     let mock = MockImageServer::start_image_mock().await;
