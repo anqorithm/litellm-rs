@@ -42,11 +42,8 @@ impl EmbeddingRouter {
                     organization: std::env::var("OPENAI_ORGANIZATION").ok(),
                     api_version: None,
                 },
-                provider_name: "openai".to_string(),
                 organization: std::env::var("OPENAI_ORGANIZATION").ok(),
-                project: None,
-                model_mappings: Default::default(),
-                features: Default::default(),
+                ..Default::default()
             };
 
             if let Ok(openai_provider) = OpenAIProvider::new(config).await {
@@ -231,11 +228,7 @@ impl EmbeddingRouter {
                 organization: None,
                 api_version: None,
             },
-            provider_name: "openai".to_string(),
-            organization: None,
-            project: None,
-            model_mappings: Default::default(),
-            features: Default::default(),
+            ..Default::default()
         };
 
         let provider = OpenAIProvider::new(config).await.map_err(|e| {
