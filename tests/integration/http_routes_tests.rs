@@ -5,6 +5,7 @@
 
 #[cfg(all(test, feature = "gateway", feature = "storage"))]
 mod tests {
+    use crate::common::providers::mock_provider_config;
     use actix_web::http::StatusCode;
     use actix_web::{App, HttpResponse, HttpServer, test, web};
     use litellm_rs::Config;
@@ -64,14 +65,13 @@ mod tests {
         config.gateway.storage.database.enabled = false;
         config.gateway.storage.redis.enabled = false;
         config.gateway.pricing.source = Some("config/model_prices_extended.json".to_string());
-        config.gateway.providers = vec![ProviderConfig {
-            name: "mock-openai".to_string(),
-            provider_type: "openai".to_string(),
-            api_key: "sk-test".to_string(),
-            base_url: Some(base_url.to_string()),
-            models: vec!["text-embedding-3-small".to_string()],
-            ..ProviderConfig::default()
-        }];
+        config.gateway.providers = vec![mock_provider_config(
+            "mock-openai",
+            "openai",
+            "sk-test",
+            base_url,
+            vec!["text-embedding-3-small".to_string()],
+        )];
 
         build_state_with_config(config).await
     }
@@ -85,14 +85,13 @@ mod tests {
         config.gateway.storage.redis.enabled = false;
         config.gateway.pricing.source = Some("config/model_prices_extended.json".to_string());
         config.gateway.cache.enabled = true;
-        config.gateway.providers = vec![ProviderConfig {
-            name: "mock-openai".to_string(),
-            provider_type: "openai".to_string(),
-            api_key: "sk-test".to_string(),
-            base_url: Some(base_url.to_string()),
-            models: vec!["text-embedding-3-small".to_string()],
-            ..ProviderConfig::default()
-        }];
+        config.gateway.providers = vec![mock_provider_config(
+            "mock-openai",
+            "openai",
+            "sk-test",
+            base_url,
+            vec!["text-embedding-3-small".to_string()],
+        )];
 
         build_state_with_config(config).await
     }

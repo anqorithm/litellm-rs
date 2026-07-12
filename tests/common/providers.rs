@@ -5,6 +5,26 @@
 
 use std::env;
 
+use litellm_rs::config::models::provider::ProviderConfig;
+
+/// Build a provider config for loopback-backed integration tests.
+pub fn mock_provider_config(
+    name: &str,
+    provider_type: &str,
+    api_key: &str,
+    base_url: &str,
+    models: Vec<String>,
+) -> ProviderConfig {
+    ProviderConfig {
+        name: name.to_string(),
+        provider_type: provider_type.to_string(),
+        api_key: api_key.to_string(),
+        base_url: Some(base_url.to_string()),
+        models,
+        ..ProviderConfig::default()
+    }
+}
+
 /// Configuration for provider tests
 #[derive(Debug, Clone)]
 pub struct ProviderTestConfig {
@@ -155,6 +175,26 @@ mod tests {
     fn test_provider_config_default() {
         let config = ProviderTestConfig::default();
         assert!(config.timeout_secs > 0);
+    }
+
+    #[test]
+    fn test_mock_provider_config_preserves_explicit_fields() {
+        let config = mock_provider_config(
+            "mock-openai",
+            "openai_compatible",
+            "sk-test",
+            "http://127.0.0.1:1234/v1",
+            vec!["gpt-test".to_string()],
+        );
+
+        assert_eq!(config.name, "mock-openai");
+        assert_eq!(config.provider_type, "openai_compatible");
+        assert_eq!(config.api_key, "sk-test");
+        assert_eq!(config.base_url.as_deref(), Some("http://127.0.0.1:1234/v1"));
+        assert_eq!(config.models, vec!["gpt-test"]);
+        assert!(config.organization.is_none());
+        assert!(config.project.is_none());
+        assert!(config.settings.is_empty());
     }
 
     #[test]

@@ -1,5 +1,10 @@
 #[cfg(all(test, feature = "gateway", feature = "storage"))]
+#[path = "common/providers.rs"]
+pub mod provider_fixtures;
+
+#[cfg(all(test, feature = "gateway", feature = "storage"))]
 mod tests {
+    use super::provider_fixtures::mock_provider_config;
     use actix_web::{App, HttpRequest, HttpResponse, HttpServer, http::StatusCode, test, web};
     use actix_web::{HttpMessage, dev::Service};
     use bytes::Bytes;
@@ -194,25 +199,17 @@ mod tests {
         base_url: &str,
         models: Vec<String>,
     ) -> ProviderConfig {
-        ProviderConfig {
-            name: name.to_string(),
-            provider_type: "openai_compatible".to_string(),
-            api_key: "sk-test".to_string(),
-            base_url: Some(base_url.to_string()),
-            models,
-            ..ProviderConfig::default()
-        }
+        mock_provider_config(name, "openai_compatible", "sk-test", base_url, models)
     }
 
     fn jina_rerank_provider_with_models(base_url: &str, models: Vec<String>) -> ProviderConfig {
-        ProviderConfig {
-            name: "mock-jina-rerank".to_string(),
-            provider_type: "openai_compatible".to_string(),
-            api_key: "sk-test".to_string(),
-            base_url: Some(base_url.to_string()),
+        mock_provider_config(
+            "mock-jina-rerank",
+            "openai_compatible",
+            "sk-test",
+            base_url,
             models,
-            ..ProviderConfig::default()
-        }
+        )
     }
 
     fn authenticated_api_key() -> ApiKey {
