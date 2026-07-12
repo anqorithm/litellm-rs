@@ -1,5 +1,10 @@
 #[cfg(all(test, feature = "gateway", feature = "storage"))]
+#[path = "common/providers.rs"]
+pub mod provider_fixtures;
+
+#[cfg(all(test, feature = "gateway", feature = "storage"))]
 mod tests {
+    use super::provider_fixtures::mock_provider_config;
     use actix_web::{App, HttpMessage, HttpResponse, HttpServer, http::StatusCode, test, web};
     use bytes::Bytes;
     use futures::stream;
@@ -123,15 +128,15 @@ mod tests {
     }
 
     fn provider_config(base_url: &str) -> ProviderConfig {
-        ProviderConfig {
-            name: "mock-openai-compatible".to_string(),
-            provider_type: "openai_compatible".to_string(),
-            api_key: "test-key".to_string(),
-            base_url: Some(base_url.to_string()),
-            settings: HashMap::from([("skip_api_key".to_string(), Value::Bool(true))]),
-            models: vec!["gpt-4o-mini".to_string()],
-            ..ProviderConfig::default()
-        }
+        let mut provider = mock_provider_config(
+            "mock-openai-compatible",
+            "openai_compatible",
+            "test-key",
+            base_url,
+            vec!["gpt-4o-mini".to_string()],
+        );
+        provider.settings = HashMap::from([("skip_api_key".to_string(), Value::Bool(true))]);
+        provider
     }
 
     async fn app_state(base_url: &str) -> AppState {

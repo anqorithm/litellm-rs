@@ -1,5 +1,10 @@
 #[cfg(all(test, feature = "gateway", feature = "storage"))]
+#[path = "common/providers.rs"]
+pub mod provider_fixtures;
+
+#[cfg(all(test, feature = "gateway", feature = "storage"))]
 mod tests {
+    use super::provider_fixtures::mock_provider_config;
     use actix_web::{App, HttpRequest, HttpResponse, HttpServer, http::StatusCode, test, web};
     use actix_web::{HttpMessage, dev::Service};
     use bytes::Bytes;
@@ -159,25 +164,11 @@ mod tests {
         base_url: &str,
         models: Vec<String>,
     ) -> ProviderConfig {
-        ProviderConfig {
-            name: name.to_string(),
-            provider_type: provider_type.to_string(),
-            api_key: "sk-test".to_string(),
-            base_url: Some(base_url.to_string()),
-            models,
-            ..ProviderConfig::default()
-        }
+        mock_provider_config(name, provider_type, "sk-test", base_url, models)
     }
 
     fn openai_image_provider(name: &str, base_url: &str, models: Vec<String>) -> ProviderConfig {
-        ProviderConfig {
-            name: name.to_string(),
-            provider_type: "openai".to_string(),
-            api_key: "sk-test".to_string(),
-            base_url: Some(base_url.to_string()),
-            models,
-            ..ProviderConfig::default()
-        }
+        mock_provider_config(name, "openai", "sk-test", base_url, models)
     }
 
     fn openai_image_provider_with_mapping(

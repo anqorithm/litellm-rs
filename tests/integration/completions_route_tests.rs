@@ -2,6 +2,7 @@
 
 #[cfg(all(test, feature = "gateway", feature = "storage"))]
 mod tests {
+    use crate::common::providers::mock_provider_config;
     use actix_web::{
         App, HttpMessage, HttpResponse, HttpServer, dev::Service, http::StatusCode, test, web,
     };
@@ -148,21 +149,21 @@ mod tests {
     }
 
     fn build_provider_config(base_url: &str) -> ProviderConfig {
-        ProviderConfig {
-            name: "openai".to_string(),
-            provider_type: "openai_compatible".to_string(),
-            api_key: "sk-completion-secret".to_string(),
-            base_url: Some(base_url.to_string()),
-            settings: HashMap::from([
-                ("skip_api_key".to_string(), serde_json::Value::Bool(true)),
-                (
-                    "provider_name".to_string(),
-                    serde_json::Value::String("openai".to_string()),
-                ),
-            ]),
-            models: vec!["gpt-4o".to_string()],
-            ..ProviderConfig::default()
-        }
+        let mut provider = mock_provider_config(
+            "openai",
+            "openai_compatible",
+            "sk-completion-secret",
+            base_url,
+            vec!["gpt-4o".to_string()],
+        );
+        provider.settings = HashMap::from([
+            ("skip_api_key".to_string(), serde_json::Value::Bool(true)),
+            (
+                "provider_name".to_string(),
+                serde_json::Value::String("openai".to_string()),
+            ),
+        ]);
+        provider
     }
 
     async fn build_test_app_state(base_url: &str) -> AppState {

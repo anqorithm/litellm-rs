@@ -1,8 +1,12 @@
 #[cfg(all(test, feature = "gateway", feature = "storage"))]
+#[path = "common/providers.rs"]
+pub mod provider_fixtures;
+
+#[cfg(all(test, feature = "gateway", feature = "storage"))]
 mod tests {
+    use super::provider_fixtures::mock_provider_config;
     use actix_web::{App, HttpRequest, HttpResponse, HttpServer, http::StatusCode, test, web};
     use litellm_rs::Config;
-    use litellm_rs::config::models::provider::ProviderConfig;
     use litellm_rs::core::budget::{
         BudgetConfig, BudgetScope, ModelLimitConfig, ProviderLimitConfig, ResetPeriod,
     };
@@ -211,18 +215,17 @@ mod tests {
         config.gateway.storage.database.enabled = false;
         config.gateway.storage.redis.enabled = false;
         config.gateway.pricing.source = Some("config/model_prices_extended.json".to_string());
-        config.gateway.providers = vec![ProviderConfig {
-            name: "openai".to_string(),
-            provider_type: "openai".to_string(),
-            api_key: "sk-test".to_string(),
-            base_url: Some(base_url.to_string()),
-            models: vec![
+        config.gateway.providers = vec![mock_provider_config(
+            "openai",
+            "openai",
+            "sk-test",
+            base_url,
+            vec![
                 CHAT_MODEL.to_string(),
                 EMBEDDING_MODEL.to_string(),
                 IMAGE_MODEL.to_string(),
             ],
-            ..ProviderConfig::default()
-        }];
+        )];
 
         let server = GatewayHttpServer::new(&config)
             .await
