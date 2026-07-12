@@ -1,4 +1,5 @@
-use super::{OpenAIConfig, OpenAIProvider};
+use super::OpenAIProvider;
+use super::config::test_openai_config;
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use crate::core::types::chat::{ChatMessage, ChatRequest};
@@ -79,9 +80,7 @@ async fn test_openai_streaming_maps_non_success_status_before_sse()
     let body = r#"{"error":{"type":"rate_limit_error","message":"slow down"}}"#;
     let api_base = response_url("429 Too Many Requests", body).await?;
 
-    let mut config = OpenAIConfig::default();
-    config.base.api_key = Some("sk-test123456789012345678901234567890123456".to_string());
-    config.base.api_base = Some(api_base);
+    let config = test_openai_config(api_base, "sk-test123456789012345678901234567890123456");
     let provider = OpenAIProvider::new(config).await?;
 
     let err = match LLMProvider::chat_completion_stream(

@@ -6,6 +6,8 @@
 use std::env;
 
 use litellm_rs::config::models::provider::ProviderConfig;
+use litellm_rs::core::providers::openai::OpenAIConfig;
+use litellm_rs::core::providers::openai_like::OpenAILikeConfig;
 
 /// Build a provider config for loopback-backed integration tests.
 pub fn mock_provider_config(
@@ -23,6 +25,20 @@ pub fn mock_provider_config(
         models,
         ..ProviderConfig::default()
     }
+}
+
+pub fn mock_openai_runtime_config(
+    api_base: impl Into<String>,
+    api_key: impl Into<String>,
+) -> OpenAIConfig {
+    let mut config = OpenAIConfig::default();
+    config.base.api_base = Some(api_base.into());
+    config.base.api_key = Some(api_key.into());
+    config
+}
+
+pub fn mock_openai_like_runtime_config(api_base: impl Into<String>) -> OpenAILikeConfig {
+    OpenAILikeConfig::new(api_base).with_skip_api_key(true)
 }
 
 /// Configuration for provider tests

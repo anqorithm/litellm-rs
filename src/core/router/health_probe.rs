@@ -270,7 +270,8 @@ fn log_probe_failure(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::providers::openai::{OpenAIConfig, OpenAIProvider};
+    use crate::core::providers::openai::OpenAIProvider;
+    use crate::core::providers::openai::config::test_openai_config;
     use crate::core::router::config::RouterConfig;
     use crate::core::router::deployment::{DeploymentConfig, DeploymentState};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -279,11 +280,14 @@ mod tests {
     use url::Url;
 
     async fn test_provider(base_url: Option<String>) -> Provider {
-        let mut config = OpenAIConfig::default();
-        config.base.api_key = Some("sk-health-probe-test".to_string());
-        if let Some(base_url) = base_url {
-            config.base.api_base = Some(base_url);
-        }
+        let config = match base_url {
+            Some(base_url) => test_openai_config(base_url, "sk-health-probe-test"),
+            None => {
+                let mut config = crate::core::providers::openai::OpenAIConfig::default();
+                config.base.api_key = Some("sk-health-probe-test".to_string());
+                config
+            }
+        };
         Provider::OpenAI(
             OpenAIProvider::new(config)
                 .await

@@ -191,7 +191,7 @@ fn test_transform_chat_request_forwards_typed_params_and_extras() {
 
 #[tokio::test]
 async fn test_openai_like_transform_request_forwards_typed_params_and_extras() {
-    let config = OpenAILikeConfig::new("http://localhost:8000/v1").with_skip_api_key(true);
+    let config = OpenAILikeConfig::new("https://api.example.com/v1").with_skip_api_key(true);
     let Ok(provider) = OpenAILikeProvider::new(config).await else {
         panic!("provider creation must succeed");
     };

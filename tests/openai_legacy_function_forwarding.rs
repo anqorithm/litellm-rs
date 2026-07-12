@@ -1,5 +1,8 @@
-use litellm_rs::core::providers::openai::{OpenAIConfig, OpenAIProvider};
-use litellm_rs::core::providers::openai_like::{OpenAILikeConfig, OpenAILikeProvider};
+#[path = "common/providers.rs"]
+pub mod provider_fixtures;
+
+use litellm_rs::core::providers::openai::OpenAIProvider;
+use litellm_rs::core::providers::openai_like::OpenAILikeProvider;
 use litellm_rs::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use litellm_rs::core::types::chat::{ChatMessage, ChatRequest};
 use litellm_rs::core::types::context::RequestContext;
@@ -13,6 +16,8 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
+
+use provider_fixtures::{mock_openai_like_runtime_config, mock_openai_runtime_config};
 
 type TestResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
 
@@ -164,9 +169,7 @@ fn request_without_legacy_fields() -> ChatRequest {
 
 async fn openai_request_body(request: ChatRequest) -> TestResult<Value> {
     let upstream = start_mock_upstream().await?;
-    let mut config = OpenAIConfig::default();
-    config.base.api_key = Some("sk-test-legacy-functions".to_string());
-    config.base.api_base = Some(upstream.api_base.clone());
+    let config = mock_openai_runtime_config(upstream.api_base.clone(), "sk-test-legacy-functions");
     let provider = OpenAIProvider::new(config).await?;
 
     LLMProvider::chat_completion(&provider, request, RequestContext::default()).await?;
@@ -175,7 +178,7 @@ async fn openai_request_body(request: ChatRequest) -> TestResult<Value> {
 
 async fn openai_like_request_body(request: ChatRequest) -> TestResult<Value> {
     let upstream = start_mock_upstream().await?;
-    let config = OpenAILikeConfig::new(upstream.api_base.clone()).with_skip_api_key(true);
+    let config = mock_openai_like_runtime_config(upstream.api_base.clone());
     let provider = OpenAILikeProvider::new(config).await?;
 
     LLMProvider::chat_completion(&provider, request, RequestContext::default()).await?;

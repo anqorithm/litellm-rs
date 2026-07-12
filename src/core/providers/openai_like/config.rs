@@ -244,6 +244,11 @@ impl ProviderConfig for OpenAILikeConfig {
 }
 
 #[cfg(test)]
+pub(crate) fn test_openai_like_config(api_base: impl Into<String>) -> OpenAILikeConfig {
+    OpenAILikeConfig::new(api_base).with_skip_api_key(true)
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
