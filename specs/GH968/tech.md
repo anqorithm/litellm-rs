@@ -63,13 +63,30 @@ Link to `product.md`.
    分类与 private-network 永久 metadata 拒绝。该 PR 不新增尚未接线的 Gateway config 字段或 HTTP client。
 2. HTTP client foundation PR (`Refs #968`): 不暴露裸 client 的可用 request builder、普通/streaming/no-redirect
    policy client，以及 deterministic DNS rebinding/literal/redirect/private 未建连测试。
-3. Shared-provider PR (`Refs #968`): Gateway config/default/env/validation、`ProviderConfig` trait、BaseConfig、
-   factory、GlobalPoolManager、BaseHttpClient、provider macros、OpenAI/OpenAI-like 普通/流式/health 路径改用
-   policy client。
-4. Native-route PR (`Fixes #968`): Anthropic/Gemini/Azure/AzureAI/Vertex 及 Gemini/batches/images/moderations/
+3. Image-edit fixture decomposition PR (`Refs #968`): 将超过 800 行的 image-edit integration tests 按连续
+   测试组拆到标准子模块；不改变测试主体、断言、覆盖集合或运行时行为。
+4. Image-router fixture decomposition PR (`Refs #968`): 对 image-router tests 做同样的单文件拆分。
+5. Completions fixture decomposition PR (`Refs #968`): 对 completions integration tests 做同样的单文件拆分。
+6. Test-fixture consolidation PR (`Refs #968`): 将 14 处 OpenAI/OpenAI-like loopback mock config 收敛到
+   `tests/common/providers.rs` 的共享构造器；保持测试行为不变，不预写或静默忽略尚未声明的 access 字段。
+7. Config-construction normalization PR (`Refs #968`): 将四处全字段 `OpenAIConfig` 字面量改为保留
+   `Default` 的构造方式，并把不发请求的 factory 单测改用公网形态 URL；保持现有运行时行为不变，为后续新增
+   默认 public-only 字段消除机械传播文件。
+8. Gateway/shared-runtime core PR (`Refs #968`): Gateway config/default/env/validation/builder 与 factory 将顶层
+   access 传播到 OpenAI/OpenAI-like config；`GlobalPoolManager` 为两者普通、流式与 health 路径构造 policy
+   client；共享 loopback fixture 显式 private opt-in，self-hosted 无 opt-in 失败，已迁移路径无普通 fallback。
+9. Shared-runtime extras PR (`Refs #968`): `ProviderConfig` trait、`BaseConfig`、BaseHttpClient、live provider macros、
+   OpenAI multipart 与自定义 health/no-redirect 路径接入 policy client，并清除已迁移 shared 路径的 raw client
+   escape。
+10. Native-route PR (`Fixes #968`): Anthropic/Gemini/Azure/AzureAI/Vertex 及 Gemini/batches/images/moderations/
    fine-tuning/rerank route 旁路接入，拒绝不安全 proxy，并增加源码架构 guard。
 
-每个 PR 独立满足 scope hard guard、current-head reviewer、CI 和 PR gate；只有第四段在全量矩阵通过后关闭 issue。
+7cf23695 基线上的直接 shared-runtime 尝试在 15 文件边界内完成生产接线后，全量测试暴露 14 个分散的
+loopback provider fixture 文件，其中 3 个又超过 800 行。移动代码按 additions + deletions 计入 800 行 scope，
+因此三个大文件必须各自成片。第 3 至 7 段先机械拆分、收敛测试构造和 Rust 字面量，且不声明未接线的安全配置；
+第八段随后一次完成配置到执行的闭环。
+
+每个 PR 独立满足 scope hard guard、current-head reviewer、CI 和 PR gate；只有第十段在全量矩阵通过后关闭 issue。
 
 ### 5. Architecture guard
 
