@@ -24,6 +24,7 @@ pub use resolver::is_provider_selector_supported;
 use super::provider_type::ProviderType;
 use super::unified_provider::ProviderError;
 use super::{Provider, openai_like, registry as provider_registry};
+use crate::core::net::ProviderEndpointAccess;
 use tracing::warn;
 
 fn provider_diagnostic_name(provider_type: &ProviderType) -> &'static str {
@@ -62,6 +63,7 @@ pub async fn create_provider(
         provider_type,
         api_key,
         base_url,
+        endpoint_access,
         api_version,
         organization,
         project,
@@ -77,6 +79,18 @@ pub async fn create_provider(
     } else {
         provider_type.as_str()
     };
+    if settings.contains_key("endpoint_access") {
+        return Err(ProviderError::configuration(
+            "provider",
+            "endpoint_access must be configured as a top-level provider field",
+        ));
+    }
+    if endpoint_access == ProviderEndpointAccess::PrivateNetwork {
+        return Err(ProviderError::configuration(
+            "provider",
+            "private_network is staged until all provider routes are policy-wired",
+        ));
+    }
     if let Some(def) = catalog_definition_for_supported_selector(provider_selector) {
         let effective_key = if api_key.is_empty() {
             def.resolve_api_key(None)
@@ -741,7 +755,7 @@ mod tests {
             .settings
             .insert("skip_api_key".to_string(), serde_json::Value::Bool(true));
 
-        let provider = create_provider(config)
+        let provider = create_provider(config.clone())
             .await
             .expect("openai_compatible provider should be creatable");
         assert!(matches!(&provider, Provider::OpenAILike(_)));
@@ -749,5 +763,26 @@ mod tests {
             provider.capabilities(),
             openai_like::provider::OPENAI_COMPATIBLE_PROXY_CAPABILITIES
         );
+
+        config.endpoint_access = ProviderEndpointAccess::PrivateNetwork;
+        let error = create_provider(config)
+            .await
+            .expect_err("private access must remain staged");
+        assert!(error.to_string().contains("staged"));
+
+        let mut settings_override = crate::config::models::provider::ProviderConfig {
+            name: "openai".to_string(),
+            provider_type: "openai".to_string(),
+            api_key: "sk-test".to_string(),
+            ..Default::default()
+        };
+        settings_override.settings.insert(
+            "endpoint_access".to_string(),
+            serde_json::json!("private_network"),
+        );
+        let error = create_provider(settings_override)
+            .await
+            .expect_err("settings must not override endpoint access");
+        assert!(error.to_string().contains("top-level"));
     }
 }

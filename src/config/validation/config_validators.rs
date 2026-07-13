@@ -158,6 +158,19 @@ impl Validate for ProviderConfig {
             ));
         }
 
+        if self.settings.contains_key("endpoint_access") {
+            return Err(format!(
+                "Provider {} endpoint_access must be configured as a top-level field",
+                self.name
+            ));
+        }
+        if self.endpoint_access == crate::core::net::ProviderEndpointAccess::PrivateNetwork {
+            return Err(format!(
+                "Provider {} private_network is staged until all provider routes are policy-wired",
+                self.name
+            ));
+        }
+
         let requires_api_key =
             crate::core::providers::registry::get_definition(&provider_selector.to_lowercase())
                 .map(|def| !def.skip_api_key)
@@ -330,5 +343,41 @@ impl Validate for ProviderHealthCheckConfig {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod endpoint_access_tests {
+    use super::*;
+    use crate::core::net::ProviderEndpointAccess;
+
+    fn public_provider() -> ProviderConfig {
+        ProviderConfig {
+            name: "staged".to_string(),
+            provider_type: "openai_compatible".to_string(),
+            api_key: "sk-test".to_string(),
+            base_url: Some("https://8.8.8.8/v1".to_string()),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn endpoint_access_is_top_level_and_private_is_staged() {
+        let mut config = public_provider();
+        assert!(Validate::validate(&config).is_ok());
+
+        config.endpoint_access = ProviderEndpointAccess::PrivateNetwork;
+        assert!(Validate::validate(&config).unwrap_err().contains("staged"));
+
+        config.endpoint_access = ProviderEndpointAccess::PublicOnly;
+        config.settings.insert(
+            "endpoint_access".to_string(),
+            serde_json::json!("private_network"),
+        );
+        assert!(
+            Validate::validate(&config)
+                .unwrap_err()
+                .contains("top-level")
+        );
     }
 }

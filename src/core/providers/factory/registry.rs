@@ -49,6 +49,12 @@ impl Provider {
         provider_type: ProviderType,
         config: serde_json::Value,
     ) -> Result<Self, ProviderError> {
+        if config.get("endpoint_access").is_some() {
+            return Err(ProviderError::configuration(
+                super::provider_diagnostic_name(&provider_type),
+                "endpoint_access is staged until provider routes are policy-wired",
+            ));
+        }
         match provider_type {
             ProviderType::OpenAI => {
                 let openai_config = build_openai_config_from_factory(&config)?;
@@ -635,17 +641,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_from_config_async_openai_compatible_accepts_api_base_alias() {
-        let config = serde_json::json!({
-            "api_base": "https://api.example.com/v1",
-            "skip_api_key": true,
-            "provider_name": "test-openai-like"
-        });
-
-        let provider = Provider::from_config_async(ProviderType::OpenAICompatible, config)
-            .await
-            .unwrap_or_else(|err| panic!("openai_compatible should be creatable: {err}"));
-        assert!(matches!(provider, Provider::OpenAILike(_)));
+    async fn test_from_config_async_rejects_staged_endpoint_access() {
+        let error = Provider::from_config_async(
+            ProviderType::OpenAICompatible,
+            serde_json::json!({"endpoint_access": "public_only"}),
+        )
+        .await
+        .expect_err("direct configs must reject staged endpoint access");
+        assert!(error.to_string().contains("staged"));
     }
 
     #[cfg(feature = "providers-extended")]
