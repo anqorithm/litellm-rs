@@ -266,10 +266,9 @@ impl Router for DefaultRouter {
                     api_key: Some(api_key),
                     api_base: Some(api_base.clone()),
                     timeout: options.timeout.unwrap_or(60),
-                    max_retries: 3,
                     headers: options.headers.clone().unwrap_or_default(),
                     organization: options.organization.clone(),
-                    api_version: None,
+                    ..Default::default()
                 },
                 organization: options.organization.clone(),
                 ..Default::default()

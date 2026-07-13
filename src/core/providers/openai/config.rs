@@ -85,13 +85,8 @@ impl Default for OpenAIConfig {
     fn default() -> Self {
         Self {
             base: BaseConfig {
-                api_key: None,
                 api_base: Some("https://api.openai.com/v1".to_string()),
-                timeout: 60, // OpenAI can be slow for complex requests
-                max_retries: 3,
-                headers: HashMap::new(),
-                organization: None,
-                api_version: None,
+                ..Default::default()
             },
             provider_name: default_provider_name(),
             organization: None,

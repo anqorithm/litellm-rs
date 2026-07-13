@@ -142,9 +142,7 @@ impl MistralProvider {
             api_base: Some(config.api_base.clone()),
             timeout: config.timeout_seconds,
             max_retries: config.max_retries,
-            headers: HashMap::new(),
-            organization: None,
-            api_version: None,
+            ..Default::default()
         };
 
         let base_client = BaseHttpClient::new(base_config)?;

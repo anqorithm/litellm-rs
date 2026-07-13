@@ -137,11 +137,8 @@ impl DefaultRouter {
                 base: BaseConfig {
                     api_key: Some(api_key),
                     api_base: Some("https://api.openai.com/v1".to_string()),
-                    timeout: 60,
-                    max_retries: 3,
-                    headers: Default::default(),
                     organization: std::env::var("OPENAI_ORGANIZATION").ok(),
-                    api_version: None,
+                    ..Default::default()
                 },
                 organization: std::env::var("OPENAI_ORGANIZATION").ok(),
                 ..Default::default()

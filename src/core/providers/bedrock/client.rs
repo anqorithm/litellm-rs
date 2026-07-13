@@ -33,13 +33,9 @@ impl BedrockClient {
 
         // Create base HTTP client
         let base_config = BaseConfig {
-            api_key: None,  // Bedrock uses AWS credentials
-            api_base: None, // Dynamic based on region and model
             timeout: config.timeout_seconds,
             max_retries: config.max_retries,
-            headers: HashMap::new(),
-            organization: None,
-            api_version: None,
+            ..Default::default()
         };
 
         let base_client = BaseHttpClient::new(base_config)

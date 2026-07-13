@@ -36,11 +36,8 @@ impl EmbeddingRouter {
                 base: BaseConfig {
                     api_key: Some(api_key),
                     api_base: Some("https://api.openai.com/v1".to_string()),
-                    timeout: 60,
-                    max_retries: 3,
-                    headers: Default::default(),
                     organization: std::env::var("OPENAI_ORGANIZATION").ok(),
-                    api_version: None,
+                    ..Default::default()
                 },
                 organization: std::env::var("OPENAI_ORGANIZATION").ok(),
                 ..Default::default()
@@ -223,10 +220,8 @@ impl EmbeddingRouter {
                 api_key: Some(api_key.to_string()),
                 api_base: Some(api_base.to_string()),
                 timeout,
-                max_retries: 3,
                 headers: options.headers.clone().unwrap_or_default(),
-                organization: None,
-                api_version: None,
+                ..Default::default()
             },
             ..Default::default()
         };
