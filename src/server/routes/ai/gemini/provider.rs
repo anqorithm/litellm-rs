@@ -1,26 +1,25 @@
 use bytes::Bytes;
 use reqwest::{
-    Client, Url,
+    Url,
     header::{CONTENT_TYPE, HeaderName, HeaderValue, RETRY_AFTER},
 };
 use serde_json::Value;
-use std::sync::OnceLock;
 use std::time::Duration;
 
 use crate::config::models::provider::ProviderConfig;
 use crate::core::budget::{BudgetReservation, UnifiedBudgetReservation};
+use crate::core::providers::base::{ProviderRequestBuilder, read_streaming_error_body};
 use crate::core::providers::shared::parse_retry_after_from_body;
 use crate::core::providers::{Provider, ProviderError};
 use crate::server::state::AppState;
 use crate::utils::error::gateway_error::GatewayError;
 
 use super::super::budgeted::ApiKeyBudgetPolicy;
+use super::super::route_http::RouteHttpClient;
 use super::{validate_api_version, validate_method, validate_model_segment};
 use uuid::Uuid;
 
 const GEMINI_BASE_URL: &str = "https://generativelanguage.googleapis.com";
-
-static GEMINI_HTTP_CLIENT: OnceLock<Client> = OnceLock::new();
 
 #[derive(Debug, Clone)]
 pub(super) struct GeminiRouteProvider {
@@ -31,6 +30,7 @@ pub(super) struct GeminiRouteProvider {
     base_url: String,
     headers: Vec<(HeaderName, HeaderValue)>,
     timeout: Duration,
+    client: RouteHttpClient,
 }
 
 #[cfg(test)]
@@ -39,14 +39,22 @@ pub(super) fn test_gemini_route_provider(
     pricing_provider: impl Into<String>,
     model: impl Into<String>,
 ) -> GeminiRouteProvider {
+    let base_url = GEMINI_BASE_URL.to_string();
     GeminiRouteProvider {
         provider_name: provider_name.into(),
         pricing_provider: pricing_provider.into(),
         model: model.into(),
         api_key: String::new(),
-        base_url: String::new(),
+        base_url: base_url.clone(),
         headers: Vec::new(),
         timeout: Duration::from_secs(1),
+        client: RouteHttpClient::new(
+            "gemini_proxy",
+            base_url,
+            crate::core::net::ProviderEndpointAccess::PublicOnly,
+            1,
+        )
+        .expect("test Gemini route client should build"),
     }
 }
 
@@ -178,14 +186,22 @@ fn gemini_route_provider_from_config(
         )));
     }
 
+    let base_url = gemini_base_url(provider);
+    let client = RouteHttpClient::new(
+        "gemini_proxy",
+        base_url.clone(),
+        provider.endpoint_access,
+        provider.timeout,
+    )?;
     Ok(GeminiRouteProvider {
         provider_name: provider.name.clone(),
         pricing_provider: "gemini".to_string(),
         model: requested_model.to_string(),
         api_key: provider.api_key.clone(),
-        base_url: gemini_base_url(provider),
+        base_url,
         headers: gemini_provider_headers(provider)?,
         timeout: Duration::from_secs(provider.timeout),
+        client,
     })
 }
 
@@ -338,15 +354,30 @@ pub(super) async fn send_gemini_request(
             || async {
                 let url = gemini_url(provider, api_version, method, stream)
                     .map_err(gemini_gateway_error_to_provider_error)?;
-                let response = apply_gemini_headers(gemini_http_client().post(url), provider)
+                let builder = if stream {
+                    provider.client.streaming_post(url)
+                } else {
+                    provider.client.ordinary_post(url)
+                }
+                .map_err(gemini_gateway_error_to_provider_error)?;
+                let builder = apply_gemini_headers(builder, provider)
                     .header(CONTENT_TYPE, "application/json")
-                    .json(request)
-                    .timeout(provider.timeout)
-                    .send()
-                    .await
-                    .map_err(|error| {
-                        gemini_gateway_error_to_provider_error(gemini_http_error(error))
-                    })?;
+                    .json(request);
+                let response = if stream {
+                    tokio::time::timeout(provider.timeout, builder.send())
+                        .await
+                        .map_err(|_| {
+                            ProviderError::timeout(
+                                "gemini_proxy",
+                                "Gemini streaming response header timeout",
+                            )
+                        })?
+                } else {
+                    builder.send().await
+                }
+                .map_err(|error| {
+                    gemini_gateway_error_to_provider_error(gemini_http_error(error))
+                })?;
                 gemini_response_or_provider_error(response, provider).await
             },
         )
@@ -369,11 +400,10 @@ async fn gemini_response_or_provider_error(
         .get(RETRY_AFTER)
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.trim().parse::<u64>().ok());
-    let body = response
-        .bytes()
+    let body = read_streaming_error_body(response)
         .await
-        .map_err(|error| gemini_gateway_error_to_provider_error(gemini_http_error(error)))?;
-    let body = sanitize_gemini_error_body(body, provider);
+        .map_err(|error| error.into_provider_error("gemini_proxy"))?;
+    let body = sanitize_gemini_error_body(Bytes::from(body), provider);
     let body_text = String::from_utf8_lossy(&body).to_string();
     Err(gemini_upstream_status_provider_error(
         status,
@@ -443,14 +473,10 @@ pub(super) fn gemini_gateway_error_to_provider_error(error: GatewayError) -> Pro
     }
 }
 
-fn gemini_http_client() -> &'static Client {
-    GEMINI_HTTP_CLIENT.get_or_init(Client::new)
-}
-
 fn apply_gemini_headers(
-    mut request: reqwest::RequestBuilder,
+    mut request: ProviderRequestBuilder,
     provider: &GeminiRouteProvider,
-) -> reqwest::RequestBuilder {
+) -> ProviderRequestBuilder {
     for (name, value) in &provider.headers {
         request = request.header(name.clone(), value.clone());
     }
@@ -474,4 +500,85 @@ fn sanitize_gemini_error_body(body: Bytes, provider: &GeminiRouteProvider) -> By
         sanitized = sanitized.replace(&encoded_key, "[REDACTED]");
     }
     Bytes::from(sanitized)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::providers::base::STREAMING_ERROR_BODY_MAX_BYTES;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    async fn raw_error_response(
+        body: Vec<u8>,
+        content_length: usize,
+        stall: bool,
+    ) -> (reqwest::Response, tokio::task::JoinHandle<()>) {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("error server should bind");
+        let address = listener.local_addr().expect("error server address");
+        let task = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.expect("request should connect");
+            let mut request = [0_u8; 4096];
+            let request_bytes = socket
+                .read(&mut request)
+                .await
+                .expect("request should be readable");
+            assert!(request_bytes > 0, "request should not be empty");
+            let headers = format!(
+                "HTTP/1.1 500 Internal Server Error\r\ncontent-length: {content_length}\r\nconnection: close\r\n\r\n"
+            );
+            socket
+                .write_all(headers.as_bytes())
+                .await
+                .expect("headers should write");
+            socket
+                .write_all(&body)
+                .await
+                .expect("error body should write");
+            if stall {
+                tokio::time::sleep(Duration::from_secs(60)).await;
+            }
+        });
+        let response = reqwest::Client::new()
+            .get(format!("http://{address}"))
+            .send()
+            .await
+            .expect("response headers should arrive");
+        (response, task)
+    }
+
+    #[tokio::test]
+    async fn gemini_streaming_error_body_stall_times_out() {
+        let (response, task) = raw_error_response(b"partial".to_vec(), 4096, true).await;
+        let provider = test_gemini_route_provider("gemini", "gemini", "model");
+
+        let error = tokio::time::timeout(
+            Duration::from_secs(12),
+            gemini_response_or_provider_error(response, &provider),
+        )
+        .await
+        .expect("bounded error reader should return")
+        .expect_err("stalled error body must fail");
+
+        assert!(matches!(error, ProviderError::Timeout { .. }));
+        task.abort();
+    }
+
+    #[tokio::test]
+    async fn gemini_streaming_error_body_is_capped() {
+        let mut body = vec![b'a'; STREAMING_ERROR_BODY_MAX_BYTES];
+        body.extend_from_slice(b"TAIL_MARKER");
+        let (response, task) = raw_error_response(body.clone(), body.len(), false).await;
+        let provider = test_gemini_route_provider("gemini", "gemini", "model");
+
+        let error = gemini_response_or_provider_error(response, &provider)
+            .await
+            .expect_err("upstream error must fail");
+        let message = error.to_string();
+
+        assert!(!message.contains("TAIL_MARKER"));
+        assert!(message.len() < STREAMING_ERROR_BODY_MAX_BYTES + 256);
+        task.await.expect("error server should finish");
+    }
 }
