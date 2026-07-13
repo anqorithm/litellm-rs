@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
 
+use crate::core::net::{ProviderEndpointAccess, ProviderEndpointPolicy};
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::provider::ProviderConfig;
 
@@ -29,6 +30,10 @@ pub struct GeminiConfig {
 
     /// Base URL
     pub base_url: String,
+
+    /// Outbound network access policy
+    #[serde(default)]
+    pub endpoint_access: ProviderEndpointAccess,
 
     /// API version
     pub api_version: String,
@@ -84,6 +89,7 @@ impl GeminiConfig {
             service_account_json: None,
             use_vertex_ai: false,
             base_url: "https://generativelanguage.googleapis.com".to_string(),
+            endpoint_access: ProviderEndpointAccess::PublicOnly,
             api_version: "v1beta".to_string(),
             request_timeout: 600,
             connect_timeout: 10,
@@ -109,6 +115,7 @@ impl GeminiConfig {
             service_account_json: None,
             use_vertex_ai: true,
             base_url: format!("https://{}-aiplatform.googleapis.com", location_str),
+            endpoint_access: ProviderEndpointAccess::PublicOnly,
             api_version: "v1".to_string(),
             request_timeout: 600,
             connect_timeout: 10,
@@ -181,6 +188,12 @@ impl GeminiConfig {
         self
     }
 
+    /// Set the outbound network access policy.
+    pub fn with_endpoint_access(mut self, access: ProviderEndpointAccess) -> Self {
+        self.endpoint_access = access;
+        self
+    }
+
     /// Settings
     pub fn with_debug(mut self, debug: bool) -> Self {
         self.debug = debug;
@@ -239,6 +252,24 @@ impl GeminiConfig {
             _ => false,
         }
     }
+
+    pub(crate) fn validate_policy_client_settings(&self) -> Result<(), String> {
+        if self.proxy_url.is_some() {
+            return Err(
+                "Gemini proxy configuration is incompatible with endpoint policy enforcement"
+                    .to_string(),
+            );
+        }
+        if self.connect_timeout != 10 {
+            return Err(
+                "Gemini connect_timeout must remain 10 seconds with the policy-aware client"
+                    .to_string(),
+            );
+        }
+        ProviderEndpointPolicy::for_base_url(self.endpoint_access, &self.base_url)
+            .map(|_| ())
+            .map_err(|error| format!("invalid Gemini base URL policy: {error}"))
+    }
 }
 
 impl Default for GeminiConfig {
@@ -289,6 +320,8 @@ impl ProviderConfig for GeminiConfig {
             return Err("Max retries cannot exceed 10".to_string());
         }
 
+        self.validate_policy_client_settings()?;
+
         Ok(())
     }
 
@@ -298,6 +331,10 @@ impl ProviderConfig for GeminiConfig {
 
     fn api_base(&self) -> Option<&str> {
         Some(&self.base_url)
+    }
+
+    fn endpoint_access(&self) -> ProviderEndpointAccess {
+        self.endpoint_access
     }
 
     fn timeout(&self) -> Duration {
@@ -376,11 +413,33 @@ mod tests {
     fn test_google_ai_config() {
         let config = GeminiConfig::new_google_ai("test-api-key-1234567890123456");
         assert!(!config.use_vertex_ai);
+        assert_eq!(config.endpoint_access, ProviderEndpointAccess::PublicOnly);
         assert_eq!(
             config.api_key,
             Some("test-api-key-1234567890123456".to_string())
         );
         assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_policy_client_settings_fail_closed() {
+        let mut config = GeminiConfig::new_google_ai("test-api-key-1234567890123456");
+        config.base_url = "http://127.0.0.1:18080".to_string();
+        assert!(crate::core::providers::gemini::GeminiClient::new(config.clone()).is_err());
+
+        config.endpoint_access = ProviderEndpointAccess::PrivateNetwork;
+        assert!(crate::core::providers::gemini::GeminiClient::new(config.clone()).is_ok());
+
+        config.proxy_url = Some("http://proxy.example".to_string());
+        let error = crate::core::providers::gemini::GeminiClient::new(config.clone())
+            .expect_err("proxy must fail closed");
+        assert!(error.to_string().contains("proxy"));
+
+        config.proxy_url = None;
+        config.connect_timeout = 9;
+        let error = crate::core::providers::gemini::GeminiClient::new(config)
+            .expect_err("custom connect timeout must fail closed");
+        assert!(error.to_string().contains("connect_timeout"));
     }
 
     #[test]

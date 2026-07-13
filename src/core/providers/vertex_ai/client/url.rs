@@ -2,6 +2,21 @@ use super::VertexAIProvider;
 use crate::core::providers::vertex_ai::VertexAIModel;
 
 impl VertexAIProvider {
+    pub(super) fn build_google_model_url(&self, model: &str, endpoint: &str) -> String {
+        if let Some(api_base) = self.config.api_base.as_deref() {
+            return format!("{}/{}:{}", api_base.trim_end_matches('/'), model, endpoint);
+        }
+        format!(
+            "https://{}-aiplatform.googleapis.com/{}/projects/{}/locations/{}/publishers/google/models/{}:{}",
+            self.config.location,
+            self.config.api_version,
+            self.config.project_id,
+            self.config.location,
+            model,
+            endpoint
+        )
+    }
+
     /// Build the API URL for a given model and endpoint
     pub(super) fn build_url(&self, model: &VertexAIModel, endpoint: &str, stream: bool) -> String {
         let model_id = model.model_id();

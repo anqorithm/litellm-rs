@@ -5,12 +5,13 @@
 
 use std::time::Duration;
 
-use reqwest::{Client, ClientBuilder, Response};
+use reqwest::Response;
 use serde_json::{Value, json};
 use tokio::time::timeout;
 
 use crate::core::providers::base::{
-    HeaderPair, apply_headers, header, header_owned, header_static,
+    BaseConfig, BaseHttpClient, HeaderPair, apply_provider_headers, header, header_owned,
+    header_static, read_streaming_error_body,
 };
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::{
@@ -33,30 +34,29 @@ use super::error::{
 #[derive(Debug, Clone)]
 pub struct GeminiClient {
     config: GeminiConfig,
-    http_client: Client,
+    http_client: BaseHttpClient,
+    streaming_client: BaseHttpClient,
 }
 
 impl GeminiClient {
     /// Create
     pub fn new(config: GeminiConfig) -> Result<Self, ProviderError> {
-        let mut builder = ClientBuilder::new()
-            .timeout(Duration::from_secs(config.request_timeout))
-            .connect_timeout(Duration::from_secs(config.connect_timeout));
-
-        // Configuration
-        if let Some(proxy_url) = &config.proxy_url {
-            let proxy = reqwest::Proxy::all(proxy_url)
-                .map_err(|e| gemini_network_error(format!("Invalid proxy URL: {}", e)))?;
-            builder = builder.proxy(proxy);
-        }
-
-        let http_client = builder
-            .build()
-            .map_err(|e| gemini_network_error(format!("Failed to create HTTP client: {}", e)))?;
+        config
+            .validate_policy_client_settings()
+            .map_err(|error| ProviderError::configuration("gemini", error))?;
+        let base_config = BaseConfig {
+            api_base: Some(config.base_url.clone()),
+            endpoint_access: config.endpoint_access,
+            timeout: config.request_timeout,
+            ..Default::default()
+        };
+        let http_client = BaseHttpClient::new_for_provider("gemini", base_config.clone())?;
+        let streaming_client = BaseHttpClient::new_for_provider_streaming("gemini", base_config)?;
 
         Ok(Self {
             config,
             http_client,
+            streaming_client,
         })
     }
 
@@ -112,7 +112,7 @@ impl GeminiClient {
 
         let response = timeout(
             Duration::from_secs(self.config.request_timeout),
-            apply_headers(self.http_client.post(&url).json(&body), headers).send(),
+            apply_provider_headers(self.http_client.post(&url)?.json(&body), headers).send(),
         )
         .await
         .map_err(|_| gemini_network_error("Request timeout"))?
@@ -144,7 +144,7 @@ impl GeminiClient {
 
         let response = timeout(
             Duration::from_secs(self.config.request_timeout),
-            apply_headers(self.http_client.post(&url).json(&body), headers).send(),
+            apply_provider_headers(self.streaming_client.post(&url)?.json(&body), headers).send(),
         )
         .await
         .map_err(|_| gemini_network_error("Request timeout"))?
@@ -154,9 +154,9 @@ impl GeminiClient {
         let status = response.status();
         if !status.is_success() {
             // Request
-            let error_text = response.text().await.map_err(|e| {
-                gemini_network_error(format!("Failed to read error response: {}", e))
-            })?;
+            let error_text = read_streaming_error_body(response)
+                .await
+                .map_err(|error| error.into_provider_error("gemini"))?;
             return Err(GeminiErrorMapper::from_http_status(
                 status.as_u16(),
                 &error_text,

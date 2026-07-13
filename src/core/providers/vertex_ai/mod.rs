@@ -39,6 +39,8 @@ pub use client::VertexAIProvider;
 pub use common_utils::VertexAIConfig;
 pub use error::VertexAIError;
 
+use crate::core::net::{ProviderEndpointAccess, ProviderEndpointPolicy};
+
 /// Main VertexAI Provider Configuration
 #[derive(Debug, Clone)]
 pub struct VertexAIProviderConfig {
@@ -56,6 +58,9 @@ pub struct VertexAIProviderConfig {
 
     /// Custom API endpoint (optional)
     pub api_base: Option<String>,
+
+    /// Outbound network access policy
+    pub endpoint_access: ProviderEndpointAccess,
 
     /// Request timeout in seconds
     pub timeout_seconds: u64,
@@ -75,6 +80,7 @@ impl Default for VertexAIProviderConfig {
             api_version: "v1".to_string(),
             credentials: VertexCredentials::ApplicationDefault,
             api_base: None,
+            endpoint_access: ProviderEndpointAccess::PublicOnly,
             timeout_seconds: 60,
             max_retries: 3,
             enable_experimental: false,
@@ -90,6 +96,17 @@ impl crate::core::traits::provider::ProviderConfig for VertexAIProviderConfig {
         if self.location.is_empty() {
             return Err("Location is required".to_string());
         }
+        if self.endpoint_access == ProviderEndpointAccess::PrivateNetwork && self.api_base.is_none()
+        {
+            return Err("private_network endpoint access requires api_base".to_string());
+        }
+        ProviderEndpointPolicy::for_base_url(
+            self.endpoint_access,
+            self.api_base
+                .as_deref()
+                .unwrap_or("https://aiplatform.googleapis.com"),
+        )
+        .map_err(|error| format!("invalid Vertex AI API base policy: {error}"))?;
         Ok(())
     }
 
@@ -101,6 +118,10 @@ impl crate::core::traits::provider::ProviderConfig for VertexAIProviderConfig {
         self.api_base
             .as_deref()
             .or(Some("https://aiplatform.googleapis.com"))
+    }
+
+    fn endpoint_access(&self) -> ProviderEndpointAccess {
+        self.endpoint_access
     }
 
     fn timeout(&self) -> std::time::Duration {

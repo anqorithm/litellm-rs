@@ -312,6 +312,7 @@ pub(super) fn build_anthropic_config_from_factory(
 ) -> Result<anthropic::AnthropicConfig, ProviderError> {
     let api_key = macros::require_config_str(config, "api_key", "anthropic")?;
     let mut anthropic_config = anthropic::AnthropicConfig::default().with_api_key(api_key);
+    anthropic_config.endpoint_access = config_endpoint_access(config, "anthropic")?;
 
     if let Some(base_url) =
         config_str(config, "base_url").or_else(|| config_str(config, "api_base"))
@@ -602,6 +603,7 @@ pub(super) fn build_vertex_ai_config_from_factory(
         project_id,
         ..Default::default()
     };
+    vertex_config.endpoint_access = config_endpoint_access(config, "vertex_ai")?;
 
     if let Some(location) = config_str_any(config, &["location", "region", "vertex_location"])
         .map(str::to_string)

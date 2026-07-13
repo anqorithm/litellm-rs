@@ -3,8 +3,8 @@
 #![cfg(feature = "providers-extended")]
 
 use super::builder::{
-    config_bool, config_str, config_str_any, config_u32, config_u64, env_str_any,
-    merge_string_headers,
+    config_bool, config_endpoint_access, config_str, config_str_any, config_u32, config_u64,
+    env_str_any, merge_string_headers,
 };
 use crate::core::providers::{gemini, unified_provider::ProviderError};
 use crate::core::traits::provider::ProviderConfig as _;
@@ -29,6 +29,7 @@ pub(super) fn build_gemini_config_from_factory(
         })?;
 
     let mut gemini_config = gemini::GeminiConfig::new_google_ai(api_key);
+    gemini_config.endpoint_access = config_endpoint_access(config, "gemini")?;
 
     if let Some(base_url) =
         config_str(config, "base_url").or_else(|| config_str(config, "api_base"))

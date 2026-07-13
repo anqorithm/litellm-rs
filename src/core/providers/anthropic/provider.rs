@@ -6,9 +6,7 @@ use futures::Stream;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::pin::Pin;
-use std::sync::Arc;
 
-use crate::core::providers::base::GlobalPoolManager;
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::provider::ProviderConfig as _;
 use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
@@ -31,7 +29,7 @@ const COMPATIBLE_MODEL_MAX_OUTPUT_TOKENS: u32 = 128_000;
 /// Anthropic Provider - unified implementation
 #[derive(Debug, Clone)]
 pub struct AnthropicProvider {
-    client: AnthropicClient,
+    client: Box<AnthropicClient>,
     supported_models: Vec<ModelInfo>,
 }
 
@@ -40,9 +38,6 @@ impl AnthropicProvider {
     pub fn new(config: AnthropicConfig) -> Result<Self, ProviderError> {
         // Create client
         let client = AnthropicClient::new(config.clone())?;
-
-        // Get pool manager
-        let _pool_manager = Arc::new(GlobalPoolManager::new()?);
 
         // Get supported models
         let supported_models = if config.uses_compatible_model_allow_list() {
@@ -77,7 +72,7 @@ impl AnthropicProvider {
         };
 
         Ok(Self {
-            client,
+            client: Box::new(client),
             supported_models,
         })
     }

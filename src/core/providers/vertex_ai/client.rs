@@ -1,14 +1,16 @@
 //! Vertex AI Client Implementation
 
-use reqwest::{Client, Response};
+use reqwest::Response;
 use serde_json::Value;
 use std::sync::Arc;
-use std::time::Duration;
 use tracing::debug;
 
-use crate::core::providers::base::HttpErrorMapper;
+use crate::core::providers::base::{BaseConfig, BaseHttpClient, HttpErrorMapper};
 use crate::core::{
-    traits::{error_mapper::trait_def::ErrorMapper, provider::LLMProvider},
+    traits::{
+        error_mapper::trait_def::ErrorMapper,
+        provider::{LLMProvider, ProviderConfig},
+    },
     types::{
         chat::ChatRequest,
         context::RequestContext,
@@ -19,7 +21,6 @@ use crate::core::{
         responses::{ChatResponse, EmbeddingResponse, ImageGenerationResponse},
     },
 };
-use crate::utils::net::http::create_custom_client;
 use std::collections::HashMap;
 
 use super::{
@@ -43,7 +44,7 @@ pub use self::error_mapper::VertexAIErrorMapper;
 pub struct VertexAIProvider {
     config: VertexAIProviderConfig,
     auth: Arc<VertexAuth>,
-    http_client: Client,
+    http_client: BaseHttpClient,
     // Cost calculation integrated internally
     gemini_transformer: GeminiTransformer,
     partner_transformer: PartnerModelTransformer,
@@ -52,10 +53,19 @@ pub struct VertexAIProvider {
 impl VertexAIProvider {
     /// Create a new Vertex AI provider
     pub async fn new(config: VertexAIProviderConfig) -> Result<Self, VertexAIError> {
+        config
+            .validate()
+            .map_err(|error| ProviderError::configuration("vertex_ai", error))?;
         let auth = Arc::new(VertexAuth::new(config.credentials.clone()));
-
-        let http_client = create_custom_client(Duration::from_secs(config.timeout_seconds))
-            .map_err(|e| ProviderError::configuration("vertex_ai", e.to_string()))?;
+        let http_client = BaseHttpClient::new_for_provider(
+            "vertex_ai",
+            BaseConfig {
+                api_base: config.api_base.clone(),
+                endpoint_access: config.endpoint_access,
+                timeout: config.timeout_seconds,
+                ..Default::default()
+            },
+        )?;
 
         Ok(Self {
             config,
@@ -78,7 +88,7 @@ impl VertexAIProvider {
 
         let response = self
             .http_client
-            .post(url)
+            .post(url)?
             .header("Authorization", format!("Bearer {}", token))
             .header("Content-Type", "application/json")
             .json(&body)
@@ -88,7 +98,12 @@ impl VertexAIProvider {
 
         if !response.status().is_success() {
             let status = response.status();
-            let error_text = response.text().await.unwrap_or_default();
+            let error_text = response.text().await.map_err(|error| {
+                ProviderError::network(
+                    "vertex_ai",
+                    format!("failed to read error response: {error}"),
+                )
+            })?;
 
             return Err(HttpErrorMapper::map_status_code(
                 "vertex_ai",
@@ -164,14 +179,7 @@ impl VertexAIProvider {
         };
 
         let endpoint = "predict";
-        let url = format!(
-            "https://{}-aiplatform.googleapis.com/v1/projects/{}/locations/{}/publishers/google/models/{}:{}",
-            self.config.location,
-            self.config.project_id,
-            self.config.location,
-            model_name,
-            endpoint
-        );
+        let url = self.build_google_model_url(&model_name, endpoint);
 
         // Build request body
         let instances: Vec<Value> = request
@@ -352,10 +360,7 @@ impl LLMProvider for VertexAIProvider {
         let endpoint = "predict";
         let model = "imagegeneration@006";
 
-        let url = format!(
-            "https://{}-aiplatform.googleapis.com/v1/projects/{}/locations/{}/publishers/google/models/{}:{}",
-            self.config.location, self.config.project_id, self.config.location, model, endpoint
-        );
+        let url = self.build_google_model_url(model, endpoint);
 
         let body = serde_json::json!({
             "instances": [{

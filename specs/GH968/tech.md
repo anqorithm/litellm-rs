@@ -84,8 +84,20 @@ Link to `product.md`.
 10. Shared-runtime extras PR (`Refs #968`): `ProviderConfig` trait、`BaseConfig`、BaseHttpClient、live provider macros、
    OpenAI multipart 与自定义 health/no-redirect 路径接入 policy client，并清除已迁移 shared 路径的 raw client
    escape。
-11. Native-route PR (`Fixes #968`): Anthropic/Gemini/Azure/AzureAI/Vertex 及 Gemini/batches/images/moderations/
-   fine-tuning/rerank route 旁路接入，拒绝不安全 proxy，并增加源码架构 guard。
+11a. Anthropic/Gemini/Vertex native PR (`Refs #968`): 配置与 ordinary/streaming/health consumer 接入 policy
+   client，拒绝显式 proxy 或无法保留的 client 参数，并移除未使用的 legacy pool 构造。
+11b. Azure native PR (`Refs #968`): chat/embedding/image/health 以及公开 batch/assistant client escape 接入同一 policy。
+11c. AzureAI native PR (`Refs #968`): chat/embedding/image/rerank/health 全部消费现有 `BaseConfig.endpoint_access`。
+11d. Gemini/batches/images route PR (`Refs #968`): route selection 保留 provider access 与 authority，移除三个静态
+   `Client::new` 旁路。
+11e. Moderations/fine-tuning/rerank route PR (`Refs #968`): route config、fine-tuning provider 和 Cohere/Jina rerank
+   client 接入 policy，不保留普通 client fallback。
+9r. Gateway/shared-runtime activation PR (`Refs #968`): 在 11a 至 11e 的 consumer 完整后解除对应 staged gate，
+   并完成 OpenAI/OpenAI-like ordinary/streaming/health 与 test fixture 的 policy 激活。
+11f. Architecture guard/CI PR (`Refs #968`): 在 9r 后扫描完整 provider/runtime route 边界，以精确 allowlist、
+   红绿 self-test 和 PR/main workflow step 证明 production bypass 为零。
+12. Security evidence PR (`Refs #968`): 保存 deterministic rebinding/literal/redirect/private listener matrix。
+13. Closure PR (`Fixes #968`): 汇总每段 exact-head evidence，运行最终 gate 与 closure audit 后关闭 issue。
 
 7cf23695 基线上的直接 shared-runtime 尝试在 15 文件边界内完成生产接线后，全量测试暴露 14 个分散的
 loopback provider fixture 文件，其中 3 个又超过 800 行。移动代码按 additions + deletions 计入 800 行 scope，
@@ -103,7 +115,13 @@ declaration-execution gap；第九段对尚归第十/十一段所有的 provider
 d3a1e862 基线上的全仓 inventory 随后确认 Gemini SDK support 是唯一剩余 direct runtime loopback 构造；8b
 完成该最后一处机械收敛，配置校验和公网 factory 测试中的 direct literal 保持原样。
 
-每个 PR 独立满足 scope hard guard、current-head reviewer、CI 和 PR gate；只有第十一段在全量矩阵通过后关闭 issue。
+2a4660f7 基线上的 T11 双 lane inventory 证明 native、direct route 与 CI guard 至少涉及约 35 个 production/CI
+文件，无法在 15 个非文档文件 hard guard 内诚实完成。11a 至 11e 因此按独立 runtime consumer 拆分；9r 在
+consumer 完整后激活 staged Gateway/shared runtime；11f 最后扫描完整边界，避免用暂时 allowlist 掩盖 T9R
+仍存在的 bypass。
+
+每个 PR 独立满足 scope hard guard、current-head reviewer、CI 和 PR gate；只有第十三段 closure PR 在所有
+runtime、guard 与 deterministic security evidence 完整后关闭 issue。
 
 ### 5. Architecture guard
 

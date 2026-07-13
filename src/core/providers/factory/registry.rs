@@ -319,7 +319,7 @@ mod tests {
                 "api_key": "test-gemini-api-key-1234567890",
                 "api_version": "v1beta",
                 "timeout": 30,
-                "connect_timeout": 5,
+                "connect_timeout": 10,
                 "max_retries": 2,
                 "enable_caching": false,
                 "debug": true
