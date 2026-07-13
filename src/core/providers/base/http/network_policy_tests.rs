@@ -1,0 +1,204 @@
+use super::*;
+use crate::utils::net::http::{ProviderHttpClient, ProviderHttpClientError};
+use std::net::SocketAddr;
+use std::sync::Arc;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+const PROXY_CHILD_TARGET_ENV: &str = "LITELLM_RS_BASE_HTTP_PROXY_CHILD_TARGET";
+const PROXY_CHILD_TEST: &str = "core::providers::base::http::network_policy_tests::base_policy_client_ignores_proxy_environment_child";
+
+struct LoopbackDnsResolver;
+
+impl reqwest::dns::Resolve for LoopbackDnsResolver {
+    fn resolve(&self, _name: reqwest::dns::Name) -> reqwest::dns::Resolving {
+        Box::pin(async {
+            let address = SocketAddr::from(([127, 0, 0, 1], 0));
+            Ok(Box::new(std::iter::once(address)) as reqwest::dns::Addrs)
+        })
+    }
+}
+
+fn public_test_client(no_redirect: bool) -> Result<ProviderHttpClient, ProviderHttpClientError> {
+    ProviderHttpClient::build_with_dns_resolver_for_test(
+        ProviderEndpointPolicy::public_only(),
+        Duration::from_secs(1),
+        no_redirect,
+        Arc::new(LoopbackDnsResolver),
+    )
+}
+
+#[tokio::test]
+async fn public_redirect_modes_preserve_signed_no_follow() -> Result<(), Box<dyn std::error::Error>>
+{
+    for (status, reason, no_redirect, expected_status, expected_target) in [
+        (302, "Found", true, 302, false),
+        (307, "Temporary Redirect", true, 307, false),
+        (308, "Permanent Redirect", true, 308, false),
+        (302, "Found", false, 200, true),
+    ] {
+        let source = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+        let source_address = source.local_addr()?;
+        let target = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+        let target_address = target.local_addr()?;
+        let mut target_probe = tokio::spawn(async move {
+            let (mut stream, _) = target.accept().await?;
+            let mut request = [0_u8; 1024];
+            if stream.read(&mut request).await? == 0 {
+                return Err(std::io::Error::other("redirect target request was empty"));
+            }
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                .await?;
+            Ok::<bool, std::io::Error>(true)
+        });
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = source.accept().await?;
+            let mut request = Vec::new();
+            loop {
+                let mut chunk = [0_u8; 512];
+                let bytes_read = stream.read(&mut chunk).await?;
+                if bytes_read == 0 {
+                    break;
+                }
+                request.extend_from_slice(&chunk[..bytes_read]);
+                if request
+                    .windows(b"signed-body".len())
+                    .any(|window| window == b"signed-body")
+                {
+                    break;
+                }
+                if request.len() > 8 * 1024 {
+                    return Err(std::io::Error::other("signed request was too large"));
+                }
+            }
+            let request = String::from_utf8(request)
+                .map_err(|error| std::io::Error::other(error.to_string()))?;
+            let request = request.to_ascii_lowercase();
+            assert!(request.starts_with("post / http/1.1\r\n"));
+            assert!(request.contains("\r\nauthorization: signed-request\r\n"));
+            assert!(request.contains("\r\nx-amz-security-token: session-token\r\n"));
+            assert!(request.contains("\r\n\r\nsigned-body"));
+            stream
+                    .write_all(
+                        format!(
+                            "HTTP/1.1 {status} {reason}\r\nLocation: http://provider.test:{}/signed\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                            target_address.port()
+                        )
+                        .as_bytes(),
+                )
+                .await?;
+            Ok::<(), std::io::Error>(())
+        });
+        let base_url = format!("http://provider.test:{}", source_address.port());
+        let client = public_test_client(no_redirect)?;
+
+        let response = client
+            .post(base_url)?
+            .header("authorization", "signed-request")
+            .header("x-amz-security-token", "session-token")
+            .body("signed-body")
+            .send()
+            .await?;
+        assert_eq!(response.status().as_u16(), expected_status);
+        let target_reached =
+            match tokio::time::timeout(Duration::from_millis(100), &mut target_probe).await {
+                Ok(result) => result??,
+                Err(_) => {
+                    target_probe.abort();
+                    false
+                }
+            };
+        assert_eq!(target_reached, expected_target, "redirect status {status}");
+        server.await??;
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn public_policy_client_ignores_proxy_environment() -> Result<(), Box<dyn std::error::Error>>
+{
+    let target = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let target_address = target.local_addr()?;
+    let proxy = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let proxy_address = proxy.local_addr()?;
+    let mut proxy_probe = tokio::spawn(async move {
+        let (mut stream, _) = proxy.accept().await?;
+        let mut request = [0_u8; 1024];
+        if stream.read(&mut request).await? == 0 {
+            return Err(std::io::Error::other("proxy request was empty"));
+        }
+        stream
+            .write_all(
+                b"HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            )
+            .await?;
+        Ok::<bool, std::io::Error>(true)
+    });
+    let server = tokio::spawn(async move {
+        let (mut stream, _) = target.accept().await?;
+        let mut request = [0_u8; 1024];
+        if stream.read(&mut request).await? == 0 {
+            return Err(std::io::Error::other("request ended before headers"));
+        }
+        stream
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            .await?;
+        Ok::<(), std::io::Error>(())
+    });
+    let executable = std::env::current_exe()?;
+    let target_url = format!("http://provider.test:{}", target_address.port());
+    let proxy_url = format!("http://{proxy_address}");
+    let child = tokio::task::spawn_blocking(move || {
+        std::process::Command::new(executable)
+            .arg("--exact")
+            .arg(PROXY_CHILD_TEST)
+            .arg("--ignored")
+            .arg("--nocapture")
+            .env(PROXY_CHILD_TARGET_ENV, target_url)
+            .env("HTTP_PROXY", &proxy_url)
+            .env("http_proxy", &proxy_url)
+            .env("ALL_PROXY", &proxy_url)
+            .env("all_proxy", &proxy_url)
+            .env_remove("NO_PROXY")
+            .env_remove("no_proxy")
+            .output()
+    });
+    let output = tokio::time::timeout(Duration::from_secs(10), child)
+        .await
+        .map_err(|_| std::io::Error::other("isolated proxy child test timed out"))?
+        .map_err(|error| std::io::Error::other(error.to_string()))??;
+    let proxy_reached =
+        match tokio::time::timeout(Duration::from_millis(100), &mut proxy_probe).await {
+            Ok(result) => result??,
+            Err(_) => {
+                proxy_probe.abort();
+                false
+            }
+        };
+    assert!(
+        !proxy_reached,
+        "policy client connected to the configured proxy"
+    );
+    assert!(
+        output.status.success(),
+        "isolated proxy child failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    server.await??;
+    Ok(())
+}
+
+#[test]
+#[ignore = "launched by the isolated proxy parent test"]
+fn base_policy_client_ignores_proxy_environment_child() -> Result<(), Box<dyn std::error::Error>> {
+    let target_url = std::env::var(PROXY_CHILD_TARGET_ENV)?;
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?
+        .block_on(async move {
+            let client = public_test_client(false)?;
+            assert!(client.get(target_url)?.send().await?.status().is_success());
+            Ok(())
+        })
+}

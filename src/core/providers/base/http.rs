@@ -396,6 +396,14 @@ pub fn validate_chat_request_common(
 }
 
 #[cfg(test)]
+#[path = "http/network_policy_tests.rs"]
+mod network_policy_tests;
+
+#[cfg(test)]
+#[path = "http/source_boundary_tests.rs"]
+mod source_boundary_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
@@ -448,27 +456,6 @@ mod tests {
 
         assert!(matches!(error, ProviderError::Configuration { .. }));
         assert!(error.to_string().contains("requires an API base"));
-    }
-
-    #[test]
-    fn migrated_shared_providers_have_no_raw_client_escape() {
-        let base_source = include_str!("http.rs");
-        let provider_sources = [
-            include_str!("../mistral/mod.rs"),
-            include_str!("../cohere/provider.rs"),
-            include_str!("../bedrock/client.rs"),
-        ];
-        let public_inner = ["pub fn ", "inner("].concat();
-        let raw_inner_call = [".", "inner()"].concat();
-        let raw_client_import = ["reqwest::{", "Client,"].concat();
-
-        assert!(!base_source.contains(&public_inner));
-        for source in provider_sources {
-            assert!(!source.contains(&raw_inner_call));
-            assert!(!source.contains(&raw_client_import));
-        }
-        let no_redirect_constructor = ["ProviderHttpClient::", "no_redirect"].concat();
-        assert!(base_source.contains(&no_redirect_constructor));
     }
 
     #[test]
