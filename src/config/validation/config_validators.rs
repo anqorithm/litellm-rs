@@ -7,7 +7,6 @@ use super::{ssrf::validate_url_against_ssrf, trait_def::Validate};
 use crate::config::models::gateway::{GatewayConfig, GatewayPricingConfig};
 use crate::config::models::provider::{ProviderConfig, ProviderHealthCheckConfig, RetryConfig};
 use crate::config::models::server::ServerConfig;
-use crate::core::net::ProviderEndpointPolicy;
 use std::collections::HashSet;
 use tracing::debug;
 
@@ -164,14 +163,10 @@ impl Validate for ProviderConfig {
                 self.name
             ));
         }
-        if self.endpoint_access == crate::core::net::ProviderEndpointAccess::PrivateNetwork
-            && !crate::core::providers::factory::is_endpoint_access_wired_selector(
-                provider_selector,
-            )
-        {
+        if self.endpoint_access == crate::core::net::ProviderEndpointAccess::PrivateNetwork {
             return Err(format!(
-                "Provider {} type '{}' does not support endpoint_access yet",
-                self.name, self.provider_type
+                "Provider {} private_network is disabled until all Gateway routes are policy-wired",
+                self.name
             ));
         }
 
@@ -213,7 +208,7 @@ impl Validate for ProviderConfig {
         }
 
         if let Some(base_url) = &self.base_url {
-            self.validate_endpoint(provider_selector, base_url, "base URL")?;
+            validate_url_against_ssrf(base_url, &format!("Provider {} base URL", self.name))?;
         }
 
         // Validate rate limits
@@ -242,17 +237,6 @@ impl Validate for ProviderConfig {
 }
 
 impl ProviderConfig {
-    fn validate_endpoint(&self, selector: &str, endpoint: &str, kind: &str) -> Result<(), String> {
-        let context = format!("Provider {} {kind}", self.name);
-        if crate::core::providers::factory::is_endpoint_access_wired_selector(selector) {
-            ProviderEndpointPolicy::for_base_url(self.endpoint_access, endpoint)
-                .map(|_| ())
-                .map_err(|error| format!("{context} is not allowed: {error}"))
-        } else {
-            validate_url_against_ssrf(endpoint, &context)
-        }
-    }
-
     /// Validate health settings at every runtime construction boundary.
     pub(crate) fn validate_health_check_runtime(&self) -> Result<(), String> {
         self.health_check.validate()?;
@@ -263,10 +247,9 @@ impl ProviderConfig {
                     self.name
                 ));
             }
-            self.validate_endpoint(
-                self.provider_type.as_str(),
+            validate_url_against_ssrf(
                 endpoint.as_str(),
-                "health check endpoint",
+                &format!("Provider {} health check endpoint", self.name),
             )?;
         }
 
@@ -382,16 +365,20 @@ mod endpoint_access_tests {
         assert!(
             Validate::validate(&config)
                 .unwrap_err()
-                .contains("private or reserved")
+                .contains("blocked for security reasons")
         );
         config.endpoint_access = ProviderEndpointAccess::PrivateNetwork;
-        assert!(Validate::validate(&config).is_ok());
+        assert!(
+            Validate::validate(&config)
+                .unwrap_err()
+                .contains("until all Gateway routes are policy-wired")
+        );
 
         config.provider_type = "anthropic".to_string();
         assert!(
             Validate::validate(&config)
                 .unwrap_err()
-                .contains("does not support")
+                .contains("until all Gateway routes are policy-wired")
         );
         config.provider_type = "openai_compatible".to_string();
         config.settings.insert(
