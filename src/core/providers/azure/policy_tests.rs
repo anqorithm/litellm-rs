@@ -11,6 +11,7 @@ use crate::core::types::context::RequestContext;
 use crate::core::types::embedding::EmbeddingRequest;
 use crate::core::types::image::ImageGenerationRequest;
 use serde_json::json;
+use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
@@ -100,7 +101,10 @@ async fn azure_core_operation_matrix_uses_policy_client() {
         images.generate_image(generation, RequestContext::default()),
         images.edit_image(edit, RequestContext::default()),
     );
-    let requests = capture.await.expect("capture task should finish");
+    let requests = tokio::time::timeout(Duration::from_secs(5), capture)
+        .await
+        .expect("all policy requests should arrive within five seconds")
+        .expect("capture task should finish");
     let paths = [
         "/openai/deployments/deployment/chat/completions",
         "/openai/deployments/deployment/chat/completions",
