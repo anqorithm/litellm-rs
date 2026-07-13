@@ -10,6 +10,8 @@ pub mod config;
 pub mod embed;
 pub mod error;
 pub mod image;
+#[cfg(test)]
+mod policy_tests;
 pub mod responses;
 pub mod utils;
 
