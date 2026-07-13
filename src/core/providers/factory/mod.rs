@@ -43,6 +43,14 @@ fn catalog_definition_for_supported_selector(
     }
 }
 
+pub(crate) fn is_endpoint_access_wired_selector(selector: &str) -> bool {
+    catalog_definition_for_supported_selector(selector).is_some()
+        || matches!(
+            selector.trim().parse::<ProviderType>(),
+            Ok(ProviderType::OpenAI | ProviderType::OpenAICompatible)
+        )
+}
+
 fn is_endpoint_access_wired_provider_type(provider_type: &ProviderType) -> bool {
     matches!(
         provider_type,
@@ -82,10 +90,12 @@ pub async fn create_provider(
             "endpoint_access must be configured as a top-level provider field",
         ));
     }
-    if endpoint_access == ProviderEndpointAccess::PrivateNetwork {
+    if endpoint_access == ProviderEndpointAccess::PrivateNetwork
+        && !is_endpoint_access_wired_selector(provider_selector)
+    {
         return Err(ProviderError::configuration(
             "provider",
-            "private_network is disabled until all Gateway routes are policy-wired",
+            format!("provider type '{provider_selector}' does not support endpoint_access yet"),
         ));
     }
     if let Some(def) = catalog_definition_for_supported_selector(provider_selector) {
@@ -245,6 +255,9 @@ mod tests {
             let result = create_provider(config.clone()).await;
             if local_default {
                 assert!(result.is_err(), "{name} must require private access");
+                let mut private = config;
+                private.endpoint_access = ProviderEndpointAccess::PrivateNetwork;
+                assert!(create_provider(private).await.is_ok());
                 continue;
             }
             let provider = result.unwrap_or_else(|e| {
@@ -751,14 +764,15 @@ mod tests {
             name: "local-openai-like".to_string(),
             provider_type: "openai_compatible".to_string(),
             api_key: "".to_string(),
-            base_url: Some("https://8.8.8.8/v1".to_string()),
+            base_url: Some("http://127.0.0.1:11434/v1".to_string()),
+            endpoint_access: ProviderEndpointAccess::PrivateNetwork,
             ..Default::default()
         };
         config
             .settings
             .insert("skip_api_key".to_string(), serde_json::Value::Bool(true));
 
-        let provider = create_provider(config.clone())
+        let provider = create_provider(config)
             .await
             .expect("openai_compatible provider should be creatable");
         assert!(matches!(&provider, Provider::OpenAILike(_)));
@@ -766,12 +780,6 @@ mod tests {
             provider.capabilities(),
             openai_like::provider::OPENAI_COMPATIBLE_PROXY_CAPABILITIES
         );
-
-        config.endpoint_access = ProviderEndpointAccess::PrivateNetwork;
-        let error = create_provider(config)
-            .await
-            .expect_err("private access must remain staged until direct routes are wired");
-        assert!(error.to_string().contains("until all Gateway routes"));
 
         let mut invalid = crate::config::models::provider::ProviderConfig {
             name: "openai".to_string(),

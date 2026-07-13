@@ -152,11 +152,6 @@ impl OpenAIConfig {
 
     /// Validate the configuration
     pub fn validate(&self) -> Result<(), String> {
-        if self.endpoint_access == crate::core::net::ProviderEndpointAccess::PrivateNetwork {
-            return Err(
-                "private_network is disabled until multipart methods are policy-wired".into(),
-            );
-        }
         // Validate base config
         self.base.validate("openai")?;
 
@@ -301,7 +296,6 @@ mod tests {
             private.endpoint_access,
             ProviderEndpointAccess::PrivateNetwork
         );
-        assert!(private.validate().unwrap_err().contains("multipart"));
     }
 
     #[test]
