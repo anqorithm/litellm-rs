@@ -3,49 +3,130 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use reqwest::Client;
+use reqwest::{IntoUrl, Method};
 use serde_json::Value;
 
+use crate::core::net::{ProviderEndpointAccess, ProviderEndpointPolicy};
 use crate::core::providers::base::BaseConfig;
+use crate::core::providers::base::connection_pool::HeaderPair;
 use crate::core::providers::unified_provider::ProviderError;
-use crate::utils::net::http::get_client_with_timeout_fallible;
-
-/// Create a provider-scoped HTTP client with a configurable timeout.
-pub fn create_http_client(
-    provider: &'static str,
-    timeout: Duration,
-) -> Result<Client, ProviderError> {
-    get_client_with_timeout_fallible(timeout)
-        .map(|shared_client| (*shared_client).clone())
-        .map_err(|e| {
-            ProviderError::initialization(provider, format!("Failed to create HTTP client: {}", e))
-        })
-}
+use crate::utils::net::http::{ProviderHttpClient, ProviderRequestBuilder};
 
 /// Base HTTP client wrapper used by provider implementations.
 #[derive(Debug, Clone)]
 pub struct BaseHttpClient {
-    client: Client,
+    client: ProviderHttpClient,
     config: BaseConfig,
+    provider: &'static str,
+}
+
+#[derive(Clone, Copy)]
+enum BaseRedirectMode {
+    Policy,
+    Disabled,
 }
 
 impl BaseHttpClient {
     /// Create a new HTTP client with common configuration.
     pub fn new(config: BaseConfig) -> Result<Self, ProviderError> {
-        let timeout = Duration::from_secs(config.timeout);
-        let client = create_http_client("provider", timeout)?;
-        Ok(Self { client, config })
+        Self::new_for_provider("provider", config)
     }
 
-    /// Get the underlying reqwest client.
-    pub fn inner(&self) -> &Client {
-        &self.client
+    /// Create a policy-aware HTTP client for a named provider.
+    pub fn new_for_provider(
+        provider: &'static str,
+        config: BaseConfig,
+    ) -> Result<Self, ProviderError> {
+        Self::build(provider, config, BaseRedirectMode::Policy)
+    }
+
+    /// Create a policy-aware client that never follows redirects.
+    pub fn new_for_provider_no_redirect(
+        provider: &'static str,
+        config: BaseConfig,
+    ) -> Result<Self, ProviderError> {
+        Self::build(provider, config, BaseRedirectMode::Disabled)
+    }
+
+    fn build(
+        provider: &'static str,
+        config: BaseConfig,
+        redirect_mode: BaseRedirectMode,
+    ) -> Result<Self, ProviderError> {
+        let policy = match config.api_base.as_deref() {
+            Some(api_base) => {
+                ProviderEndpointPolicy::for_base_url(config.endpoint_access, api_base).map_err(
+                    |error| {
+                        ProviderError::configuration(
+                            provider,
+                            format!("invalid provider API base: {error}"),
+                        )
+                    },
+                )?
+            }
+            None if config.endpoint_access == ProviderEndpointAccess::PrivateNetwork => {
+                return Err(ProviderError::configuration(
+                    provider,
+                    "private_network endpoint access requires an API base",
+                ));
+            }
+            None => ProviderEndpointPolicy::public_only(),
+        };
+        let timeout = Duration::from_secs(config.timeout);
+        let client_result = match redirect_mode {
+            BaseRedirectMode::Policy => ProviderHttpClient::new(policy, timeout),
+            BaseRedirectMode::Disabled => ProviderHttpClient::no_redirect(policy, timeout),
+        };
+        let client = client_result.map_err(|error| {
+            ProviderError::initialization(
+                provider,
+                format!("failed to create policy-aware HTTP client: {error}"),
+            )
+        })?;
+        Ok(Self {
+            client,
+            config,
+            provider,
+        })
+    }
+
+    /// Create a policy-checked request builder.
+    pub fn request<U: IntoUrl>(
+        &self,
+        method: Method,
+        url: U,
+    ) -> Result<ProviderRequestBuilder, ProviderError> {
+        self.client
+            .request(method, url)
+            .map_err(|error| ProviderError::network(self.provider, error.to_string()))
+    }
+
+    /// Create a policy-checked GET request builder.
+    pub fn get<U: IntoUrl>(&self, url: U) -> Result<ProviderRequestBuilder, ProviderError> {
+        self.request(Method::GET, url)
+    }
+
+    /// Create a policy-checked POST request builder.
+    pub fn post<U: IntoUrl>(&self, url: U) -> Result<ProviderRequestBuilder, ProviderError> {
+        self.request(Method::POST, url)
     }
 
     /// Get configuration.
     pub fn config(&self) -> &BaseConfig {
         &self.config
     }
+}
+
+/// Apply provider headers without exposing the policy-bound raw client.
+#[inline]
+pub fn apply_provider_headers(
+    mut builder: ProviderRequestBuilder,
+    headers: Vec<HeaderPair>,
+) -> ProviderRequestBuilder {
+    for (key, value) in headers {
+        builder = builder.header(key.as_ref(), value.as_ref());
+    }
+    builder
 }
 
 /// Canonical HTTP status/body -> ProviderError mapper.
@@ -318,6 +399,77 @@ pub fn validate_chat_request_common(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn base_http_client_rejects_public_loopback_base() {
+        let error = BaseHttpClient::new_for_provider(
+            "test",
+            BaseConfig {
+                api_base: Some("http://127.0.0.1:11434/v1".to_string()),
+                ..Default::default()
+            },
+        )
+        .unwrap_err();
+
+        assert!(matches!(error, ProviderError::Configuration { .. }));
+        assert!(error.to_string().contains("SSRF protection"));
+    }
+
+    #[test]
+    fn base_http_client_accepts_private_base_and_pins_authority() {
+        let client = BaseHttpClient::new_for_provider(
+            "test",
+            BaseConfig {
+                api_base: Some("http://127.0.0.1:11434/v1".to_string()),
+                endpoint_access: ProviderEndpointAccess::PrivateNetwork,
+                ..Default::default()
+            },
+        )
+        .unwrap_or_else(|error| panic!("private test client should build: {error}"));
+
+        let error = client
+            .get("http://127.0.0.1:11435/v1/models")
+            .err()
+            .unwrap_or_else(|| panic!("cross-authority request must fail"));
+        assert!(matches!(error, ProviderError::Network { .. }));
+        assert!(error.to_string().contains("does not match"));
+    }
+
+    #[test]
+    fn base_http_client_requires_base_for_private_access() {
+        let error = BaseHttpClient::new_for_provider(
+            "test",
+            BaseConfig {
+                endpoint_access: ProviderEndpointAccess::PrivateNetwork,
+                ..Default::default()
+            },
+        )
+        .unwrap_err();
+
+        assert!(matches!(error, ProviderError::Configuration { .. }));
+        assert!(error.to_string().contains("requires an API base"));
+    }
+
+    #[test]
+    fn migrated_shared_providers_have_no_raw_client_escape() {
+        let base_source = include_str!("http.rs");
+        let provider_sources = [
+            include_str!("../mistral/mod.rs"),
+            include_str!("../cohere/provider.rs"),
+            include_str!("../bedrock/client.rs"),
+        ];
+        let public_inner = ["pub fn ", "inner("].concat();
+        let raw_inner_call = [".", "inner()"].concat();
+        let raw_client_import = ["reqwest::{", "Client,"].concat();
+
+        assert!(!base_source.contains(&public_inner));
+        for source in provider_sources {
+            assert!(!source.contains(&raw_inner_call));
+            assert!(!source.contains(&raw_client_import));
+        }
+        let no_redirect_constructor = ["ProviderHttpClient::", "no_redirect"].concat();
+        assert!(base_source.contains(&no_redirect_constructor));
+    }
 
     #[test]
     fn http_mapper_extracts_json_message_for_invalid_request() {
