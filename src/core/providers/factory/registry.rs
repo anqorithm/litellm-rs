@@ -279,7 +279,6 @@ mod tests {
         serde_json::json!({
             "api_key": "sk-test-key",
             "api_base": "https://example.test/v1",
-            "base_url": "https://example.test/v1",
             "endpoint": "https://example.test/v1",
             "provider_name": "test-openai-compatible",
             "organization": "test-account",
