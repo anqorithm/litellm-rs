@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-use crate::config::validation::validate_url_against_ssrf;
+use crate::core::net::{ProviderEndpointAccess, validate_provider_endpoint_url_str};
 use crate::core::providers::base::BaseConfig;
 use crate::core::traits::provider::ProviderConfig;
 
@@ -88,12 +88,21 @@ impl ProviderConfig for CustomHttpxConfig {
         if self.endpoint_url.is_empty() {
             return Err("Endpoint URL is required".to_string());
         }
+        self.http_method
+            .trim()
+            .to_ascii_uppercase()
+            .parse::<reqwest::Method>()
+            .map_err(|error| format!("invalid HTTP method: {error}"))?;
 
-        validate_url_against_ssrf(&self.endpoint_url, "Endpoint URL")
-    }
-
-    fn use_ssrf_safe_client(&self) -> bool {
-        true
+        let endpoint =
+            validate_provider_endpoint_url_str(&self.endpoint_url, self.base.endpoint_access)
+                .map_err(|error| format!("invalid endpoint URL: {error}"))?;
+        match endpoint.scheme() {
+            "http" | "https" => Ok(()),
+            scheme => Err(format!(
+                "invalid endpoint URL: custom HTTP endpoints require http or https, got {scheme}"
+            )),
+        }
     }
 
     fn api_key(&self) -> Option<&str> {
@@ -101,7 +110,11 @@ impl ProviderConfig for CustomHttpxConfig {
     }
 
     fn api_base(&self) -> Option<&str> {
-        self.base.api_base.as_deref()
+        Some(&self.endpoint_url)
+    }
+
+    fn endpoint_access(&self) -> ProviderEndpointAccess {
+        self.base.endpoint_access
     }
 
     fn timeout(&self) -> Duration {
@@ -135,6 +148,43 @@ mod tests {
     fn test_reject_loopback_ip() {
         let cfg = CustomHttpxConfig::new("http://127.0.0.1:8080/endpoint");
         assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn test_private_endpoint_access_is_validated_and_propagated() {
+        let mut cfg = CustomHttpxConfig::new("http://127.0.0.1:8080/endpoint");
+        cfg.base.endpoint_access = ProviderEndpointAccess::PrivateNetwork;
+
+        assert!(cfg.validate().is_ok());
+        assert_eq!(cfg.api_base(), Some("http://127.0.0.1:8080/endpoint"));
+        assert_eq!(
+            cfg.endpoint_access(),
+            ProviderEndpointAccess::PrivateNetwork
+        );
+
+        cfg.endpoint_url = "http://169.254.169.254/latest/meta-data".to_string();
+        assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn test_http_method_is_parsed_fallibly() {
+        let mut cfg = CustomHttpxConfig::new("https://8.8.8.8/endpoint");
+        cfg.http_method = "delete".to_string();
+        assert!(cfg.validate().is_ok());
+
+        cfg.http_method = "not a method".to_string();
+        assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn test_reject_websocket_endpoint_schemes() {
+        for endpoint in ["ws://8.8.8.8/endpoint", "wss://8.8.8.8/endpoint"] {
+            let cfg = CustomHttpxConfig::new(endpoint);
+            let error = cfg
+                .validate()
+                .expect_err("custom HTTP endpoints must reject WebSocket schemes");
+            assert!(error.contains("http or https"), "unexpected error: {error}");
+        }
     }
 
     #[test]
