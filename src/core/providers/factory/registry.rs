@@ -1,3 +1,8 @@
+//! Provider construction registry
+//!
+//! Implements `Provider::from_config_async`, which maps each `ProviderType`
+//! to its concrete provider instantiation logic.
+
 use crate::core::providers::provider_type::ProviderType;
 use crate::core::providers::registry as provider_registry;
 use crate::core::providers::unified_provider::ProviderError;
@@ -15,7 +20,7 @@ use super::builder::{
     apply_tier1_openai_like_overrides, build_anthropic_config_from_factory,
     build_bedrock_config_from_factory, build_cloudflare_config_from_factory,
     build_mistral_config_from_factory, build_openai_config_from_factory,
-    build_openai_like_config_from_factory, config_endpoint_access, config_str,
+    build_openai_like_config_from_factory, config_str,
 };
 #[cfg(feature = "providers-extra")]
 use super::builder::{
@@ -36,18 +41,14 @@ use super::gemini_builder::build_gemini_config_from_factory;
 use super::replicate_builder::build_replicate_config_from_factory;
 
 impl Provider {
+    /// Create provider from configuration asynchronously
+    ///
+    /// This is the preferred method for creating providers from configuration.
+    /// It supports all provider types and handles async initialization properly.
     pub async fn from_config_async(
         provider_type: ProviderType,
         config: serde_json::Value,
     ) -> Result<Self, ProviderError> {
-        if config.get("endpoint_access").is_some()
-            && !super::is_endpoint_access_wired_provider_type(&provider_type)
-        {
-            return Err(ProviderError::configuration(
-                super::provider_diagnostic_name(&provider_type),
-                "endpoint_access is not wired for this provider type yet",
-            ));
-        }
         match provider_type {
             ProviderType::OpenAI => {
                 let openai_config = build_openai_config_from_factory(&config)?;
@@ -241,7 +242,6 @@ impl Provider {
                     config_str(&config, "base_url").or_else(|| config_str(&config, "api_base"));
                 let mut oai_config =
                     def.to_openai_like_config(api_key.as_deref(), base_url_override);
-                oai_config.endpoint_access = config_endpoint_access(&config, name)?;
                 if let Some(settings) = config.as_object() {
                     let settings = settings
                         .iter()
@@ -419,6 +419,8 @@ mod tests {
         for provider_type in supported_factory_provider_types() {
             let result =
                 Provider::from_config_async(provider_type.clone(), serde_json::json!({})).await;
+            // Success is fine (e.g. local catalog providers with skip_api_key);
+            // a real config error is also fine. Only NotImplemented is wrong.
             if let Err(err) = result {
                 assert!(
                     !matches!(err, ProviderError::NotImplemented { .. }),
@@ -633,14 +635,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_from_config_async_rejects_endpoint_access_for_unwired_provider() {
-        let error = Provider::from_config_async(
-            ProviderType::Anthropic,
-            serde_json::json!({"endpoint_access": "public_only"}),
-        )
-        .await
-        .expect_err("unwired direct configs must reject endpoint_access");
-        assert!(error.to_string().contains("not wired"));
+    async fn test_from_config_async_openai_compatible_accepts_api_base_alias() {
+        let config = serde_json::json!({
+            "api_base": "https://api.example.com/v1",
+            "skip_api_key": true,
+            "provider_name": "test-openai-like"
+        });
+
+        let provider = Provider::from_config_async(ProviderType::OpenAICompatible, config)
+            .await
+            .unwrap_or_else(|err| panic!("openai_compatible should be creatable: {err}"));
+        assert!(matches!(provider, Provider::OpenAILike(_)));
     }
 
     #[cfg(feature = "providers-extended")]

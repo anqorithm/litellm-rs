@@ -2,7 +2,6 @@
 
 use super::types::ProviderConfigBuilder;
 use crate::config::models::provider::ProviderConfig;
-use crate::core::net::ProviderEndpointAccess;
 use crate::utils::data::type_utils::{NonEmptyString, PositiveF64};
 use crate::utils::error::gateway_error::{GatewayError, Result};
 use std::time::Duration;
@@ -15,7 +14,6 @@ impl ProviderConfigBuilder {
             provider_type: None,
             api_key: None,
             base_url: None,
-            endpoint_access: ProviderEndpointAccess::PublicOnly,
             models: Vec::new(),
             max_requests_per_minute: None,
             timeout: None,
@@ -52,12 +50,6 @@ impl ProviderConfigBuilder {
     /// Set the base URL
     pub fn base_url(mut self, base_url: impl Into<String>) -> Self {
         self.base_url = Some(base_url.into());
-        self
-    }
-
-    /// Set the network access allowed for the configured endpoint.
-    pub fn endpoint_access(mut self, endpoint_access: ProviderEndpointAccess) -> Self {
-        self.endpoint_access = endpoint_access;
         self
     }
 
@@ -115,7 +107,6 @@ impl ProviderConfigBuilder {
             provider_type: provider_type.into_string(),
             api_key: self.api_key.unwrap_or_default(),
             base_url: self.base_url,
-            endpoint_access: self.endpoint_access,
             api_version: None,
             organization: None,
             project: None,
@@ -154,7 +145,6 @@ mod tests {
         assert!(builder.provider_type.is_none());
         assert!(builder.api_key.is_none());
         assert!(builder.base_url.is_none());
-        assert_eq!(builder.endpoint_access, ProviderEndpointAccess::PublicOnly);
         assert!(builder.models.is_empty());
         assert!(builder.max_requests_per_minute.is_none());
         assert!(builder.timeout.is_none());
@@ -215,22 +205,6 @@ mod tests {
         assert_eq!(
             builder.base_url,
             Some("https://api.example.com".to_string())
-        );
-    }
-
-    #[test]
-    fn test_provider_config_builder_endpoint_access() {
-        let config = ProviderConfigBuilder::new()
-            .name("local")
-            .unwrap()
-            .provider_type("openai_compatible")
-            .unwrap()
-            .endpoint_access(ProviderEndpointAccess::PrivateNetwork)
-            .build()
-            .unwrap();
-        assert_eq!(
-            config.endpoint_access,
-            ProviderEndpointAccess::PrivateNetwork
         );
     }
 
@@ -365,7 +339,6 @@ mod tests {
 
         assert_eq!(config.api_key, "");
         assert!(config.base_url.is_none());
-        assert_eq!(config.endpoint_access, ProviderEndpointAccess::PublicOnly);
         assert_eq!(config.weight, 1.0);
         assert_eq!(config.rpm, 1000);
         assert_eq!(config.tpm, 100000);

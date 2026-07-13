@@ -3,11 +3,11 @@
 //! This module provides validation implementations for the main gateway configuration
 //! structures including GatewayConfig, ServerConfig, and ProviderConfig.
 
+use super::ssrf::validate_url_against_ssrf;
 use super::trait_def::Validate;
 use crate::config::models::gateway::{GatewayConfig, GatewayPricingConfig};
 use crate::config::models::provider::{ProviderConfig, ProviderHealthCheckConfig, RetryConfig};
 use crate::config::models::server::ServerConfig;
-use crate::core::net::ProviderEndpointPolicy;
 use std::collections::HashSet;
 use tracing::debug;
 
@@ -158,23 +158,6 @@ impl Validate for ProviderConfig {
             ));
         }
 
-        if self.settings.contains_key("endpoint_access") {
-            return Err(format!(
-                "Provider {} endpoint_access must be configured as a top-level field",
-                self.name
-            ));
-        }
-        if self.endpoint_access == crate::core::net::ProviderEndpointAccess::PrivateNetwork
-            && !crate::core::providers::factory::is_endpoint_access_wired_selector(
-                provider_selector,
-            )
-        {
-            return Err(format!(
-                "Provider {} type '{}' does not support endpoint_access yet",
-                self.name, self.provider_type
-            ));
-        }
-
         let requires_api_key =
             crate::core::providers::registry::get_definition(&provider_selector.to_lowercase())
                 .map(|def| !def.skip_api_key)
@@ -212,10 +195,9 @@ impl Validate for ProviderConfig {
             ));
         }
 
+        // Validate base URL if present (with SSRF protection)
         if let Some(base_url) = &self.base_url {
-            ProviderEndpointPolicy::for_base_url(self.endpoint_access, base_url).map_err(
-                |error| format!("Provider {} base URL is not allowed: {}", self.name, error),
-            )?;
+            validate_url_against_ssrf(base_url, &format!("Provider {} base URL", self.name))?;
         }
 
         // Validate rate limits
@@ -254,13 +236,9 @@ impl ProviderConfig {
                     self.name
                 ));
             }
-            ProviderEndpointPolicy::for_base_url(self.endpoint_access, endpoint.as_str()).map_err(
-                |error| {
-                    format!(
-                        "Provider {} health check endpoint is not allowed: {}",
-                        self.name, error
-                    )
-                },
+            validate_url_against_ssrf(
+                endpoint.as_str(),
+                &format!("Provider {} health check endpoint", self.name),
             )?;
         }
 
@@ -352,50 +330,5 @@ impl Validate for ProviderHealthCheckConfig {
         }
 
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod endpoint_access_tests {
-    use super::*;
-    use crate::core::net::ProviderEndpointAccess;
-
-    fn local_provider() -> ProviderConfig {
-        ProviderConfig {
-            name: "local".to_string(),
-            provider_type: "openai_compatible".to_string(),
-            api_key: "sk-test".to_string(),
-            base_url: Some("http://127.0.0.1:11434/v1".to_string()),
-            ..Default::default()
-        }
-    }
-
-    #[test]
-    fn endpoint_access_validation_is_fail_closed_and_staged() {
-        let mut config = local_provider();
-        assert!(
-            Validate::validate(&config)
-                .unwrap_err()
-                .contains("private or reserved")
-        );
-        config.endpoint_access = ProviderEndpointAccess::PrivateNetwork;
-        assert!(Validate::validate(&config).is_ok());
-
-        config.provider_type = "anthropic".to_string();
-        assert!(
-            Validate::validate(&config)
-                .unwrap_err()
-                .contains("does not support")
-        );
-        config.provider_type = "openai_compatible".to_string();
-        config.settings.insert(
-            "endpoint_access".to_string(),
-            serde_json::json!("private_network"),
-        );
-        assert!(
-            Validate::validate(&config)
-                .unwrap_err()
-                .contains("top-level")
-        );
     }
 }

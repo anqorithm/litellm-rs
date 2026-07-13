@@ -9,7 +9,6 @@ use super::super::unified_provider::ProviderError;
 use super::super::{anthropic, bedrock, cloudflare, macros, mistral, openai, openai_like};
 #[cfg(feature = "providers-extra")]
 use super::super::{azure, azure_ai, vertex_ai};
-use crate::core::net::ProviderEndpointAccess;
 use crate::core::traits::provider::ProviderConfig as _;
 use std::env;
 #[cfg(feature = "providers-extra")]
@@ -37,19 +36,6 @@ pub(super) fn config_u64(config: &serde_json::Value, key: &str) -> Option<u64> {
 
 pub(super) fn config_bool(config: &serde_json::Value, key: &str) -> Option<bool> {
     config.get(key).and_then(serde_json::Value::as_bool)
-}
-
-pub(super) fn config_endpoint_access(
-    config: &serde_json::Value,
-    provider: &'static str,
-) -> Result<ProviderEndpointAccess, ProviderError> {
-    config
-        .get("endpoint_access")
-        .cloned()
-        .map(serde_json::from_value)
-        .transpose()
-        .map(|value| value.unwrap_or_default())
-        .map_err(|error| ProviderError::configuration(provider, error.to_string()))
 }
 
 pub(super) fn config_str_any<'a>(config: &'a serde_json::Value, keys: &[&str]) -> Option<&'a str> {
@@ -261,10 +247,7 @@ pub(super) fn build_openai_config_from_factory(
     config: &serde_json::Value,
 ) -> Result<openai::OpenAIConfig, ProviderError> {
     let api_key = macros::require_config_str(config, "api_key", "openai")?;
-    let mut openai_config = openai::OpenAIConfig {
-        endpoint_access: config_endpoint_access(config, "openai")?,
-        ..Default::default()
-    };
+    let mut openai_config = openai::OpenAIConfig::default();
     openai_config.base.api_key = Some(api_key.to_string());
     if let Some(provider_name) = config_str(config, "provider_name") {
         openai_config.provider_name = provider_name.to_string();
@@ -753,7 +736,6 @@ pub(super) fn build_openai_like_config_from_factory(
         openai_like::OpenAILikeConfig::new(api_base).with_skip_api_key(skip_api_key)
     };
 
-    oai_like.endpoint_access = config_endpoint_access(config, "openai_compatible")?;
     oai_like.skip_api_key = skip_api_key;
     oai_like.provider_name = config_str(config, "provider_name")
         .unwrap_or("openai_compatible")

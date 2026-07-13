@@ -16,10 +16,6 @@ pub struct OpenAIConfig {
     #[serde(flatten)]
     pub base: BaseConfig,
 
-    /// Network access allowed for the configured API endpoint.
-    #[serde(default)]
-    pub endpoint_access: crate::core::net::ProviderEndpointAccess,
-
     /// Gateway provider name for router deployment identity.
     #[serde(default = "default_provider_name")]
     pub provider_name: String,
@@ -97,7 +93,6 @@ impl Default for OpenAIConfig {
                 organization: None,
                 api_version: None,
             },
-            endpoint_access: crate::core::net::ProviderEndpointAccess::PublicOnly,
             provider_name: default_provider_name(),
             organization: None,
             project: None,
@@ -108,14 +103,6 @@ impl Default for OpenAIConfig {
 }
 
 impl OpenAIConfig {
-    pub fn with_endpoint_access(
-        mut self,
-        endpoint_access: crate::core::net::ProviderEndpointAccess,
-    ) -> Self {
-        self.endpoint_access = endpoint_access;
-        self
-    }
-
     /// Create configuration from environment variables
     pub fn from_env() -> Self {
         let mut config = Self::default();
@@ -253,49 +240,19 @@ pub(crate) fn test_openai_config(
     let mut config = OpenAIConfig::default();
     config.base.api_base = Some(api_base.into());
     config.base.api_key = Some(api_key.into());
-    config.endpoint_access = crate::core::net::ProviderEndpointAccess::PrivateNetwork;
     config
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::net::ProviderEndpointAccess;
 
     #[test]
     fn test_default_config() {
         let config = OpenAIConfig::default();
         // Remove provider_name check as it doesn't exist in BaseConfig
         assert_eq!(config.get_api_base(), "https://api.openai.com/v1");
-        assert_eq!(config.endpoint_access, ProviderEndpointAccess::PublicOnly);
         assert!(config.features.image_generation);
-    }
-
-    #[test]
-    fn endpoint_access_serde_defaults_public_and_accepts_private_opt_in() {
-        let Ok(mut value) = serde_json::to_value(OpenAIConfig::default()) else {
-            panic!("default OpenAI config must serialize");
-        };
-        let Some(object) = value.as_object_mut() else {
-            panic!("serialized OpenAI config must be an object");
-        };
-        object.remove("endpoint_access");
-        let Ok(defaulted) = serde_json::from_value::<OpenAIConfig>(value.clone()) else {
-            panic!("OpenAI config without endpoint_access must deserialize");
-        };
-        assert_eq!(
-            defaulted.endpoint_access,
-            ProviderEndpointAccess::PublicOnly
-        );
-
-        value["endpoint_access"] = serde_json::json!("private_network");
-        let Ok(private) = serde_json::from_value::<OpenAIConfig>(value) else {
-            panic!("private-network OpenAI config must deserialize");
-        };
-        assert_eq!(
-            private.endpoint_access,
-            ProviderEndpointAccess::PrivateNetwork
-        );
     }
 
     #[test]

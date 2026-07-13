@@ -6,7 +6,6 @@
 use std::env;
 
 use litellm_rs::config::models::provider::ProviderConfig;
-use litellm_rs::core::net::ProviderEndpointAccess;
 use litellm_rs::core::providers::openai::OpenAIConfig;
 use litellm_rs::core::providers::openai_like::OpenAILikeConfig;
 
@@ -23,7 +22,6 @@ pub fn mock_provider_config(
         provider_type: provider_type.to_string(),
         api_key: api_key.to_string(),
         base_url: Some(base_url.to_string()),
-        endpoint_access: ProviderEndpointAccess::PrivateNetwork,
         models,
         ..ProviderConfig::default()
     }
@@ -36,14 +34,11 @@ pub fn mock_openai_runtime_config(
     let mut config = OpenAIConfig::default();
     config.base.api_base = Some(api_base.into());
     config.base.api_key = Some(api_key.into());
-    config.endpoint_access = ProviderEndpointAccess::PrivateNetwork;
     config
 }
 
 pub fn mock_openai_like_runtime_config(api_base: impl Into<String>) -> OpenAILikeConfig {
-    OpenAILikeConfig::new(api_base)
-        .with_endpoint_access(ProviderEndpointAccess::PrivateNetwork)
-        .with_skip_api_key(true)
+    OpenAILikeConfig::new(api_base).with_skip_api_key(true)
 }
 
 /// Configuration for provider tests
@@ -213,10 +208,6 @@ mod tests {
         assert_eq!(config.api_key, "sk-test");
         assert_eq!(config.base_url.as_deref(), Some("http://127.0.0.1:1234/v1"));
         assert_eq!(config.models, vec!["gpt-test"]);
-        assert_eq!(
-            config.endpoint_access,
-            ProviderEndpointAccess::PrivateNetwork
-        );
         assert!(config.organization.is_none());
         assert!(config.project.is_none());
         assert!(config.settings.is_empty());

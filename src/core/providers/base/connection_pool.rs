@@ -7,14 +7,14 @@ use futures::StreamExt;
 use reqwest::{Client, RequestBuilder, Response};
 use serde_json;
 
-use crate::core::net::{ProviderEndpointAccess, ProviderEndpointPolicy};
 use crate::core::providers::unified_provider::ProviderError;
 use crate::utils::net::http::{
-    HttpClientPoolConfig, ProviderHttpClient, ProviderRequestBuilder,
-    create_custom_client_with_config, create_streaming_client,
+    HttpClientPoolConfig, create_custom_client_with_config, create_streaming_client,
 };
 
-/// HTTP headers using `Cow` to avoid allocations for static strings.
+/// Type alias for HTTP headers using Cow to avoid allocations for static strings.
+///
+/// Use `Cow::Borrowed("Header-Name")` for static strings and `Cow::Owned(value)` for dynamic values.
 pub type HeaderPair = (Cow<'static, str>, Cow<'static, str>);
 
 /// Helper to create a header from static key and dynamic value.
@@ -50,7 +50,7 @@ pub fn apply_headers(
     builder
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum HttpMethod {
     GET,
     POST,
@@ -113,7 +113,10 @@ fn pool_http_config() -> HttpClientPoolConfig {
     }
 }
 
-/// Global HTTP client singleton.
+/// Global HTTP client singleton
+///
+/// This is the actual global singleton that holds the reqwest::Client.
+/// All providers share this single client instance for connection pooling efficiency.
 static GLOBAL_CLIENT: LazyLock<Arc<Client>> = LazyLock::new(|| {
     let client = create_custom_client_with_config(
         Duration::from_secs(PoolConfig::TIMEOUT_SECS),
@@ -143,13 +146,57 @@ pub fn global_client() -> Arc<Client> {
     Arc::clone(&GLOBAL_CLIENT)
 }
 
-/// Get the legacy bounded streaming client for providers not yet migrated.
+/// Get a streaming-ready HTTP client
+///
+/// Returns the legacy bounded HTTP client for streaming requests.
+/// This should be used instead of ad hoc client construction for streaming
+/// to benefit from the streaming connection pool.
+///
+/// Existing callers still use this client directly with `.send().await`, so it
+/// must keep the global total timeout until callers migrate to
+/// `streaming_unbounded_client()` plus `send_streaming_request()`.
+///
+/// # Example
+///
+/// ```ignore
+/// use crate::core::providers::base::connection_pool::streaming_client;
+///
+/// // Use the shared legacy streaming client.
+/// let response = streaming_client()
+///     .post(&url)
+///     .headers(headers)
+///     .json(&body)
+///     .send()
+///     .await?;
+/// let stream = response.bytes_stream();
+/// ```
 #[inline]
 pub fn streaming_client() -> Arc<Client> {
     global_client()
 }
 
-/// Get the legacy unbounded streaming client for providers not yet migrated.
+/// Get an HTTP client for streaming bodies without a total request timeout.
+///
+/// Pair this with `send_streaming_request()` so only the pre-header request
+/// phase is bounded and the response body can stream indefinitely.
+///
+/// # Example
+///
+/// ```ignore
+/// use crate::core::providers::base::connection_pool::{
+///     send_streaming_request, streaming_unbounded_client,
+/// };
+///
+/// let response = send_streaming_request(
+///     streaming_unbounded_client()
+///         .post(&url)
+///         .headers(headers)
+///         .json(&body),
+///     "provider_name",
+/// )
+/// .await?;
+/// let stream = response.bytes_stream();
+/// ```
 #[inline]
 pub fn streaming_unbounded_client() -> Arc<Client> {
     Arc::clone(&STREAMING_CLIENT)
@@ -279,92 +326,37 @@ impl ConnectionPool {
     }
 }
 
-#[derive(Debug, Clone)]
-struct PolicyClients {
-    ordinary: ProviderHttpClient,
-    streaming: ProviderHttpClient,
-    health: ProviderHttpClient,
-}
-
-/// Shared pool manager with an optional provider-scoped endpoint policy.
+/// Global pool manager - single instance for all providers
+///
+/// This manager wraps the global connection pool singleton.
+/// Multiple `GlobalPoolManager` instances all share the same underlying HTTP client.
 #[derive(Debug, Clone)]
 pub struct GlobalPoolManager {
     pool: Arc<ConnectionPool>,
-    policy_clients: Option<PolicyClients>,
-    provider: &'static str,
 }
 
 impl GlobalPoolManager {
-    /// Create a manager backed by the global client.
+    /// Create a new global pool manager
+    ///
+    /// Note: This returns a manager that uses the global client singleton.
+    /// Creating multiple managers is cheap as they all share the same client.
     pub fn new() -> Result<Self, ProviderError> {
         Ok(Self {
             pool: Arc::new(ConnectionPool::new()?),
-            policy_clients: None,
-            provider: "common",
         })
     }
 
-    /// Get a manager backed by the global client.
+    /// Get a shared instance of the global pool manager
+    ///
+    /// This is the most efficient way to get a pool manager as it reuses
+    /// the global singleton without any additional allocations.
     pub fn shared() -> Self {
+        // Use the global client directly
         Self {
             pool: Arc::new(ConnectionPool {
                 client: global_client(),
             }),
-            policy_clients: None,
-            provider: "common",
         }
-    }
-
-    /// Create a manager that enforces one provider endpoint policy on every path.
-    pub fn for_provider_endpoint(
-        provider: &'static str,
-        api_base: &str,
-        endpoint_access: ProviderEndpointAccess,
-        timeout: Duration,
-    ) -> Result<Self, ProviderError> {
-        let policy = ProviderEndpointPolicy::for_base_url(endpoint_access, api_base)
-            .map_err(|error| ProviderError::configuration(provider, error.to_string()))?;
-        let map_error = |error: crate::utils::net::http::ProviderHttpClientError| {
-            ProviderError::initialization(provider, error.to_string())
-        };
-        let policy_clients = PolicyClients {
-            ordinary: ProviderHttpClient::new(policy.clone(), timeout).map_err(map_error)?,
-            streaming: ProviderHttpClient::streaming(policy.clone()).map_err(map_error)?,
-            health: ProviderHttpClient::no_redirect(policy, timeout).map_err(map_error)?,
-        };
-        Ok(Self {
-            policy_clients: Some(policy_clients),
-            provider,
-            ..Self::shared()
-        })
-    }
-
-    fn policy_request(
-        &self,
-        client: &ProviderHttpClient,
-        url: &str,
-        method: HttpMethod,
-        headers: Vec<HeaderPair>,
-        body: Option<serde_json::Value>,
-    ) -> Result<ProviderRequestBuilder, ProviderError> {
-        let method = match method {
-            HttpMethod::GET => reqwest::Method::GET,
-            HttpMethod::POST => reqwest::Method::POST,
-            HttpMethod::PUT => reqwest::Method::PUT,
-            HttpMethod::DELETE => reqwest::Method::DELETE,
-        };
-        let mut request = client
-            .request(method, url)
-            .map_err(|error| ProviderError::configuration(self.provider, error.to_string()))?;
-        for (key, value) in headers {
-            request = request.header(key.as_ref(), value.as_ref());
-        }
-        if let Some(body) = body {
-            request = request
-                .header("Content-Type", "application/json")
-                .json(&body);
-        }
-        Ok(request)
     }
 
     /// Execute an HTTP request
@@ -378,13 +370,6 @@ impl GlobalPoolManager {
         headers: Vec<HeaderPair>,
         body: Option<serde_json::Value>,
     ) -> Result<reqwest::Response, ProviderError> {
-        if let Some(clients) = &self.policy_clients {
-            return self
-                .policy_request(&clients.ordinary, url, method, headers, body)?
-                .send()
-                .await
-                .map_err(|error| ProviderError::network(self.provider, error.to_string()));
-        }
         let client = self.pool.client();
 
         let mut request_builder = match method {
@@ -410,40 +395,6 @@ impl GlobalPoolManager {
             .send()
             .await
             .map_err(|e| ProviderError::network("common", e.to_string()))
-    }
-
-    pub async fn execute_streaming_request(
-        &self,
-        url: &str,
-        method: HttpMethod,
-        headers: Vec<HeaderPair>,
-        body: Option<serde_json::Value>,
-    ) -> Result<Response, ProviderError> {
-        let clients = self.policy_clients.as_ref().ok_or_else(|| {
-            ProviderError::configuration(self.provider, "streaming endpoint policy is required")
-        })?;
-        let request = self.policy_request(&clients.streaming, url, method, headers, body)?;
-        tokio::time::timeout(
-            Duration::from_secs(STREAMING_HEADER_TIMEOUT_SECS),
-            request.send(),
-        )
-        .await
-        .map_err(|_| ProviderError::timeout(self.provider, "streaming response headers timed out"))?
-        .map_err(|error| ProviderError::network(self.provider, error.to_string()))
-    }
-
-    pub async fn execute_health_request(
-        &self,
-        url: &str,
-        headers: Vec<HeaderPair>,
-    ) -> Result<Response, ProviderError> {
-        let clients = self.policy_clients.as_ref().ok_or_else(|| {
-            ProviderError::configuration(self.provider, "health endpoint policy is required")
-        })?;
-        self.policy_request(&clients.health, url, HttpMethod::GET, headers, None)?
-            .send()
-            .await
-            .map_err(|error| ProviderError::network(self.provider, error.to_string()))
     }
 
     /// Get the underlying client for direct use
@@ -732,66 +683,5 @@ mod tests {
         let manager = GlobalPoolManager::default();
         // Should work without panic
         let _client = manager.client();
-    }
-
-    #[tokio::test]
-    async fn policy_manager_covers_ordinary_streaming_and_health_requests()
-    -> Result<(), Box<dyn std::error::Error>> {
-        use crate::core::net::ProviderEndpointAccess;
-
-        assert!(
-            GlobalPoolManager::for_provider_endpoint(
-                "test",
-                "http://127.0.0.1:11434/v1",
-                ProviderEndpointAccess::PublicOnly,
-                Duration::from_secs(1),
-            )
-            .is_err()
-        );
-
-        let blocked = TcpListener::bind(("127.0.0.1", 0)).await?;
-        let blocked_url = format!("http://{}/v1", blocked.local_addr()?);
-        let manager = GlobalPoolManager::for_provider_endpoint(
-            "test",
-            "http://127.0.0.1:11434/v1",
-            ProviderEndpointAccess::PrivateNetwork,
-            Duration::from_secs(1),
-        )?;
-        let error = manager
-            .execute_request(&blocked_url, HttpMethod::GET, vec![], None)
-            .await
-            .expect_err("private access must not cross authorities");
-        assert!(error.to_string().contains("does not match"));
-        assert!(
-            tokio::time::timeout(Duration::from_millis(25), blocked.accept())
-                .await
-                .is_err()
-        );
-
-        for mode in ["ordinary", "streaming", "health"] {
-            let url = delayed_response_url(Duration::ZERO, Duration::ZERO).await?;
-            let manager = GlobalPoolManager::for_provider_endpoint(
-                "test",
-                &url,
-                ProviderEndpointAccess::PrivateNetwork,
-                Duration::from_secs(1),
-            )?;
-            let response = match mode {
-                "ordinary" => {
-                    manager
-                        .execute_request(&url, HttpMethod::GET, vec![], None)
-                        .await?
-                }
-                "streaming" => {
-                    manager
-                        .execute_streaming_request(&url, HttpMethod::GET, vec![], None)
-                        .await?
-                }
-                "health" => manager.execute_health_request(&url, vec![]).await?,
-                _ => unreachable!(),
-            };
-            assert_eq!(response.text().await?, "hello");
-        }
-        Ok(())
     }
 }

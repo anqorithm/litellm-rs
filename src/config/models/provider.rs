@@ -5,8 +5,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use url::Url;
 
-use crate::core::net::ProviderEndpointAccess;
-
 /// Provider configuration
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -19,9 +17,6 @@ pub struct ProviderConfig {
     pub api_key: String,
     /// Base URL
     pub base_url: Option<String>,
-    /// Network access allowed for this provider endpoint.
-    #[serde(default)]
-    pub endpoint_access: ProviderEndpointAccess,
     /// API version
     pub api_version: Option<String>,
     /// Organization ID
@@ -73,7 +68,6 @@ impl std::fmt::Debug for ProviderConfig {
             .field("provider_type", &self.provider_type)
             .field("api_key", &"[REDACTED]")
             .field("base_url", &self.base_url)
-            .field("endpoint_access", &self.endpoint_access)
             .field("api_version", &self.api_version)
             .field("organization", &self.organization)
             .field("project", &self.project)
@@ -100,7 +94,6 @@ impl Default for ProviderConfig {
             provider_type: String::new(),
             api_key: String::new(),
             base_url: None,
-            endpoint_access: ProviderEndpointAccess::PublicOnly,
             api_version: None,
             organization: None,
             project: None,
@@ -385,7 +378,6 @@ mod tests {
         assert!(config.provider_type.is_empty());
         assert!(config.api_key.is_empty());
         assert!(config.base_url.is_none());
-        assert_eq!(config.endpoint_access, ProviderEndpointAccess::PublicOnly);
         assert!((config.weight - 1.0).abs() < f32::EPSILON);
         assert_eq!(config.rpm, 1000);
         assert!(config.enabled);
@@ -398,7 +390,6 @@ mod tests {
             provider_type: "openai".to_string(),
             api_key: "sk-xxx".to_string(),
             base_url: Some("https://api.openai.com/v1".to_string()),
-            endpoint_access: ProviderEndpointAccess::PublicOnly,
             api_version: Some("2024-01".to_string()),
             organization: Some("org-123".to_string()),
             project: None,
@@ -431,7 +422,6 @@ mod tests {
             provider_type: "custom".to_string(),
             api_key: "key".to_string(),
             base_url: None,
-            endpoint_access: ProviderEndpointAccess::PublicOnly,
             api_version: None,
             organization: None,
             project: None,
@@ -458,7 +448,6 @@ mod tests {
             provider_type: "anthropic".to_string(),
             api_key: "sk-ant-xxx".to_string(),
             base_url: None,
-            endpoint_access: ProviderEndpointAccess::PublicOnly,
             api_version: None,
             organization: None,
             project: None,
@@ -478,7 +467,6 @@ mod tests {
         let json = serde_json::to_value(&config).unwrap();
         assert_eq!(json["name"], "test-provider");
         assert_eq!(json["provider_type"], "anthropic");
-        assert_eq!(json["endpoint_access"], "public_only");
         assert_eq!(json["rpm"], 50);
     }
 
@@ -500,31 +488,6 @@ mod tests {
         assert_eq!(config.name, "gemini");
         assert!(!config.enabled);
         assert!((config.weight - 0.5).abs() < f32::EPSILON);
-        assert_eq!(config.endpoint_access, ProviderEndpointAccess::PublicOnly);
-    }
-
-    #[test]
-    fn test_provider_endpoint_access_yaml_is_strict() {
-        let private: ProviderConfig = serde_yml::from_str(
-            "name: local\nprovider_type: openai_compatible\napi_key: ''\nendpoint_access: private_network\n",
-        )
-        .expect("private endpoint access should deserialize");
-        assert_eq!(
-            private.endpoint_access,
-            ProviderEndpointAccess::PrivateNetwork
-        );
-        assert!(
-            serde_yml::from_str::<ProviderConfig>(
-                "name: local\nprovider_type: openai\napi_key: key\nendpoint_access: ''\n"
-            )
-            .is_err()
-        );
-        assert!(
-            serde_yml::from_str::<ProviderConfig>(
-                "name: local\nprovider_type: openai\napi_key: key\nendpoint_access: private\n"
-            )
-            .is_err()
-        );
     }
 
     #[test]
