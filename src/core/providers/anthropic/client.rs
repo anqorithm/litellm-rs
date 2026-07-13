@@ -4,12 +4,13 @@
 
 use std::time::Duration;
 
-use reqwest::{Client, ClientBuilder, Response};
+use reqwest::Response;
 use serde_json::{Value, json};
 use tokio::time::timeout;
 
 use crate::core::providers::base::{
-    HeaderPair, apply_headers, header, header_owned, header_static,
+    BaseConfig, BaseHttpClient, HeaderPair, apply_provider_headers, header, header_owned,
+    header_static, read_streaming_error_body,
 };
 use crate::core::providers::shared::parse_retry_after_from_body;
 use crate::core::providers::unified_provider::ProviderError;
@@ -36,30 +37,30 @@ const EXTENDED_CACHE_TTL_BETA: &str = "extended-cache-ttl-2025-04-11";
 #[derive(Debug, Clone)]
 pub struct AnthropicClient {
     config: AnthropicConfig,
-    http_client: Client,
+    http_client: BaseHttpClient,
+    streaming_client: BaseHttpClient,
 }
 
 impl AnthropicClient {
     /// Create
     pub fn new(config: AnthropicConfig) -> Result<Self, ProviderError> {
-        let mut builder = ClientBuilder::new()
-            .timeout(Duration::from_secs(config.request_timeout))
-            .connect_timeout(Duration::from_secs(config.connect_timeout));
-
-        // Configuration
-        if let Some(proxy_url) = &config.proxy_url {
-            let proxy = reqwest::Proxy::all(proxy_url)
-                .map_err(|e| anthropic_network_error(format!("Invalid proxy URL: {}", e)))?;
-            builder = builder.proxy(proxy);
-        }
-
-        let http_client = builder
-            .build()
-            .map_err(|e| anthropic_network_error(format!("Failed to create HTTP client: {}", e)))?;
+        config
+            .validate_policy_client_settings()
+            .map_err(|error| ProviderError::configuration("anthropic", error))?;
+        let base_config = BaseConfig {
+            api_base: Some(config.base_url.clone()),
+            endpoint_access: config.endpoint_access,
+            timeout: config.request_timeout,
+            ..Default::default()
+        };
+        let http_client = BaseHttpClient::new_for_provider("anthropic", base_config.clone())?;
+        let streaming_client =
+            BaseHttpClient::new_for_provider_streaming("anthropic", base_config)?;
 
         Ok(Self {
             config,
             http_client,
+            streaming_client,
         })
     }
 
@@ -111,7 +112,7 @@ impl AnthropicClient {
 
         let response = timeout(
             Duration::from_secs(self.config.request_timeout),
-            apply_headers(self.http_client.post(&url).json(&body), headers).send(),
+            apply_provider_headers(self.http_client.post(&url)?.json(&body), headers).send(),
         )
         .await
         .map_err(|_| anthropic_network_error("Request timeout"))?
@@ -131,7 +132,7 @@ impl AnthropicClient {
 
         let response = timeout(
             Duration::from_secs(self.config.request_timeout),
-            apply_headers(self.http_client.post(&url).json(&body), headers).send(),
+            apply_provider_headers(self.streaming_client.post(&url)?.json(&body), headers).send(),
         )
         .await
         .map_err(|_| anthropic_network_error("Request timeout"))?
@@ -140,10 +141,9 @@ impl AnthropicClient {
         // Check
         if !response.status().is_success() {
             let status = response.status().as_u16();
-            let error_text = response
-                .text()
+            let error_text = read_streaming_error_body(response)
                 .await
-                .unwrap_or_else(|_| "Failed to read error response".to_string());
+                .map_err(|error| error.into_provider_error("anthropic"))?;
             return Err(self.map_http_error(status, &error_text));
         }
 

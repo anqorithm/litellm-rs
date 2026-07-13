@@ -5,6 +5,7 @@
 use std::collections::HashMap;
 use std::env;
 
+use crate::core::net::{ProviderEndpointAccess, ProviderEndpointPolicy};
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::traits::provider::ProviderConfig;
 
@@ -15,6 +16,8 @@ pub struct AnthropicConfig {
     pub api_key: Option<String>,
     /// Base URL
     pub base_url: String,
+    /// Outbound network access policy
+    pub endpoint_access: ProviderEndpointAccess,
     /// APIversion
     pub api_version: String,
     /// Request
@@ -50,6 +53,7 @@ impl Default for AnthropicConfig {
         Self {
             api_key: None,
             base_url: "https://api.anthropic.com".to_string(),
+            endpoint_access: ProviderEndpointAccess::PublicOnly,
             api_version: "2023-06-01".to_string(),
             request_timeout: 120,
             connect_timeout: 10,
@@ -170,6 +174,12 @@ impl AnthropicConfig {
         self
     }
 
+    /// Set the outbound network access policy.
+    pub fn with_endpoint_access(mut self, access: ProviderEndpointAccess) -> Self {
+        self.endpoint_access = access;
+        self
+    }
+
     /// Settings
     pub fn with_api_version(mut self, version: impl Into<String>) -> Self {
         self.api_version = version.into();
@@ -284,6 +294,24 @@ impl AnthropicConfig {
             _ => false,
         }
     }
+
+    pub(crate) fn validate_policy_client_settings(&self) -> Result<(), String> {
+        if self.proxy_url.is_some() {
+            return Err(
+                "Anthropic proxy configuration is incompatible with endpoint policy enforcement"
+                    .to_string(),
+            );
+        }
+        if self.connect_timeout != 10 {
+            return Err(
+                "Anthropic connect_timeout must remain 10 seconds with the policy-aware client"
+                    .to_string(),
+            );
+        }
+        ProviderEndpointPolicy::for_base_url(self.endpoint_access, &self.base_url)
+            .map(|_| ())
+            .map_err(|error| format!("invalid Anthropic base URL policy: {error}"))
+    }
 }
 
 impl ProviderConfig for AnthropicConfig {
@@ -347,6 +375,8 @@ impl ProviderConfig for AnthropicConfig {
             return Err("Connect timeout cannot be greater than request timeout".to_string());
         }
 
+        self.validate_policy_client_settings()?;
+
         Ok(())
     }
 
@@ -356,6 +386,10 @@ impl ProviderConfig for AnthropicConfig {
 
     fn api_base(&self) -> Option<&str> {
         Some(&self.base_url)
+    }
+
+    fn endpoint_access(&self) -> ProviderEndpointAccess {
+        self.endpoint_access
     }
 
     fn timeout(&self) -> std::time::Duration {
@@ -472,6 +506,7 @@ mod tests {
     fn test_default_config() {
         let config = AnthropicConfig::default();
         assert_eq!(config.base_url, "https://api.anthropic.com");
+        assert_eq!(config.endpoint_access, ProviderEndpointAccess::PublicOnly);
         assert_eq!(config.api_version, "2023-06-01");
         assert!(config.enable_multimodal);
         assert!(config.enable_cache_control);
@@ -492,6 +527,27 @@ mod tests {
         // Should fail with invalid API key format
         config.api_key = Some("invalid-key".to_string());
         assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_policy_client_settings_fail_closed() {
+        let mut config = AnthropicConfig::new_test("test-key");
+        config.base_url = "http://127.0.0.1:18080".to_string();
+        assert!(crate::core::providers::anthropic::AnthropicClient::new(config.clone()).is_err());
+
+        config.endpoint_access = ProviderEndpointAccess::PrivateNetwork;
+        assert!(crate::core::providers::anthropic::AnthropicClient::new(config.clone()).is_ok());
+
+        config.proxy_url = Some("http://proxy.example".to_string());
+        let error = crate::core::providers::anthropic::AnthropicClient::new(config.clone())
+            .expect_err("proxy must fail closed");
+        assert!(error.to_string().contains("proxy"));
+
+        config.proxy_url = None;
+        config.connect_timeout = 9;
+        let error = crate::core::providers::anthropic::AnthropicClient::new(config)
+            .expect_err("custom connect timeout must fail closed");
+        assert!(error.to_string().contains("connect_timeout"));
     }
 
     #[test]

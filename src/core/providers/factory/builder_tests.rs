@@ -3,6 +3,8 @@
 use super::builder::*;
 #[cfg(feature = "providers-extended")]
 use super::cohere_builder::build_cohere_config_from_factory;
+#[cfg(feature = "providers-extended")]
+use super::gemini_builder::build_gemini_config_from_factory;
 use super::{Provider, ProviderType, create_provider};
 use crate::core::net::ProviderEndpointAccess;
 use std::sync::Mutex;
@@ -116,12 +118,11 @@ fn test_build_anthropic_config_from_factory_maps_optional_fields() {
     let config = serde_json::json!({
         "api_key": "sk-ant-test",
         "api_base": "https://example-anthropic.test",
+        "endpoint_access": "private_network",
         "api_version": "2024-01-01",
         "timeout": 99,
-        "connect_timeout": 12,
         "max_retries": 6,
         "retry_delay_base": 250,
-        "proxy": "http://localhost:8080",
         "headers": {
             "x-anthropic-a": "a"
         },
@@ -143,12 +144,13 @@ fn test_build_anthropic_config_from_factory_maps_optional_fields() {
     assert_eq!(anthropic_config.base_url, "https://example-anthropic.test");
     assert_eq!(anthropic_config.api_version, "2024-01-01");
     assert_eq!(anthropic_config.request_timeout, 99);
-    assert_eq!(anthropic_config.connect_timeout, 12);
+    assert_eq!(anthropic_config.connect_timeout, 10);
     assert_eq!(anthropic_config.max_retries, 6);
     assert_eq!(anthropic_config.retry_delay_base, 250);
+    assert!(anthropic_config.proxy_url.is_none());
     assert_eq!(
-        anthropic_config.proxy_url.as_deref(),
-        Some("http://localhost:8080")
+        anthropic_config.endpoint_access,
+        ProviderEndpointAccess::PrivateNetwork
     );
     assert_eq!(
         anthropic_config
@@ -177,6 +179,57 @@ fn test_build_anthropic_config_from_factory_maps_optional_fields() {
         anthropic_config.configured_multimodal_models,
         vec!["mimo-v2.5".to_string()]
     );
+}
+
+#[test]
+fn test_anthropic_factory_rejects_unsafe_client_options() {
+    for config in [
+        serde_json::json!({
+            "api_key": "sk-ant-test",
+            "api_base": "https://8.8.8.8",
+            "proxy": "http://localhost:8080"
+        }),
+        serde_json::json!({
+            "api_key": "sk-ant-test",
+            "api_base": "https://8.8.8.8",
+            "connect_timeout": 12
+        }),
+    ] {
+        assert!(build_anthropic_config_from_factory(&config).is_err());
+    }
+}
+
+#[cfg(feature = "providers-extended")]
+#[test]
+fn test_gemini_factory_maps_access_and_rejects_unsafe_client_options() {
+    let config = serde_json::json!({
+        "api_key": "test-api-key-1234567890123456",
+        "base_url": "http://127.0.0.1:18080",
+        "endpoint_access": "private_network"
+    });
+    let gemini = build_gemini_config_from_factory(&config)
+        .unwrap_or_else(|error| panic!("private Gemini config should build: {error}"));
+    assert_eq!(
+        gemini.endpoint_access,
+        ProviderEndpointAccess::PrivateNetwork
+    );
+
+    for invalid in [
+        serde_json::json!({
+            "api_key": "test-api-key-1234567890123456",
+            "base_url": "http://127.0.0.1:18080",
+            "endpoint_access": "private_network",
+            "proxy_url": "http://localhost:8080"
+        }),
+        serde_json::json!({
+            "api_key": "test-api-key-1234567890123456",
+            "base_url": "http://127.0.0.1:18080",
+            "endpoint_access": "private_network",
+            "connect_timeout": 12
+        }),
+    ] {
+        assert!(build_gemini_config_from_factory(&invalid).is_err());
+    }
 }
 
 #[test]
@@ -617,6 +670,24 @@ fn test_build_azure_ai_config_from_factory_maps_native_fields() {
             .get("x-azure-ai-custom")
             .map(String::as_str),
         Some("custom")
+    );
+}
+
+#[cfg(feature = "providers-extra")]
+#[test]
+fn test_vertex_factory_maps_endpoint_access() {
+    let config = serde_json::json!({
+        "project_id": "project",
+        "location": "us-central1",
+        "base_url": "http://127.0.0.1:18080",
+        "endpoint_access": "private_network",
+        "access_token": "token"
+    });
+    let vertex = build_vertex_ai_config_from_factory(&config)
+        .unwrap_or_else(|error| panic!("private Vertex config should build: {error}"));
+    assert_eq!(
+        vertex.endpoint_access,
+        ProviderEndpointAccess::PrivateNetwork
     );
 }
 

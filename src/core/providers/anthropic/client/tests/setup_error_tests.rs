@@ -13,9 +13,17 @@ fn test_client_creation() {
 fn test_client_creation_with_custom_config() {
     let mut config = AnthropicConfig::new_test("test-key");
     config.request_timeout = 120;
-    config.connect_timeout = 30;
     let client = AnthropicClient::new(config);
     assert!(client.is_ok());
+}
+
+#[test]
+fn test_client_creation_rejects_unsupported_connect_timeout() {
+    let mut config = AnthropicConfig::new_test("test-key");
+    config.connect_timeout = 30;
+    let error = AnthropicClient::new(config)
+        .expect_err("a connect timeout the policy client cannot honor must fail");
+    assert!(error.to_string().contains("connect_timeout"));
 }
 
 // ==================== Header Building Tests ====================
