@@ -1,4 +1,8 @@
 #[cfg(all(test, feature = "gateway", feature = "storage"))]
+#[path = "common/providers.rs"]
+pub mod provider_fixtures;
+
+#[cfg(all(test, feature = "gateway", feature = "storage"))]
 #[path = "gemini_sdk_routes/support.rs"]
 mod support;
 

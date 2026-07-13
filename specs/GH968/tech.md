@@ -76,6 +76,8 @@ Link to `product.md`.
    的 crate/internal tests 收敛到 3 个 test-only helper；不声明 access 字段，不改变测试断言、listener 或运行时行为。
 8a. Gemini fallback fixture preparation PR (`Refs #968`): 将全量 integration gate 发现的最后一处 Gemini fallback
    loopback `ProviderConfig` 收敛到既有 integration helper；不声明 access 字段，不改变测试行为或断言。
+8b. Gemini SDK fixture preparation PR (`Refs #968`): 依据全仓 direct-runtime fixture inventory，将最后一处 Gemini
+   SDK loopback `ProviderConfig` 收敛到同一 helper；不声明 access 字段，不改变测试行为或断言。
 9. Gateway/shared-runtime core PR (`Refs #968`): Gateway config/default/env/validation/builder 与 factory 将顶层
    access 传播到 OpenAI/OpenAI-like config；`GlobalPoolManager` 为两者普通、流式与 health 路径构造 policy
    client；共享 loopback fixture 显式 private opt-in，self-hosted 无 opt-in 失败，已迁移路径无普通 fallback。
@@ -97,6 +99,9 @@ declaration-execution gap；第九段对尚归第十/十一段所有的 provider
 
 4dfee12f 基线上的第九段全量 integration gate 进一步发现 Gemini fallback fixture 仍保留一处同形 loopback
 `ProviderConfig`；8a 先做单文件机械收敛，避免第九段突破精确 15 文件 hard guard。
+
+d3a1e862 基线上的全仓 inventory 随后确认 Gemini SDK support 是唯一剩余 direct runtime loopback 构造；8b
+完成该最后一处机械收敛，配置校验和公网 factory 测试中的 direct literal 保持原样。
 
 每个 PR 独立满足 scope hard guard、current-head reviewer、CI 和 PR gate；只有第十一段在全量矩阵通过后关闭 issue。
 
