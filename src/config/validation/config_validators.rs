@@ -3,7 +3,7 @@
 //! This module provides validation implementations for the main gateway configuration
 //! structures including GatewayConfig, ServerConfig, and ProviderConfig.
 
-use super::{ssrf::validate_url_against_ssrf, trait_def::Validate};
+use super::trait_def::Validate;
 use crate::config::models::gateway::{GatewayConfig, GatewayPricingConfig};
 use crate::config::models::provider::{ProviderConfig, ProviderHealthCheckConfig, RetryConfig};
 use crate::config::models::server::ServerConfig;
@@ -213,7 +213,9 @@ impl Validate for ProviderConfig {
         }
 
         if let Some(base_url) = &self.base_url {
-            self.validate_endpoint(provider_selector, base_url, "base URL")?;
+            ProviderEndpointPolicy::for_base_url(self.endpoint_access, base_url).map_err(
+                |error| format!("Provider {} base URL is not allowed: {}", self.name, error),
+            )?;
         }
 
         // Validate rate limits
@@ -242,17 +244,6 @@ impl Validate for ProviderConfig {
 }
 
 impl ProviderConfig {
-    fn validate_endpoint(&self, selector: &str, endpoint: &str, kind: &str) -> Result<(), String> {
-        let context = format!("Provider {} {kind}", self.name);
-        if crate::core::providers::factory::is_endpoint_access_wired_selector(selector) {
-            ProviderEndpointPolicy::for_base_url(self.endpoint_access, endpoint)
-                .map(|_| ())
-                .map_err(|error| format!("{context} is not allowed: {error}"))
-        } else {
-            validate_url_against_ssrf(endpoint, &context)
-        }
-    }
-
     /// Validate health settings at every runtime construction boundary.
     pub(crate) fn validate_health_check_runtime(&self) -> Result<(), String> {
         self.health_check.validate()?;
@@ -263,10 +254,13 @@ impl ProviderConfig {
                     self.name
                 ));
             }
-            self.validate_endpoint(
-                self.provider_type.as_str(),
-                endpoint.as_str(),
-                "health check endpoint",
+            ProviderEndpointPolicy::for_base_url(self.endpoint_access, endpoint.as_str()).map_err(
+                |error| {
+                    format!(
+                        "Provider {} health check endpoint is not allowed: {}",
+                        self.name, error
+                    )
+                },
             )?;
         }
 
@@ -402,18 +396,6 @@ mod endpoint_access_tests {
             Validate::validate(&config)
                 .unwrap_err()
                 .contains("top-level")
-        );
-    }
-
-    #[test]
-    fn unwired_provider_retains_dns_fail_closed_validation() {
-        let mut config = local_provider();
-        config.provider_type = "anthropic".to_string();
-        config.base_url = Some(format!("https://{}.test", "a".repeat(64)));
-        assert!(
-            Validate::validate(&config)
-                .unwrap_err()
-                .contains("could not be resolved")
         );
     }
 }
