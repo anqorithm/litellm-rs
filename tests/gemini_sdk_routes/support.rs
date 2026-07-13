@@ -11,6 +11,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+use super::provider_fixtures::mock_provider_config;
+
 #[derive(Clone, Debug)]
 pub(crate) struct CapturedGeminiRequest {
     pub(crate) path_and_query: String,
@@ -239,14 +241,13 @@ pub(crate) async fn build_auth_required_state(providers: Vec<ProviderConfig>) ->
 }
 
 pub(crate) fn gemini_provider(name: &str, base_url: &str, models: Vec<String>) -> ProviderConfig {
-    let mut provider = ProviderConfig {
-        name: name.to_string(),
-        provider_type: "openai_compatible".to_string(),
-        api_key: "test-api-key-12345678901234567890".to_string(),
-        base_url: Some(base_url.to_string()),
+    let mut provider = mock_provider_config(
+        name,
+        "openai_compatible",
+        "test-api-key-12345678901234567890",
+        base_url,
         models,
-        ..ProviderConfig::default()
-    };
+    );
     provider.settings = HashMap::from([
         (
             "headers".to_string(),
