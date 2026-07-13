@@ -93,9 +93,7 @@ impl CohereProvider {
             api_base: Some(config.api_base.clone()),
             timeout: config.timeout_seconds,
             max_retries: config.max_retries,
-            headers: HashMap::new(),
-            organization: None,
-            api_version: None,
+            ..Default::default()
         };
 
         let client = BaseHttpClient::new(base_config)?;

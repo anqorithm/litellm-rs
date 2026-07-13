@@ -55,15 +55,7 @@ fn default_pass_through() -> bool {
 impl Default for OpenAILikeConfig {
     fn default() -> Self {
         Self {
-            base: BaseConfig {
-                api_key: None,
-                api_base: None, // Required - must be set by user
-                timeout: 60,
-                max_retries: 3,
-                headers: HashMap::new(),
-                organization: None,
-                api_version: None,
-            },
+            base: BaseConfig::default(),
             provider_name: default_provider_name(),
             custom_headers: HashMap::new(),
             skip_api_key: false,

@@ -53,13 +53,9 @@ impl Default for ReplicateConfig {
     fn default() -> Self {
         Self {
             base: BaseConfig {
-                api_key: None,
                 api_base: Some("https://api.replicate.com/v1".to_string()),
                 timeout: 600, // Replicate can take a long time for predictions
-                max_retries: 3,
-                headers: std::collections::HashMap::new(),
-                organization: None,
-                api_version: None,
+                ..Default::default()
             },
             polling_delay_seconds: DEFAULT_POLLING_DELAY_SECONDS,
             polling_retries: DEFAULT_POLLING_RETRIES,

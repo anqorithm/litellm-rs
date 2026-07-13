@@ -1,7 +1,6 @@
 //! Custom HTTPX Configuration
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::time::Duration;
 
 use crate::config::validation::validate_url_against_ssrf;
@@ -29,15 +28,7 @@ pub struct CustomHttpxConfig {
 impl Default for CustomHttpxConfig {
     fn default() -> Self {
         Self {
-            base: BaseConfig {
-                api_key: None,
-                api_base: None,
-                timeout: 60,
-                max_retries: 3,
-                headers: HashMap::new(),
-                organization: None,
-                api_version: None,
-            },
+            base: BaseConfig::default(),
             endpoint_url: String::new(),
             http_method: "POST".to_string(),
             request_template: None,
