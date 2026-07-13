@@ -37,8 +37,6 @@ pub fn mock_openai_runtime_config(
     config.base.api_base = Some(api_base.into());
     config.base.api_key = Some(api_key.into());
     config.endpoint_access = ProviderEndpointAccess::PrivateNetwork;
-    config.features.audio_models = false;
-    config.features.audio_transcription = false;
     config
 }
 

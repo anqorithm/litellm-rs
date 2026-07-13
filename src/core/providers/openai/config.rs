@@ -152,9 +152,7 @@ impl OpenAIConfig {
 
     /// Validate the configuration
     pub fn validate(&self) -> Result<(), String> {
-        if self.endpoint_access == crate::core::net::ProviderEndpointAccess::PrivateNetwork
-            && (self.features.audio_models || self.features.audio_transcription)
-        {
+        if self.endpoint_access == crate::core::net::ProviderEndpointAccess::PrivateNetwork {
             return Err(
                 "private_network is disabled until multipart methods are policy-wired".into(),
             );
@@ -261,8 +259,6 @@ pub(crate) fn test_openai_config(
     config.base.api_base = Some(api_base.into());
     config.base.api_key = Some(api_key.into());
     config.endpoint_access = crate::core::net::ProviderEndpointAccess::PrivateNetwork;
-    config.features.audio_models = false;
-    config.features.audio_transcription = false;
     config
 }
 
@@ -298,7 +294,7 @@ mod tests {
         );
 
         value["endpoint_access"] = serde_json::json!("private_network");
-        let Ok(mut private) = serde_json::from_value::<OpenAIConfig>(value) else {
+        let Ok(private) = serde_json::from_value::<OpenAIConfig>(value) else {
             panic!("private-network OpenAI config must deserialize");
         };
         assert_eq!(
@@ -306,10 +302,6 @@ mod tests {
             ProviderEndpointAccess::PrivateNetwork
         );
         assert!(private.validate().unwrap_err().contains("multipart"));
-        private.features.audio_models = false;
-        private.features.audio_transcription = false;
-        private.base.api_key = Some("sk-test".to_string());
-        assert!(private.validate().is_ok());
     }
 
     #[test]
