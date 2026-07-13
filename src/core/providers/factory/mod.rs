@@ -1,10 +1,3 @@
-//! Provider factory: creation from configuration
-//!
-//! This module coordinates provider creation. It is split into focused submodules:
-//! - `resolver`: selector support detection
-//! - `builder`: per-provider config builders and extraction helpers
-//! - `registry`: `Provider::from_config_async` dispatch table
-
 mod builder;
 #[cfg(test)]
 mod builder_tests;
@@ -24,6 +17,7 @@ pub use resolver::is_provider_selector_supported;
 use super::provider_type::ProviderType;
 use super::unified_provider::ProviderError;
 use super::{Provider, openai_like, registry as provider_registry};
+use crate::core::net::ProviderEndpointAccess;
 use tracing::warn;
 
 fn provider_diagnostic_name(provider_type: &ProviderType) -> &'static str {
@@ -49,9 +43,21 @@ fn catalog_definition_for_supported_selector(
     }
 }
 
-/// Create a provider from configuration
-///
-/// This is the main factory function for creating providers
+pub(crate) fn is_endpoint_access_wired_selector(selector: &str) -> bool {
+    catalog_definition_for_supported_selector(selector).is_some()
+        || matches!(
+            selector.trim().parse::<ProviderType>(),
+            Ok(ProviderType::OpenAI | ProviderType::OpenAICompatible)
+        )
+}
+
+fn is_endpoint_access_wired_provider_type(provider_type: &ProviderType) -> bool {
+    matches!(
+        provider_type,
+        ProviderType::OpenAI | ProviderType::OpenAICompatible
+    ) || provider_registry::catalog_definition_for_provider_type(provider_type).is_some()
+}
+
 pub async fn create_provider(
     config: crate::config::models::provider::ProviderConfig,
 ) -> Result<Provider, ProviderError> {
@@ -62,6 +68,7 @@ pub async fn create_provider(
         provider_type,
         api_key,
         base_url,
+        endpoint_access,
         api_version,
         organization,
         project,
@@ -77,6 +84,20 @@ pub async fn create_provider(
     } else {
         provider_type.as_str()
     };
+    if settings.contains_key("endpoint_access") {
+        return Err(ProviderError::configuration(
+            "provider",
+            "endpoint_access must be configured as a top-level provider field",
+        ));
+    }
+    if endpoint_access == ProviderEndpointAccess::PrivateNetwork
+        && !is_endpoint_access_wired_selector(provider_selector)
+    {
+        return Err(ProviderError::configuration(
+            "provider",
+            format!("provider type '{provider_selector}' does not support endpoint_access yet"),
+        ));
+    }
     if let Some(def) = catalog_definition_for_supported_selector(provider_selector) {
         let effective_key = if api_key.is_empty() {
             def.resolve_api_key(None)
@@ -87,6 +108,7 @@ pub async fn create_provider(
             def.to_openai_like_config(effective_key.as_deref(), base_url.as_deref());
         oai_config.base.timeout = timeout;
         oai_config.base.max_retries = max_retries;
+        oai_config.endpoint_access = endpoint_access;
 
         if let Some(version) = api_version.filter(|v| !v.trim().is_empty()) {
             oai_config.base.api_version = Some(version);
@@ -119,9 +141,6 @@ pub async fn create_provider(
         return Ok(Provider::OpenAILike(provider));
     }
 
-    // --- Tier 2/3: existing factory logic ---
-    // Catalog selectors are already handled above; use strict FromStr so unknown strings
-    // produce a ConfigError::InvalidValue instead of silently becoming ProviderType::Custom.
     let provider_type_enum = provider_selector
         .parse::<ProviderType>()
         .map_err(|e| ProviderError::invalid_request("provider_type", e.to_string()))?;
@@ -159,6 +178,13 @@ pub async fn create_provider(
         factory_config.insert(
             "models".to_string(),
             Value::Array(models.into_iter().map(Value::String).collect()),
+        );
+    }
+    if is_endpoint_access_wired_provider_type(&provider_type_enum) {
+        factory_config.insert(
+            "endpoint_access".to_string(),
+            serde_json::to_value(endpoint_access)
+                .map_err(|error| ProviderError::configuration("provider", error.to_string()))?,
         );
     }
 
@@ -207,10 +233,7 @@ mod tests {
     #[test]
     fn test_catalog_factory_shortcut_keeps_pure_catalog_only_selectors() {
         let selector = "together";
-        assert!(
-            provider_registry::entry_for_name(selector).is_none(),
-            "{selector} should remain a pure catalog-only selector for this guard"
-        );
+        assert!(provider_registry::entry_for_name(selector).is_none());
         assert!(catalog_definition_for_supported_selector(selector).is_some());
     }
 
@@ -228,7 +251,16 @@ mod tests {
                 ..Default::default()
             };
 
-            let provider = create_provider(config).await.unwrap_or_else(|e| {
+            let local_default = def.base_url.starts_with("http://localhost:");
+            let result = create_provider(config.clone()).await;
+            if local_default {
+                assert!(result.is_err(), "{name} must require private access");
+                let mut private = config;
+                private.endpoint_access = ProviderEndpointAccess::PrivateNetwork;
+                assert!(create_provider(private).await.is_ok());
+                continue;
+            }
+            let provider = result.unwrap_or_else(|e| {
                 panic!("Catalog provider '{}' should be creatable: {}", name, e)
             });
 
@@ -714,8 +746,6 @@ mod tests {
         let err = create_provider(config)
             .await
             .expect_err("Expected unknown custom provider to fail");
-        // Unknown provider strings now produce InvalidRequest (via ConfigError::InvalidValue)
-        // instead of NotImplemented, so callers get a clear parse-time error.
         assert!(
             matches!(err, ProviderError::InvalidRequest { .. }),
             "Expected InvalidRequest error, got {}",
@@ -731,10 +761,11 @@ mod tests {
     #[tokio::test]
     async fn test_create_provider_openai_compatible_factory() {
         let mut config = crate::config::models::provider::ProviderConfig {
-            name: "test-openai-like".to_string(),
+            name: "local-openai-like".to_string(),
             provider_type: "openai_compatible".to_string(),
             api_key: "".to_string(),
-            base_url: Some("https://api.example.com/v1".to_string()),
+            base_url: Some("http://127.0.0.1:11434/v1".to_string()),
+            endpoint_access: ProviderEndpointAccess::PrivateNetwork,
             ..Default::default()
         };
         config
@@ -749,5 +780,20 @@ mod tests {
             provider.capabilities(),
             openai_like::provider::OPENAI_COMPATIBLE_PROXY_CAPABILITIES
         );
+
+        let mut invalid = crate::config::models::provider::ProviderConfig {
+            name: "openai".to_string(),
+            provider_type: "openai".to_string(),
+            api_key: "sk-test".to_string(),
+            ..Default::default()
+        };
+        invalid.settings.insert(
+            "endpoint_access".to_string(),
+            serde_json::json!("private_network"),
+        );
+        let error = create_provider(invalid)
+            .await
+            .expect_err("settings must not override top-level endpoint access");
+        assert!(error.to_string().contains("top-level"));
     }
 }

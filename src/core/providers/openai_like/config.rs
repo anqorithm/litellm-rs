@@ -18,6 +18,10 @@ pub struct OpenAILikeConfig {
     #[serde(flatten)]
     pub base: BaseConfig,
 
+    /// Network access allowed for the configured API endpoint.
+    #[serde(default)]
+    pub endpoint_access: crate::core::net::ProviderEndpointAccess,
+
     /// Provider name for identification (optional, defaults to "openai_like")
     #[serde(default = "default_provider_name")]
     pub provider_name: String,
@@ -64,6 +68,7 @@ impl Default for OpenAILikeConfig {
                 organization: None,
                 api_version: None,
             },
+            endpoint_access: crate::core::net::ProviderEndpointAccess::PublicOnly,
             provider_name: default_provider_name(),
             custom_headers: HashMap::new(),
             skip_api_key: false,
@@ -75,6 +80,14 @@ impl Default for OpenAILikeConfig {
 }
 
 impl OpenAILikeConfig {
+    pub fn with_endpoint_access(
+        mut self,
+        endpoint_access: crate::core::net::ProviderEndpointAccess,
+    ) -> Self {
+        self.endpoint_access = endpoint_access;
+        self
+    }
+
     /// Create a new configuration with required api_base
     pub fn new(api_base: impl Into<String>) -> Self {
         let mut config = Self::default();
@@ -245,20 +258,51 @@ impl ProviderConfig for OpenAILikeConfig {
 
 #[cfg(test)]
 pub(crate) fn test_openai_like_config(api_base: impl Into<String>) -> OpenAILikeConfig {
-    OpenAILikeConfig::new(api_base).with_skip_api_key(true)
+    OpenAILikeConfig::new(api_base)
+        .with_endpoint_access(crate::core::net::ProviderEndpointAccess::PrivateNetwork)
+        .with_skip_api_key(true)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::net::ProviderEndpointAccess;
 
     #[test]
     fn test_default_config() {
         let config = OpenAILikeConfig::default();
         assert!(config.base.api_base.is_none());
         assert!(config.base.api_key.is_none());
+        assert_eq!(config.endpoint_access, ProviderEndpointAccess::PublicOnly);
         assert!(!config.skip_api_key);
         assert!(config.pass_through_params);
+    }
+
+    #[test]
+    fn endpoint_access_serde_defaults_public_and_accepts_private_opt_in() {
+        let Ok(mut value) = serde_json::to_value(OpenAILikeConfig::default()) else {
+            panic!("default OpenAI-like config must serialize");
+        };
+        let Some(object) = value.as_object_mut() else {
+            panic!("serialized OpenAI-like config must be an object");
+        };
+        object.remove("endpoint_access");
+        let Ok(defaulted) = serde_json::from_value::<OpenAILikeConfig>(value.clone()) else {
+            panic!("OpenAI-like config without endpoint_access must deserialize");
+        };
+        assert_eq!(
+            defaulted.endpoint_access,
+            ProviderEndpointAccess::PublicOnly
+        );
+
+        value["endpoint_access"] = serde_json::json!("private_network");
+        let Ok(private) = serde_json::from_value::<OpenAILikeConfig>(value) else {
+            panic!("private-network OpenAI-like config must deserialize");
+        };
+        assert_eq!(
+            private.endpoint_access,
+            ProviderEndpointAccess::PrivateNetwork
+        );
     }
 
     #[test]

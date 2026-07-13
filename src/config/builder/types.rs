@@ -33,6 +33,7 @@ pub struct ProviderConfigBuilder {
     pub(super) provider_type: Option<NonEmptyString>,
     pub(super) api_key: Option<String>,
     pub(super) base_url: Option<String>,
+    pub(super) endpoint_access: crate::core::net::ProviderEndpointAccess,
     pub(super) models: Vec<String>,
     pub(super) max_requests_per_minute: Option<u32>,
     pub(super) timeout: Option<Duration>,
