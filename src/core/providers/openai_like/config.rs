@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
 
+use crate::core::net::ProviderEndpointAccess;
 use crate::core::providers::base::BaseConfig;
 use crate::core::traits::provider::ProviderConfig;
 
@@ -233,6 +234,10 @@ impl ProviderConfig for OpenAILikeConfig {
     fn max_retries(&self) -> u32 {
         self.base.max_retries
     }
+
+    fn endpoint_access(&self) -> ProviderEndpointAccess {
+        self.base.endpoint_access
+    }
 }
 
 #[cfg(test)]
@@ -251,6 +256,25 @@ mod tests {
         assert!(config.base.api_key.is_none());
         assert!(!config.skip_api_key);
         assert!(config.pass_through_params);
+        assert_eq!(
+            ProviderConfig::endpoint_access(&config),
+            ProviderEndpointAccess::PublicOnly
+        );
+    }
+
+    #[test]
+    fn test_endpoint_access_flattened_serde_round_trip() {
+        let mut value = serde_json::to_value(OpenAILikeConfig::default()).unwrap();
+        value["endpoint_access"] = serde_json::json!("private_network");
+        let config: OpenAILikeConfig = serde_json::from_value(value).unwrap();
+        assert_eq!(
+            ProviderConfig::endpoint_access(&config),
+            ProviderEndpointAccess::PrivateNetwork
+        );
+        assert_eq!(
+            serde_json::to_value(config).unwrap()["endpoint_access"],
+            "private_network"
+        );
     }
 
     #[test]

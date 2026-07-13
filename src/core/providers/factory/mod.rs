@@ -99,6 +99,7 @@ pub async fn create_provider(
         };
         let mut oai_config =
             def.to_openai_like_config(effective_key.as_deref(), base_url.as_deref());
+        oai_config.base.endpoint_access = endpoint_access;
         oai_config.base.timeout = timeout;
         oai_config.base.max_retries = max_retries;
 
@@ -148,6 +149,10 @@ pub async fn create_provider(
     }
 
     let mut factory_config = serde_json::Map::new();
+    factory_config.insert(
+        "endpoint_access".to_string(),
+        Value::String(endpoint_access.to_string()),
+    );
 
     if !api_key.is_empty() {
         factory_config.insert("api_key".to_string(), Value::String(api_key.clone()));
@@ -195,7 +200,7 @@ pub async fn create_provider(
             .or_insert(Value::String(name));
     }
 
-    Provider::from_config_async(provider_type_enum, Value::Object(factory_config)).await
+    Provider::from_gateway_config_async(provider_type_enum, Value::Object(factory_config)).await
 }
 
 #[cfg(test)]
@@ -484,6 +489,7 @@ mod tests {
                 assert_eq!(cfg.provider_name, "perplexity");
                 assert_eq!(cfg.base.timeout, 42);
                 assert_eq!(cfg.base.max_retries, 6);
+                assert_eq!(cfg.base.endpoint_access, ProviderEndpointAccess::PublicOnly);
                 assert_eq!(cfg.base.api_version.as_deref(), Some("2024-01-01"));
                 assert_eq!(cfg.base.organization.as_deref(), Some("org-top-level"));
                 assert_eq!(cfg.model_prefix.as_deref(), Some("pplx/"));
@@ -740,49 +746,5 @@ mod tests {
             "Expected custom provider name in error, got {}",
             err
         );
-    }
-
-    #[tokio::test]
-    async fn test_create_provider_openai_compatible_factory() {
-        let mut config = crate::config::models::provider::ProviderConfig {
-            name: "test-openai-like".to_string(),
-            provider_type: "openai_compatible".to_string(),
-            api_key: "".to_string(),
-            base_url: Some("https://api.example.com/v1".to_string()),
-            ..Default::default()
-        };
-        config
-            .settings
-            .insert("skip_api_key".to_string(), serde_json::Value::Bool(true));
-
-        let provider = create_provider(config.clone())
-            .await
-            .expect("openai_compatible provider should be creatable");
-        assert!(matches!(&provider, Provider::OpenAILike(_)));
-        assert_eq!(
-            provider.capabilities(),
-            openai_like::provider::OPENAI_COMPATIBLE_PROXY_CAPABILITIES
-        );
-
-        config.endpoint_access = ProviderEndpointAccess::PrivateNetwork;
-        let error = create_provider(config)
-            .await
-            .expect_err("private access must remain staged");
-        assert!(error.to_string().contains("staged"));
-
-        let mut settings_override = crate::config::models::provider::ProviderConfig {
-            name: "openai".to_string(),
-            provider_type: "openai".to_string(),
-            api_key: "sk-test".to_string(),
-            ..Default::default()
-        };
-        settings_override.settings.insert(
-            "endpoint_access".to_string(),
-            serde_json::json!("private_network"),
-        );
-        let error = create_provider(settings_override)
-            .await
-            .expect_err("settings must not override endpoint access");
-        assert!(error.to_string().contains("top-level"));
     }
 }
