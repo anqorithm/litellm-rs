@@ -20,7 +20,7 @@ use super::builder::{
     apply_tier1_openai_like_overrides, build_anthropic_config_from_factory,
     build_bedrock_config_from_factory, build_cloudflare_config_from_factory,
     build_mistral_config_from_factory, build_openai_config_from_factory,
-    build_openai_like_config_from_factory, config_str,
+    build_openai_like_config_from_factory, config_endpoint_access, config_str,
 };
 #[cfg(feature = "providers-extra")]
 use super::builder::{
@@ -55,6 +55,13 @@ impl Provider {
                 "endpoint_access is staged until provider routes are policy-wired",
             ));
         }
+        Self::from_gateway_config_async(provider_type, config).await
+    }
+
+    pub(super) async fn from_gateway_config_async(
+        provider_type: ProviderType,
+        config: serde_json::Value,
+    ) -> Result<Self, ProviderError> {
         match provider_type {
             ProviderType::OpenAI => {
                 let openai_config = build_openai_config_from_factory(&config)?;
@@ -248,6 +255,7 @@ impl Provider {
                     config_str(&config, "base_url").or_else(|| config_str(&config, "api_base"));
                 let mut oai_config =
                     def.to_openai_like_config(api_key.as_deref(), base_url_override);
+                oai_config.base.endpoint_access = config_endpoint_access(&config, name)?;
                 if let Some(settings) = config.as_object() {
                     let settings = settings
                         .iter()
@@ -637,17 +645,6 @@ mod tests {
             err.to_string().contains("providers-extended"),
             "error should identify required feature: {err}"
         );
-    }
-
-    #[tokio::test]
-    async fn test_from_config_async_rejects_staged_endpoint_access() {
-        let error = Provider::from_config_async(
-            ProviderType::OpenAICompatible,
-            serde_json::json!({"endpoint_access": "public_only"}),
-        )
-        .await
-        .expect_err("direct configs must reject staged endpoint access");
-        assert!(error.to_string().contains("staged"));
     }
 
     #[cfg(feature = "providers-extended")]

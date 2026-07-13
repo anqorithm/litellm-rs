@@ -1,10 +1,10 @@
 //! Configuration
 //!
-//! Configuration
-
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
+
+use crate::core::net::ProviderEndpointAccess;
 
 /// Configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -16,6 +16,10 @@ pub struct BaseConfig {
     /// API base URL
     #[serde(skip_serializing_if = "Option::is_none")]
     pub api_base: Option<String>,
+
+    /// Network scope allowed for the configured endpoint.
+    #[serde(default)]
+    pub endpoint_access: ProviderEndpointAccess,
 
     /// Request
     #[serde(default = "default_timeout")]
@@ -51,6 +55,7 @@ impl Default for BaseConfig {
         Self {
             api_key: None,
             api_base: None,
+            endpoint_access: ProviderEndpointAccess::PublicOnly,
             timeout: default_timeout(),
             max_retries: default_max_retries(),
             headers: HashMap::new(),
@@ -113,6 +118,7 @@ impl BaseConfig {
         Self {
             api_key: Self::env_value(provider, "API_KEY"),
             api_base: Self::env_value(provider, "API_BASE"),
+            endpoint_access: ProviderEndpointAccess::PublicOnly,
             timeout: Self::env_value(provider, "TIMEOUT")
                 .and_then(|t| t.parse().ok())
                 .unwrap_or(default_timeout()),
@@ -286,6 +292,9 @@ macro_rules! define_provider_config {
             fn max_retries(&self) -> u32 {
                 self.base.max_retries
             }
+            fn endpoint_access(&self) -> $crate::core::net::ProviderEndpointAccess {
+                self.base.endpoint_access
+            }
         }
     };
 
@@ -349,6 +358,9 @@ macro_rules! define_provider_config {
 
             fn max_retries(&self) -> u32 {
                 self.base.max_retries
+            }
+            fn endpoint_access(&self) -> $crate::core::net::ProviderEndpointAccess {
+                self.base.endpoint_access
             }
         }
     };
@@ -449,6 +461,8 @@ macro_rules! define_standalone_provider_config {
             pub api_key: Option<String>,
             /// API base URL
             pub api_base: Option<String>,
+            #[serde(default)]
+            pub endpoint_access: $crate::core::net::ProviderEndpointAccess,
             /// Request timeout in seconds
             #[serde(default)]
             pub timeout: u64,
@@ -466,6 +480,7 @@ macro_rules! define_standalone_provider_config {
                 Self {
                     api_key: None,
                     api_base: None,
+                    endpoint_access: $crate::core::net::ProviderEndpointAccess::PublicOnly,
                     timeout: $default_timeout,
                     max_retries: 3,
                     $($field: $default,)*
@@ -504,6 +519,9 @@ macro_rules! define_standalone_provider_config {
             fn max_retries(&self) -> u32 {
                 self.max_retries
             }
+            fn endpoint_access(&self) -> $crate::core::net::ProviderEndpointAccess {
+                self.endpoint_access
+            }
         }
 
         impl $name {
@@ -512,6 +530,7 @@ macro_rules! define_standalone_provider_config {
                 Self {
                     api_key: std::env::var(concat!($env_prefix, "_API_KEY")).ok(),
                     api_base: std::env::var(concat!($env_prefix, "_API_BASE")).ok(),
+                    endpoint_access: $crate::core::net::ProviderEndpointAccess::PublicOnly,
                     timeout: std::env::var(concat!($env_prefix, "_TIMEOUT"))
                         .ok()
                         .and_then(|t| t.parse().ok())
@@ -559,6 +578,14 @@ macro_rules! define_standalone_provider_config {
                 self
             }
 
+            pub fn with_endpoint_access(
+                mut self,
+                endpoint_access: $crate::core::net::ProviderEndpointAccess,
+            ) -> Self {
+                self.endpoint_access = endpoint_access;
+                self
+            }
+
             /// Set the timeout in seconds
             pub fn with_timeout(mut self, timeout: u64) -> Self {
                 self.timeout = timeout;
@@ -594,12 +621,67 @@ macro_rules! define_standalone_provider_config {
 mod tests {
     use super::*;
 
+    crate::define_standalone_provider_config!(EndpointAccessStandaloneTestConfig,
+        provider: "endpoint_access_test",
+        env_prefix: "ENDPOINT_ACCESS_TEST",
+        default_base_url: "https://api.example.test/v1",
+        default_timeout: 60,
+    );
+
     #[test]
     fn test_base_config_default() {
         let config = BaseConfig::default();
         assert_eq!(config.timeout, 60);
         assert_eq!(config.max_retries, 3);
         assert!(config.api_key.is_none());
+        assert_eq!(config.endpoint_access, ProviderEndpointAccess::PublicOnly);
+    }
+
+    #[test]
+    fn endpoint_access_serde_and_standalone_macro_are_strict() {
+        let default: BaseConfig = serde_json::from_value(serde_json::json!({}))
+            .expect("missing endpoint_access should use the public default");
+        assert_eq!(default.endpoint_access, ProviderEndpointAccess::PublicOnly);
+
+        let private: BaseConfig = serde_json::from_value(serde_json::json!({
+            "endpoint_access": "private_network"
+        }))
+        .expect("private_network is a valid typed value");
+        assert_eq!(
+            private.endpoint_access,
+            ProviderEndpointAccess::PrivateNetwork
+        );
+
+        for invalid in [
+            serde_json::json!(""),
+            serde_json::json!("private"),
+            serde_json::json!(true),
+        ] {
+            assert!(
+                serde_json::from_value::<BaseConfig>(serde_json::json!({
+                    "endpoint_access": invalid
+                }))
+                .is_err()
+            );
+        }
+
+        let standalone = EndpointAccessStandaloneTestConfig::new("test-key")
+            .with_api_key("test-key")
+            .with_base_url("https://api.example.test/v1")
+            .with_timeout(30)
+            .with_max_retries(2)
+            .with_endpoint_access(ProviderEndpointAccess::PrivateNetwork);
+        assert_eq!(standalone.get_api_key().as_deref(), Some("test-key"));
+        assert_eq!(standalone.get_api_base(), "https://api.example.test/v1");
+        let env_config = EndpointAccessStandaloneTestConfig::from_env();
+        assert_eq!(
+            env_config.endpoint_access,
+            ProviderEndpointAccess::PublicOnly
+        );
+        assert_eq!(
+            crate::core::traits::provider::ProviderConfig::endpoint_access(&standalone),
+            ProviderEndpointAccess::PrivateNetwork
+        );
     }
 
     #[test]

@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
 
+use crate::core::net::ProviderEndpointAccess;
 use crate::core::providers::base::BaseConfig;
 use crate::core::traits::provider::ProviderConfig;
 
@@ -225,6 +226,10 @@ impl ProviderConfig for OpenAIConfig {
     fn max_retries(&self) -> u32 {
         self.base.max_retries
     }
+
+    fn endpoint_access(&self) -> ProviderEndpointAccess {
+        self.base.endpoint_access
+    }
 }
 
 #[cfg(test)]
@@ -248,6 +253,25 @@ mod tests {
         // Remove provider_name check as it doesn't exist in BaseConfig
         assert_eq!(config.get_api_base(), "https://api.openai.com/v1");
         assert!(config.features.image_generation);
+        assert_eq!(
+            ProviderConfig::endpoint_access(&config),
+            ProviderEndpointAccess::PublicOnly
+        );
+    }
+
+    #[test]
+    fn test_endpoint_access_flattened_serde_round_trip() {
+        let mut value = serde_json::to_value(OpenAIConfig::default()).unwrap();
+        value["endpoint_access"] = serde_json::json!("private_network");
+        let config: OpenAIConfig = serde_json::from_value(value).unwrap();
+        assert_eq!(
+            ProviderConfig::endpoint_access(&config),
+            ProviderEndpointAccess::PrivateNetwork
+        );
+        assert_eq!(
+            serde_json::to_value(config).unwrap()["endpoint_access"],
+            "private_network"
+        );
     }
 
     #[test]

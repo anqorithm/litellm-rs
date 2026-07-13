@@ -1,6 +1,8 @@
 //! Tests for provider-specific config builders
 
 use super::builder::*;
+use super::{Provider, ProviderType, create_provider};
+use crate::core::net::ProviderEndpointAccess;
 use std::sync::Mutex;
 
 static ENV_LOCK: Mutex<()> = Mutex::new(());
@@ -49,6 +51,7 @@ fn test_build_openai_config_from_factory_maps_optional_fields() {
     let config = serde_json::json!({
         "api_key": "sk-test123",
         "base_url": "https://example-openai.test/v1",
+        "endpoint_access": "private_network",
         "timeout": 42,
         "max_retries": 7,
         "organization": "org-test",
@@ -74,6 +77,10 @@ fn test_build_openai_config_from_factory_maps_optional_fields() {
     );
     assert_eq!(openai_config.base.timeout, 42);
     assert_eq!(openai_config.base.max_retries, 7);
+    assert_eq!(
+        openai_config.base.endpoint_access,
+        ProviderEndpointAccess::PrivateNetwork
+    );
     assert_eq!(openai_config.organization.as_deref(), Some("org-test"));
     assert_eq!(openai_config.project.as_deref(), Some("proj-test"));
     assert_eq!(
@@ -232,6 +239,7 @@ fn test_build_openai_like_config_from_factory_maps_optional_fields() {
     let config = serde_json::json!({
         "base_url": "https://openai-like.example.test/v1",
         "api_key": "sk-openai-like",
+        "endpoint_access": "private_network",
         "provider_name": "custom-like",
         "timeout": 55,
         "max_retries": 4,
@@ -260,6 +268,10 @@ fn test_build_openai_like_config_from_factory_maps_optional_fields() {
     assert_eq!(oai_like.provider_name, "custom-like");
     assert_eq!(oai_like.base.timeout, 55);
     assert_eq!(oai_like.base.max_retries, 4);
+    assert_eq!(
+        oai_like.base.endpoint_access,
+        ProviderEndpointAccess::PrivateNetwork
+    );
     assert_eq!(oai_like.model_prefix.as_deref(), Some("prefix/"));
     assert_eq!(oai_like.default_model.as_deref(), Some("gpt-4o-mini"));
     assert!(!oai_like.pass_through_params);
@@ -293,6 +305,102 @@ fn test_build_openai_like_config_from_factory_requires_api_base() {
         .err()
         .unwrap_or_else(|| panic!("missing base_url should return an error"));
     assert!(err.to_string().contains("base_url"));
+}
+
+#[test]
+fn test_factory_endpoint_access_defaults_and_rejects_invalid_values() {
+    let openai = build_openai_config_from_factory(&serde_json::json!({
+        "api_key": "sk-test"
+    }))
+    .unwrap_or_else(|error| panic!("default OpenAI access should parse: {error}"));
+    let openai_like = build_openai_like_config_from_factory(&serde_json::json!({
+        "base_url": "https://api.example.test/v1",
+        "skip_api_key": true
+    }))
+    .unwrap_or_else(|error| panic!("default OpenAI-like access should parse: {error}"));
+    assert_eq!(
+        openai.base.endpoint_access,
+        ProviderEndpointAccess::PublicOnly
+    );
+    assert_eq!(
+        openai_like.base.endpoint_access,
+        ProviderEndpointAccess::PublicOnly
+    );
+
+    for invalid in [
+        serde_json::json!(""),
+        serde_json::json!("private"),
+        serde_json::json!(true),
+    ] {
+        let config = serde_json::json!({"endpoint_access": invalid});
+        let error = config_endpoint_access(&config, "test")
+            .err()
+            .unwrap_or_else(|| panic!("invalid endpoint_access must fail"));
+        assert!(error.to_string().contains("invalid endpoint_access"));
+    }
+}
+
+#[tokio::test]
+async fn test_gateway_and_direct_registry_endpoint_access_contract() {
+    let mut config = crate::config::models::provider::ProviderConfig {
+        name: "test-openai-like".to_string(),
+        provider_type: "openai_compatible".to_string(),
+        base_url: Some("https://api.example.com/v1".to_string()),
+        ..Default::default()
+    };
+    config
+        .settings
+        .insert("skip_api_key".to_string(), serde_json::json!(true));
+
+    let provider = create_provider(config.clone())
+        .await
+        .unwrap_or_else(|error| panic!("public-only Gateway config should work: {error}"));
+    let Provider::OpenAILike(provider) = provider else {
+        panic!("expected OpenAILike provider");
+    };
+    assert_eq!(
+        provider.config().base.endpoint_access,
+        ProviderEndpointAccess::PublicOnly
+    );
+
+    config.endpoint_access = ProviderEndpointAccess::PrivateNetwork;
+    let error = create_provider(config)
+        .await
+        .err()
+        .unwrap_or_else(|| panic!("private access must remain staged"));
+    assert!(error.to_string().contains("staged"));
+
+    let mut settings_override = crate::config::models::provider::ProviderConfig {
+        name: "openai".to_string(),
+        provider_type: "openai".to_string(),
+        api_key: "sk-test".to_string(),
+        ..Default::default()
+    };
+    settings_override.settings.insert(
+        "endpoint_access".to_string(),
+        serde_json::json!("private_network"),
+    );
+    let error = create_provider(settings_override)
+        .await
+        .err()
+        .unwrap_or_else(|| panic!("settings must not override endpoint access"));
+    assert!(error.to_string().contains("top-level"));
+
+    for explicit in [
+        serde_json::json!("public_only"),
+        serde_json::json!("private_network"),
+        serde_json::json!("invalid"),
+        serde_json::json!(true),
+    ] {
+        let error = Provider::from_config_async(
+            ProviderType::OpenAICompatible,
+            serde_json::json!({"endpoint_access": explicit}),
+        )
+        .await
+        .err()
+        .unwrap_or_else(|| panic!("direct configs must reject explicit endpoint_access"));
+        assert!(error.to_string().contains("staged"));
+    }
 }
 
 #[cfg(not(feature = "providers-extra"))]

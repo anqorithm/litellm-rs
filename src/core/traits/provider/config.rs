@@ -4,6 +4,8 @@
 
 use std::fmt::Debug;
 
+use crate::core::net::ProviderEndpointAccess;
+
 /// Provider configuration trait
 ///
 /// All provider configurations must implement this trait to ensure consistent
@@ -109,6 +111,11 @@ pub trait ProviderConfig: Send + Sync + Clone + Debug + 'static {
     /// - Consider rate limits when setting this value
     fn max_retries(&self) -> u32;
 
+    /// Network scope allowed for this provider's configured endpoint.
+    fn endpoint_access(&self) -> ProviderEndpointAccess {
+        ProviderEndpointAccess::PublicOnly
+    }
+
     /// Whether this provider requires an SSRF-safe HTTP client.
     ///
     /// Return `true` for providers whose endpoint URL is user-controlled.
@@ -134,5 +141,20 @@ pub trait ProviderConfig: Send + Sync + Clone + Debug + 'static {
             return Err("Max retries should not exceed 10".to_string());
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ProviderConfig;
+    use crate::core::net::ProviderEndpointAccess;
+    use crate::core::providers::mistral::MistralConfig;
+
+    #[test]
+    fn endpoint_access_defaults_to_public_only() {
+        assert_eq!(
+            MistralConfig::default().endpoint_access(),
+            ProviderEndpointAccess::PublicOnly
+        );
     }
 }
