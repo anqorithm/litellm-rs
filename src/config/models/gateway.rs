@@ -16,6 +16,8 @@ use std::collections::HashMap;
 use std::env;
 use std::str::FromStr;
 
+use crate::core::net::ProviderEndpointAccess;
+
 const ENV_HOST: &str = "LITELLM_HOST";
 const ENV_PORT: &str = "LITELLM_PORT";
 const ENV_WORKERS: &str = "LITELLM_WORKERS";
@@ -169,6 +171,23 @@ fn load_providers_from_env() -> crate::utils::error::gateway_error::Result<Vec<P
 
         if let Some(base_url) = env_var(&provider_env_name(&name, "BASE_URL")) {
             provider.base_url = Some(base_url);
+        }
+        let endpoint_access_key = provider_env_name(&name, "ENDPOINT_ACCESS");
+        match env::var(&endpoint_access_key) {
+            Ok(raw) => {
+                provider.endpoint_access =
+                    raw.parse::<ProviderEndpointAccess>().map_err(|error| {
+                        crate::utils::error::gateway_error::GatewayError::Config(format!(
+                            "Invalid value for {endpoint_access_key}: {error}"
+                        ))
+                    })?;
+            }
+            Err(env::VarError::NotPresent) => {}
+            Err(error) => {
+                return Err(crate::utils::error::gateway_error::GatewayError::Config(
+                    format!("Invalid value for {endpoint_access_key}: {error}"),
+                ));
+            }
         }
         if let Some(api_version) = env_var(&provider_env_name(&name, "API_VERSION")) {
             provider.api_version = Some(api_version);
@@ -699,6 +718,48 @@ impl GatewayConfig {
         }
 
         config
+    }
+}
+
+#[cfg(test)]
+mod endpoint_access_env_tests {
+    use super::*;
+
+    const ACCESS_KEY: &str = "LITELLM_PROVIDER_OPENAI_ENDPOINT_ACCESS";
+
+    fn clear_env() {
+        for key in [
+            ENV_ENABLE_JWT,
+            ENV_PROVIDERS,
+            "LITELLM_PROVIDER_OPENAI_TYPE",
+            "LITELLM_PROVIDER_OPENAI_API_KEY",
+            ACCESS_KEY,
+        ] {
+            unsafe { env::remove_var(key) };
+        }
+    }
+
+    #[test]
+    fn endpoint_access_env_preserves_presence_and_rejects_invalid_values() {
+        let _guard = GATEWAY_ENV_LOCK.blocking_lock();
+        clear_env();
+        unsafe {
+            env::set_var(ENV_ENABLE_JWT, "false");
+            env::set_var(ENV_PROVIDERS, "openai");
+            env::set_var("LITELLM_PROVIDER_OPENAI_TYPE", "openai");
+            env::set_var("LITELLM_PROVIDER_OPENAI_API_KEY", "sk-test");
+            env::set_var(ACCESS_KEY, "private_network");
+        }
+        let private = GatewayConfig::from_env().expect("private access env should parse");
+        assert_eq!(
+            private.providers[0].endpoint_access,
+            ProviderEndpointAccess::PrivateNetwork
+        );
+        for invalid in ["", "private"] {
+            unsafe { env::set_var(ACCESS_KEY, invalid) };
+            assert!(GatewayConfig::from_env().is_err());
+        }
+        clear_env();
     }
 }
 
