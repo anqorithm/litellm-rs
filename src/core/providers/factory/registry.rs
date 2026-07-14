@@ -49,12 +49,7 @@ impl Provider {
         provider_type: ProviderType,
         config: serde_json::Value,
     ) -> Result<Self, ProviderError> {
-        if config.get("endpoint_access").is_some() {
-            return Err(ProviderError::configuration(
-                super::provider_diagnostic_name(&provider_type),
-                "endpoint_access is staged until provider routes are policy-wired",
-            ));
-        }
+        super::endpoint_policy::validate_direct_endpoint_policy(&provider_type, &config)?;
         Self::from_gateway_config_async(provider_type, config).await
     }
 
@@ -125,7 +120,8 @@ impl Provider {
                 }
                 #[cfg(not(feature = "providers-extra"))]
                 {
-                    let oai_config = build_azure_ai_openai_like_config_from_factory(&config)?;
+                    let mut oai_config = build_azure_ai_openai_like_config_from_factory(&config)?;
+                    oai_config.base.endpoint_access = config_endpoint_access(&config, "azure_ai")?;
                     let provider = openai_like::OpenAILikeProvider::new(oai_config)
                         .await
                         .map_err(|e| ProviderError::initialization("azure_ai", e.to_string()))?;
@@ -158,7 +154,8 @@ impl Provider {
                 }
                 #[cfg(not(feature = "providers-extra"))]
                 {
-                    let oai_config = build_azure_openai_like_config_from_factory(&config)?;
+                    let mut oai_config = build_azure_openai_like_config_from_factory(&config)?;
+                    oai_config.base.endpoint_access = config_endpoint_access(&config, "azure")?;
                     let provider = openai_like::OpenAILikeProvider::new(oai_config)
                         .await
                         .map_err(|e| ProviderError::initialization("azure", e.to_string()))?;
@@ -273,10 +270,11 @@ impl Provider {
         }
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "providers-extended")]
+    use crate::core::providers::{fal_ai::FalAIConfig, replicate::ReplicateConfig};
     use provider_registry::{ProviderDispatchKind, provider_type_registry};
 
     fn supported_factory_provider_types() -> Vec<ProviderType> {
@@ -324,15 +322,17 @@ mod tests {
                 "enable_caching": false,
                 "debug": true
             }),
+            ProviderType::Cloudflare => serde_json::json!({
+                "organization": "test-account",
+                "api_key": "sk-test-key"
+            }),
             ProviderType::GitHubCopilot => serde_json::json!({
                 "token_dir": "/tmp/litellm-rs-github-copilot-test",
                 "access_token_file": "access-token",
                 "api_key_file": "api-key.json",
-                "api_base": "https://example.test",
                 "timeout": 30,
                 "max_retries": 2,
-                "disable_system_to_assistant": true,
-                "debug": true
+                "disable_system_to_assistant": true
             }),
             ProviderType::Cohere => serde_json::json!({
                 "api_key": "test-cohere-key",
@@ -344,7 +344,6 @@ mod tests {
             }),
             ProviderType::FalAI => serde_json::json!({
                 "api_key": "test-fal-ai-key",
-                "api_base": "https://fal.run",
                 "timeout": 30,
                 "max_retries": 2,
                 "output_format": "png",
@@ -352,7 +351,6 @@ mod tests {
             }),
             ProviderType::Replicate => serde_json::json!({
                 "api_key": "test-replicate-token",
-                "api_base": "https://api.replicate.com/v1",
                 "timeout": 30,
                 "max_retries": 2,
                 "polling_delay_seconds": 1,
@@ -545,7 +543,8 @@ mod tests {
     async fn test_from_config_async_cloudflare_accepts_alias_fields() {
         let config = serde_json::json!({
             "organization": "acct-alias",
-            "api_key": "token-alias"
+            "api_key": "token-alias",
+            "api_base": null
         });
 
         let provider = Provider::from_config_async(ProviderType::Cloudflare, config)
@@ -561,7 +560,7 @@ mod tests {
     async fn test_from_config_async_fal_ai_creates_native_image_provider() {
         let provider = Provider::from_config_async(
             ProviderType::FalAI,
-            minimal_dispatch_config_for(&ProviderType::FalAI),
+            serde_json::to_value(FalAIConfig::with_api_key("test-fal-ai-key")).unwrap(),
         )
         .await
         .unwrap_or_else(|err| panic!("fal_ai should create native provider: {err}"));
@@ -581,7 +580,7 @@ mod tests {
     async fn test_from_config_async_replicate_creates_native_prediction_provider() {
         let provider = Provider::from_config_async(
             ProviderType::Replicate,
-            minimal_dispatch_config_for(&ProviderType::Replicate),
+            serde_json::to_value(ReplicateConfig::new("test-replicate-token")).unwrap(),
         )
         .await
         .unwrap_or_else(|err| panic!("replicate should create native provider: {err}"));

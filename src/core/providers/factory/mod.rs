@@ -12,6 +12,9 @@ mod builder;
 mod builder_tests;
 #[cfg(feature = "providers-extended")]
 mod cohere_builder;
+#[cfg(test)]
+mod endpoint_access_tests;
+mod endpoint_policy;
 #[cfg(feature = "providers-extended")]
 mod fal_ai_builder;
 #[cfg(feature = "providers-extended")]
@@ -21,12 +24,16 @@ mod registry;
 mod replicate_builder;
 mod resolver;
 
+pub(crate) use endpoint_policy::{
+    invalid_endpoint, selector_allows_implicit_private, selector_supports_endpoint_access,
+};
 pub use resolver::is_provider_selector_supported;
 
 use super::provider_type::ProviderType;
 use super::unified_provider::ProviderError;
 use super::{Provider, openai_like, registry as provider_registry};
 use crate::core::net::ProviderEndpointAccess;
+use endpoint_policy::provider_type_supports;
 use tracing::warn;
 
 fn provider_diagnostic_name(provider_type: &ProviderType) -> &'static str {
@@ -71,7 +78,7 @@ pub async fn create_provider(
         project,
         timeout,
         max_retries,
-        settings,
+        mut settings,
         models,
         ..
     } = config;
@@ -81,16 +88,37 @@ pub async fn create_provider(
     } else {
         provider_type.as_str()
     };
+    if base_url.as_ref().is_some_and(|url| url.trim().is_empty())
+        || ["base_url", "api_base"]
+            .into_iter()
+            .any(|key| invalid_endpoint(settings.get(key)))
+    {
+        return Err(ProviderError::configuration(
+            "provider",
+            "endpoint must be a string",
+        ));
+    }
+    let base_endpoint = base_url.as_deref().filter(|url| !url.trim().is_empty());
+    let settings_endpoint = ["base_url", "api_base"].into_iter().any(|key| {
+        settings
+            .get(key)
+            .and_then(Value::as_str)
+            .is_some_and(|value| !value.trim().is_empty())
+    });
+    let has_endpoint = base_endpoint.is_some() || settings_endpoint;
     if settings.contains_key("endpoint_access") {
         return Err(ProviderError::configuration(
             "provider",
             "endpoint_access must be configured as a top-level provider field",
         ));
     }
-    if endpoint_access == ProviderEndpointAccess::PrivateNetwork {
+    if endpoint_access == ProviderEndpointAccess::PrivateNetwork
+        && !has_endpoint
+        && !selector_allows_implicit_private(provider_selector)
+    {
         return Err(ProviderError::configuration(
             "provider",
-            "private_network is staged until all provider routes are policy-wired",
+            "private_network endpoint access requires a base URL",
         ));
     }
     if let Some(def) = catalog_definition_for_supported_selector(provider_selector) {
@@ -99,8 +127,19 @@ pub async fn create_provider(
         } else {
             Some(api_key.clone())
         };
-        let mut oai_config =
-            def.to_openai_like_config(effective_key.as_deref(), base_url.as_deref());
+        let settings_base_url = ["base_url", "api_base"]
+            .into_iter()
+            .filter_map(|key| settings.remove(key))
+            .find_map(|value| {
+                value
+                    .as_str()
+                    .filter(|url| !url.trim().is_empty())
+                    .map(str::to_owned)
+            });
+        let mut oai_config = def.to_openai_like_config(
+            effective_key.as_deref(),
+            base_endpoint.or(settings_base_url.as_deref()),
+        );
         oai_config.base.endpoint_access = endpoint_access;
         oai_config.base.timeout = timeout;
         oai_config.base.max_retries = max_retries;
@@ -143,6 +182,14 @@ pub async fn create_provider(
         .parse::<ProviderType>()
         .map_err(|e| ProviderError::invalid_request("provider_type", e.to_string()))?;
 
+    if !provider_type_supports(&provider_type_enum)
+        && (endpoint_access == ProviderEndpointAccess::PrivateNetwork || has_endpoint)
+    {
+        return Err(ProviderError::configuration(
+            provider_diagnostic_name(&provider_type_enum),
+            "configurable endpoint access is unavailable because this provider runtime is not policy-wired",
+        ));
+    }
     if !Provider::factory_supported_provider_types().contains(&provider_type_enum) {
         return Err(ProviderError::not_implemented(
             provider_diagnostic_name(&provider_type_enum),
@@ -208,6 +255,7 @@ pub async fn create_provider(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::net::ProviderEndpointAccess::{PrivateNetwork, PublicOnly};
     use crate::core::providers::registry as provider_registry;
 
     #[test]
@@ -238,26 +286,25 @@ mod tests {
     #[tokio::test]
     async fn test_catalog_entries_are_creatable_via_factory() {
         for (name, def) in provider_registry::PROVIDER_CATALOG.iter() {
+            let is_local = def.base_url.contains("localhost");
             let config = crate::config::models::provider::ProviderConfig {
                 name: (*name).to_string(),
                 provider_type: (*name).to_string(),
-                api_key: if def.skip_api_key {
-                    String::new()
-                } else {
-                    "test-key".to_string()
-                },
+                api_key: "test-key".into(),
+                endpoint_access: if is_local { PrivateNetwork } else { PublicOnly },
                 ..Default::default()
             };
-
-            let provider = create_provider(config).await.unwrap_or_else(|e| {
-                panic!("Catalog provider '{}' should be creatable: {}", name, e)
-            });
-
-            assert!(
-                matches!(&provider, Provider::OpenAILike(_)),
-                "Catalog provider '{}' must create OpenAILike variant",
-                name
-            );
+            let mut opposite = config.clone();
+            opposite.endpoint_access = if is_local { PublicOnly } else { PrivateNetwork };
+            if is_local {
+                assert!(create_provider(opposite).await.is_err());
+            } else {
+                assert!(crate::config::Validate::validate(&opposite).is_err());
+            }
+            let provider = create_provider(config)
+                .await
+                .unwrap_or_else(|error| panic!("Catalog provider '{name}': {error}"));
+            assert!(matches!(&provider, Provider::OpenAILike(_)));
             assert_eq!(provider.capabilities(), def.capabilities);
         }
     }
@@ -364,7 +411,6 @@ mod tests {
             name: "fal_ai".to_string(),
             provider_type: "fal_ai".to_string(),
             api_key: "test-fal-ai-key".to_string(),
-            base_url: Some("https://fal.run".to_string()),
             timeout: 30,
             max_retries: 2,
             ..Default::default()
@@ -408,7 +454,6 @@ mod tests {
             name: "replicate".to_string(),
             provider_type: "replicate".to_string(),
             api_key: "test-replicate-token".to_string(),
-            base_url: Some("https://api.replicate.com/v1".to_string()),
             timeout: 30,
             max_retries: 2,
             ..Default::default()

@@ -1,11 +1,18 @@
 use super::*;
 use crate::core::types::chat::ChatMessage;
 use crate::core::types::context::RequestContext;
+use crate::core::types::health::HealthStatus;
 use crate::core::types::message::{MessageContent, MessageRole};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
 const TEST_PUBLIC_API_BASE: &str = "https://api.example.com/v1";
+
+fn private_openai_like_config(api_base: impl Into<String>) -> OpenAILikeConfig {
+    let mut config = crate::core::providers::openai_like::config::test_openai_like_config(api_base);
+    config.base.endpoint_access = crate::core::net::ProviderEndpointAccess::PrivateNetwork;
+    config
+}
 
 async fn read_full_http_request(socket: &mut TcpStream) -> std::io::Result<()> {
     let mut request_bytes = Vec::new();
@@ -37,12 +44,16 @@ async fn read_full_http_request(socket: &mut TcpStream) -> std::io::Result<()> {
     }
 }
 
-async fn openai_like_stream_response_url(status: &str, body: &str) -> std::io::Result<String> {
+async fn openai_like_stream_response_url(
+    status: &str,
+    body: &str,
+    complete: bool,
+) -> std::io::Result<String> {
     let listener = TcpListener::bind(("127.0.0.1", 0)).await?;
     let addr = listener.local_addr()?;
     let response = format!(
         "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-        body.len()
+        body.len() + usize::from(!complete)
     );
 
     tokio::spawn(async move {
@@ -148,8 +159,8 @@ async fn test_openai_like_streaming_maps_non_success_status_before_sse()
     use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 
     let body = r#"{"error":{"type":"rate_limit_error","message":"slow down","retry_after":5}}"#;
-    let api_base = openai_like_stream_response_url("429 Too Many Requests", body).await?;
-    let config = crate::core::providers::openai_like::config::test_openai_like_config(api_base);
+    let api_base = openai_like_stream_response_url("429 Too Many Requests", body, true).await?;
+    let config = private_openai_like_config(api_base);
     let provider = OpenAILikeProvider::new(config).await?;
 
     let err = match LLMProvider::chat_completion_stream(
@@ -175,6 +186,54 @@ async fn test_openai_like_streaming_maps_non_success_status_before_sse()
         other => panic!("expected OpenAI-like rate limit error, got {other:?}"),
     }
 
+    Ok(())
+}
+
+#[tokio::test]
+async fn openai_like_policy_pool_rejects_cross_authority_without_connect()
+-> Result<(), Box<dyn std::error::Error>> {
+    use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
+
+    let api_base = openai_like_stream_response_url("200 OK", "{}", true).await?;
+    let health_provider = OpenAILikeProvider::new(private_openai_like_config(api_base)).await?;
+    assert_eq!(
+        LLMProvider::health_check(&health_provider).await,
+        HealthStatus::Healthy
+    );
+    let target = TcpListener::bind(("127.0.0.1", 0)).await?;
+    let config = private_openai_like_config("http://127.0.0.1:1");
+    let provider = OpenAILikeProvider::new(config).await?;
+    let target_url = format!("http://{}/models", target.local_addr()?);
+
+    let error = provider
+        .pool_manager
+        .execute_request(&target_url, HttpMethod::GET, Vec::new(), None)
+        .await
+        .expect_err("cross-authority request must fail closed");
+    assert!(error.to_string().contains("authority"));
+    let accepted =
+        tokio::time::timeout(std::time::Duration::from_millis(100), target.accept()).await;
+    assert!(accepted.is_err());
+    let config = private_openai_like_config("http://169.254.169.254/v1");
+    let error = OpenAILikeProvider::new(config)
+        .await
+        .expect_err("metadata endpoints must remain forbidden");
+    assert!(error.to_string().contains("private or reserved"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn ordinary_error_body_failure_preserves_http_status()
+-> Result<(), Box<dyn std::error::Error>> {
+    let api_base = openai_like_stream_response_url("401 Unauthorized", "{}", false).await?;
+    let config = private_openai_like_config(api_base);
+    let provider = OpenAILikeProvider::new(config).await?;
+
+    let error = provider
+        .execute_chat_completion(openai_like_chat_stream_request())
+        .await
+        .expect_err("truncated 401 body must remain an authentication error");
+    assert!(matches!(error, OpenAILikeError::Authentication { .. }));
     Ok(())
 }
 
