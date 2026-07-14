@@ -28,10 +28,51 @@ pub(crate) fn selector_allows_implicit_private(selector: &str) -> bool {
             .is_some_and(|url| url.host_str() == Some("localhost"))
 }
 
+const STANDARD_ENDPOINT_KEYS: &[&str] = &["base_url", "api_base"];
+const AZURE_ENDPOINT_KEYS: &[&str] = &["base_url", "api_base", "endpoint", "azure_endpoint"];
+const AZURE_AI_ENDPOINT_KEYS: &[&str] = &["base_url", "api_base", "endpoint", "azure_ai_endpoint"];
+const VERTEX_ENDPOINT_KEYS: &[&str] = &["base_url", "api_base", "endpoint"];
+
+pub(crate) fn endpoint_keys_for_selector(selector: &str) -> &'static [&'static str] {
+    match selector.parse::<ProviderType>() {
+        Ok(ProviderType::Azure) => AZURE_ENDPOINT_KEYS,
+        Ok(ProviderType::AzureAI) => AZURE_AI_ENDPOINT_KEYS,
+        Ok(ProviderType::VertexAI) => VERTEX_ENDPOINT_KEYS,
+        _ => STANDARD_ENDPOINT_KEYS,
+    }
+}
+
 pub(crate) fn invalid_endpoint(value: Option<&serde_json::Value>) -> bool {
     value.is_some_and(|value| {
         !value.is_null() && value.as_str().is_none_or(|url| url.trim().is_empty())
     })
+}
+
+pub(crate) fn configured_endpoint_for_keys<'a>(
+    base_endpoint: Option<&'a str>,
+    config: &'a std::collections::HashMap<String, serde_json::Value>,
+    endpoint_keys: &[&str],
+) -> Option<&'a str> {
+    base_endpoint.or_else(|| {
+        endpoint_keys.iter().copied().find_map(|key| {
+            config
+                .get(key)
+                .and_then(serde_json::Value::as_str)
+                .filter(|value| !value.trim().is_empty())
+        })
+    })
+}
+
+pub(crate) fn validate_private_official_openai_endpoint(
+    access: ProviderEndpointAccess,
+    endpoint: Option<&str>,
+) -> Result<(), &'static str> {
+    if access == ProviderEndpointAccess::PrivateNetwork
+        && endpoint.is_some_and(crate::core::providers::openai::config::is_official_openai_endpoint)
+    {
+        return Err("private_network access cannot target the official OpenAI endpoint");
+    }
+    Ok(())
 }
 
 fn is_native_default_endpoint(
@@ -58,19 +99,23 @@ pub(super) fn validate_direct_endpoint_policy(
 ) -> Result<(), ProviderError> {
     let provider = provider_diagnostic_name(provider_type);
     let fail = |message| ProviderError::configuration(provider, message);
-    if ["base_url", "api_base"]
-        .into_iter()
+    let endpoint_keys = endpoint_keys_for_selector(&provider_type.to_string());
+    if endpoint_keys
+        .iter()
+        .copied()
         .any(|key| invalid_endpoint(config.get(key)))
     {
         return Err(fail("endpoint must be a string"));
     }
-    let has_endpoint = ["base_url", "api_base"].into_iter().any(|key| {
+    let configured_endpoint = endpoint_keys.iter().copied().find_map(|key| {
         config
             .get(key)
             .and_then(serde_json::Value::as_str)
-            .is_some_and(|value| !value.trim().is_empty())
+            .filter(|value| !value.trim().is_empty())
     });
+    let has_endpoint = configured_endpoint.is_some();
     let access = builder::config_endpoint_access(config, provider)?;
+    validate_private_official_openai_endpoint(access, configured_endpoint).map_err(fail)?;
     let selector = provider_type.to_string();
     if access == ProviderEndpointAccess::PrivateNetwork
         && !has_endpoint

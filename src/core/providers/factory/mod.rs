@@ -25,7 +25,9 @@ mod replicate_builder;
 mod resolver;
 
 pub(crate) use endpoint_policy::{
-    invalid_endpoint, selector_allows_implicit_private, selector_supports_endpoint_access,
+    configured_endpoint_for_keys, endpoint_keys_for_selector, invalid_endpoint,
+    selector_allows_implicit_private, selector_supports_endpoint_access,
+    validate_private_official_openai_endpoint,
 };
 pub use resolver::is_provider_selector_supported;
 
@@ -88,9 +90,11 @@ pub async fn create_provider(
     } else {
         provider_type.as_str()
     };
+    let endpoint_keys = endpoint_keys_for_selector(provider_selector);
     if base_url.as_ref().is_some_and(|url| url.trim().is_empty())
-        || ["base_url", "api_base"]
-            .into_iter()
+        || endpoint_keys
+            .iter()
+            .copied()
             .any(|key| invalid_endpoint(settings.get(key)))
     {
         return Err(ProviderError::configuration(
@@ -99,13 +103,8 @@ pub async fn create_provider(
         ));
     }
     let base_endpoint = base_url.as_deref().filter(|url| !url.trim().is_empty());
-    let settings_endpoint = ["base_url", "api_base"].into_iter().any(|key| {
-        settings
-            .get(key)
-            .and_then(Value::as_str)
-            .is_some_and(|value| !value.trim().is_empty())
-    });
-    let has_endpoint = base_endpoint.is_some() || settings_endpoint;
+    let configured_endpoint = configured_endpoint_for_keys(base_endpoint, &settings, endpoint_keys);
+    let has_endpoint = configured_endpoint.is_some();
     if settings.contains_key("endpoint_access") {
         return Err(ProviderError::configuration(
             "provider",
@@ -121,6 +120,8 @@ pub async fn create_provider(
             "private_network endpoint access requires a base URL",
         ));
     }
+    validate_private_official_openai_endpoint(endpoint_access, configured_endpoint)
+        .map_err(|message| ProviderError::configuration("provider", message))?;
     if let Some(def) = catalog_definition_for_supported_selector(provider_selector) {
         let effective_key = if api_key.is_empty() {
             def.resolve_api_key(None)

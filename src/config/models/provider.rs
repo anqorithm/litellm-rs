@@ -121,6 +121,27 @@ impl Default for ProviderConfig {
 }
 
 impl ProviderConfig {
+    pub(crate) fn configured_endpoint(&self) -> Option<&str> {
+        let provider_selector = if self.provider_type.trim().is_empty() {
+            self.name.as_str()
+        } else {
+            self.provider_type.as_str()
+        };
+        self.base_url
+            .as_deref()
+            .filter(|url| !url.trim().is_empty())
+            .or_else(|| {
+                crate::core::providers::factory::endpoint_keys_for_selector(provider_selector)
+                    .iter()
+                    .find_map(|key| {
+                        self.settings
+                            .get(*key)
+                            .and_then(serde_json::Value::as_str)
+                            .filter(|url| !url.trim().is_empty())
+                    })
+            })
+    }
+
     /// Resolve a configured custom health endpoint to an absolute URL.
     pub(crate) fn resolved_health_check_endpoint(&self) -> Result<Option<Url>, String> {
         let Some(endpoint) = self.health_check.endpoint.as_deref() else {
@@ -137,9 +158,9 @@ impl ProviderConfig {
         match Url::parse(endpoint) {
             Ok(url) => Ok(Some(url)),
             Err(url::ParseError::RelativeUrlWithoutBase) => {
-                let base_url = self.base_url.as_deref().ok_or_else(|| {
+                let base_url = self.configured_endpoint().ok_or_else(|| {
                     format!(
-                        "Provider {} relative health check endpoint requires base_url",
+                        "Provider {} relative health check endpoint requires a configured endpoint",
                         self.name
                     )
                 })?;
@@ -418,6 +439,31 @@ mod tests {
         assert_eq!(config.name, "openai-main");
         assert_eq!(config.provider_type, "openai");
         assert_eq!(config.models.len(), 1);
+    }
+
+    #[test]
+    fn name_only_provider_uses_effective_selector_for_endpoint_aliases() {
+        let mut config = ProviderConfig {
+            name: "azure".to_string(),
+            health_check: ProviderHealthCheckConfig {
+                endpoint: Some("health".to_string()),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        config.settings.insert(
+            "azure_endpoint".to_string(),
+            "http://127.0.0.1:18080/openai/deployments/test".into(),
+        );
+
+        assert_eq!(
+            config
+                .resolved_health_check_endpoint()
+                .expect("name fallback must resolve relative health endpoint")
+                .expect("health endpoint must be configured")
+                .as_str(),
+            "http://127.0.0.1:18080/openai/deployments/test/health"
+        );
     }
 
     #[test]
