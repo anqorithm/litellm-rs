@@ -107,6 +107,7 @@ impl From<&ProviderError> for ProviderFailureKind {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::providers::bedrock::BedrockErrorMapper;
 
     #[test]
     fn facts_capture_rate_limit_retry_after_without_policy() {
@@ -130,5 +131,23 @@ mod tests {
         assert_eq!(facts.kind, ProviderFailureKind::ApiError);
         assert_eq!(facts.upstream_status, Some(503));
         assert_eq!(facts.retry_hint.retry_after, None);
+    }
+
+    #[test]
+    fn facts_preserve_only_modeled_bedrock_retry_signals() {
+        let modeled_error =
+            BedrockErrorMapper::map_service_error("ModelNotReadyException", "model not ready")
+                .expect("modeled Bedrock service error");
+        let modeled = ProviderFailureFacts::from_error(&modeled_error);
+        let ordinary = ProviderFailureFacts::from_error(&ProviderError::api_error(
+            "bedrock",
+            424,
+            "ModelNotReadyException: misleading ordinary HTTP message",
+        ));
+
+        assert_eq!(modeled.kind, ProviderFailureKind::ApiError);
+        assert_eq!(modeled.upstream_status, Some(424));
+        assert_eq!(ordinary.kind, ProviderFailureKind::ApiError);
+        assert_eq!(ordinary.upstream_status, Some(424));
     }
 }

@@ -44,6 +44,7 @@ mod contextual_error_tests {
 
 #[cfg(test)]
 mod provider_error_tests {
+    use crate::core::providers::bedrock::BedrockErrorMapper;
     use crate::core::providers::unified_provider::{ProviderError, provider_http_error_facts};
 
     // ==================== Factory Method Tests ====================
@@ -430,9 +431,26 @@ mod provider_error_tests {
         assert!(ProviderError::provider_unavailable("a", "b").is_retryable());
         assert!(ProviderError::deployment_error("a", "b").is_retryable());
         assert!(ProviderError::streaming_error("a", "b", None, None, "c").is_retryable());
-        let failed_dependency = ProviderError::api_error("bedrock", 424, "not ready");
+        let failed_dependency =
+            BedrockErrorMapper::map_service_error("DependencyFailedException", "not ready")
+                .expect("modeled Bedrock service error");
         assert!(failed_dependency.is_retryable());
         assert_eq!(failed_dependency.retry_delay(), Some(3));
+        assert_eq!(failed_dependency.provider(), "bedrock");
+        let reconstructed = ProviderError::api_error(
+            failed_dependency.provider(),
+            424,
+            "ordinary reconstructed error",
+        );
+        assert!(!reconstructed.is_retryable());
+        assert_eq!(reconstructed.retry_delay(), None);
+        let ordinary_failed_dependency = ProviderError::api_error(
+            "bedrock",
+            424,
+            "ModelNotReadyException: misleading ordinary HTTP message",
+        );
+        assert!(!ordinary_failed_dependency.is_retryable());
+        assert_eq!(ordinary_failed_dependency.retry_delay(), None);
         let unrelated_failed_dependency = ProviderError::api_error("custom_httpx", 424, "failed");
         assert!(!unrelated_failed_dependency.is_retryable());
         assert_eq!(unrelated_failed_dependency.retry_delay(), None);

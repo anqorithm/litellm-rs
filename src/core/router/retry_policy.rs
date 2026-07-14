@@ -169,6 +169,7 @@ impl RetryPolicy {
         F: FnOnce() -> Duration,
     {
         let facts = ProviderFailureFacts::from_error(error);
+        let explicitly_retryable = error.is_bedrock_modeled_retry_error();
 
         if context.attempt >= context.max_attempts {
             return RetryDecision::stop(RetryDecisionReason::AttemptsExhausted);
@@ -186,7 +187,7 @@ impl RetryPolicy {
             return RetryDecision::stop(RetryDecisionReason::NonIdempotentRequest);
         }
 
-        if !failure_is_retryable(facts, context) {
+        if !failure_is_retryable(facts, context, explicitly_retryable) {
             return RetryDecision::stop(RetryDecisionReason::NonRetryableFailure);
         }
 
@@ -202,7 +203,11 @@ impl RetryPolicy {
     }
 }
 
-fn failure_is_retryable(facts: ProviderFailureFacts, context: RetryContext) -> bool {
+fn failure_is_retryable(
+    facts: ProviderFailureFacts,
+    context: RetryContext,
+    explicitly_retryable: bool,
+) -> bool {
     match facts.kind {
         ProviderFailureKind::RateLimit
         | ProviderFailureKind::Timeout
@@ -210,9 +215,7 @@ fn failure_is_retryable(facts: ProviderFailureFacts, context: RetryContext) -> b
         | ProviderFailureKind::Network
         | ProviderFailureKind::DeploymentError => true,
         ProviderFailureKind::ApiError => facts.upstream_status.is_some_and(|status| {
-            (facts.provider == "bedrock" && status == 424)
-                || status == 429
-                || (500..=599).contains(&status)
+            explicitly_retryable || status == 429 || (500..=599).contains(&status)
         }),
         ProviderFailureKind::Streaming => {
             context.operation == RetryOperation::Streaming
@@ -225,6 +228,7 @@ fn failure_is_retryable(facts: ProviderFailureFacts, context: RetryContext) -> b
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::providers::bedrock::BedrockErrorMapper;
     use crate::core::router::deployment::RetrySchedule;
 
     fn deployment_config_with_schedule() -> DeploymentConfig {
@@ -360,7 +364,14 @@ mod tests {
 
     #[test]
     fn failed_dependency_api_error_is_retryable_but_not_not_found() {
-        let not_ready = ProviderError::api_error("bedrock", 424, "model not ready");
+        let not_ready =
+            BedrockErrorMapper::map_service_error("ModelNotReadyException", "model not ready")
+                .expect("modeled Bedrock service error");
+        let model_error = ProviderError::api_error(
+            "bedrock",
+            424,
+            "ModelNotReadyException: misleading ordinary HTTP message",
+        );
         let missing = ProviderError::api_error("bedrock", 404, "resource not found");
         let unrelated = ProviderError::api_error("custom_httpx", 424, "failed dependency");
 
@@ -374,6 +385,11 @@ mod tests {
             &missing,
             RetryContext::unary(1, 2),
         );
+        let model_error_stop = RetryPolicy.decide(
+            &RouterConfig::default(),
+            &model_error,
+            RetryContext::unary(1, 2),
+        );
         let unrelated_stop = RetryPolicy.decide(
             &RouterConfig::default(),
             &unrelated,
@@ -381,6 +397,11 @@ mod tests {
         );
 
         assert!(retry.should_retry);
+        assert!(!model_error_stop.should_retry);
+        assert_eq!(
+            model_error_stop.reason,
+            RetryDecisionReason::NonRetryableFailure
+        );
         assert!(!stop.should_retry);
         assert_eq!(stop.reason, RetryDecisionReason::NonRetryableFailure);
         assert!(!unrelated_stop.should_retry);

@@ -1,6 +1,13 @@
 use super::{ContextualError, ProviderError};
 
 impl ProviderError {
+    fn bedrock_modeled_retry_provider() -> &'static str {
+        use std::sync::OnceLock;
+
+        static PROVIDER: OnceLock<Box<str>> = OnceLock::new();
+        PROVIDER.get_or_init(|| "bedrock".into()).as_ref()
+    }
+
     /// Create authentication error
     pub fn authentication(provider: &'static str, message: impl Into<String>) -> Self {
         Self::Authentication {
@@ -180,11 +187,38 @@ impl ProviderError {
 
     /// Create API error with status code
     pub fn api_error(provider: &'static str, status: u16, message: impl Into<String>) -> Self {
+        // Never propagate the internal Bedrock provenance token through a public constructor.
+        let provider = if provider == "bedrock" {
+            "bedrock"
+        } else {
+            provider
+        };
         Self::ApiError {
             provider,
             status,
             message: message.into(),
         }
+    }
+
+    /// Create a Bedrock 424 whose retry provenance came from a structured AWS error code.
+    pub(crate) fn bedrock_modeled_retry_error(message: impl Into<String>) -> Self {
+        Self::ApiError {
+            provider: Self::bedrock_modeled_retry_provider(),
+            status: 424,
+            message: message.into(),
+        }
+    }
+
+    /// Whether this API error carries the internal Bedrock modeled-error identity.
+    pub(crate) fn is_bedrock_modeled_retry_error(&self) -> bool {
+        matches!(
+            self,
+            Self::ApiError {
+                provider,
+                status: 424,
+                ..
+            } if std::ptr::eq(*provider, Self::bedrock_modeled_retry_provider())
+        )
     }
 
     /// Create token limit exceeded error
@@ -318,7 +352,6 @@ impl ProviderError {
             | Self::Timeout { provider, .. }
             | Self::ContextLengthExceeded { provider, .. }
             | Self::ContentFiltered { provider, .. }
-            | Self::ApiError { provider, .. }
             | Self::TokenLimitExceeded { provider, .. }
             | Self::FeatureDisabled { provider, .. }
             | Self::DeploymentError { provider, .. }
@@ -328,6 +361,12 @@ impl ProviderError {
             | Self::Cancelled { provider, .. }
             | Self::Streaming { provider, .. }
             | Self::Other { provider, .. } => provider,
+            Self::ApiError { provider, .. }
+                if std::ptr::eq(*provider, Self::bedrock_modeled_retry_provider()) =>
+            {
+                "bedrock"
+            }
+            Self::ApiError { provider, .. } => provider,
         }
     }
 
@@ -340,11 +379,8 @@ impl ProviderError {
             | Self::ProviderUnavailable { .. } => true,
 
             // API errors depend on status code
-            Self::ApiError {
-                provider, status, ..
-            } => {
-                (*provider == "bedrock" && *status == 424)
-                    || matches!(*status, 429 | 500..=599)
+            Self::ApiError { status, .. } => {
+                self.is_bedrock_modeled_retry_error() || matches!(*status, 429 | 500..=599)
             }
 
             // Deployment errors might be retryable depending on the issue
@@ -386,12 +422,10 @@ impl ProviderError {
             Self::ProviderUnavailable { .. } => Some(5),
 
             // API errors with 429 (rate limit) or 5xx get retry delays
-            Self::ApiError {
-                provider, status, ..
-            } => match *status {
-                424 if *provider == "bedrock" => Some(3), // Bedrock dependency/not-ready
-                429 => Some(60),                          // Rate limit, wait longer
-                500..=599 => Some(3),                     // Server errors, shorter delay
+            Self::ApiError { status, .. } => match *status {
+                424 if self.is_bedrock_modeled_retry_error() => Some(3),
+                429 => Some(60),      // Rate limit, wait longer
+                500..=599 => Some(3), // Server errors, shorter delay
                 _ => None,
             },
 
