@@ -1,6 +1,7 @@
 //! AWS Event Stream parsing for Bedrock streaming responses.
 
 use super::BedrockStream;
+use crate::core::providers::bedrock::error::BedrockErrorMapper;
 use crate::core::providers::unified_provider::ProviderError;
 use bytes::Bytes;
 use serde_json::Value;
@@ -126,17 +127,16 @@ impl BedrockStream {
     }
 
     fn stream_error(code: &str, message: &str) -> ProviderError {
+        if let Some(error) = BedrockErrorMapper::map_service_error(code, message) {
+            return error;
+        }
         let details = if message.is_empty() {
             format!("Bedrock stream error: {code}")
         } else {
             format!("Bedrock stream error {code}: {message}")
         };
 
-        if code.eq_ignore_ascii_case("validationException") {
-            ProviderError::invalid_request("bedrock", details)
-        } else {
-            ProviderError::api_error("bedrock", 500, details)
-        }
+        ProviderError::api_error("bedrock", 500, details)
     }
 
     pub(crate) fn check_stream_error(message: &EventStreamMessage) -> Result<(), ProviderError> {
@@ -168,6 +168,22 @@ impl BedrockStream {
 mod strict_frame_tests {
     use super::*;
 
+    fn exception_message(exception_type: &str) -> EventStreamMessage {
+        EventStreamMessage {
+            headers: vec![
+                EventStreamHeader {
+                    name: ":message-type".to_string(),
+                    value: HeaderValue::String("exception".to_string()),
+                },
+                EventStreamHeader {
+                    name: ":exception-type".to_string(),
+                    value: HeaderValue::String(exception_type.to_string()),
+                },
+            ],
+            payload: Bytes::from_static(br#"{"message":"request failed"}"#),
+        }
+    }
+
     fn frame(headers: &[u8], payload: &[u8]) -> Vec<u8> {
         let total_length = 16 + headers.len() + payload.len();
         let mut data = Vec::new();
@@ -196,5 +212,38 @@ mod strict_frame_tests {
     fn rejects_truncated_header() {
         let truncated_header = [4_u8, b'a'];
         assert!(BedrockStream::parse_event_message(&frame(&truncated_header, &[])).is_err());
+    }
+
+    #[test]
+    fn maps_modeled_service_exceptions_to_structured_provider_errors() {
+        let cases = [
+            ("validationException", "invalid_request", None, false),
+            ("accessDeniedException", "api_error", Some(403), false),
+            ("throttlingException", "rate_limit", None, true),
+            ("serviceQuotaExceededException", "rate_limit", None, true),
+            ("resourceNotFoundException", "api_error", Some(404), false),
+            ("modelNotReadyException", "api_error", Some(424), true),
+            ("badGatewayException", "network", None, true),
+            ("conflictException", "api_error", Some(409), false),
+            ("dependencyFailedException", "api_error", Some(424), true),
+            ("internalServerException", "api_error", Some(500), true),
+        ];
+
+        for (exception_type, expected_category, expected_status, expected_retryable) in cases {
+            let error = BedrockStream::check_stream_error(&exception_message(exception_type))
+                .expect_err("modeled exception must fail");
+            assert_eq!(error.is_retryable(), expected_retryable, "{exception_type}");
+            let (category, status) = match error {
+                ProviderError::InvalidRequest { .. } => ("invalid_request", None),
+                ProviderError::Authentication { .. } => ("authentication", None),
+                ProviderError::RateLimit { .. } => ("rate_limit", None),
+                ProviderError::ModelNotFound { .. } => ("model_not_found", None),
+                ProviderError::Network { .. } => ("network", None),
+                ProviderError::ApiError { status, .. } => ("api_error", Some(status)),
+                other => panic!("unexpected category for {exception_type}: {other}"),
+            };
+            assert_eq!(category, expected_category, "{exception_type}");
+            assert_eq!(status, expected_status, "{exception_type}");
+        }
     }
 }

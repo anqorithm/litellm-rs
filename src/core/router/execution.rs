@@ -20,6 +20,11 @@ pub fn is_retryable_error(error: &ProviderError) -> bool {
         | ProviderError::Timeout { .. }
         | ProviderError::ProviderUnavailable { .. }
         | ProviderError::Network { .. } => true,
+        ProviderError::ApiError {
+            provider: "bedrock",
+            status: 424,
+            ..
+        } => true,
         ProviderError::QuotaExceeded { .. } => retryable_budget_scope(error).is_some(),
         _ => false,
     }
@@ -131,6 +136,13 @@ pub fn infer_cooldown_reason(error: &ProviderError) -> CooldownReason {
 
         // Timeout errors
         ProviderError::Timeout { .. } => CooldownReason::Timeout,
+
+        // Bedrock permission failures retain HTTP 403 while cooling down the deployment.
+        ProviderError::ApiError {
+            provider: "bedrock",
+            status: 403,
+            ..
+        } => CooldownReason::AuthError,
 
         // API errors - map based on status code
         ProviderError::ApiError { status, .. } => match *status {
