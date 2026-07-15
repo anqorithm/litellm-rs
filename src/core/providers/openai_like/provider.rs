@@ -7,6 +7,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::time::Duration;
 
 use crate::core::providers::base::{
     GlobalPoolManager, HeaderPair, HttpMethod, header, header_owned, read_streaming_error_body,
@@ -27,7 +28,7 @@ use super::{
     error::{OpenAILikeError, PROVIDER_NAME},
     models::{OpenAILikeModelRegistry, get_openai_like_registry},
 };
-use crate::core::providers::unified_provider::ProviderError;
+use crate::core::providers::{GeminiNativeRequest, ProviderError, gemini_transport_error};
 
 pub(crate) static OPENAI_LIKE_CATALOG_CAPABILITIES: &[ProviderCapability] = &[
     ProviderCapability::ChatCompletion,
@@ -64,6 +65,64 @@ pub struct OpenAILikeProvider {
 }
 
 impl OpenAILikeProvider {
+    pub(crate) async fn gemini_generate_content(
+        &self,
+        request: GeminiNativeRequest,
+    ) -> Result<reqwest::Response, ProviderError> {
+        if !crate::core::providers::capability_dispatch::openai_like_provider_supports_gemini(
+            &self.provider_name,
+        ) {
+            return Err(ProviderError::not_supported(
+                "openai_like",
+                "Gemini native generateContent",
+            ));
+        }
+        let api_key = self.config.base.api_key.as_deref().unwrap_or_default();
+        let url = crate::core::providers::gemini_native_url(
+            &self.config.get_api_base(),
+            api_key,
+            &request,
+        )?;
+        let headers = self
+            .config
+            .base
+            .headers
+            .iter()
+            .chain(&self.config.custom_headers)
+            .map(|(key, value)| header_owned(key.clone(), value.clone()))
+            .collect();
+        let response = if request.stream {
+            Self::map_gemini_stream_response(
+                tokio::time::timeout(
+                    Duration::from_secs(self.config.base.timeout),
+                    self.pool_manager.execute_streaming_request(
+                        url.as_str(),
+                        headers,
+                        request.body,
+                        "gemini_proxy",
+                    ),
+                )
+                .await,
+            )?
+        } else {
+            self.pool_manager
+                .execute_request(url.as_str(), HttpMethod::POST, headers, Some(request.body))
+                .await
+                .map_err(|_| {
+                    ProviderError::network("gemini_proxy", "Gemini upstream request failed")
+                })?
+        };
+        crate::core::providers::gemini_response_or_provider_error(response, api_key).await
+    }
+
+    pub(crate) fn map_gemini_stream_response<T>(
+        result: Result<Result<T, ProviderError>, tokio::time::error::Elapsed>,
+    ) -> Result<T, ProviderError> {
+        result
+            .map_err(|_| ProviderError::timeout("gemini_proxy", "Gemini response header timeout"))?
+            .map_err(|error| gemini_transport_error(matches!(error, ProviderError::Timeout { .. })))
+    }
+
     /// Create a new OpenAI-like provider
     pub async fn new(config: OpenAILikeConfig) -> Result<Self, OpenAILikeError> {
         Self::new_with_profile(

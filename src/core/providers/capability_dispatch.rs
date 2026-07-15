@@ -25,17 +25,95 @@ impl Provider {
             Provider::OpenAILike(provider) if capability == &ProviderCapability::Rerank => {
                 openai_like_provider_supports_rerank(provider.name())
             }
+            Provider::OpenAILike(provider)
+                if capability == &ProviderCapability::GeminiGenerateContent =>
+            {
+                openai_like_provider_supports_gemini(provider.name())
+            }
             _ => self.supports_capability(capability),
         }
     }
 }
 
+pub(crate) fn openai_like_provider_supports_gemini(provider_name: &str) -> bool {
+    if !provider_name
+        .chars()
+        .all(|ch| matches!(ch, '_' | '-') || ch.is_ascii_alphanumeric())
+    {
+        return false;
+    }
+    matches!(
+        normalize_provider_name(provider_name).as_str(),
+        "gemini" | "googleai" | "googleaistudio"
+    )
+}
+
 fn openai_like_provider_supports_rerank(provider_name: &str) -> bool {
-    let normalized = provider_name
+    let normalized = normalize_provider_name(provider_name);
+    normalized.contains("cohere") || normalized.contains("jina")
+}
+
+fn normalize_provider_name(provider_name: &str) -> String {
+    provider_name
         .chars()
         .filter(|ch| ch.is_ascii_alphanumeric())
-        .flat_map(|ch| ch.to_lowercase())
-        .collect::<String>();
+        .flat_map(char::to_lowercase)
+        .collect()
+}
 
-    normalized.contains("cohere") || normalized.contains("jina")
+#[cfg(test)]
+mod tests {
+    use super::{openai_like_provider_supports_gemini, openai_like_provider_supports_rerank};
+    use crate::core::net::ProviderEndpointAccess;
+    use crate::core::providers::openai_like::{OpenAILikeConfig, OpenAILikeProvider};
+    use crate::core::providers::{GeminiNativeRequest, ProviderError};
+
+    #[test]
+    fn gemini_compatibility_name_set_is_closed_and_normalized() {
+        for name in ["gemini", "Google-AI", "google_ai_studio"] {
+            assert!(openai_like_provider_supports_gemini(name));
+        }
+        for name in ["openai", "my-gemini-proxy", "google", "g.e.m.i.n.i"] {
+            assert!(!openai_like_provider_supports_gemini(name));
+        }
+        assert!(!openai_like_provider_supports_gemini("google ai"));
+        assert!(openai_like_provider_supports_rerank("cohere.ai"));
+        let leaked = "raw/key+value raw%2Fkey%2Bvalue";
+        for (inner, is_timeout) in [
+            (ProviderError::timeout("x", leaked), true),
+            (ProviderError::network("x", leaked), false),
+        ] {
+            let error = OpenAILikeProvider::map_gemini_stream_response::<()>(Ok(Err(inner)))
+                .expect_err("transport error must remain an error");
+            assert_eq!(matches!(error, ProviderError::Timeout { .. }), is_timeout);
+            let text = format!("{error:?} {error}");
+            assert!(!text.contains("raw/key+value") && !text.contains("raw%2Fkey%2Bvalue"));
+        }
+    }
+    #[tokio::test]
+    async fn named_gemini_stream_uses_runtime_header_timeout() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("timeout server should bind");
+        let address = listener.local_addr().expect("listener should have address");
+        let mut config = OpenAILikeConfig::with_api_key(format!("http://{address}"), "test-key");
+        config.provider_name = "Google-AI".to_string();
+        config.base.endpoint_access = ProviderEndpointAccess::PrivateNetwork;
+        config.base.timeout = 1;
+        let provider = OpenAILikeProvider::new_openai_compatible(config)
+            .await
+            .expect("named provider should build");
+        let error = provider
+            .gemini_generate_content(GeminiNativeRequest {
+                api_version: "v1beta".to_string(),
+                model: "gemini-3.1-flash-lite".to_string(),
+                method: "streamGenerateContent",
+                stream: true,
+                body: serde_json::json!({"contents": []}),
+            })
+            .await
+            .expect_err("delayed headers should time out");
+        assert!(matches!(error, ProviderError::Timeout { .. }));
+        drop(listener);
+    }
 }
