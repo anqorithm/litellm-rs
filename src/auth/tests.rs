@@ -239,3 +239,76 @@ async fn api_key_storage_error_propagates_from_auth_system() {
         crate::utils::error::gateway_error::GatewayError::Storage(_)
     ));
 }
+
+#[tokio::test]
+async fn jwt_canonical_user_conversion_error_propagates_from_auth_system() {
+    use crate::core::models::user::types::{User, UserStatus};
+    use crate::storage::database::entities::user;
+    use sea_orm::{ActiveModelTrait, EntityTrait, Set};
+
+    let mut config = crate::config::Config::default();
+    config.gateway.auth.jwt_secret = "AaaAaaAaaAaaAaaAaaAaaAaaAaaAaa1!".to_string();
+    config.gateway.storage.database.enabled = false;
+    config.gateway.storage.redis.enabled = false;
+
+    let storage = std::sync::Arc::new(
+        crate::storage::StorageLayer::new(&config.gateway.storage)
+            .await
+            .expect("storage should initialize"),
+    );
+    let mut persisted = User::new(
+        "jwt-corrupt-user".to_string(),
+        "jwt-corrupt@example.com".to_string(),
+        "secret-hash".to_string(),
+    );
+    persisted.status = UserStatus::Active;
+    storage.db().create_user(&persisted).await.unwrap();
+
+    let auth_system = super::system::AuthSystem::new(&config.gateway.auth, storage.clone())
+        .await
+        .expect("AuthSystem should initialize");
+    let token = auth_system
+        .jwt()
+        .create_access_token(persisted.id(), "user".to_string(), vec![], None, None)
+        .await
+        .unwrap();
+
+    user::ActiveModel {
+        id: Set(persisted.id()),
+        role: Set("sentinel-invalid-jwt-role".to_string()),
+        ..Default::default()
+    }
+    .update(storage.db().connection())
+    .await
+    .expect("test should corrupt persisted role");
+
+    let error = auth_system
+        .authenticate(AuthMethod::Jwt(token.clone()), RequestContext::new())
+        .await
+        .expect_err("canonical conversion error must propagate from JWT authentication");
+
+    let rendered = error.to_string();
+    assert!(rendered.contains("role"));
+    assert!(!rendered.contains("sentinel-invalid-jwt-role"));
+    assert!(!rendered.contains("jwt-corrupt-user"));
+    assert!(!rendered.contains("jwt-corrupt@example.com"));
+    assert!(!rendered.contains("secret-hash"));
+    assert!(!rendered.contains(&token));
+
+    storage
+        .db()
+        .delete_user(&persisted.id().to_string())
+        .await
+        .expect("test should delete the legacy mirror");
+    user::Entity::delete_by_id(persisted.id())
+        .exec(storage.db().connection())
+        .await
+        .expect("test should delete the canonical user");
+
+    let missing = auth_system
+        .authenticate(AuthMethod::Jwt(token), RequestContext::new())
+        .await
+        .expect("a genuinely missing user remains an authentication result");
+    assert!(!missing.success);
+    assert_eq!(missing.error.as_deref(), Some("User not found"));
+}

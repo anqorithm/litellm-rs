@@ -17,6 +17,8 @@ mod user_management_ops;
 mod user_ops;
 #[cfg(test)]
 mod user_repository_tests;
+#[cfg(test)]
+mod user_state_corruption_tests;
 mod virtual_key_ops;
 
 // Re-export public types

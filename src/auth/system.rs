@@ -102,8 +102,9 @@ impl AuthSystem {
                     });
                 }
 
-                // Get user from database
-                if let Ok(Some(user)) = self.storage.db().find_user_by_id(claims.sub).await {
+                // Get user from database. Storage and conversion failures must remain errors;
+                // only a successful lookup with no row is an authentication rejection.
+                if let Some(user) = self.storage.db().find_user_by_id(claims.sub).await? {
                     if user.is_active() {
                         context.user_id = Some(user.id().to_string());
                         if let Some(team_id) = user.team_ids.first().copied() {

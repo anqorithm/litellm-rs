@@ -11,7 +11,7 @@ use sea_orm::EntityTrait;
 use std::collections::HashMap;
 use uuid::Uuid;
 
-async fn create_database() -> SeaOrmDatabase {
+pub(super) async fn create_database() -> SeaOrmDatabase {
     let db = SeaOrmDatabase::new(&DatabaseConfig {
         enabled: false,
         ..DatabaseConfig::default()
@@ -22,7 +22,7 @@ async fn create_database() -> SeaOrmDatabase {
     db
 }
 
-fn canonical_user(username: &str, email: &str) -> User {
+pub(super) fn canonical_user(username: &str, email: &str) -> User {
     let mut user = User::new(username.to_string(), email.to_string(), "hash".to_string());
     user.status = UserStatus::Active;
     user.display_name = Some("Canonical User".to_string());

@@ -179,7 +179,7 @@ impl SeaOrmDatabase {
             .await
             .map_err(GatewayError::from)?;
 
-        Ok(user_model.map(|model| model.to_domain_user()))
+        user_model.map(|model| model.to_domain_user()).transpose()
     }
 
     pub(crate) async fn find_canonical_user_by_username(
@@ -192,7 +192,7 @@ impl SeaOrmDatabase {
             .await
             .map_err(GatewayError::from)?;
 
-        Ok(user_model.map(|model| model.to_domain_user()))
+        user_model.map(|model| model.to_domain_user()).transpose()
     }
 
     pub(crate) async fn find_canonical_user_by_email(&self, email: &str) -> Result<Option<User>> {
@@ -202,7 +202,7 @@ impl SeaOrmDatabase {
             .await
             .map_err(GatewayError::from)?;
 
-        Ok(user_model.map(|model| model.to_domain_user()))
+        user_model.map(|model| model.to_domain_user()).transpose()
     }
 
     pub(crate) async fn persist_legacy_user(&self, legacy: &LegacyUser) -> Result<Option<User>> {
