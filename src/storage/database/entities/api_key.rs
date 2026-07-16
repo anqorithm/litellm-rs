@@ -1,7 +1,22 @@
 use sea_orm::Set;
 use sea_orm::entity::prelude::*;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+use crate::utils::error::gateway_error::{GatewayError, Result as GatewayResult};
+
+fn parse_json_field<T: DeserializeOwned>(raw: &str, field: &str) -> GatewayResult<T> {
+    serde_json::from_str(raw).map_err(|_| {
+        GatewayError::Serialization(format!("Invalid persisted API key JSON field '{field}'"))
+    })
+}
+
+fn serialize_json_field<T: Serialize>(value: &T, field: &str) -> GatewayResult<String> {
+    serde_json::to_string(value).map_err(|_| {
+        GatewayError::Serialization(format!("Failed to serialize API key field '{field}'"))
+    })
+}
 
 /// API key database model
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize)]
@@ -82,21 +97,20 @@ impl ActiveModelBehavior for ActiveModel {}
 
 impl Model {
     /// Convert SeaORM model to domain API key model
-    pub fn to_domain_api_key(&self) -> crate::core::models::ApiKey {
+    pub fn to_domain_api_key(&self) -> GatewayResult<crate::core::models::ApiKey> {
         use crate::core::models::{Metadata, RateLimits, UsageStats};
 
-        let permissions =
-            serde_json::from_str::<Vec<String>>(&self.permissions).unwrap_or_else(|_| vec![]);
+        let permissions = parse_json_field::<Vec<String>>(&self.permissions, "permissions")?;
         let rate_limits = self
             .rate_limits
-            .as_ref()
-            .and_then(|raw| serde_json::from_str::<RateLimits>(raw).ok());
-        let usage_stats = serde_json::from_str::<UsageStats>(&self.usage_stats).unwrap_or_default();
-        let extra = self
-            .extra
-            .as_ref()
-            .and_then(|raw| serde_json::from_str::<HashMap<String, serde_json::Value>>(raw).ok())
-            .unwrap_or_default();
+            .as_deref()
+            .map(|raw| parse_json_field::<RateLimits>(raw, "rate_limits"))
+            .transpose()?;
+        let usage_stats = parse_json_field::<UsageStats>(&self.usage_stats, "usage_stats")?;
+        let extra = match self.extra.as_deref() {
+            Some(raw) => parse_json_field::<HashMap<String, serde_json::Value>>(raw, "extra")?,
+            None => HashMap::new(),
+        };
 
         let metadata = Metadata {
             id: self.id,
@@ -106,7 +120,7 @@ impl Model {
             extra,
         };
 
-        crate::core::models::ApiKey {
+        Ok(crate::core::models::ApiKey {
             metadata,
             name: self.name.clone(),
             key_hash: self.key_hash.clone(),
@@ -119,26 +133,27 @@ impl Model {
             is_active: self.is_active,
             last_used_at: self.last_used_at.map(|dt| dt.naive_utc().and_utc()),
             usage_stats,
-        }
+        })
     }
 
     /// Convert domain API key model to SeaORM active model
-    pub fn from_domain_api_key(api_key: &crate::core::models::ApiKey) -> ActiveModel {
-        let permissions =
-            serde_json::to_string(&api_key.permissions).unwrap_or_else(|_| "[]".into());
+    pub fn from_domain_api_key(
+        api_key: &crate::core::models::ApiKey,
+    ) -> GatewayResult<ActiveModel> {
+        let permissions = serialize_json_field(&api_key.permissions, "permissions")?;
         let rate_limits = api_key
             .rate_limits
             .as_ref()
-            .and_then(|limits| serde_json::to_string(limits).ok());
-        let usage_stats =
-            serde_json::to_string(&api_key.usage_stats).unwrap_or_else(|_| "{}".into());
+            .map(|limits| serialize_json_field(limits, "rate_limits"))
+            .transpose()?;
+        let usage_stats = serialize_json_field(&api_key.usage_stats, "usage_stats")?;
         let extra = if api_key.metadata.extra.is_empty() {
             None
         } else {
-            serde_json::to_string(&api_key.metadata.extra).ok()
+            Some(serialize_json_field(&api_key.metadata.extra, "extra")?)
         };
 
-        ActiveModel {
+        Ok(ActiveModel {
             id: Set(api_key.metadata.id),
             name: Set(api_key.name.clone()),
             key_hash: Set(api_key.key_hash.clone()),
@@ -155,6 +170,6 @@ impl Model {
             created_at: Set(api_key.metadata.created_at.into()),
             updated_at: Set(api_key.metadata.updated_at.into()),
             version: Set(api_key.metadata.version as i32),
-        }
+        })
     }
 }
