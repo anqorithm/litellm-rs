@@ -29,11 +29,13 @@ impl TeamRepository for SeaOrmTeamRepository {
     }
 
     async fn get_by_name(&self, name: &str) -> Result<Option<Team>> {
+        let legacy_teams = self.list_legacy_um_teams().await?;
+
         if let Some(team) = self.get_canonical_by_name(name).await? {
             return Ok(Some(team));
         }
 
-        for legacy in self.list_legacy_um_teams().await? {
+        for legacy in legacy_teams {
             if legacy.team_name == name {
                 return self.persist_legacy_team(&legacy).await;
             }

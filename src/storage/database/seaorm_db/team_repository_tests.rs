@@ -189,6 +189,9 @@ async fn test_corrupt_legacy_team_fails_enumeration_backed_queries() {
     let raw_data = "{raw-corrupt-team-json";
 
     db.create_team(&valid).await.unwrap();
+    let valid_id = Uuid::parse_str(&valid.team_id).unwrap();
+    assert!(repo.get(valid_id).await.unwrap().is_some());
+
     db.create_team(&corrupt).await.unwrap();
     corrupt_legacy_team_data(&db, &corrupt.team_id, raw_data).await;
 
