@@ -44,10 +44,10 @@ impl SeaOrmTeamRepository {
         let mut teams = Vec::with_capacity(rows.len());
         for row in rows {
             let data: String = row.try_get("", "data").map_err(GatewayError::from)?;
-            match Self::from_json::<LegacyTeam>(&data) {
-                Ok(team) => teams.push(team),
-                Err(err) => warn!(error = %err, "Skipping invalid legacy um_teams row"),
-            }
+            let team = Self::from_json::<LegacyTeam>(&data).map_err(|_| {
+                GatewayError::Storage("Invalid persisted um_teams.data JSON".to_string())
+            })?;
+            teams.push(team);
         }
         Ok(teams)
     }

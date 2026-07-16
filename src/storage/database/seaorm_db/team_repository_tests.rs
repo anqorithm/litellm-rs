@@ -9,6 +9,7 @@ use crate::core::user_management::{
     UserPreferences as LegacyUserPreferences, UserRole as LegacyUserRole,
 };
 use chrono::Utc;
+use sea_orm::{ConnectionTrait, DatabaseBackend, Statement, Value};
 use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -76,6 +77,26 @@ fn legacy_user(user_id: Uuid, email: &str) -> LegacyUser {
         last_login_at: None,
         preferences: LegacyUserPreferences::default(),
     }
+}
+
+async fn corrupt_legacy_team_data(db: &SeaOrmDatabase, team_id: &str, raw_data: &str) {
+    db.db
+        .execute(Statement::from_sql_and_values(
+            DatabaseBackend::Sqlite,
+            "UPDATE um_teams SET data = ? WHERE team_id = ?",
+            [
+                Value::String(Some(Box::new(raw_data.to_string()))),
+                Value::String(Some(Box::new(team_id.to_string()))),
+            ],
+        ))
+        .await
+        .unwrap();
+}
+
+fn assert_legacy_team_corruption_error(error: impl std::fmt::Display, raw_data: &str) {
+    let message = error.to_string();
+    assert!(message.contains("um_teams.data"));
+    assert!(!message.contains(raw_data));
 }
 
 #[tokio::test]
@@ -158,6 +179,45 @@ async fn test_legacy_user_management_team_is_visible_through_canonical_repositor
     assert_eq!(total, 1);
     assert_eq!(teams.len(), 1);
     assert_eq!(teams[0].id(), legacy_id);
+}
+
+#[tokio::test]
+async fn test_corrupt_legacy_team_fails_enumeration_backed_queries() {
+    let (repo, db) = create_repository_with_db().await;
+    let valid = legacy_team("legacy-valid-peer", Uuid::new_v4());
+    let corrupt = legacy_team("legacy-corrupt", Uuid::new_v4());
+    let raw_data = "{raw-corrupt-team-json";
+
+    db.create_team(&valid).await.unwrap();
+    let valid_id = Uuid::parse_str(&valid.team_id).unwrap();
+    assert!(repo.get(valid_id).await.unwrap().is_some());
+
+    db.create_team(&corrupt).await.unwrap();
+    corrupt_legacy_team_data(&db, &corrupt.team_id, raw_data).await;
+
+    let list_error = repo
+        .list(0, 10)
+        .await
+        .expect_err("corrupt legacy data must fail list");
+    assert_legacy_team_corruption_error(list_error, raw_data);
+
+    let count_error = repo
+        .count()
+        .await
+        .expect_err("corrupt legacy data must fail count");
+    assert_legacy_team_corruption_error(count_error, raw_data);
+
+    let name_error = repo
+        .get_by_name(&valid.team_name)
+        .await
+        .expect_err("a valid peer must not mask corrupt legacy data");
+    assert_legacy_team_corruption_error(name_error, raw_data);
+
+    let user_teams_error = repo
+        .get_user_teams(Uuid::new_v4())
+        .await
+        .expect_err("corrupt legacy data must fail user-team synchronization");
+    assert_legacy_team_corruption_error(user_teams_error, raw_data);
 }
 
 #[tokio::test]
