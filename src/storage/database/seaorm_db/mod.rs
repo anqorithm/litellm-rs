@@ -1,5 +1,7 @@
 // Module declarations
 mod analytics_ops;
+#[cfg(test)]
+mod api_key_corruption_tests;
 mod api_key_ops;
 #[cfg(all(test, any(feature = "postgres", feature = "sqlite")))]
 mod api_key_owner_migration_tests;
