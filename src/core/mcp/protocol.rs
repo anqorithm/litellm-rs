@@ -9,6 +9,9 @@ use serde_json::Value;
 /// JSON-RPC 2.0 version constant
 pub const JSONRPC_VERSION: &str = "2.0";
 
+/// MCP protocol version supported by this client
+pub const SUPPORTED_PROTOCOL_VERSION: &str = "2024-11-05";
+
 /// JSON-RPC 2.0 Request
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JsonRpcRequest {
@@ -238,6 +241,9 @@ pub mod methods {
     /// Initialize the connection
     pub const INITIALIZE: &str = "initialize";
 
+    /// Notify the server that initialization completed
+    pub const INITIALIZED: &str = "notifications/initialized";
+
     /// List available tools
     pub const LIST_TOOLS: &str = "tools/list";
 
@@ -288,6 +294,7 @@ pub struct McpCapabilities {
 
 /// Tools capability
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct ToolsCapability {
     /// Whether list_changed notifications are supported
     #[serde(default)]
@@ -296,6 +303,7 @@ pub struct ToolsCapability {
 
 /// Resources capability
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct ResourcesCapability {
     /// Whether subscribe is supported
     #[serde(default)]
@@ -308,6 +316,7 @@ pub struct ResourcesCapability {
 
 /// Prompts capability
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct PromptsCapability {
     /// Whether list_changed notifications are supported
     #[serde(default)]
@@ -320,6 +329,7 @@ pub struct LoggingCapability {}
 
 /// Initialize request params
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct InitializeParams {
     /// Protocol version
     pub protocol_version: String,
@@ -329,6 +339,20 @@ pub struct InitializeParams {
 
     /// Client info
     pub client_info: ClientInfo,
+}
+
+/// Initialize response result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InitializeResult {
+    /// Protocol version selected by the server
+    pub protocol_version: String,
+
+    /// Server capabilities
+    pub capabilities: McpCapabilities,
+
+    /// Server implementation information
+    pub server_info: ClientInfo,
 }
 
 /// Client info for initialization
@@ -459,8 +483,68 @@ mod tests {
     }
 
     #[test]
+    fn test_initialize_params_use_mcp_camel_case_fields() {
+        let params = InitializeParams {
+            protocol_version: SUPPORTED_PROTOCOL_VERSION.to_string(),
+            capabilities: McpCapabilities {
+                tools: Some(ToolsCapability { list_changed: true }),
+                resources: Some(ResourcesCapability {
+                    subscribe: true,
+                    list_changed: true,
+                }),
+                prompts: Some(PromptsCapability { list_changed: true }),
+                logging: None,
+            },
+            client_info: ClientInfo::default(),
+        };
+
+        let value = serde_json::to_value(params).expect("initialize params should serialize");
+        assert_eq!(value["protocolVersion"], SUPPORTED_PROTOCOL_VERSION);
+        assert!(value.get("clientInfo").is_some());
+        assert!(value.get("protocol_version").is_none());
+        assert!(value.get("client_info").is_none());
+        assert_eq!(value["capabilities"]["tools"]["listChanged"], true);
+        assert_eq!(value["capabilities"]["resources"]["listChanged"], true);
+        assert_eq!(value["capabilities"]["prompts"]["listChanged"], true);
+        assert!(value["capabilities"]["tools"].get("list_changed").is_none());
+    }
+
+    #[test]
+    fn test_initialize_result_requires_all_mcp_fields() {
+        let valid = serde_json::json!({
+            "protocolVersion": SUPPORTED_PROTOCOL_VERSION,
+            "capabilities": {"tools": {"listChanged": true}},
+            "serverInfo": {"name": "test-server", "version": "1.0.0"}
+        });
+
+        let result: InitializeResult =
+            serde_json::from_value(valid.clone()).expect("valid result should parse");
+        assert_eq!(result.protocol_version, SUPPORTED_PROTOCOL_VERSION);
+        assert!(
+            result
+                .capabilities
+                .tools
+                .expect("tools capability")
+                .list_changed
+        );
+
+        for required_field in ["protocolVersion", "capabilities", "serverInfo"] {
+            let mut invalid = valid.clone();
+            invalid
+                .as_object_mut()
+                .expect("fixture should be an object")
+                .remove(required_field);
+            assert!(
+                serde_json::from_value::<InitializeResult>(invalid).is_err(),
+                "missing {required_field} should fail"
+            );
+        }
+    }
+
+    #[test]
     fn test_method_constants() {
         assert_eq!(methods::INITIALIZE, "initialize");
+        assert_eq!(methods::INITIALIZED, "notifications/initialized");
         assert_eq!(methods::LIST_TOOLS, "tools/list");
         assert_eq!(methods::CALL_TOOL, "tools/call");
     }
