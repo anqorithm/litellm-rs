@@ -10,7 +10,8 @@ use tokio::sync::RwLock;
 use super::config::McpServerConfig;
 use super::error::{McpError, McpResult};
 use super::protocol::{
-    ClientInfo, InitializeParams, JsonRpcRequest, JsonRpcResponse, McpCapabilities, methods,
+    ClientInfo, InitializeParams, InitializeResult, JsonRpcRequest, JsonRpcResponse,
+    McpCapabilities, SUPPORTED_PROTOCOL_VERSION, methods,
 };
 use super::tools::{Tool, ToolCall, ToolList, ToolResult};
 use super::transport::Transport;
@@ -154,6 +155,7 @@ impl McpServer {
             }
             *state = ServerState::Connecting;
         }
+        *self.capabilities.write().await = None;
 
         match self.initialize().await {
             Ok(caps) => {
@@ -171,7 +173,7 @@ impl McpServer {
     /// Initialize the MCP connection
     async fn initialize(&self) -> McpResult<McpCapabilities> {
         let params = InitializeParams {
-            protocol_version: "2024-11-05".to_string(),
+            protocol_version: SUPPORTED_PROTOCOL_VERSION.to_string(),
             capabilities: McpCapabilities::default(),
             client_info: ClientInfo::default(),
         };
@@ -179,19 +181,10 @@ impl McpServer {
         let response = self
             .send_request(methods::INITIALIZE, Some(serde_json::to_value(params)?))
             .await?;
+        let result = parse_initialize_response(response)?;
 
-        if let Some(result) = response.result {
-            let caps: McpCapabilities =
-                serde_json::from_value(result.get("capabilities").cloned().unwrap_or_default())
-                    .unwrap_or_default();
-            Ok(caps)
-        } else if let Some(error) = response.error {
-            Err(McpError::ProtocolError {
-                message: format!("Initialize failed: {}", error.message),
-            })
-        } else {
-            Ok(McpCapabilities::default())
-        }
+        self.send_notification(methods::INITIALIZED, None).await?;
+        Ok(result.capabilities)
     }
 
     /// Disconnect from the server
@@ -280,6 +273,25 @@ impl McpServer {
         }
     }
 
+    /// Send a JSON-RPC notification without expecting a response body
+    async fn send_notification(
+        &self,
+        method: &str,
+        params: Option<serde_json::Value>,
+    ) -> McpResult<()> {
+        match self.config.transport {
+            Transport::Http | Transport::Sse => self.send_http_notification(method, params).await,
+            Transport::Stdio => Err(McpError::TransportError {
+                transport: "stdio".to_string(),
+                message: "Stdio transport not yet implemented".to_string(),
+            }),
+            Transport::WebSocket => Err(McpError::TransportError {
+                transport: "websocket".to_string(),
+                message: "WebSocket transport not yet implemented".to_string(),
+            }),
+        }
+    }
+
     /// Send HTTP request
     async fn send_http_request(
         &self,
@@ -293,6 +305,48 @@ impl McpServer {
         let request =
             JsonRpcRequest::new(method, params).with_id(serde_json::Value::Number(id.into()));
 
+        let response = self.send_http_message(&request).await?;
+
+        response.json().await.map_err(|e| McpError::ProtocolError {
+            message: format!("Failed to parse response: {e}"),
+        })
+    }
+
+    /// Send an HTTP notification and accept a successful empty response body
+    async fn send_http_notification(
+        &self,
+        method: &str,
+        params: Option<serde_json::Value>,
+    ) -> McpResult<()> {
+        let notification = JsonRpcRequest::notification(method, params);
+        self.send_http_message(&notification)
+            .await?
+            .bytes()
+            .await
+            .map_err(|error| self.map_http_error(error))?;
+        Ok(())
+    }
+
+    fn map_http_error(&self, error: reqwest::Error) -> McpError {
+        if error.is_timeout() {
+            McpError::Timeout {
+                server_name: self.config.name.clone(),
+                timeout_ms: self.config.timeout_ms,
+            }
+        } else if error.is_connect() {
+            McpError::ConnectionError {
+                server_name: self.config.name.clone(),
+                message: error.to_string(),
+            }
+        } else {
+            McpError::TransportError {
+                transport: "http".to_string(),
+                message: error.to_string(),
+            }
+        }
+    }
+
+    async fn send_http_message(&self, request: &JsonRpcRequest) -> McpResult<reqwest::Response> {
         let response = self
             .http_client
             .post(&self.config.url)
@@ -300,24 +354,7 @@ impl McpServer {
             .json(&request)
             .send()
             .await
-            .map_err(|e| {
-                if e.is_timeout() {
-                    McpError::Timeout {
-                        server_name: self.config.name.clone(),
-                        timeout_ms: self.config.timeout_ms,
-                    }
-                } else if e.is_connect() {
-                    McpError::ConnectionError {
-                        server_name: self.config.name.clone(),
-                        message: e.to_string(),
-                    }
-                } else {
-                    McpError::TransportError {
-                        transport: "http".to_string(),
-                        message: e.to_string(),
-                    }
-                }
-            })?;
+            .map_err(|error| self.map_http_error(error))?;
 
         let status = response.status();
         if status == reqwest::StatusCode::UNAUTHORIZED {
@@ -346,13 +383,14 @@ impl McpServer {
                 retry_after_ms: retry_after,
             });
         }
+        if !status.is_success() {
+            return Err(McpError::TransportError {
+                transport: "http".to_string(),
+                message: format!("MCP server returned HTTP status {status}"),
+            });
+        }
 
-        let rpc_response: JsonRpcResponse =
-            response.json().await.map_err(|e| McpError::ProtocolError {
-                message: format!("Failed to parse response: {}", e),
-            })?;
-
-        Ok(rpc_response)
+        Ok(response)
     }
 
     /// Send SSE request (for now, falls back to HTTP POST)
@@ -395,6 +433,42 @@ impl McpServer {
     pub async fn capabilities(&self) -> Option<McpCapabilities> {
         self.capabilities.read().await.clone()
     }
+}
+
+fn parse_initialize_response(response: JsonRpcResponse) -> McpResult<InitializeResult> {
+    let result = match (response.result, response.error) {
+        (Some(result), None) => result,
+        (None, Some(error)) => {
+            return Err(McpError::ProtocolError {
+                message: format!("Initialize failed: {}", error.message),
+            });
+        }
+        (Some(_), Some(_)) => {
+            return Err(McpError::ProtocolError {
+                message: "Initialize response contained both result and error".to_string(),
+            });
+        }
+        (None, None) => {
+            return Err(McpError::ProtocolError {
+                message: "Initialize response contained neither result nor error".to_string(),
+            });
+        }
+    };
+
+    let result: InitializeResult =
+        serde_json::from_value(result).map_err(|error| McpError::ProtocolError {
+            message: format!("Invalid initialize result: {error}"),
+        })?;
+    if result.protocol_version != SUPPORTED_PROTOCOL_VERSION {
+        return Err(McpError::ProtocolError {
+            message: format!(
+                "Unsupported MCP protocol version '{}'; expected '{}'",
+                result.protocol_version, SUPPORTED_PROTOCOL_VERSION
+            ),
+        });
+    }
+
+    Ok(result)
 }
 
 /// Thread-safe MCP Server handle
@@ -665,3 +739,7 @@ mod tests {
         assert!(result.is_err());
     }
 }
+
+#[cfg(test)]
+#[path = "server_lifecycle_tests.rs"]
+mod lifecycle_tests;
