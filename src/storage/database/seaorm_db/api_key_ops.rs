@@ -34,7 +34,7 @@ impl SeaOrmDatabase {
     ) -> Result<crate::core::models::ApiKey> {
         debug!("Creating API key: {}", api_key.metadata.id);
 
-        let active_model = api_key::Model::from_domain_api_key(api_key);
+        let active_model = api_key::Model::from_domain_api_key(api_key)?;
         entities::ApiKey::insert(active_model)
             .exec(&self.db)
             .await
@@ -56,7 +56,7 @@ impl SeaOrmDatabase {
             .await
             .map_err(GatewayError::from)?;
 
-        Ok(model.map(|m| m.to_domain_api_key()))
+        model.map(|m| m.to_domain_api_key()).transpose()
     }
 
     /// Find API key by ID
@@ -71,7 +71,7 @@ impl SeaOrmDatabase {
             .await
             .map_err(GatewayError::from)?;
 
-        Ok(model.map(|m| m.to_domain_api_key()))
+        model.map(|m| m.to_domain_api_key()).transpose()
     }
 
     /// Deactivate API key with transaction wrapping and optimistic locking
@@ -159,7 +159,7 @@ impl SeaOrmDatabase {
             .await
             .map_err(GatewayError::from)?;
 
-        Ok(models.into_iter().map(|m| m.to_domain_api_key()).collect())
+        models.into_iter().map(|m| m.to_domain_api_key()).collect()
     }
 
     /// List API keys by team
@@ -175,7 +175,7 @@ impl SeaOrmDatabase {
             .await
             .map_err(GatewayError::from)?;
 
-        Ok(models.into_iter().map(|m| m.to_domain_api_key()).collect())
+        models.into_iter().map(|m| m.to_domain_api_key()).collect()
     }
 
     /// List API keys with optional status filter and pagination
@@ -196,7 +196,7 @@ impl SeaOrmDatabase {
         }
 
         let models = query.all(&self.db).await.map_err(GatewayError::from)?;
-        Ok(models.into_iter().map(|m| m.to_domain_api_key()).collect())
+        models.into_iter().map(|m| m.to_domain_api_key()).collect()
     }
 
     /// Count API keys with optional status filter
@@ -449,7 +449,7 @@ impl SeaOrmDatabase {
             .map_err(GatewayError::from)?
             .ok_or_else(|| GatewayError::NotFound("API key not found".to_string()))?;
 
-        let mut domain_key = model.to_domain_api_key();
+        let mut domain_key = model.to_domain_api_key()?;
         domain_key.usage_stats.total_requests = domain_key
             .usage_stats
             .total_requests
