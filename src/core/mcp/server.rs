@@ -319,8 +319,31 @@ impl McpServer {
         params: Option<serde_json::Value>,
     ) -> McpResult<()> {
         let notification = JsonRpcRequest::notification(method, params);
-        self.send_http_message(&notification).await?;
+        self.send_http_message(&notification)
+            .await?
+            .bytes()
+            .await
+            .map_err(|error| self.map_http_error(error))?;
         Ok(())
+    }
+
+    fn map_http_error(&self, error: reqwest::Error) -> McpError {
+        if error.is_timeout() {
+            McpError::Timeout {
+                server_name: self.config.name.clone(),
+                timeout_ms: self.config.timeout_ms,
+            }
+        } else if error.is_connect() {
+            McpError::ConnectionError {
+                server_name: self.config.name.clone(),
+                message: error.to_string(),
+            }
+        } else {
+            McpError::TransportError {
+                transport: "http".to_string(),
+                message: error.to_string(),
+            }
+        }
     }
 
     async fn send_http_message(&self, request: &JsonRpcRequest) -> McpResult<reqwest::Response> {
@@ -331,24 +354,7 @@ impl McpServer {
             .json(&request)
             .send()
             .await
-            .map_err(|e| {
-                if e.is_timeout() {
-                    McpError::Timeout {
-                        server_name: self.config.name.clone(),
-                        timeout_ms: self.config.timeout_ms,
-                    }
-                } else if e.is_connect() {
-                    McpError::ConnectionError {
-                        server_name: self.config.name.clone(),
-                        message: e.to_string(),
-                    }
-                } else {
-                    McpError::TransportError {
-                        transport: "http".to_string(),
-                        message: e.to_string(),
-                    }
-                }
-            })?;
+            .map_err(|error| self.map_http_error(error))?;
 
         let status = response.status();
         if status == reqwest::StatusCode::UNAUTHORIZED {
