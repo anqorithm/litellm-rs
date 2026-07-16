@@ -78,10 +78,13 @@ impl ActiveModelBehavior for ActiveModel {}
 // Conversion methods between SeaORM model and our domain model
 impl Model {
     /// Convert SeaORM model to domain user model
-    pub fn to_domain_user(&self) -> crate::core::models::user::types::User {
+    pub fn to_domain_user(
+        &self,
+    ) -> crate::utils::error::gateway_error::Result<crate::core::models::user::types::User> {
         use crate::core::models::user::preferences::UserPreferences;
         use crate::core::models::user::types::{UserProfile, UserRole, UserStatus};
         use crate::core::models::{Metadata, UsageStats};
+        use crate::utils::error::gateway_error::GatewayError;
         use std::str::FromStr;
 
         let metadata = Metadata {
@@ -92,16 +95,22 @@ impl Model {
             extra: std::collections::HashMap::new(),
         };
 
-        let role = UserRole::from_str(&self.role).unwrap_or(UserRole::User);
+        let role = UserRole::from_str(&self.role)
+            .map_err(|_| GatewayError::Storage("Invalid persisted users.role enum".to_string()))?;
         let status = match self.status.as_str() {
             "active" => UserStatus::Active,
             "inactive" => UserStatus::Inactive,
             "pending" => UserStatus::Pending,
             "suspended" => UserStatus::Suspended,
-            _ => UserStatus::Pending,
+            "deleted" => UserStatus::Deleted,
+            _ => {
+                return Err(GatewayError::Storage(
+                    "Invalid persisted users.status enum".to_string(),
+                ));
+            }
         };
 
-        crate::core::models::user::types::User {
+        Ok(crate::core::models::user::types::User {
             metadata,
             username: self.username.clone(),
             email: self.email.clone(),
@@ -117,7 +126,7 @@ impl Model {
             email_verified: self.email_verified,
             two_factor_enabled: self.two_factor_enabled,
             profile: UserProfile::default(),
-        }
+        })
     }
 
     /// Convert domain user model to SeaORM active model
