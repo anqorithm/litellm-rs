@@ -113,7 +113,7 @@ impl TeamRepository for SeaOrmTeamRepository {
             &sql,
             [Value::String(Some(Box::new(id_str)))],
         );
-        txn.execute(stmt).await.map_err(GatewayError::from)?;
+        let canonical_delete = txn.execute(stmt).await.map_err(GatewayError::from)?;
 
         let sql = format!("DELETE FROM um_teams WHERE team_id = {}", self.ph(1));
         let stmt = Statement::from_sql_and_values(
@@ -121,7 +121,12 @@ impl TeamRepository for SeaOrmTeamRepository {
             &sql,
             [Value::String(Some(Box::new(id.to_string())))],
         );
-        txn.execute(stmt).await.map_err(GatewayError::from)?;
+        let legacy_delete = txn.execute(stmt).await.map_err(GatewayError::from)?;
+
+        if canonical_delete.rows_affected() == 0 && legacy_delete.rows_affected() == 0 {
+            txn.rollback().await.map_err(GatewayError::from)?;
+            return Err(GatewayError::NotFound(format!("Team {} not found", id)));
+        }
 
         txn.commit().await.map_err(GatewayError::from)?;
 

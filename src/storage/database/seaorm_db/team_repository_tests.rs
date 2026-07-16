@@ -344,6 +344,52 @@ async fn test_delete_does_not_resurrect_backfilled_legacy_team() {
 }
 
 #[tokio::test]
+async fn test_delete_missing_team_returns_not_found_and_rolls_back_cleanup() {
+    let (repo, db) = create_repository_with_db().await;
+    let missing_id = Uuid::new_v4();
+    let user_id = Uuid::new_v4();
+    let mut user = legacy_user(user_id, "orphan-member@example.com");
+    user.teams.push(missing_id.to_string());
+    db.um_create_user(&user).await.unwrap();
+
+    let orphan_member = TeamMember::new(missing_id, user_id, TeamRole::Member, None);
+    db.db
+        .execute(Statement::from_sql_and_values(
+            DatabaseBackend::Sqlite,
+            "INSERT INTO team_members (team_id, user_id, data) VALUES (?, ?, ?)",
+            [
+                Value::String(Some(Box::new(missing_id.to_string()))),
+                Value::String(Some(Box::new(user_id.to_string()))),
+                Value::String(Some(Box::new(
+                    serde_json::to_string(&orphan_member).unwrap(),
+                ))),
+            ],
+        ))
+        .await
+        .unwrap();
+
+    let error = repo
+        .delete(missing_id)
+        .await
+        .expect_err("deleting a missing team must not report success");
+    assert!(matches!(error, GatewayError::NotFound(_)));
+    assert!(
+        repo.get_member(missing_id, user_id)
+            .await
+            .unwrap()
+            .is_some()
+    );
+    assert_eq!(
+        db.get_user(&user_id.to_string())
+            .await
+            .unwrap()
+            .unwrap()
+            .teams,
+        vec![missing_id.to_string()]
+    );
+}
+
+#[tokio::test]
 async fn test_legacy_name_conflict_does_not_return_wrong_team_for_id_lookup() {
     let (repo, db) = create_repository_with_db().await;
     let canonical = Team::new("shared-name".to_string(), None);
