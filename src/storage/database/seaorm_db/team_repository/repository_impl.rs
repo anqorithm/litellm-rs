@@ -63,7 +63,13 @@ impl TeamRepository for SeaOrmTeamRepository {
                 Value::String(Some(Box::new(id))),
             ],
         );
-        self.db.db.execute(stmt).await.map_err(GatewayError::from)?;
+        let result = self.db.db.execute(stmt).await.map_err(GatewayError::from)?;
+        if result.rows_affected() == 0 {
+            return Err(GatewayError::NotFound(format!(
+                "Team {} not found",
+                team.id()
+            )));
+        }
         self.sync_legacy_team_from_canonical(team.id()).await?;
         Ok(team)
     }

@@ -8,6 +8,7 @@ use crate::core::user_management::{
     TeamSettings as LegacyTeamSettings, User as LegacyUser,
     UserPreferences as LegacyUserPreferences, UserRole as LegacyUserRole,
 };
+use crate::utils::error::gateway_error::GatewayError;
 use chrono::Utc;
 use sea_orm::{ConnectionTrait, DatabaseBackend, Statement, Value};
 use std::collections::HashMap;
@@ -123,6 +124,26 @@ async fn test_list_and_count_exclude_deleted_teams() {
 
     let count = repo.count().await.unwrap();
     assert_eq!(count, 2);
+}
+
+#[tokio::test]
+async fn test_update_missing_team_returns_not_found_without_side_effects() {
+    let (repo, db) = create_repository_with_db().await;
+    let missing = Team::new("missing-team".to_string(), None);
+    let missing_id = missing.id();
+
+    let error = repo
+        .update(missing)
+        .await
+        .expect_err("updating a missing team must not report success");
+    assert!(matches!(error, GatewayError::NotFound(_)));
+    assert!(repo.get(missing_id).await.unwrap().is_none());
+    assert!(
+        db.get_team(&missing_id.to_string())
+            .await
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[tokio::test]
