@@ -137,6 +137,7 @@ pub struct BatchResponse {
 
 /// Batch processing status
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
 pub enum BatchStatus {
     /// Batch is being validated
     Validating,
@@ -154,6 +155,40 @@ pub enum BatchStatus {
     Cancelling,
     /// Batch has been cancelled
     Cancelled,
+}
+
+impl BatchStatus {
+    /// Return the canonical status spelling used by APIs and persistence.
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Validating => "validating",
+            Self::Failed => "failed",
+            Self::InProgress => "in_progress",
+            Self::Finalizing => "finalizing",
+            Self::Completed => "completed",
+            Self::Expired => "expired",
+            Self::Cancelling => "cancelling",
+            Self::Cancelled => "cancelled",
+        }
+    }
+}
+
+impl std::str::FromStr for BatchStatus {
+    type Err = &'static str;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "validating" | "Validating" => Ok(Self::Validating),
+            "failed" | "Failed" => Ok(Self::Failed),
+            "in_progress" | "InProgress" => Ok(Self::InProgress),
+            "finalizing" | "Finalizing" => Ok(Self::Finalizing),
+            "completed" | "Completed" => Ok(Self::Completed),
+            "expired" | "Expired" => Ok(Self::Expired),
+            "cancelling" | "Cancelling" => Ok(Self::Cancelling),
+            "cancelled" | "Cancelled" => Ok(Self::Cancelled),
+            _ => Err("invalid batch status"),
+        }
+    }
 }
 
 /// Request counts for batch
@@ -343,21 +378,33 @@ mod tests {
 
     #[test]
     fn test_batch_status_variants() {
-        let statuses = vec![
-            BatchStatus::Validating,
-            BatchStatus::Failed,
-            BatchStatus::InProgress,
-            BatchStatus::Finalizing,
-            BatchStatus::Completed,
-            BatchStatus::Expired,
-            BatchStatus::Cancelling,
-            BatchStatus::Cancelled,
+        let statuses = [
+            (BatchStatus::Validating, "validating", "Validating"),
+            (BatchStatus::Failed, "failed", "Failed"),
+            (BatchStatus::InProgress, "in_progress", "InProgress"),
+            (BatchStatus::Finalizing, "finalizing", "Finalizing"),
+            (BatchStatus::Completed, "completed", "Completed"),
+            (BatchStatus::Expired, "expired", "Expired"),
+            (BatchStatus::Cancelling, "cancelling", "Cancelling"),
+            (BatchStatus::Cancelled, "cancelled", "Cancelled"),
         ];
 
-        for status in statuses {
-            let json = serde_json::to_string(&status).unwrap();
-            assert!(!json.is_empty());
+        for (status, canonical, historical) in statuses {
+            assert_eq!(status.as_str(), canonical);
+            assert_eq!(canonical.parse::<BatchStatus>().unwrap(), status);
+            assert_eq!(historical.parse::<BatchStatus>().unwrap(), status);
+            assert_eq!(
+                serde_json::to_string(&status).unwrap(),
+                format!("\"{canonical}\"")
+            );
+            assert_eq!(
+                serde_json::from_str::<BatchStatus>(&format!("\"{canonical}\"")).unwrap(),
+                status
+            );
         }
+
+        assert!("unknown".parse::<BatchStatus>().is_err());
+        assert!(serde_json::from_str::<BatchStatus>("\"InProgress\"").is_err());
     }
 
     #[test]
@@ -370,7 +417,7 @@ mod tests {
     fn test_batch_status_serialization() {
         let status = BatchStatus::InProgress;
         let json = serde_json::to_string(&status).unwrap();
-        assert!(json.contains("InProgress"));
+        assert_eq!(json, "\"in_progress\"");
     }
 
     // ==================== BatchRequestCounts Tests ====================

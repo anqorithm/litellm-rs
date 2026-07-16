@@ -1,3 +1,4 @@
+use crate::core::batch::BatchStatus;
 use crate::utils::error::gateway_error::{GatewayError, Result};
 use sea_orm::*;
 use tracing::{debug, warn};
@@ -23,7 +24,7 @@ impl SeaOrmDatabase {
             }),
             input_file_id: Set(None),
             completion_window: Set(format!("{}h", batch.completion_window.unwrap_or(24))),
-            status: Set("validating".to_string()),
+            status: Set(BatchStatus::Validating.as_str().to_string()),
             output_file_id: Set(None),
             error_file_id: Set(None),
             created_at: Set(chrono::Utc::now().into()),
@@ -54,8 +55,8 @@ impl SeaOrmDatabase {
     ///
     /// The read-then-update sequence is wrapped in a transaction to ensure
     /// status transitions are atomic.
-    pub async fn update_batch_status(&self, batch_id: &str, status: &str) -> Result<()> {
-        debug!("Updating batch status: {} -> {}", batch_id, status);
+    pub async fn update_batch_status(&self, batch_id: &str, status: BatchStatus) -> Result<()> {
+        debug!("Updating batch status: {} -> {}", batch_id, status.as_str());
 
         let txn = self.db.begin().await.map_err(GatewayError::from)?;
 
@@ -66,19 +67,19 @@ impl SeaOrmDatabase {
             .ok_or_else(|| GatewayError::NotFound("Batch not found".to_string()))?;
 
         let mut active_model: entities::batch::ActiveModel = batch_model.into();
-        active_model.status = Set(status.to_string());
+        active_model.status = Set(status.as_str().to_string());
 
         // Update timestamp based on status
         let now = chrono::Utc::now().into();
         match status {
-            "in_progress" => active_model.in_progress_at = Set(Some(now)),
-            "finalizing" => active_model.finalizing_at = Set(Some(now)),
-            "completed" => active_model.completed_at = Set(Some(now)),
-            "failed" => active_model.failed_at = Set(Some(now)),
-            "expired" => active_model.expired_at = Set(Some(now)),
-            "cancelling" => active_model.cancelling_at = Set(Some(now)),
-            "cancelled" => active_model.cancelled_at = Set(Some(now)),
-            _ => {}
+            BatchStatus::Validating => {}
+            BatchStatus::InProgress => active_model.in_progress_at = Set(Some(now)),
+            BatchStatus::Finalizing => active_model.finalizing_at = Set(Some(now)),
+            BatchStatus::Completed => active_model.completed_at = Set(Some(now)),
+            BatchStatus::Failed => active_model.failed_at = Set(Some(now)),
+            BatchStatus::Expired => active_model.expired_at = Set(Some(now)),
+            BatchStatus::Cancelling => active_model.cancelling_at = Set(Some(now)),
+            BatchStatus::Cancelled => active_model.cancelled_at = Set(Some(now)),
         }
 
         active_model
@@ -117,23 +118,14 @@ impl SeaOrmDatabase {
             .await
             .map_err(GatewayError::from)?;
 
-        let batch_records = batch_models
+        batch_models
             .into_iter()
             .map(|model| {
-                // Parse status string to BatchStatus enum
-                let status = match model.status.as_str() {
-                    "validating" => crate::core::batch::BatchStatus::Validating,
-                    "failed" => crate::core::batch::BatchStatus::Failed,
-                    "in_progress" => crate::core::batch::BatchStatus::InProgress,
-                    "finalizing" => crate::core::batch::BatchStatus::Finalizing,
-                    "completed" => crate::core::batch::BatchStatus::Completed,
-                    "expired" => crate::core::batch::BatchStatus::Expired,
-                    "cancelling" => crate::core::batch::BatchStatus::Cancelling,
-                    "cancelled" => crate::core::batch::BatchStatus::Cancelled,
-                    _ => crate::core::batch::BatchStatus::Failed,
-                };
+                let status = model.status.parse::<BatchStatus>().map_err(|_| {
+                    GatewayError::Storage("Invalid persisted batches.status enum".to_string())
+                })?;
 
-                crate::core::batch::BatchRecord {
+                Ok(crate::core::batch::BatchRecord {
                     id: model.id,
                     object: model.object,
                     endpoint: model.endpoint,
@@ -157,11 +149,9 @@ impl SeaOrmDatabase {
                         failed: model.request_counts_failed.unwrap_or(0),
                     },
                     metadata: model.metadata.and_then(|m| serde_json::from_str(&m).ok()),
-                }
+                })
             })
-            .collect();
-
-        Ok(batch_records)
+            .collect()
     }
 
     /// Get batch results
@@ -247,7 +237,7 @@ impl SeaOrmDatabase {
             .ok_or_else(|| GatewayError::NotFound("Batch not found".to_string()))?;
 
         let mut active_model: entities::batch::ActiveModel = batch_model.into();
-        active_model.status = Set("completed".to_string());
+        active_model.status = Set(BatchStatus::Completed.as_str().to_string());
         active_model.completed_at = Set(Some(chrono::Utc::now().into()));
 
         active_model

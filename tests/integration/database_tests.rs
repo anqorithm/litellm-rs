@@ -8,6 +8,7 @@ mod tests {
     use litellm_rs::config::models::file_storage::FileStorageConfig;
     use litellm_rs::config::models::storage::DatabaseConfig;
     use litellm_rs::config::models::storage::{RedisConfig, StorageConfig};
+    use litellm_rs::core::batch::{BatchRequest, BatchStatus, BatchType};
     use litellm_rs::core::models::user::types::User;
     use litellm_rs::core::models::{ApiKey, Metadata, RateLimits, UsageStats};
     use litellm_rs::storage::StorageLayer;
@@ -438,10 +439,91 @@ mod tests {
             .expect("Failed to create database");
         db.migrate().await.expect("Migration failed");
 
-        // List batches (should be empty)
+        // List batches (should be empty).
         let batches = db.list_batches(Some(10), None).await;
         assert!(batches.is_ok());
         assert!(batches.unwrap().is_empty());
+
+        let request = BatchRequest {
+            batch_id: "batch-status-contract".to_string(),
+            user_id: "user-1".to_string(),
+            batch_type: BatchType::ChatCompletion,
+            requests: vec![],
+            metadata: std::collections::HashMap::new(),
+            completion_window: Some(24),
+            webhook_url: None,
+        };
+        db.create_batch(&request).await.unwrap();
+
+        db.update_batch_status(&request.batch_id, BatchStatus::InProgress)
+            .await
+            .unwrap();
+        let row = db
+            .connection()
+            .query_one(Statement::from_sql_and_values(
+                DatabaseBackend::Sqlite,
+                "SELECT status, in_progress_at FROM batches WHERE id = ?",
+                [Value::String(Some(Box::new(request.batch_id.clone())))],
+            ))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(row.try_get::<String>("", "status").unwrap(), "in_progress");
+        assert!(
+            row.try_get::<Option<String>>("", "in_progress_at")
+                .unwrap()
+                .is_some()
+        );
+
+        let historical_statuses = [
+            ("Validating", BatchStatus::Validating),
+            ("Failed", BatchStatus::Failed),
+            ("InProgress", BatchStatus::InProgress),
+            ("Finalizing", BatchStatus::Finalizing),
+            ("Completed", BatchStatus::Completed),
+            ("Expired", BatchStatus::Expired),
+            ("Cancelling", BatchStatus::Cancelling),
+            ("Cancelled", BatchStatus::Cancelled),
+        ];
+        for (historical, expected) in historical_statuses {
+            db.connection()
+                .execute(Statement::from_sql_and_values(
+                    DatabaseBackend::Sqlite,
+                    "UPDATE batches SET status = ? WHERE id = ?",
+                    [
+                        Value::String(Some(Box::new(historical.to_string()))),
+                        Value::String(Some(Box::new(request.batch_id.clone()))),
+                    ],
+                ))
+                .await
+                .unwrap();
+            let batches = db.list_batches(Some(10), None).await.unwrap();
+            assert_eq!(batches.len(), 1);
+            assert_eq!(batches[0].status, expected);
+        }
+
+        let mut valid_peer = request.clone();
+        valid_peer.batch_id = "batch-status-valid-peer".to_string();
+        db.create_batch(&valid_peer).await.unwrap();
+
+        db.connection()
+            .execute(Statement::from_sql_and_values(
+                DatabaseBackend::Sqlite,
+                "UPDATE batches SET status = ? WHERE id = ?",
+                [
+                    Value::String(Some(Box::new("unknown-status".to_string()))),
+                    Value::String(Some(Box::new(request.batch_id))),
+                ],
+            ))
+            .await
+            .unwrap();
+
+        let error = db
+            .list_batches(Some(10), None)
+            .await
+            .expect_err("unknown persisted batch status must fail the list");
+        assert!(error.to_string().contains("status"));
+        assert!(!error.to_string().contains("unknown-status"));
     }
 
     /// Test database statistics

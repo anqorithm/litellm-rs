@@ -21,9 +21,7 @@ impl BatchProcessor {
         }
 
         // Update in database
-        self.database
-            .update_batch_status(batch_id, &format!("{:?}", status))
-            .await
+        self.database.update_batch_status(batch_id, status).await
     }
 
     /// Update batch progress

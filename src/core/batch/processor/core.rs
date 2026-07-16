@@ -157,7 +157,7 @@ impl BatchProcessor {
 
                 // Update in database
                 self.database
-                    .update_batch_status(batch_id, &format!("{:?}", batch.status))
+                    .update_batch_status(batch_id, batch.status.clone())
                     .await?;
 
                 Ok(batch)
