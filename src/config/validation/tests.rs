@@ -564,31 +564,31 @@ fn test_enterprise_validation_rejects_unwired_advanced_analytics() {
 
 #[test]
 fn test_ssrf_validation_valid_urls() {
-    // Valid public URLs should pass
-    assert!(validate_url_against_ssrf("https://api.openai.com/v1", "test").is_ok());
-    assert!(validate_url_against_ssrf("https://api.anthropic.com", "test").is_ok());
-    assert!(validate_url_against_ssrf("http://example.com:8080/api", "test").is_ok());
+    // Public literals keep these URL-shape checks independent of external DNS.
+    assert!(validate_url_against_ssrf("https://8.8.8.8/v1", "test").is_ok());
+    assert!(validate_url_against_ssrf("https://1.1.1.1", "test").is_ok());
+    assert!(validate_url_against_ssrf("http://8.8.4.4:8080/api", "test").is_ok());
 }
 
 #[test]
 fn test_ssrf_validation_https_urls() {
-    // Use literal public IPs — fictional subdomains may not resolve in all test environments
+    // Use literal public IPs to avoid external DNS dependencies.
     assert!(validate_url_against_ssrf("https://8.8.8.8", "test").is_ok());
-    assert!(validate_url_against_ssrf("https://api.github.com", "test").is_ok());
-    assert!(validate_url_against_ssrf("https://google.com", "test").is_ok());
+    assert!(validate_url_against_ssrf("https://1.0.0.1", "test").is_ok());
+    assert!(validate_url_against_ssrf("https://8.8.4.4", "test").is_ok());
 }
 
 #[test]
 fn test_ssrf_validation_http_urls() {
-    // Use literal public IPs — fictional subdomains may not resolve in all test environments
+    // Use literal public IPs to avoid external DNS dependencies.
     assert!(validate_url_against_ssrf("http://8.8.8.8", "test").is_ok());
-    assert!(validate_url_against_ssrf("http://example.com:9000", "test").is_ok());
+    assert!(validate_url_against_ssrf("http://1.1.1.1:9000", "test").is_ok());
 }
 
 #[test]
 fn test_ssrf_validation_url_with_path() {
     assert!(validate_url_against_ssrf("https://8.8.8.8/v1/chat", "test").is_ok());
-    assert!(validate_url_against_ssrf("https://example.com/api/v2/messages", "test").is_ok());
+    assert!(validate_url_against_ssrf("https://1.0.0.1/api/v2/messages", "test").is_ok());
 }
 
 #[test]
@@ -737,7 +737,7 @@ fn test_ssrf_validation_invalid_url() {
 // ==================== Provider Config SSRF ====================
 
 #[test]
-fn test_provider_config_ssrf_validation() {
+fn test_ssrf_validation_provider_config() {
     let mut config = ProviderConfig {
         name: "test".to_string(),
         provider_type: "openai".to_string(),
@@ -750,7 +750,7 @@ fn test_provider_config_ssrf_validation() {
     assert!(config.validate().is_err());
 
     // Should pass with valid public URL
-    config.base_url = Some("https://api.openai.com/v1".to_string());
+    config.base_url = Some("https://8.8.8.8/v1".to_string());
     assert!(config.validate().is_ok());
 
     // Should fail with private IP
