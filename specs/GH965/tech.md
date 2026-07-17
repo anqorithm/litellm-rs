@@ -440,8 +440,8 @@ D1E 拆成 D1E-a1/D1E-a2/D1E-b/D1E-c 是预算修正，不是范围扩大：原 
 production callers 分散在八个真实文件（canonical coarse helpers 明确 grandfather，不计 removal scope）。
 单一 tranche 需同时改动 taxonomy、序列化出口与 deprecated compatibility surface，500-line 预算下必然挤压测试，
 故按本节"超限先拆 tranche"的规则拆分。2026-07-18 在 merged `origin/main@8d57e42b` 上进行的实现测量进一步证明，
-把逐 variant canonical/HTTP/retry table 与 SDK redaction negative fixture 同时放入原 D1E-a 会先达到 598
-changed lines，且此时 SDK negative fixture 尚未加入；压缩断言或删测试才能回到 500，明确违反 task guard。
+原 D1E-a 的 canonical/HTTP/retry table 与 SDK mapping/redaction implementation 已达到 598 changed lines，
+且此时 SDK negative fixture 尚未加入；压缩断言或删测试才能回到 500，明确违反 task guard。
 因此 D1E-a 再严格串行拆为 a1（typed facts/retry/HTTP）与 a2（redaction/SDK），共享的
 `unified_provider_methods.rs` 只允许前一 tranche 合并后由后一 tranche 接续修改。同理，credential 修复
 独立成 D3C，避免 D3 触及 10 文件上限。D3C 为满足 length-independent match 必须同时拥有 digest helper 与
