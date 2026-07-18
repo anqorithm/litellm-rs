@@ -327,6 +327,9 @@ HTTP presentation 的 coarse compatibility fact，0.6/0.7 不删除，但不得�
 `RateLimitError`，InvalidRequest/Conflict → `InvalidRequest`，NotFound → `ModelNotFound`，Timeout/Network →
 `NetworkError`，Unavailable → deprecated `ProviderError`，Configuration → `ConfigError`，Parsing → `ParseError`，
 NotImplemented → `NotSupported`，Internal → `Internal`。variant selection 不得解析 redacted string。
+D1E-a1 结束时，`src/sdk/errors.rs` 中现有、未修改的 exhaustive SDK category match 仅作为严格串行过渡：
+a1 source guard 只禁止 provider/retry production scope 中新增或第二个 retry-fact classifier，不得扩大该
+SDK match；D1E-a2 必须用 `canonical_code()` mapping 删除该 exhaustive/string classifier，且不得增加 allowlist。
 
 `GatewayError::Provider(ProviderError)` 已存在并保持；跨 Gateway 边界构造
 `GatewayError::Provider(e.redacted())`，只有该既有 wrapper 持有脱敏 typed copy。原始 runtime `ProviderError` 只在
