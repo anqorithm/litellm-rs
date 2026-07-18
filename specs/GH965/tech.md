@@ -46,8 +46,9 @@ GH-965 / #965
 维护者 issue comment `4982855807` 已将 `HD-001` 至 `HD-004` 全部标为 `resolved`：采用显式 per-instance
 runtime + replaceable process default、受限 request context、0.6.0 deprecation → 0.7.0 removal，以及
 `ProviderError` typed source。实现门仍需本 D0 amendment 经独立 review 并合并；`SP965-T002` 不得仅凭 issue
-comment 越过 spec gate。另有 release-policy 子门：0.7.0 removal 由 `SP965-T010` 建立的 durable follow-up
-管理，并把当前 version-bump workflow 的显式修订与 fixture 证据设为 removal 前硬依赖。
+comment 越过 spec gate。另有 release-policy 子门：`SP965-T010` 只建立并链接 durable follow-up；
+0.7.0 typed replacement/removal 由该 follow-up 实施，并把当前 version-bump workflow 的显式修订与 fixture
+证据设为 removal 前硬依赖。
 
 ## 设计方案
 
@@ -274,7 +275,7 @@ D6 因此按如下方式收敛，且不触碰 `HD-003` 的 0.6→0.7 窗口：
 
 ### 5. Canonical error API and exhaustive mapping
 
-D1E-a1/D1E-a2/D1E-b 以 `ProviderError` 为 source，并复用现有 `src/utils/error/canonical.rs` 的 `ErrorCode` / `CanonicalError`
+D1E-a1/D1E-a2a/D1E-a2b/D1E-b 以 `ProviderError` 为 source，并复用现有 `src/utils/error/canonical.rs` 的 `ErrorCode` / `CanonicalError`
 以及 `src/core/providers/unified_provider_http_mapping.rs` 的 `ProviderHttpErrorFacts` /
 `provider_http_error_facts`；不得新增平行的 provider error class 或 HTTP facts 类型。`ErrorCode` 是公开且未标
 `non_exhaustive` 的 enum，0.6.0 **不得新增 `Cancelled` 等 variant**；cancellation 由
@@ -329,7 +330,272 @@ HTTP presentation 的 coarse compatibility fact，0.6/0.7 不删除，但不得�
 NotImplemented → `NotSupported`，Internal → `Internal`。variant selection 不得解析 redacted string。
 D1E-a1 结束时，`src/sdk/errors.rs` 中现有、未修改的 exhaustive SDK category match 仅作为严格串行过渡：
 a1 source guard 只禁止 provider/retry production scope 中新增或第二个 retry-fact classifier，不得扩大该
-SDK match；D1E-a2 必须用 `canonical_code()` mapping 删除该 exhaustive/string classifier，且不得增加 allowlist。
+SDK match；D1E-a2a 必须用 `canonical_code()` mapping 删除该 exhaustive/string classifier。D1E-a2a 的
+writable scope **恰为** `src/core/providers/unified_provider_methods.rs` 与 `src/sdk/errors.rs`，只实现
+保留原 variant/category 的 `redacted()` copy、SDK canonical mapping 及其 negative/category fixtures，
+≤500 changed lines。为让该 tranche 在不引入 lint 例外时独立通过 strict Clippy，D1E-a2a **不得**给 legacy
+`SDKError::ProviderError(String)` 增加真实 `#[deprecated]` 属性，也不得增加任何 `allow/expect(deprecated)`；
+0.6 deprecation metadata 延后到紧随其后的 D1E-a2b。D1E-a2a 的 classifier guard 是以下**确定性验证命令**，
+不是待加入 `src/` 的测试或 production diff：
+
+```bash
+python3 - <<'PY'
+import hashlib
+import json
+import re
+from pathlib import Path
+
+MARKER = "SP965-T010 links 0.7 removal follow-up for SDKError::ProviderError"
+ATTRIBUTE = "#[allow(deprecated)]"
+OUTSIDE_SHA256 = {
+    "T023a": "721c4930700167ebf9e9172f31d5f38f4e65d5dac6811c1cee973c3810ec380b",
+    "T023b": "cc062b0bdc847ee3033fb75b50e7f315e8d61b691ef8e82d0b4f2456a031a053",
+}
+PUNCT = set("{}()[].,:;|=<>?!&+-*/%^#@~$'")
+MULTI = ("::", "=>", "->", "..=", "...", "..", "&&", "||", "==", "!=", "<=", ">=",
+         "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<", ">>")
+def rust_lex(text, keep_comments=False):
+    tokens = []
+    offset = 0
+    while offset < len(text):
+        if text[offset].isspace():
+            offset += 1; continue
+        start = offset
+        if text.startswith("//", offset):
+            offset = text.find("\n", offset)
+            if offset < 0:
+                offset = len(text)
+            if keep_comments:
+                tokens.append(("COMMENT:" + text[start:offset], start, offset))
+            continue
+        if text.startswith("/*", offset):
+            depth = 1; offset += 2
+            while offset < len(text) and depth:
+                if text.startswith("/*", offset):
+                    depth += 1; offset += 2
+                elif text.startswith("*/", offset):
+                    depth -= 1; offset += 2
+                else:
+                    offset += 1
+            assert depth == 0, "unterminated block comment"
+            if keep_comments:
+                tokens.append(("COMMENT:" + text[start:offset], start, offset))
+            continue
+        raw = re.match(r'(?:br|cr|r)(?P<h>#{0,255})"', text[offset:])
+        if raw:
+            closing = '"' + raw.group("h")
+            offset += raw.end()
+            end = text.find(closing, offset)
+            assert end >= 0, "unterminated raw string"
+            offset = end + len(closing)
+            tokens.append(((text[start:offset] if keep_comments else "LITERAL"), start, offset)); continue
+        prefix = 1 if text.startswith(('b"', 'c"'), offset) else 0
+        if text[offset + prefix:offset + prefix + 1] == '"':
+            offset += prefix + 1
+            while offset < len(text):
+                if text[offset] == "\\":
+                    offset += 2
+                elif text[offset] == '"':
+                    offset += 1
+                    break
+                else:
+                    offset += 1
+            assert offset <= len(text) and text[offset - 1] == '"', "unterminated string"
+            tokens.append(((text[start:offset] if keep_comments else "LITERAL"), start, offset)); continue
+        if text[offset] == "'" and offset + 2 < len(text) and (
+            text[offset + 1] == "\\" or text[offset + 2] == "'"
+        ):
+            offset += 1
+            offset += 2 if text[offset] == "\\" else 1
+            assert offset < len(text) and text[offset] == "'", "unterminated char"
+            offset += 1
+            tokens.append(((text[start:offset] if keep_comments else "LITERAL"), start, offset)); continue
+        match = re.match(r"[A-Za-z_][A-Za-z0-9_]*", text[offset:])
+        if not match:
+            match = re.match(r"[0-9][A-Za-z0-9_.]*", text[offset:])
+        if match:
+            offset += match.end(); tokens.append((text[start:offset], start, offset)); continue
+        operator = next((item for item in MULTI if text.startswith(item, offset)), None)
+        if operator:
+            offset += len(operator); tokens.append((operator, start, offset)); continue
+        assert text[offset] in PUNCT, f"unrecognized Rust syntax at {offset}: {text[offset:offset + 20]!r}"
+        offset += 1; tokens.append((text[start:offset], start, offset))
+    return tokens
+def values(text, keep_comments=False):
+    return [value for value, _, _ in rust_lex(text, keep_comments)]
+def subsequences(haystack, needle):
+    return [index for index in range(len(haystack) - len(needle) + 1)
+            if haystack[index:index + len(needle)] == needle]
+def matching_brace(tokens, open_index):
+    assert tokens[open_index][0] == "{"
+    depth = 0
+    for index in range(open_index, len(tokens)):
+        value = tokens[index][0]
+        if value == "{": depth += 1
+        elif value == "}":
+            depth -= 1
+            if depth == 0: return index
+    raise AssertionError("unclosed Rust block")
+def conversion_span(production):
+    tokens = rust_lex(production)
+    token_values = [value for value, _, _ in tokens]
+    header = values("impl From<crate::core::providers::ProviderError> for SDKError {")
+    starts = subsequences(token_values, header)
+    assert len(starts) == 1, "expected exactly one ProviderError-to-SDKError conversion"
+    start = starts[0]; close = matching_brace(tokens, start + len(header) - 1)
+    return tokens[start][1], tokens[close][2]
+def normalize_conversion(block):
+    marker_line = "// " + MARKER
+    counts = block.count(marker_line), block.count(ATTRIBUTE)
+    if counts == (0, 0):
+        return block, "T023a"
+    assert counts == (1, 1), "T023b decoration count mismatch"
+    decoration = re.compile(
+        r"(?m)^(?P<indent>[ \t]*)" + re.escape(marker_line) + r"\r?\n"
+        r"(?P=indent)" + re.escape(ATTRIBUTE) + r"\r?\n"
+        r"(?P=indent)ErrorCode::Unavailable => SDKError::ProviderError\(message\),$"
+    )
+    matches = list(decoration.finditer(block))
+    assert len(matches) == 1, "T023b decoration is not on the exact Unavailable arm"
+    match = matches[0]
+    plain_arm = match.group("indent") + "ErrorCode::Unavailable => SDKError::ProviderError(message),"
+    return block[:match.start()] + plain_arm + block[match.end():], "T023b"
+EXPECTED = """
+impl From<crate::core::providers::ProviderError> for SDKError {
+    fn from(error: crate::core::providers::ProviderError) -> Self {
+        let redacted = error.redacted();
+        let code = redacted.canonical_code();
+        let message = redacted.to_string();
+        match code {
+            ErrorCode::Authentication | ErrorCode::Authorization => SDKError::AuthError(message),
+            ErrorCode::RateLimited | ErrorCode::QuotaExceeded => SDKError::RateLimitError(message),
+            ErrorCode::InvalidRequest | ErrorCode::Conflict => SDKError::InvalidRequest(message),
+            ErrorCode::NotFound => SDKError::ModelNotFound(message),
+            ErrorCode::Timeout | ErrorCode::Network => SDKError::NetworkError(message),
+            ErrorCode::Unavailable => SDKError::ProviderError(message),
+            ErrorCode::Configuration => SDKError::ConfigError(message),
+            ErrorCode::Parsing => SDKError::ParseError(message),
+            ErrorCode::NotImplemented => SDKError::NotSupported(message),
+            ErrorCode::Internal => SDKError::Internal(message),
+        }
+    }
+}
+"""
+def production_before_tests(source):
+    tokens = rust_lex(source)
+    token_values = [value for value, _, _ in tokens]
+    boundary = values("#[cfg(test)] mod tests {")
+    depth = 0
+    starts = []
+    for index, value in enumerate(token_values):
+        if depth == 0 and token_values[index:index + len(boundary)] == boundary:
+            starts.append(index)
+        if value == "{": depth += 1
+        elif value == "}":
+            depth -= 1
+            assert depth >= 0, "unbalanced Rust braces"
+    assert depth == 0, "unbalanced Rust braces"
+    assert len(starts) == 1, "expected one top-level #[cfg(test)] mod tests item"
+    start = starts[0]
+    close = matching_brace(tokens, start + len(boundary) - 1)
+    assert not source[tokens[close][2]:].strip(), (
+        "test module must be the final item; trailing comment/item forbidden"
+    )
+    return source[:tokens[start][1]]
+def verify_source(source):
+    production = production_before_tests(source)
+    start, end = conversion_span(production)
+    normalized, phase = normalize_conversion(production[start:end])
+    assert values(normalized, True) == values(EXPECTED, True), "conversion token shape changed"
+    outside = production[:start] + production[end:]
+    payload = json.dumps(values(outside, True), ensure_ascii=True, separators=(",", ":")).encode()
+    fingerprint = hashlib.sha256(payload).hexdigest()
+    assert fingerprint == OUTSIDE_SHA256[phase], (
+        f"outside-production fingerprint changed for {phase}: {fingerprint}"
+    )
+    return phase
+phase = verify_source(Path("src/sdk/errors.rs").read_text(encoding="utf-8"))
+print(f"ProviderError classifier guard passed: phase={phase}")
+PY
+```
+
+该命令不是 whitespace/text-count heuristic。它先 fail closed 词法化并定位完整 conversion：T023a 只接受无
+decoration 的批准 token shape；T023b 只接受在 `ErrorCode::Unavailable` arm 紧邻、依次出现且各恰为一次的固定
+marker 与 `#[allow(deprecated)]`，精确剥离这两行后再要求**整个 token 序列逐项相等**。任何额外、错位或错误
+attribute/comment，以及换行形式的 `match\n redacted.to_string()`、第二个 `match`/`if`、字符串 helper、
+`ProviderError::Variant` arm、额外 assignment/call 或 variant classifier 都失败；纯格式换行/缩进仍可通过。
+
+同一命令还由该 fail-closed lexer 定位唯一顶层 `#[cfg(test)] mod tests` item 的 opening brace 与 matching
+close，要求 closing brace 后只有 whitespace（尾随 comment/item 均失败），并只把该 item 前缀视为 production；
+conversion 外的完整 comment/literal-preserving token stream 经无歧义 JSON 编码后必须命中 phase-specific 固定 SHA-256。
+T023a digest 由 immutable `origin/main@2ff9bb2066adfb04d67b2e692ae9fbd9968fa9b5` 的
+`src/sdk/errors.rs` 去掉 conversion/tests 后、只加入编译所需精确
+`use crate::utils::error::ErrorCode;` 生成，禁止 outside decoration。T023b synthetic baseline 只再加入
+legacy variant 的 exact `#[deprecated(since = "0.6.0", note = "use the existing typed SDK categories returned by ProviderError conversion")]`
+以及 Gateway Unavailable arm、`SDKError::is_retryable` 紧邻的固定 marker +局部 allow；tests/completions 的
+其余 6 个 marker/allow（5 tests + 1 completions）继续由后文 9-site all-target guard 精确锁定。固定值只在 spec authoring 时以上述
+immutable baseline 和同一 lexer/JSON 算法生成；运行命令不调用 `git show`，不依赖 mutable/shallow Git 状态。
+因此任何 cfg/inline/custom attribute、body/helper/const/static/macro、comment/literal 或其他 production 变化
+都会改变 digest 并失败。该命令不增加 production/test changed line；若 D1E-a2a 超过 500 changed lines，必须
+在不删除/压缩安全 fixture 的前提下减少实现 diff，不得把验证命令伪装成 source 文件或放宽预算。
+
+2026-07-18 在原 D1E-a2 实现 worktree 上重新验证发现：给 legacy
+`SDKError::ProviderError(String)` 加真实 `#[deprecated(since = "0.6.0", ...)]` 后，strict Clippy 会把同一
+0.6 compatibility surface 的既有 construction/match 升级为 `-D deprecated` 错误。除
+`src/sdk/errors.rs` 内部的兼容映射、match 与测试外，`src/sdk/client/completions.rs` 的
+`LLMClient::execute_chat_request` 还在 unsupported provider-type fallback 中构造该 variant；它不在原两文件
+scope 内，因此把 redaction/mapping、true deprecation、全仓 guard 与兼容 allow 挤进同一个 ≤500-line tranche
+不可满足。
+
+D1E-a2b 因此成为独立、严格串行的 deprecation-only tranche：只可从已合并 D1E-a2a 的
+`origin/main` 开始，writable scope **恰为** `src/sdk/errors.rs` 与
+`src/sdk/client/completions.rs`，保持 ≤500 changed lines。它只给 legacy variant 增加真实
+`#[deprecated(since = "0.6.0", ...)]`、下列局部兼容 lint 标记和 source guard；`completions.rs` 只允许在
+现有 fallback arm 上增加局部 lint 属性与 `SP965-T010` 所链接 0.7 follow-up 的 removal marker。不得改 control flow、错误文本、
+provider selection、canonical mapping、redaction 或 sender 行为。0.6 legacy variant 的公开签名、
+`Display`、retryability 与所有既有构造/匹配行为保持不变。
+
+仅下列 legacy compatibility 站点可使用**紧邻目标表达式或单个函数/测试函数**的
+`#[allow(deprecated)]`，且每个属性必须带固定注释
+`SP965-T010 links 0.7 removal follow-up for SDKError::ProviderError`：
+
+1. `src/sdk/errors.rs` 的 `From<GatewayError>` 中 `GatewayError::Unavailable` construction arm；
+2. `src/sdk/errors.rs` 的 `From<ProviderError>` 中 `ErrorCode::Unavailable` construction arm；
+3. `src/sdk/errors.rs` 的 `SDKError::is_retryable` legacy match；
+4. `src/sdk/client/completions.rs` 的 `LLMClient::execute_chat_request` 既有 unsupported provider-type
+   fallback arm；
+5. `src/sdk/errors.rs` 测试中的单个 `sdk_variant` category helper，以及
+   `test_sdk_error_provider_error`、`test_is_retryable_provider_error`、
+   `test_from_gateway_error_provider_unavailable`、`test_sdk_error_empty_message` 四个既有兼容测试。
+
+上述清单恰为 9 个局部 allow 站点（`src/sdk/errors.rs` 8 个、
+`src/sdk/client/completions.rs` 1 个），不得按文件或 module 合并计数。
+禁止 module/crate-wide `allow(deprecated)`、`expect(deprecated)`、command-line lint 降级、未列名的新
+`SDKError::ProviderError` callsite，或把多个非兼容路径包进同一个 allow。D1E-a2b 必须在
+`src/sdk/errors.rs` 的 test scope 增加
+`legacy_provider_error_deprecation_allowlist_does_not_grow` source guard。guard 必须从以下来源取并集、
+canonicalize、去重、排序且读取失败时 fail closed，覆盖**每一个 Rust target/source**：
+
+- `git ls-files '*.rs'` 与 filesystem discovery 下 `src/**/*.rs`、`tests/**/*.rs`、`examples/**/*.rs`、
+  `benches/**/*.rs` 以及 workspace/package root 的 `build.rs`；
+- `cargo metadata --no-deps --format-version 1` 返回的每个 package target `src_path`，以及每个 package root
+  的上述 Rust 目录/`build.rs`；metadata 声明在常规目录之外的 target 也必须扫描。
+
+guard 对该全集中的 legacy variant qualified reference、显式 variant import/alias 与 wildcard variant import
+做 exact allowlist，只接受上列 9 个 path + enclosing function/arm/test 站点；任何新增 production/test/example/
+bench/build-script/Cargo-target callsite、改名绕过或数量增长都 fail closed。仓库已存在、与本 legacy variant
+无关的 broad `allow/expect(deprecated)` 可仅按 path + anchor +既有计数基线保留，但新增/移动/扩大的 broad
+attribute 必须失败；即使某文件命中该 unrelated baseline，只要新增 `SDKError::ProviderError` reference/import/
+alias/wildcard，仍必须失败，除非它就是上述 9 个带 T010 durable-handoff marker 的局部站点。T023b 自身禁止新增 crate/module-wide
+allow/expect，所有 9 个站点仍须逐一验证紧邻的 T010-linked follow-up marker 与局部 allow。
+
+guard 还必须扫描相关 lint/config/command surfaces：workspace/package `Cargo.toml`、`.cargo/config*`、
+`.github/workflows/**`、`Makefile*`、`justfile*`、`scripts/**`、`checks/**`、`xtask/**`、`clippy.toml`、
+`rust-toolchain*` 及 Cargo metadata 暴露的 manifest/target config 路径，拒绝 `-A deprecated`、
+`--allow deprecated` 或等价 `RUSTFLAGS`/command-line lint 降级。strict verification 必须使用原样
+`cargo clippy --all-targets --all-features --locked -- -D warnings`；guard 自身不得成为 allowlisted
+deprecated use。`SP965-T010` 只负责创建并链接 durable handoff；所有这些例外与 markers 由该 0.7 follow-up
+在 typed replacement/removal 落地时一并删除，不形成长期 lint policy。
 
 `GatewayError::Provider(ProviderError)` 已存在并保持；跨 Gateway 边界构造
 `GatewayError::Provider(e.redacted())`，只有该既有 wrapper 持有脱敏 typed copy。原始 runtime `ProviderError` 只在
@@ -411,7 +677,8 @@ map/config scan/local routing counters/client construction。
 | D0 decision amendment | `specs/GH965/{product,tech,tasks}.md` | docs-only；`Refs #965`；不实现。 |
 | D1 runtime contract | `src/core/router/mod.rs`, `unified.rs`, `gateway_config.rs`, `deployment.rs`, `selection.rs`, `execute_impl.rs`, `execution.rs`, `error.rs`, `src/core/router/tests/router_tests.rs` | 9 files / ≤500；`Refs #965`。 |
 | D1E-a1 canonical taxonomy + retry convergence | `src/core/providers/unified_provider_http_mapping.rs`, `src/core/providers/unified_provider_methods.rs`, `src/core/providers/failure.rs`, `src/core/providers/mod.rs`, `src/utils/error/canonical.rs`, `src/core/router/retry_policy.rs` | 6 files / ≤500；删除 `ProviderFailureKind` 及 re-export，在唯一 exhaustive match 中保留 typed retry facts，并锁定 canonical/HTTP/retry table；`Refs #965`。 |
-| D1E-a2 provider redaction + SDK mapping | `src/core/providers/unified_provider_methods.rs`, `src/sdk/errors.rs` | 2 files / ≤500；增加保留原 variant 的 `redacted()` copy，0.6 SDK 只按 canonical code 映射到既有 variant，并 deprecated legacy string variant；`Refs #965`。 |
+| D1E-a2a provider redaction + SDK mapping | `src/core/providers/unified_provider_methods.rs`, `src/sdk/errors.rs` | 2 files / ≤500；增加保留原 variant 的 `redacted()` copy，0.6 SDK 只按 canonical code 映射到既有 variant；不得给 legacy string variant 加真实 deprecation 属性或 lint allow；`Refs #965`。 |
+| D1E-a2b legacy SDK error deprecation | `src/sdk/errors.rs`, `src/sdk/client/completions.rs` | 2 files / ≤500；依赖 D1E-a2a merged；只增加 true deprecation、9 个局部 allow + T010-linked 0.7 follow-up marker 及扫描所有 Rust target/source 和 lint command/config surfaces 的 exact-allowlist source guard；无运行行为改动；`Refs #965`。 |
 | D1E-b response emitters + redaction | `src/utils/error/gateway_error/response.rs`, `src/utils/error/gateway_error/conversions.rs`, `src/server/routes/ai/openai_errors.rs`, `src/utils/error/gateway_error/response_tests.rs` | 4 files / ≤500；Gateway wrapper 与真实响应出口都只携带 `redacted()` copy；`Refs #965`。 |
 | D1E-c legacy retry helper deprecation | `src/core/providers/contextual_error.rs`, `src/core/providers/unified_provider_methods.rs`, `src/core/types/errors/traits.rs`, `src/core/router/execution.rs`, `src/utils/error/utils/retry.rs`, `src/sdk/errors.rs`, `src/server/routes/ai/batches.rs`, `src/server/routes/ai/fine_tuning.rs` | 8 files / ≤500；六个 provider-specific helper 保留 0.6 行为、deprecated、production 零消费；canonical coarse helpers 明确 grandfather；`Refs #965`。 |
 | D2 completion facade | `src/core/completion/mod.rs`, `router_trait.rs`, `types.rs`, `conversion.rs`, `default_router/mod.rs`, `default_router/router_impl.rs`, `src/core/completion/tests.rs`, `tests/e2e/chat_completion.rs` | 8 files / ≤500；只迁移 binding + unary；`Refs #965`。 |
@@ -436,7 +703,7 @@ map/config scan/local routing counters/client construction。
 D2/D3、D4/D5、D2/D6 虽有同路径（`types.rs`、`router_trait.rs`、
 `default_router/mod.rs`），但为严格串行且各自从前一 merged SHA 开始，不并行写同一文件。
 
-D1E 拆成 D1E-a1/D1E-a2/D1E-b/D1E-c 是预算修正，不是范围扩大：原 D1E 列的 `utils/retry.rs` **不存在**
+D1E 拆成 D1E-a1/D1E-a2a/D1E-a2b/D1E-b/D1E-c 是预算修正，不是范围扩大：原 D1E 列的 `utils/retry.rs` **不存在**
 （repo 中无该文件），而真正的 retry/响应出口是 `src/core/router/retry_policy.rs`、
 `src/core/providers/failure.rs`、`src/utils/error/gateway_error/response.rs`、
 `src/server/routes/ai/openai_errors.rs`，且六个 provider-specific context-free compatibility helpers 及其两个
@@ -445,8 +712,15 @@ production callers 分散在八个真实文件（canonical coarse helpers 明确
 故按本节"超限先拆 tranche"的规则拆分。2026-07-18 在 merged `origin/main@8d57e42b` 上进行的实现测量进一步证明，
 原 D1E-a 的 canonical/HTTP/retry table 与 SDK mapping/redaction implementation 已达到 598 changed lines，
 且此时 SDK negative fixture 尚未加入；压缩断言或删测试才能回到 500，明确违反 task guard。
-因此 D1E-a 再严格串行拆为 a1（typed facts/retry/HTTP）与 a2（redaction/SDK），共享的
-`unified_provider_methods.rs` 只允许前一 tranche 合并后由后一 tranche 接续修改。同理，credential 修复
+因此 D1E-a 先严格串行拆为 a1（typed facts/retry/HTTP）与 a2a（redaction/SDK canonical mapping），共享的
+`unified_provider_methods.rs` 只允许前一 tranche 合并后由后一 tranche 接续修改。2026-07-18 对实现 draft 的
+fresh measurement 是 **491 changed lines = 439 additions + 52 deletions**；439 additions 已包含 legacy
+`#[deprecated]` attribute 的 4 行。D1E-a2a 精确移除这 4 行后为
+**487 changed lines = 435 additions + 52 deletions**。上文 deterministic classifier command 当时尚未存在于
+draft，按 contract 只在 verification 中执行且占 0 production/test diff line。若实现偏离该测量或新增行使
+a2a 超过 500，必须先减少实现且不得删除/压缩安全 fixture；不能把 guard 预算记为 0 后继续超限。
+true deprecation、`completions.rs` 兼容 lint 与全 Rust-target source guard 独立进入 a2b；独立 P1 review
+因此要求该 tranche 严格依赖 a2a merged，且不再写 `unified_provider_methods.rs`。同理，credential 修复
 独立成 D3C，避免 D3 触及 10 文件上限。D3C 为满足 length-independent match 必须同时拥有 digest helper 与
 canonical deployment/snapshot metadata publication；只改 `hmac.rs`/tests 会在 request candidate loop 内重复
 hash 变长 stored secret，不能满足本 contract。
@@ -460,13 +734,13 @@ hash 变长 stored secret，不能满足本 contract。
 | B-003 | D2-D7 adapter cleanup | `cargo test --all-features --locked --test lib integration::router_runtime_conformance::single_sender`；production source guard。 |
 | B-004 | D1/D2/D4 config normalization | `cargo test --all-features --locked --test lib integration::router_runtime_conformance::invalid_and_empty_config`。 |
 | B-005 | canonical alias/surface selection | `cargo test --all-features --locked support_matrix` 加 conformance `alias_and_unsupported` fixture。 |
-| B-006 | D1E-a1 删除 `ProviderFailureKind` 并保留 typed facts；D1E-a2 收敛 provider redaction/SDK existing-category mapping；D1E-b 收敛 Gateway wrapper/响应出口；D1E-c 隔离旧 bool helpers | conformance `error_class_mapping` table覆盖全部 `ProviderError` variants，并检查 0.6 existing SDK category/Gateway typed wrapper、secret redaction/retryability/cancellation；`RetryPolicy::decide` 按 `RetryContext` 逐 variant 断言 pre/post-output。 |
+| B-006 | D1E-a1 删除 `ProviderFailureKind` 并保留 typed facts；D1E-a2a 收敛 provider redaction/SDK existing-category mapping；D1E-a2b 增加 legacy SDK error deprecation 与兼容 guard；D1E-b 收敛 Gateway wrapper/响应出口；D1E-c 隔离旧 bool helpers | conformance `error_class_mapping` table覆盖全部 `ProviderError` variants，并检查 0.6 existing SDK category/Gateway typed wrapper、secret redaction/retryability/cancellation；`RetryPolicy::decide` 按 `RetryContext` 逐 variant 断言 pre/post-output；tech §5 deterministic command 证明 a2a canonical-code-only conversion；`legacy_provider_error_deprecation_allowlist_does_not_grow` 扫描所有 Rust target/source，锁定 D1E-a2b 的局部兼容站点并拒绝 lint downgrade 或 allow/callsite 增长。 |
 | B-007 | deployment lease/state + SDK stats view | conformance `exactly_once_state` fixture比较 attempt trace 与 counter delta。 |
 | B-008 | runtime retry/fallback | conformance `retry_and_fallback` fixture证明 adapter request count 与 runtime attempts 相等。 |
 | B-009 | immutable generation replacement | conformance `snapshot_replacement` 并发双 listener/key fixture。 |
 | B-010 | runtime streaming lease | conformance `stream_failure_cancel_and_success` fixture；`cargo test --all-features --locked streaming`。 |
 | B-011 | D2-D6 facades/deprecations | compile fixtures + `cargo test --all-features --locked --doc`；release-note/API diff 人工复核。 |
-| B-012 | D7i evidence architecture | 全部 `router_runtime_conformance` tests + source guard red/green fixture；guard 扫描所有 production AI routes，`config.gateway.providers` selection scan、`RouteHttpClient`、`OpenAIFineTuningProvider` 与 adapter-owned sender 零命中；仅 matrix tests 不计完成。 |
+| B-012 | D1E-a2a SDK mapping classifier command、D1E-a2b all-target deprecation allowlist guard；D7i final evidence architecture | D1E-a2a 的 tech §5 command 拒绝 SDK exhaustive/string classifier且不占 implementation diff；D1E-a2b 对 `src`、`tests`、`examples`、`benches`、`build.rs` 与 Cargo metadata target `src_path` 的 legacy reference/import/alias/wildcard exact-allowlist fail closed；最终全部 `router_runtime_conformance` tests + source guard red/green fixture 扫描所有 production AI routes，`config.gateway.providers` selection scan、`RouteHttpClient`、`OpenAIFineTuningProvider` 与 adapter-owned sender 零命中；仅 matrix tests 不计完成。 |
 
 ## 数据流
 
@@ -513,7 +787,7 @@ completion 外观，不持久化第二份 routing state，也不执行额外外�
 
 ## 回滚方案
 
-按 D7i → D7h → D7g → D7f → D7e → D7d → D7c → D7b → D7a → D6 → D5 → D4 → D3 → D3C → D2 → D1E-c → D1E-b → D1E-a2 → D1E-a1 → D1 逆序整体 revert 已合并 tranche；每个中间点必须仍有一个明确可用
+按 D7i → D7h → D7g → D7f → D7e → D7d → D7c → D7b → D7a → D6 → D5 → D4 → D3 → D3C → D2 → D1E-c → D1E-b → D1E-a2b → D1E-a2a → D1E-a1 → D1 逆序整体 revert 已合并 tranche；每个中间点必须仍有一个明确可用
 的 canonical runtime，不得只恢复 adapter fallback。若 closure audit 已关闭 #965，回滚后重新打开 issue 并在
 release note 标明被恢复的 `HD-003` compatibility surface。无持久化迁移；runtime generation replacement
 通过进程重启/重新构造恢复。若安全回归涉及 sender/override，首先回滚对应 D3/D5，同时保持 #968 policy。
