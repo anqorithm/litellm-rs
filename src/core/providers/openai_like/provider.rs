@@ -567,7 +567,18 @@ impl OpenAILikeProvider {
 
     /// Get model information
     pub fn get_model_info(&self, model_id: &str) -> ModelInfo {
-        self.model_registry.get_model_info(model_id)
+        if self.provider_name == "amazon_nova"
+            && let Some(info) =
+                crate::core::providers::registry::catalog::amazon_nova_catalog_model_info(model_id)
+        {
+            return info;
+        }
+        let mut info = self.model_registry.get_model_info(model_id);
+        if self.provider_name == "amazon_nova" && super::models::is_xai_priced_model(model_id) {
+            info.input_cost_per_1k_tokens = None;
+            info.output_cost_per_1k_tokens = None;
+        }
+        info
     }
 
     /// Get the provider configuration
@@ -652,9 +663,10 @@ impl LLMProvider for OpenAILikeProvider {
     }
 
     fn models(&self) -> &[ModelInfo] {
-        // Return empty slice - any model is supported dynamically
-        static MODELS: &[ModelInfo] = &[];
-        MODELS
+        if self.provider_name == "amazon_nova" {
+            return crate::core::providers::registry::catalog::amazon_nova_catalog_model_infos();
+        }
+        &[]
     }
 
     fn supports_model(&self, _model: &str) -> bool {

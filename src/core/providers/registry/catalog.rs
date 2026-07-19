@@ -8,6 +8,134 @@ use std::sync::LazyLock;
 
 use super::definition::{AuthType, ProviderDefinition};
 use crate::core::providers::openai_like::provider::OPENAI_LIKE_CATALOG_CAPABILITIES;
+use crate::core::types::model::{ModelInfo, ProviderCapability};
+pub(crate) const AMAZON_NOVA_CATALOG_CAPABILITIES: &[ProviderCapability] = &[
+    ProviderCapability::ChatCompletion,
+    ProviderCapability::ChatCompletionStream,
+    ProviderCapability::ToolCalling,
+];
+pub(crate) const AMAZON_NOVA_SUPPORTS_STREAMING: bool = true;
+pub(crate) const AMAZON_NOVA_SUPPORTS_TOOLS: bool = true;
+pub(crate) struct AmazonNovaCatalogModel {
+    pub(crate) model_id: &'static str,
+    pub(crate) display_name: &'static str,
+    pub(crate) description: &'static str,
+    pub(crate) max_context_length: u32,
+    pub(crate) max_output_length: u32,
+    pub(crate) supports_multimodal: bool,
+    pub(crate) supports_reasoning: bool,
+    pub(crate) input_cost_per_million: f64,
+    pub(crate) output_cost_per_million: f64,
+}
+pub(crate) static AMAZON_NOVA_CATALOG_MODELS: &[AmazonNovaCatalogModel] = &[
+    AmazonNovaCatalogModel {
+        model_id: "amazon.nova-2-lite-v1:0",
+        display_name: "Amazon Nova 2 Lite",
+        description: "Cost-efficient multimodal model for automation, documents, and support",
+        max_context_length: 1_000_000,
+        max_output_length: 64_000,
+        supports_multimodal: true,
+        supports_reasoning: true,
+        input_cost_per_million: 0.3,
+        output_cost_per_million: 2.5,
+    },
+    AmazonNovaCatalogModel {
+        model_id: "amazon.nova-pro-v1:0",
+        display_name: "Amazon Nova Pro",
+        description: "High-capability multimodal model for complex tasks",
+        max_context_length: 300_000,
+        max_output_length: 5_000,
+        supports_multimodal: true,
+        supports_reasoning: true,
+        input_cost_per_million: 0.8,
+        output_cost_per_million: 3.2,
+    },
+    AmazonNovaCatalogModel {
+        model_id: "amazon.nova-lite-v1:0",
+        display_name: "Amazon Nova Lite",
+        description: "Cost-effective multimodal model for everyday tasks",
+        max_context_length: 300_000,
+        max_output_length: 5_000,
+        supports_multimodal: true,
+        supports_reasoning: false,
+        input_cost_per_million: 0.06,
+        output_cost_per_million: 0.24,
+    },
+    AmazonNovaCatalogModel {
+        model_id: "amazon.nova-micro-v1:0",
+        display_name: "Amazon Nova Micro",
+        description: "Fast text-only model optimized for speed",
+        max_context_length: 128_000,
+        max_output_length: 5_000,
+        supports_multimodal: false,
+        supports_reasoning: false,
+        input_cost_per_million: 0.035,
+        output_cost_per_million: 0.14,
+    },
+    AmazonNovaCatalogModel {
+        model_id: "amazon.nova-premier-v1:0",
+        display_name: "Amazon Nova Premier",
+        description: "Most capable model for complex reasoning and multimodal tasks",
+        max_context_length: 1_000_000,
+        max_output_length: 10_000,
+        supports_multimodal: true,
+        supports_reasoning: true,
+        input_cost_per_million: 2.5,
+        output_cost_per_million: 12.5,
+    },
+];
+pub(crate) const AMAZON_NOVA_MODEL_ALIASES: &[(&str, &str)] = &[
+    ("nova-2-lite", "amazon.nova-2-lite-v1:0"),
+    ("nova-pro", "amazon.nova-pro-v1:0"),
+    ("nova-lite", "amazon.nova-lite-v1:0"),
+    ("nova-micro", "amazon.nova-micro-v1:0"),
+    ("nova-premier", "amazon.nova-premier-v1:0"),
+];
+static AMAZON_NOVA_MODEL_INFOS: LazyLock<Vec<ModelInfo>> = LazyLock::new(|| {
+    AMAZON_NOVA_CATALOG_MODELS
+        .iter()
+        .map(amazon_nova_model_info_from_entry)
+        .collect()
+});
+pub(crate) fn amazon_nova_catalog_model(model: &str) -> Option<&'static AmazonNovaCatalogModel> {
+    let canonical = AMAZON_NOVA_MODEL_ALIASES
+        .iter()
+        .find(|(alias, _)| *alias == model)
+        .map_or(model, |(_, canonical)| *canonical);
+    AMAZON_NOVA_CATALOG_MODELS
+        .iter()
+        .find(|entry| entry.model_id == canonical)
+}
+pub(crate) fn amazon_nova_catalog_model_infos() -> &'static [ModelInfo] {
+    &AMAZON_NOVA_MODEL_INFOS
+}
+pub(crate) fn amazon_nova_catalog_model_info(model: &str) -> Option<ModelInfo> {
+    amazon_nova_catalog_model(model).map(amazon_nova_model_info_from_entry)
+}
+fn amazon_nova_model_info_from_entry(entry: &AmazonNovaCatalogModel) -> ModelInfo {
+    ModelInfo {
+        id: entry.model_id.to_string(),
+        name: entry.display_name.to_string(),
+        provider: "amazon_nova".to_string(),
+        max_context_length: entry.max_context_length,
+        max_output_length: Some(entry.max_output_length),
+        supports_streaming: AMAZON_NOVA_SUPPORTS_STREAMING,
+        supports_tools: AMAZON_NOVA_SUPPORTS_TOOLS,
+        supports_multimodal: entry.supports_multimodal,
+        input_cost_per_1k_tokens: Some(entry.input_cost_per_million / 1_000.0),
+        output_cost_per_1k_tokens: Some(entry.output_cost_per_million / 1_000.0),
+        currency: "USD".to_string(),
+        capabilities: vec![
+            ProviderCapability::ChatCompletion,
+            ProviderCapability::ChatCompletionStream,
+        ],
+        metadata: HashMap::from([
+            ("description".into(), entry.description.into()),
+            ("supports_reasoning".into(), entry.supports_reasoning.into()),
+        ]),
+        ..Default::default()
+    }
+}
 
 /// Global provider catalog, keyed by provider name.
 pub static PROVIDER_CATALOG: LazyLock<HashMap<&'static str, ProviderDefinition>> =
@@ -199,12 +327,15 @@ fn build_catalog() -> HashMap<&'static str, ProviderDefinition> {
             "META_LLAMA_API_KEY",
         ),
         def_chat("v0", "Vercel v0", "https://api.v0.dev/v1", "V0_API_KEY"),
-        def_chat(
-            "amazon_nova",
-            "Amazon Nova",
-            "https://api.nova.amazon.com/v1",
-            "AMAZON_NOVA_API_KEY",
-        ),
+        ProviderDefinition {
+            capabilities: AMAZON_NOVA_CATALOG_CAPABILITIES,
+            ..def_chat(
+                "amazon_nova",
+                "Amazon Nova",
+                "https://api.nova.amazon.com/v1",
+                "AMAZON_NOVA_API_KEY",
+            )
+        },
         def_chat(
             "github",
             "GitHub Models",
@@ -458,6 +589,31 @@ mod tests {
         }
     }
 
+    #[tokio::test]
+    async fn amazon_nova_catalog_runtime_exposes_models_and_pricing() {
+        use crate::core::providers::openai_like::{OpenAILikeConfig, OpenAILikeProvider};
+        use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
+        let provider = OpenAILikeProvider::new_for_catalog(
+            OpenAILikeConfig::with_api_key("https://8.8.8.8/v1", "catalog-runtime-test-key")
+                .with_provider_name("amazon_nova"),
+            AMAZON_NOVA_CATALOG_CAPABILITIES,
+        )
+        .await
+        .expect("catalog provider must construct");
+        assert_eq!(provider.models().len(), 5);
+        for model in ["amazon.nova-pro-v1:0", "nova-pro"] {
+            let cost = provider
+                .calculate_cost(model, 1_000, 1_000)
+                .await
+                .expect("pricing");
+            assert!((cost - 0.004).abs() < f64::EPSILON);
+        }
+        let unknown = provider
+            .calculate_cost("grok-4.3", 1_000, 1_000)
+            .await
+            .unwrap();
+        assert_eq!(unknown, 0.0);
+    }
     #[test]
     fn test_xai_openai_compatible_pass_through_definition() {
         let Some(definition) = get_definition("xai") else {

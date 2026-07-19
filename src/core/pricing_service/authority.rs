@@ -196,6 +196,9 @@ fn resolve_model_info_for_provider(
     model: &str,
 ) -> Option<(String, LiteLLMModelInfo)> {
     let normalized_provider = crate::core::pricing::normalize_pricing_provider(provider);
+    if normalized_provider == "amazon_nova" {
+        return amazon_nova_pricing_model_info(model);
+    }
     if normalized_provider == "openai_like"
         && let Some((prefixed_provider, stripped_model)) = provider_prefixed_model(model)
     {
@@ -265,44 +268,18 @@ fn provider_catalog_model_info(
                     core_pricing_to_litellm_model_info("bedrock", pricing),
                 )
             }),
-        "amazon_nova" => amazon_nova_pricing_model_info(model),
         "xai" => xai_pricing_model_info(model),
         _ => None,
     }
 }
 
-#[cfg(feature = "providers-extended")]
 fn amazon_nova_pricing_model_info(model: &str) -> Option<(String, LiteLLMModelInfo)> {
-    let registry = crate::core::providers::amazon_nova::AmazonNovaModelRegistry::new();
-    let model = registry.get(model)?;
-    let resolved_model = model.id.clone();
-
+    let info = crate::core::providers::registry::catalog::amazon_nova_catalog_model_info(model)?;
+    let resolved_model = info.id.clone();
     Some((
         resolved_model,
-        LiteLLMModelInfo {
-            max_tokens: Some(model.context_length),
-            max_input_tokens: Some(model.context_length),
-            max_output_tokens: Some(model.max_output_tokens),
-            input_cost_per_token: Some(model.input_cost_per_1k / 1000.0),
-            output_cost_per_token: Some(model.output_cost_per_1k / 1000.0),
-            input_cost_per_character: None,
-            output_cost_per_character: None,
-            cost_per_second: None,
-            litellm_provider: "amazon_nova".to_string(),
-            mode: "chat".to_string(),
-            supports_function_calling: Some(model.supports_tools),
-            supports_vision: Some(model.supports_vision),
-            supports_streaming: Some(model.supports_streaming),
-            supports_parallel_function_calling: Some(model.supports_tools),
-            supports_system_message: Some(true),
-            extra: HashMap::new(),
-        },
+        model_info_to_litellm_model_info("amazon_nova", info),
     ))
-}
-
-#[cfg(not(feature = "providers-extended"))]
-fn amazon_nova_pricing_model_info(_model: &str) -> Option<(String, LiteLLMModelInfo)> {
-    None
 }
 
 fn xai_pricing_model_info(model: &str) -> Option<(String, LiteLLMModelInfo)> {
@@ -708,6 +685,29 @@ fn extract_tier_threshold(key: &str) -> Option<u32> {
     }
 }
 
+#[cfg(test)]
+mod amazon_nova_catalog_authority_tests {
+    use super::*;
+    #[test]
+    fn amazon_nova_catalog_authority_is_feature_independent() {
+        let service = PricingService::with_embedded_default().unwrap();
+        for model in ["amazon.nova-pro-v1:0", "nova-pro"] {
+            let (resolved, info) = service
+                .get_model_info_for_provider("amazon_nova", model)
+                .unwrap();
+            assert_eq!(resolved, "amazon.nova-pro-v1:0");
+            assert_eq!(info.max_output_tokens, Some(5_000));
+            let expected = "High-capability multimodal model for complex tasks";
+            assert_eq!(info.extra["description"], expected);
+            assert_eq!(info.extra["supports_reasoning"], true);
+        }
+        assert!(
+            service
+                .get_model_info_for_provider("amazon_nova", "unknown-nova")
+                .is_none()
+        );
+    }
+}
 #[cfg(test)]
 #[path = "authority_tests.rs"]
 mod tests;

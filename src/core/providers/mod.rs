@@ -11,6 +11,10 @@ pub mod base;
 // aiml_api: Tier 1 -> registry/catalog.rs
 // aleph_alpha: Tier 1 -> registry/catalog.rs
 #[cfg(feature = "providers-extended")]
+#[cfg_attr(
+    not(test),
+    deprecated(since = "0.6.0", note = "use catalog amazon_nova before 0.7")
+)]
 pub mod amazon_nova;
 pub mod anthropic;
 // anyscale: Tier 1 -> registry/catalog.rs
@@ -110,7 +114,6 @@ pub use provider_type::ProviderType;
 // Factory: create_provider, from_config_async, config builders
 pub mod factory;
 pub use factory::{create_provider, is_provider_selector_supported};
-
 // Registry and unified provider
 pub mod contextual_error;
 pub mod failure;
@@ -118,11 +121,9 @@ pub mod provider_error_conversions;
 pub mod provider_registry;
 pub mod registry; // Data-driven Tier 1 provider catalog
 pub mod unified_provider;
-
 // Test modules (only compiled during tests)
 #[cfg(test)]
 mod unified_provider_tests;
-
 // Export main types
 pub use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 use crate::core::types::responses::{
@@ -136,7 +137,6 @@ pub use contextual_error::ContextualError;
 pub use failure::{ProviderFailureFacts, ProviderRetryHint};
 pub use provider_registry::ProviderRegistry;
 pub use unified_provider::ProviderError;
-
 #[derive(Debug, Clone)]
 pub(crate) struct GeminiNativeRequest {
     pub(crate) api_version: String,

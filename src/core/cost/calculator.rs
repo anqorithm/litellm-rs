@@ -124,11 +124,7 @@ fn get_fallback_model_pricing(model: &str, provider: &str) -> Result<ModelPricin
             get_pricing_with_shared_source(model, &["gemini", "vertex_ai"], get_vertex_ai_pricing)
         }
         "bedrock" => get_pricing_with_shared_source(model, &["bedrock"], get_bedrock_pricing),
-        "amazon_nova" => get_pricing_with_shared_source(
-            model,
-            &["amazon_nova", "bedrock"],
-            get_amazon_nova_pricing,
-        ),
+        "amazon_nova" => get_amazon_nova_pricing(model),
         "openai_like" => get_openai_like_pricing(model),
         "xai" => get_xai_pricing(model),
         "groq" => get_pricing_with_shared_source(model, &["groq"], |model| {
@@ -185,6 +181,16 @@ fn get_fallback_model_pricing(model: &str, provider: &str) -> Result<ModelPricin
     }
 }
 
+#[cfg(test)]
+#[test]
+fn amazon_nova_fallback_pricing_prefers_catalog_over_shared_bedrock() {
+    assert!(get_shared_model_pricing("amazon.nova-pro-v1:0", &["bedrock"]).is_some());
+    for model in ["amazon.nova-pro-v1:0", "nova-pro"] {
+        let pricing = get_fallback_model_pricing(model, "amazon_nova").unwrap();
+        assert_eq!(pricing.model, "amazon.nova-pro-v1:0");
+        assert_eq!(pricing.input_cost_per_1k_tokens, 0.0008);
+    }
+}
 fn pricing_usage_from_cost_usage(usage: &UsageTokens) -> PricingUsage {
     PricingUsage {
         prompt_tokens: usage.prompt_tokens,
@@ -325,22 +331,16 @@ fn get_bedrock_pricing(model: &str) -> Result<ModelPricing, CostError> {
 }
 
 fn get_amazon_nova_pricing(model: &str) -> Result<ModelPricing, CostError> {
-    #[cfg(feature = "providers-extended")]
-    {
-        let registry = crate::core::providers::amazon_nova::AmazonNovaModelRegistry::new();
-        if let Some(model_info) = registry.get(model) {
-            return Ok(ModelPricing {
-                model: model_info.id.clone(),
-                input_cost_per_1k_tokens: model_info.input_cost_per_1k,
-                output_cost_per_1k_tokens: model_info.output_cost_per_1k,
-                ..Default::default()
-            });
-        }
-    }
-
-    Err(CostError::ModelNotSupported {
-        model: model.to_string(),
-        provider: "amazon_nova".to_string(),
+    let entry = crate::core::providers::registry::catalog::amazon_nova_catalog_model(model)
+        .ok_or_else(|| CostError::ModelNotSupported {
+            model: model.to_string(),
+            provider: "amazon_nova".to_string(),
+        })?;
+    Ok(ModelPricing {
+        model: entry.model_id.to_string(),
+        input_cost_per_1k_tokens: entry.input_cost_per_million / 1_000.0,
+        output_cost_per_1k_tokens: entry.output_cost_per_million / 1_000.0,
+        ..Default::default()
     })
 }
 
