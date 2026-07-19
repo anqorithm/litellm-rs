@@ -55,6 +55,12 @@ impl ExportFailures {
     }
 }
 
+#[derive(Default)]
+struct ExportState {
+    tasks: JoinSet<Result<(), String>>,
+    failures: ExportFailures,
+}
+
 impl SpanBatch {
     fn new() -> Self {
         Self {
@@ -89,8 +95,7 @@ pub struct OpenTelemetryIntegration {
     config: OpenTelemetryConfig,
     active_spans: RwLock<HashMap<String, ActiveSpan>>,
     pending_spans: RwLock<SpanBatch>,
-    export_tasks: Mutex<JoinSet<Result<(), String>>>,
-    export_failures: Mutex<ExportFailures>,
+    export_state: Mutex<ExportState>,
     http_client: reqwest::Client,
 }
 
@@ -108,8 +113,7 @@ impl OpenTelemetryIntegration {
             config,
             active_spans: RwLock::new(HashMap::new()),
             pending_spans: RwLock::new(SpanBatch::new()),
-            export_tasks: Mutex::new(JoinSet::new()),
-            export_failures: Mutex::new(ExportFailures::default()),
+            export_state: Mutex::new(ExportState::default()),
             http_client,
         })
     }
@@ -128,8 +132,7 @@ impl OpenTelemetryIntegration {
                     config,
                     active_spans: RwLock::new(HashMap::new()),
                     pending_spans: RwLock::new(SpanBatch::new()),
-                    export_tasks: Mutex::new(JoinSet::new()),
-                    export_failures: Mutex::new(ExportFailures::default()),
+                    export_state: Mutex::new(ExportState::default()),
                     http_client: reqwest::Client::new(),
                 }
             }
@@ -169,42 +172,28 @@ impl OpenTelemetryIntegration {
 
         if should_flush {
             let spans = batch.take();
-            drop(batch);
 
             let client = self.http_client.clone();
             let endpoint = self.config.endpoint.clone();
             let headers = self.config.headers.clone();
             let service_name = self.config.service_name.clone();
 
-            self.reap_finished_exports();
-            self.export_tasks.lock().spawn(async move {
+            let mut state = self.export_state.lock();
+            let ExportState { tasks, failures } = &mut *state;
+            while let Some(result) = tasks.try_join_next() {
+                record_export_result(failures, result);
+            }
+            tasks.spawn(async move {
                 export_spans(&client, &endpoint, &headers, &service_name, spans).await
             });
         }
     }
 
-    fn reap_finished_exports(&self) {
-        let completed = {
-            let mut tasks = self.export_tasks.lock();
-            std::iter::from_fn(|| tasks.try_join_next()).collect::<Vec<_>>()
-        };
-        if completed.is_empty() {
-            return;
+    async fn wait_for_exports(mut state: ExportState) -> IntegrationResult<()> {
+        while let Some(result) = state.tasks.join_next().await {
+            record_export_result(&mut state.failures, result);
         }
-
-        let mut failures = self.export_failures.lock();
-        for result in completed {
-            record_export_result(&mut failures, result);
-        }
-    }
-
-    async fn wait_for_exports(&self) -> IntegrationResult<()> {
-        let mut tasks = std::mem::take(&mut *self.export_tasks.lock());
-        let mut failures = std::mem::take(&mut *self.export_failures.lock());
-        while let Some(result) = tasks.join_next().await {
-            record_export_result(&mut failures, result);
-        }
-        failures.into_result()
+        state.failures.into_result()
     }
 
     /// Get the number of active spans
@@ -219,7 +208,12 @@ impl OpenTelemetryIntegration {
 
     #[cfg(test)]
     pub(super) fn export_task_count(&self) -> usize {
-        self.export_tasks.lock().len()
+        self.export_state.lock().tasks.len()
+    }
+
+    #[cfg(test)]
+    pub(super) fn export_failure_count(&self) -> usize {
+        self.export_state.lock().failures.total
     }
 }
 
@@ -422,7 +416,12 @@ impl Integration for OpenTelemetryIntegration {
     }
 
     async fn flush(&self) -> IntegrationResult<()> {
-        let spans = self.pending_spans.write().take();
+        let (spans, export_state) = {
+            let mut pending = self.pending_spans.write();
+            let spans = pending.take();
+            let export_state = std::mem::take(&mut *self.export_state.lock());
+            (spans, export_state)
+        };
 
         let pending_result = if spans.is_empty() {
             Ok(())
@@ -437,7 +436,7 @@ impl Integration for OpenTelemetryIntegration {
             .await
             .map_err(IntegrationError::other)
         };
-        let in_flight_result = self.wait_for_exports().await;
+        let in_flight_result = Self::wait_for_exports(export_state).await;
 
         pending_result?;
         in_flight_result

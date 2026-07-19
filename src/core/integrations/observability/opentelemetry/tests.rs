@@ -267,6 +267,11 @@ async fn test_reaped_export_failure_is_reported_by_flush() {
     export_one_span(&integration, "req-failed-export").await;
     wait_for_completed_requests(&completed, 1).await;
     export_one_span(&integration, "req-reap-failure").await;
+    assert_eq!(
+        integration.export_failure_count(),
+        1,
+        "the completed failed task must be reaped before flush"
+    );
     wait_for_completed_requests(&completed, 2).await;
 
     let error = integration
