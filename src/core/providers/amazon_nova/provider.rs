@@ -255,20 +255,10 @@ impl AmazonNovaProvider {
 
     /// Normalize model name to full format
     fn normalize_model_name(&self, model: &str) -> String {
-        // If already fully qualified, return as-is
-        if model.starts_with("amazon.nova") {
-            return model.to_string();
-        }
-
-        // Map short names to full names
-        match model {
-            "nova-2-lite" => "amazon.nova-2-lite-v1:0".to_string(),
-            "nova-pro" => "amazon.nova-pro-v1:0".to_string(),
-            "nova-lite" => "amazon.nova-lite-v1:0".to_string(),
-            "nova-micro" => "amazon.nova-micro-v1:0".to_string(),
-            "nova-premier" => "amazon.nova-premier-v1:0".to_string(),
-            _ => model.to_string(),
-        }
+        crate::core::providers::registry::catalog::amazon_nova_catalog_model(model)
+            .map(|entry| entry.model_id)
+            .unwrap_or(model)
+            .to_string()
     }
 
     /// Transform Amazon Nova response to ChatResponse

@@ -7,7 +7,6 @@ use std::collections::HashMap;
 use std::sync::LazyLock;
 
 use super::definition::{AuthType, ProviderDefinition};
-use crate::core::providers::base::ProviderModelEntry;
 use crate::core::providers::openai_like::provider::OPENAI_LIKE_CATALOG_CAPABILITIES;
 use crate::core::types::model::{ModelInfo, ProviderCapability};
 
@@ -16,82 +15,96 @@ pub(crate) const AMAZON_NOVA_CATALOG_CAPABILITIES: &[ProviderCapability] = &[
     ProviderCapability::ChatCompletionStream,
     ProviderCapability::ToolCalling,
 ];
-
+pub(crate) const AMAZON_NOVA_SUPPORTS_STREAMING: bool = true;
+pub(crate) const AMAZON_NOVA_SUPPORTS_TOOLS: bool = true;
 /// Canonical Amazon Nova models retained by the catalog after native demotion.
 ///
 /// Pricing uses the shared catalog unit of USD per million tokens. The values
-/// are derived from the native `AmazonNovaModelRegistry` and guarded by the
-/// provider-specific equivalence test below.
-pub static AMAZON_NOVA_CATALOG_MODELS: &[ProviderModelEntry] = &[
-    ProviderModelEntry {
+/// are the single production authority projected into both catalog and native
+/// compatibility runtimes.
+pub(crate) struct AmazonNovaCatalogModel {
+    pub(crate) model_id: &'static str,
+    pub(crate) display_name: &'static str,
+    pub(crate) description: &'static str,
+    pub(crate) max_context_length: u32,
+    pub(crate) max_output_length: u32,
+    pub(crate) supports_multimodal: bool,
+    pub(crate) supports_reasoning: bool,
+    pub(crate) input_cost_per_million: f64,
+    pub(crate) output_cost_per_million: f64,
+}
+pub(crate) static AMAZON_NOVA_CATALOG_MODELS: &[AmazonNovaCatalogModel] = &[
+    AmazonNovaCatalogModel {
         model_id: "amazon.nova-2-lite-v1:0",
         display_name: "Amazon Nova 2 Lite",
+        description: "Cost-efficient multimodal model for automation, documents, and support",
         max_context_length: 1_000_000,
         max_output_length: 64_000,
-        supports_tools: true,
         supports_multimodal: true,
+        supports_reasoning: true,
         input_cost_per_million: 0.3,
         output_cost_per_million: 2.5,
     },
-    ProviderModelEntry {
+    AmazonNovaCatalogModel {
         model_id: "amazon.nova-pro-v1:0",
         display_name: "Amazon Nova Pro",
+        description: "High-capability multimodal model for complex tasks",
         max_context_length: 300_000,
         max_output_length: 5_000,
-        supports_tools: true,
         supports_multimodal: true,
+        supports_reasoning: true,
         input_cost_per_million: 0.8,
         output_cost_per_million: 3.2,
     },
-    ProviderModelEntry {
+    AmazonNovaCatalogModel {
         model_id: "amazon.nova-lite-v1:0",
         display_name: "Amazon Nova Lite",
+        description: "Cost-effective multimodal model for everyday tasks",
         max_context_length: 300_000,
         max_output_length: 5_000,
-        supports_tools: true,
         supports_multimodal: true,
+        supports_reasoning: false,
         input_cost_per_million: 0.06,
         output_cost_per_million: 0.24,
     },
-    ProviderModelEntry {
+    AmazonNovaCatalogModel {
         model_id: "amazon.nova-micro-v1:0",
         display_name: "Amazon Nova Micro",
+        description: "Fast text-only model optimized for speed",
         max_context_length: 128_000,
         max_output_length: 5_000,
-        supports_tools: true,
         supports_multimodal: false,
+        supports_reasoning: false,
         input_cost_per_million: 0.035,
         output_cost_per_million: 0.14,
     },
-    ProviderModelEntry {
+    AmazonNovaCatalogModel {
         model_id: "amazon.nova-premier-v1:0",
         display_name: "Amazon Nova Premier",
+        description: "Most capable model for complex reasoning and multimodal tasks",
         max_context_length: 1_000_000,
         max_output_length: 10_000,
-        supports_tools: true,
         supports_multimodal: true,
+        supports_reasoning: true,
         input_cost_per_million: 2.5,
         output_cost_per_million: 12.5,
     },
 ];
-
-const AMAZON_NOVA_MODEL_ALIASES: &[(&str, &str)] = &[
+pub(crate) const AMAZON_NOVA_MODEL_ALIASES: &[(&str, &str)] = &[
     ("nova-2-lite", "amazon.nova-2-lite-v1:0"),
     ("nova-pro", "amazon.nova-pro-v1:0"),
     ("nova-lite", "amazon.nova-lite-v1:0"),
     ("nova-micro", "amazon.nova-micro-v1:0"),
     ("nova-premier", "amazon.nova-premier-v1:0"),
 ];
-
 static AMAZON_NOVA_MODEL_INFOS: LazyLock<Vec<ModelInfo>> = LazyLock::new(|| {
     AMAZON_NOVA_CATALOG_MODELS
         .iter()
         .map(amazon_nova_model_info_from_entry)
         .collect()
 });
-
 /// Resolve a canonical Amazon Nova model or one of its retained short aliases.
-pub(crate) fn amazon_nova_catalog_model(model: &str) -> Option<&'static ProviderModelEntry> {
+pub(crate) fn amazon_nova_catalog_model(model: &str) -> Option<&'static AmazonNovaCatalogModel> {
     let canonical = AMAZON_NOVA_MODEL_ALIASES
         .iter()
         .find_map(|(alias, canonical)| (*alias == model).then_some(*canonical))
@@ -111,15 +124,15 @@ pub(crate) fn amazon_nova_catalog_model_info(model: &str) -> Option<ModelInfo> {
     amazon_nova_catalog_model(model).map(amazon_nova_model_info_from_entry)
 }
 
-fn amazon_nova_model_info_from_entry(entry: &ProviderModelEntry) -> ModelInfo {
+fn amazon_nova_model_info_from_entry(entry: &AmazonNovaCatalogModel) -> ModelInfo {
     ModelInfo {
         id: entry.model_id.to_string(),
         name: entry.display_name.to_string(),
         provider: "amazon_nova".to_string(),
         max_context_length: entry.max_context_length,
         max_output_length: Some(entry.max_output_length),
-        supports_streaming: true,
-        supports_tools: entry.supports_tools,
+        supports_streaming: AMAZON_NOVA_SUPPORTS_STREAMING,
+        supports_tools: AMAZON_NOVA_SUPPORTS_TOOLS,
         supports_multimodal: entry.supports_multimodal,
         input_cost_per_1k_tokens: Some(entry.input_cost_per_million / 1_000.0),
         output_cost_per_1k_tokens: Some(entry.output_cost_per_million / 1_000.0),
@@ -560,12 +573,6 @@ fn def_local_chat(
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(all(feature = "providers-extended", not(clippy)))]
-    use crate::core::providers::amazon_nova::{
-        AmazonNovaConfig, AmazonNovaProvider, config::DEFAULT_AMAZON_NOVA_API_BASE,
-    };
-    #[cfg(all(feature = "providers-extended", not(clippy)))]
-    use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
 
     #[test]
     fn every_catalog_capability_is_executable_and_unique() {
@@ -590,65 +597,6 @@ mod tests {
         }
     }
 
-    #[cfg(all(feature = "providers-extended", not(clippy)))]
-    #[test]
-    fn amazon_nova_catalog_policy_matches_native_models_pricing_and_capabilities() {
-        let definition =
-            get_definition("amazon_nova").expect("Amazon Nova catalog definition must exist");
-        assert_eq!(definition.base_url, DEFAULT_AMAZON_NOVA_API_BASE);
-        assert_eq!(definition.auth_env_var, "AMAZON_NOVA_API_KEY");
-        assert!(definition.alternate_auth_env_vars.is_empty());
-        assert_eq!(definition.auth_type, AuthType::Bearer);
-        assert!(!definition.skip_api_key);
-
-        let mut native_config = AmazonNovaConfig::with_api_key("catalog-policy-test-key");
-        native_config.base.api_base = Some("https://8.8.8.8/v1".to_string());
-        let native_provider = AmazonNovaProvider::new(native_config)
-            .expect("native Amazon Nova provider must construct without issuing a request");
-        assert_eq!(definition.capabilities, native_provider.capabilities());
-
-        let native_models = native_provider.models();
-        let catalog_ids: std::collections::HashSet<_> = AMAZON_NOVA_CATALOG_MODELS
-            .iter()
-            .map(|model| model.model_id)
-            .collect();
-        let native_ids: std::collections::HashSet<_> = native_models
-            .iter()
-            .map(|model| model.id.as_str())
-            .collect();
-        assert_eq!(catalog_ids.len(), AMAZON_NOVA_CATALOG_MODELS.len());
-        assert_eq!(native_ids.len(), native_models.len());
-        assert_eq!(catalog_ids, native_ids);
-        for catalog_model in AMAZON_NOVA_CATALOG_MODELS {
-            let native_model = native_models
-                .iter()
-                .find(|model| model.id == catalog_model.model_id)
-                .unwrap_or_else(|| panic!("missing native model {}", catalog_model.model_id));
-            assert_eq!(
-                (
-                    native_model.name.as_str(),
-                    native_model.max_context_length,
-                    native_model.max_output_length,
-                    native_model.supports_tools,
-                    native_model.supports_multimodal,
-                ),
-                (
-                    catalog_model.display_name,
-                    catalog_model.max_context_length,
-                    Some(catalog_model.max_output_length),
-                    catalog_model.supports_tools,
-                    catalog_model.supports_multimodal,
-                ),
-                "{} differs from catalog authority",
-                catalog_model.model_id,
-            );
-            let input = native_model.input_cost_per_1k_tokens.unwrap_or_default() * 1_000.0;
-            let output = native_model.output_cost_per_1k_tokens.unwrap_or_default() * 1_000.0;
-            assert!((input - catalog_model.input_cost_per_million).abs() < 1e-12);
-            assert!((output - catalog_model.output_cost_per_million).abs() < 1e-12);
-        }
-    }
-
     #[tokio::test]
     async fn amazon_nova_catalog_runtime_exposes_models_and_pricing() {
         use crate::core::providers::openai_like::{OpenAILikeConfig, OpenAILikeProvider};
@@ -662,15 +610,7 @@ mod tests {
                 .await
                 .expect("Amazon Nova catalog provider must construct without issuing a request");
 
-        let ids: std::collections::HashSet<_> =
-            provider.models().iter().map(|model| &model.id).collect();
-        assert_eq!(ids.len(), 5, "canonical catalog IDs must be unique");
-        for (alias, canonical) in AMAZON_NOVA_MODEL_ALIASES {
-            assert_eq!(
-                amazon_nova_catalog_model(alias).unwrap().model_id,
-                *canonical
-            );
-        }
+        assert_eq!(provider.models().len(), 5);
         for model in ["amazon.nova-pro-v1:0", "nova-pro"] {
             let cost = provider
                 .calculate_cost(model, 1_000, 1_000)
@@ -678,13 +618,11 @@ mod tests {
                 .expect("Amazon Nova catalog pricing must calculate");
             assert!((cost - 0.004).abs() < f64::EPSILON);
         }
-        assert_eq!(
-            provider
-                .calculate_cost("grok-4.3", 1_000, 1_000)
-                .await
-                .unwrap(),
-            0.0
-        );
+        let unknown = provider
+            .calculate_cost("grok-4.3", 1_000, 1_000)
+            .await
+            .unwrap();
+        assert_eq!(unknown, 0.0);
     }
 
     #[test]

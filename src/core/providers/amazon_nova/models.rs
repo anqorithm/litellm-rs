@@ -4,6 +4,11 @@
 
 use std::collections::HashMap;
 
+use crate::core::providers::registry::catalog::{
+    AMAZON_NOVA_CATALOG_MODELS, AMAZON_NOVA_MODEL_ALIASES, AMAZON_NOVA_SUPPORTS_STREAMING,
+    AMAZON_NOVA_SUPPORTS_TOOLS, AmazonNovaCatalogModel,
+};
+
 /// Amazon Nova model definition
 #[derive(Debug, Clone)]
 pub struct AmazonNovaModel {
@@ -32,6 +37,22 @@ pub struct AmazonNovaModel {
 }
 
 impl AmazonNovaModel {
+    fn from_catalog(entry: &AmazonNovaCatalogModel) -> Self {
+        Self {
+            id: entry.model_id.to_string(),
+            name: entry.display_name.to_string(),
+            description: entry.description.to_string(),
+            context_length: entry.max_context_length,
+            max_output_tokens: entry.max_output_length,
+            input_cost_per_1k: entry.input_cost_per_million / 1_000.0,
+            output_cost_per_1k: entry.output_cost_per_million / 1_000.0,
+            supports_vision: entry.supports_multimodal,
+            supports_tools: AMAZON_NOVA_SUPPORTS_TOOLS,
+            supports_reasoning: entry.supports_reasoning,
+            supports_streaming: AMAZON_NOVA_SUPPORTS_STREAMING,
+        }
+    }
+
     /// Create a new Amazon Nova model definition
     pub fn new(
         id: &str,
@@ -97,99 +118,19 @@ impl AmazonNovaModelRegistry {
     /// Create a new model registry with default models
     pub fn new() -> Self {
         let mut models = HashMap::new();
-
-        // Nova 2 Lite - Bedrock runtime multimodal model
-        let nova_2_lite = AmazonNovaModel::new(
-            "amazon.nova-2-lite-v1:0",
-            "Amazon Nova 2 Lite",
-            "Cost-efficient multimodal model for automation, documents, and support",
-            1_000_000,
-            64_000,
-        )
-        .with_pricing(0.0003, 0.0025)
-        .with_vision()
-        .with_reasoning();
-        models.insert("amazon.nova-2-lite-v1:0".to_string(), nova_2_lite.clone());
-
-        // Nova Pro - High capability model
-        models.insert(
-            "amazon.nova-pro-v1:0".to_string(),
-            AmazonNovaModel::new(
-                "amazon.nova-pro-v1:0",
-                "Amazon Nova Pro",
-                "High-capability multimodal model for complex tasks",
-                300000,
-                5000,
-            )
-            .with_pricing(0.0008, 0.0032)
-            .with_vision()
-            .with_reasoning(),
-        );
-
-        // Nova Lite - Cost-effective model
-        models.insert(
-            "amazon.nova-lite-v1:0".to_string(),
-            AmazonNovaModel::new(
-                "amazon.nova-lite-v1:0",
-                "Amazon Nova Lite",
-                "Cost-effective multimodal model for everyday tasks",
-                300000,
-                5000,
-            )
-            .with_pricing(0.00006, 0.00024)
-            .with_vision(),
-        );
-
-        // Nova Micro - Fast text-only model
-        models.insert(
-            "amazon.nova-micro-v1:0".to_string(),
-            AmazonNovaModel::new(
-                "amazon.nova-micro-v1:0",
-                "Amazon Nova Micro",
-                "Fast text-only model optimized for speed",
-                128000,
-                5000,
-            )
-            .with_pricing(0.000035, 0.00014),
-        );
-
-        // Nova Premier - Most capable model (upcoming)
-        models.insert(
-            "amazon.nova-premier-v1:0".to_string(),
-            AmazonNovaModel::new(
-                "amazon.nova-premier-v1:0",
-                "Amazon Nova Premier",
-                "Most capable model for complex reasoning and multimodal tasks",
-                1000000,
-                10000,
-            )
-            .with_pricing(0.0025, 0.0125)
-            .with_vision()
-            .with_reasoning(),
-        );
-
-        // Also register simplified names (keys were inserted above, so expect is safe)
-        let nova_pro = models
-            .get("amazon.nova-pro-v1:0")
-            .expect("nova-pro-v1:0 was just inserted")
-            .clone();
-        let nova_lite = models
-            .get("amazon.nova-lite-v1:0")
-            .expect("nova-lite-v1:0 was just inserted")
-            .clone();
-        let nova_micro = models
-            .get("amazon.nova-micro-v1:0")
-            .expect("nova-micro-v1:0 was just inserted")
-            .clone();
-        let nova_premier = models
-            .get("amazon.nova-premier-v1:0")
-            .expect("nova-premier-v1:0 was just inserted")
-            .clone();
-        models.insert("nova-2-lite".to_string(), nova_2_lite);
-        models.insert("nova-pro".to_string(), nova_pro);
-        models.insert("nova-lite".to_string(), nova_lite);
-        models.insert("nova-micro".to_string(), nova_micro);
-        models.insert("nova-premier".to_string(), nova_premier);
+        for entry in AMAZON_NOVA_CATALOG_MODELS {
+            models.insert(
+                entry.model_id.to_string(),
+                AmazonNovaModel::from_catalog(entry),
+            );
+        }
+        for (alias, canonical) in AMAZON_NOVA_MODEL_ALIASES {
+            let model = models
+                .get(*canonical)
+                .unwrap_or_else(|| panic!("missing catalog model {canonical}"))
+                .clone();
+            models.insert((*alias).to_string(), model);
+        }
 
         Self { models }
     }
@@ -264,6 +205,30 @@ mod tests {
         assert!(registry.is_supported("amazon.nova-pro-v1:0"));
         assert!(registry.is_supported("amazon.nova-lite-v1:0"));
         assert!(registry.is_supported("amazon.nova-micro-v1:0"));
+    }
+
+    #[test]
+    fn amazon_nova_native_registry_is_exact_catalog_authority_projection() {
+        let registry = AmazonNovaModelRegistry::new();
+        let native_models = registry.list_models();
+        let native_ids: std::collections::HashSet<_> = native_models
+            .iter()
+            .map(|model| model.id.as_str())
+            .collect();
+        let catalog_ids: std::collections::HashSet<_> = AMAZON_NOVA_CATALOG_MODELS
+            .iter()
+            .map(|entry| entry.model_id)
+            .collect();
+        assert_eq!(native_ids.len(), native_models.len());
+        assert_eq!(catalog_ids.len(), AMAZON_NOVA_CATALOG_MODELS.len());
+        assert_eq!(native_ids, catalog_ids);
+
+        for (alias, canonical) in AMAZON_NOVA_MODEL_ALIASES {
+            assert_eq!(
+                registry.get(alias).map(|model| model.id.as_str()),
+                Some(*canonical)
+            );
+        }
     }
 
     #[test]

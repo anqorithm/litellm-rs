@@ -124,11 +124,7 @@ fn get_fallback_model_pricing(model: &str, provider: &str) -> Result<ModelPricin
             get_pricing_with_shared_source(model, &["gemini", "vertex_ai"], get_vertex_ai_pricing)
         }
         "bedrock" => get_pricing_with_shared_source(model, &["bedrock"], get_bedrock_pricing),
-        "amazon_nova" => get_pricing_with_shared_source(
-            model,
-            &["amazon_nova", "bedrock"],
-            get_amazon_nova_pricing,
-        ),
+        "amazon_nova" => get_amazon_nova_pricing(model),
         "openai_like" => get_openai_like_pricing(model),
         "xai" => get_xai_pricing(model),
         "groq" => get_pricing_with_shared_source(model, &["groq"], |model| {
@@ -182,6 +178,17 @@ fn get_fallback_model_pricing(model: &str, provider: &str) -> Result<ModelPricin
         _ => Err(CostError::ProviderNotSupported {
             provider: provider.to_string(),
         }),
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn amazon_nova_fallback_pricing_prefers_catalog_over_shared_bedrock() {
+    assert!(get_shared_model_pricing("amazon.nova-pro-v1:0", &["bedrock"]).is_some());
+    for model in ["amazon.nova-pro-v1:0", "nova-pro"] {
+        let pricing = get_fallback_model_pricing(model, "amazon_nova").unwrap();
+        assert_eq!(pricing.model, "amazon.nova-pro-v1:0");
+        assert_eq!(pricing.input_cost_per_1k_tokens, 0.0008);
     }
 }
 

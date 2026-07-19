@@ -691,26 +691,13 @@ mod amazon_nova_catalog_authority_tests {
 
     #[test]
     fn amazon_nova_catalog_authority_is_feature_independent() {
-        let Ok(service) = PricingService::with_embedded_default() else {
-            panic!("embedded pricing service must initialize");
-        };
+        let service = PricingService::with_embedded_default().unwrap();
         for model in ["amazon.nova-pro-v1:0", "nova-pro"] {
-            let Some((resolved, info)) = service.get_model_info_for_provider("amazon_nova", model)
-            else {
-                panic!("Amazon Nova catalog authority must resolve {model}");
-            };
+            let (resolved, info) = service
+                .get_model_info_for_provider("amazon_nova", model)
+                .unwrap();
             assert_eq!(resolved, "amazon.nova-pro-v1:0");
-            assert!((info.input_cost_per_token.unwrap_or_default() - 0.000_000_8).abs() < 1e-15);
-            assert!((info.output_cost_per_token.unwrap_or_default() - 0.000_003_2).abs() < 1e-15);
-
-            let Ok(pricing) =
-                crate::core::cost::calculator::get_model_pricing(model, "amazon_nova")
-            else {
-                panic!("core cost calculator must resolve {model}");
-            };
-            assert_eq!(pricing.model, "amazon.nova-pro-v1:0");
-            assert_eq!(pricing.input_cost_per_1k_tokens, 0.0008);
-            assert_eq!(pricing.output_cost_per_1k_tokens, 0.0032);
+            assert_eq!(info.max_output_tokens, Some(5_000));
         }
         assert!(
             service

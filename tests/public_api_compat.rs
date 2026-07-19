@@ -18,20 +18,9 @@ use litellm_rs::core::providers::custom_api::{
 fn amazon_nova_deprecated_in_0_6() {
     let registry = AmazonNovaModelRegistry::new();
     assert!(registry.is_supported("amazon.nova-pro-v1:0"));
-
-    let model = AmazonNovaModel::new(
-        "compat-only",
-        "Compatibility Only",
-        "compile-time public API probe",
-        1_024,
-        128,
-    );
-    assert_eq!(model.id, "compat-only");
-
+    let _model = AmazonNovaModel::new("compat-only", "Compat", "compat probe", 1_024, 128);
     let _mapper = AmazonNovaErrorMapper;
-    let mut config = AmazonNovaConfig::with_api_key("compat-only-key");
-    config.base.api_base = Some("https://8.8.8.8/v1".to_string());
-    let _provider = AmazonNovaProvider::new(config)
+    let _provider = AmazonNovaProvider::new(AmazonNovaConfig::with_api_key("compat-only-key"))
         .expect("0.6 public construction must remain available without issuing a request");
 }
 
