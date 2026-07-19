@@ -36,7 +36,10 @@ fn insert_error_headers(builder: &mut HttpResponseBuilder, headers: HttpErrorHea
 impl GatewayError {
     pub fn error_response_with_request_id(&self, request_id: Option<String>) -> HttpResponse {
         let facts = gateway_http_error_facts(self);
-        let message = self.to_string();
+        let message = match self {
+            GatewayError::Provider(provider_error) => provider_error.redacted().to_string(),
+            _ => self.to_string(),
+        };
 
         let canonical_code = self.canonical_code().as_str().to_string();
         let retryable = self.canonical_retryable();

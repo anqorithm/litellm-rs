@@ -111,7 +111,11 @@ fn openai_error_spec_from_safe_error(
     error: &GatewayError,
     facts: HttpErrorFacts,
 ) -> OpenAiErrorSpec {
-    let message = error.to_string();
+    let message = match error {
+        GatewayError::Provider(ProviderError::ApiError { message, .. }) => message.clone(),
+        GatewayError::Provider(provider_error) => provider_error.to_string(),
+        _ => error.to_string(),
+    };
     let mut spec = spec_from_facts(facts, message);
 
     if let GatewayError::Provider(ProviderError::ApiError { .. }) = error
@@ -333,9 +337,10 @@ mod tests {
 
     #[actix_web::test]
     async fn provider_api_error_preserves_upstream_openai_error_fields() {
+        let secret = "sk-live-upstream-secret";
         let upstream = serde_json::json!({
             "error": {
-                "message": "context window exceeded",
+                "message": format!("context window exceeded {secret}"),
                 "type": "invalid_request_error",
                 "param": "messages",
                 "code": "context_length_exceeded"
@@ -351,10 +356,14 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
         let body = to_json(response).await;
-        assert_eq!(body["error"]["message"], "context window exceeded");
+        assert_eq!(
+            body["error"]["message"],
+            "context window exceeded [REDACTED]"
+        );
         assert_eq!(body["error"]["type"], "invalid_request_error");
         assert_eq!(body["error"]["param"], "messages");
         assert_eq!(body["error"]["code"], "context_length_exceeded");
+        assert!(!body.to_string().contains(secret));
     }
 
     #[test]

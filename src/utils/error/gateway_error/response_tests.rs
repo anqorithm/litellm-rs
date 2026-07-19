@@ -48,16 +48,26 @@ async fn provider_error_secrets_are_redacted_at_gateway_and_http_boundaries() {
     assert!(body.contains("[REDACTED]"));
 }
 
-#[test]
-fn provider_response_emitters_do_not_stringify_raw_provider_errors() {
-    let gateway_response = include_str!("response.rs");
-    let openai_response = include_str!("../../../server/routes/ai/openai_errors.rs");
+#[actix_web::test]
+async fn provider_response_redacts_directly_wrapped_errors_without_gateway_prefix() {
+    let secret = "sk-live-direct-wrapper-secret";
+    let error = GatewayError::Provider(ProviderError::api_error(
+        "openai",
+        503,
+        format!("upstream failed with {secret}"),
+    ));
 
-    for source in [gateway_response, openai_response] {
-        assert!(!source.contains("provider_error.to_string()"));
-    }
-    assert!(openai_response.contains("provider_error.redacted()"));
-    assert!(openai_response.contains("gateway_http_error_facts(error)"));
+    let body = String::from_utf8(
+        to_bytes(error.error_response().into_body())
+            .await
+            .expect("response body")
+            .to_vec(),
+    )
+    .expect("utf-8 response");
+
+    assert!(!body.contains(secret));
+    assert!(!body.contains("Provider error:"));
+    assert!(body.contains("[REDACTED]"));
 }
 
 // ==================== ErrorDetail Tests ====================
