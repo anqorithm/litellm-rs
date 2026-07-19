@@ -6,11 +6,11 @@ use crate::config::models::defaults::default_true;
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::collections::{HashMap, VecDeque};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tokio::sync::Mutex as AsyncMutex;
+use tracing::{debug, info};
 
 use crate::core::traits::integration::{
     CacheHitEvent, EmbeddingEndEvent, EmbeddingStartEvent, Integration, IntegrationError,
@@ -69,6 +69,18 @@ fn default_site() -> String {
     "datadoghq.com".to_string()
 }
 
+const SUPPORTED_DATADOG_SITES: &[&str] = &[
+    "datadoghq.com",
+    "us3.datadoghq.com",
+    "us5.datadoghq.com",
+    "datadoghq.eu",
+    "ap1.datadoghq.com",
+    "ap2.datadoghq.com",
+    "uk1.datadoghq.com",
+    "ddog-gov.com",
+    "us2.ddog-gov.com",
+];
+
 fn default_service() -> String {
     "litellm-gateway".to_string()
 }
@@ -112,6 +124,10 @@ impl DataDogConfig {
     pub fn site(mut self, site: impl Into<String>) -> Self {
         self.site = site.into();
         self
+    }
+
+    pub(crate) fn is_supported_site(site: &str) -> bool {
+        SUPPORTED_DATADOG_SITES.contains(&site)
     }
 
     /// Set the service name
@@ -214,11 +230,26 @@ enum BufferedEvent {
     Log(DataDogLogRecord),
 }
 
+#[derive(Debug, Default)]
+struct EventBuffer {
+    pending: VecDeque<BufferedEvent>,
+    in_flight: Vec<BufferedEvent>,
+}
+
+impl EventBuffer {
+    fn len(&self) -> usize {
+        self.pending.len() + self.in_flight.len()
+    }
+}
+
 /// DataDog APM Integration
 pub struct DataDogIntegration {
     config: DataDogConfig,
     http_client: Client,
-    buffer: Arc<RwLock<Vec<BufferedEvent>>>,
+    metrics_url: String,
+    logs_url: String,
+    buffer: Arc<Mutex<EventBuffer>>,
+    flush_lock: AsyncMutex<()>,
     enabled: bool,
 }
 
@@ -235,9 +266,14 @@ impl std::fmt::Debug for DataDogIntegration {
 impl DataDogIntegration {
     /// Create a new DataDog integration
     pub fn new(config: DataDogConfig) -> IntegrationResult<Self> {
-        if config.api_key.is_empty() {
+        if config.api_key.trim().is_empty() {
             return Err(IntegrationError::config(
                 "DataDog API key is required".to_string(),
+            ));
+        }
+        if !DataDogConfig::is_supported_site(&config.site) {
+            return Err(IntegrationError::config(
+                "DataDog site is not a supported Datadog site".to_string(),
             ));
         }
 
@@ -251,9 +287,12 @@ impl DataDogIntegration {
         );
 
         Ok(Self {
+            metrics_url: config.metrics_url(),
+            logs_url: config.logs_url(),
             config,
             http_client,
-            buffer: Arc::new(RwLock::new(Vec::new())),
+            buffer: Arc::new(Mutex::new(EventBuffer::default())),
+            flush_lock: AsyncMutex::new(()),
             enabled: true,
         })
     }
@@ -316,9 +355,9 @@ impl DataDogIntegration {
         metric_type: i32,
         tags: &[(&str, &str)],
         unit: Option<&str>,
-    ) {
+    ) -> IntegrationResult<()> {
         if !self.config.enable_metrics {
-            return;
+            return Ok(());
         }
 
         let metric = MetricSeries {
@@ -332,19 +371,21 @@ impl DataDogIntegration {
             unit: unit.map(String::from),
         };
 
-        let mut buffer = self.buffer.write().await;
-        buffer.push(BufferedEvent::Metric(metric));
-
-        if buffer.len() >= self.config.batch_size {
-            drop(buffer);
-            let _ = self.flush().await;
+        if self.enqueue(BufferedEvent::Metric(metric))? {
+            self.flush_batch(false).await?;
         }
+        Ok(())
     }
 
     /// Record a log entry
-    async fn record_log(&self, message: &str, status: &str, tags: &[(&str, &str)]) {
+    async fn record_log(
+        &self,
+        message: &str,
+        status: &str,
+        tags: &[(&str, &str)],
+    ) -> IntegrationResult<()> {
         if !self.config.enable_logs {
-            return;
+            return Ok(());
         }
 
         let hostname = std::env::var("HOSTNAME")
@@ -361,13 +402,36 @@ impl DataDogIntegration {
             timestamp: Some(Self::current_timestamp() * 1000), // milliseconds
         };
 
-        let mut buffer = self.buffer.write().await;
-        buffer.push(BufferedEvent::Log(log));
-
-        if buffer.len() >= self.config.batch_size {
-            drop(buffer);
-            let _ = self.flush().await;
+        if self.enqueue(BufferedEvent::Log(log))? {
+            self.flush_batch(false).await?;
         }
+        Ok(())
+    }
+
+    fn batch_size(&self) -> usize {
+        self.config.batch_size.max(1)
+    }
+
+    fn buffer_capacity(&self) -> usize {
+        self.batch_size().saturating_mul(2)
+    }
+
+    fn buffer(&self) -> IntegrationResult<std::sync::MutexGuard<'_, EventBuffer>> {
+        self.buffer
+            .lock()
+            .map_err(|_| IntegrationError::other("DataDog event buffer lock is poisoned"))
+    }
+
+    fn enqueue(&self, event: BufferedEvent) -> IntegrationResult<bool> {
+        let mut buffer = self.buffer()?;
+        if buffer.len() >= self.buffer_capacity() {
+            return Err(IntegrationError::other(format!(
+                "DataDog event buffer is full (capacity {})",
+                self.buffer_capacity()
+            )));
+        }
+        buffer.pending.push_back(event);
+        Ok(buffer.in_flight.is_empty() && buffer.pending.len() >= self.batch_size())
     }
 
     /// Send metrics to DataDog
@@ -380,7 +444,7 @@ impl DataDogIntegration {
 
         let response = self
             .http_client
-            .post(self.config.metrics_url())
+            .post(&self.metrics_url)
             .header("DD-API-KEY", &self.config.api_key)
             .header("Content-Type", "application/json")
             .json(&payload)
@@ -391,11 +455,9 @@ impl DataDogIntegration {
         if !response.status().is_success() {
             let status = response.status();
             let response_bytes = response.bytes().await.map(|bytes| bytes.len()).unwrap_or(0);
-            warn!(
-                %status,
-                response_bytes,
-                "DataDog metrics API returned non-success status"
-            );
+            return Err(IntegrationError::connection(format!(
+                "DataDog metrics API returned {status} ({response_bytes} response bytes)"
+            )));
         }
 
         Ok(())
@@ -409,7 +471,7 @@ impl DataDogIntegration {
 
         let response = self
             .http_client
-            .post(self.config.logs_url())
+            .post(&self.logs_url)
             .header("DD-API-KEY", &self.config.api_key)
             .header("Content-Type", "application/json")
             .json(&logs)
@@ -420,14 +482,65 @@ impl DataDogIntegration {
         if !response.status().is_success() {
             let status = response.status();
             let response_bytes = response.bytes().await.map(|bytes| bytes.len()).unwrap_or(0);
-            warn!(
-                %status,
-                response_bytes,
-                "DataDog logs API returned non-success status"
-            );
+            return Err(IntegrationError::connection(format!(
+                "DataDog logs API returned {status} ({response_bytes} response bytes)"
+            )));
         }
 
         Ok(())
+    }
+
+    async fn flush_batch(&self, retry_failed: bool) -> IntegrationResult<()> {
+        let _flush = self.flush_lock.lock().await;
+        let events = {
+            let mut buffer = self.buffer()?;
+            if !retry_failed && !buffer.in_flight.is_empty() {
+                return Ok(());
+            }
+            if buffer.in_flight.is_empty() {
+                let count = self.batch_size().min(buffer.pending.len());
+                buffer.in_flight = buffer.pending.drain(..count).collect();
+            }
+            buffer.in_flight.clone()
+        };
+        if events.is_empty() {
+            return Ok(());
+        }
+
+        debug!("DataDog: Flushing {} events", events.len());
+        let mut metrics = Vec::new();
+        let mut logs = Vec::new();
+        for event in events {
+            match event {
+                BufferedEvent::Metric(metric) => metrics.push(metric),
+                BufferedEvent::Log(log) => logs.push(log),
+            }
+        }
+        let metrics_result = self.send_metrics(metrics).await;
+        if metrics_result.is_ok() {
+            self.buffer()?
+                .in_flight
+                .retain(|event| !matches!(event, BufferedEvent::Metric(_)));
+        }
+        let logs_result = self.send_logs(logs).await;
+        if logs_result.is_ok() {
+            self.buffer()?
+                .in_flight
+                .retain(|event| !matches!(event, BufferedEvent::Log(_)));
+        }
+
+        let mut errors = Vec::new();
+        if let Err(error) = metrics_result {
+            errors.push(error.to_string());
+        }
+        if let Err(error) = logs_result {
+            errors.push(error.to_string());
+        }
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(IntegrationError::other(errors.join("; ")))
+        }
     }
 }
 
@@ -451,7 +564,7 @@ impl Integration for DataDogIntegration {
 
         // Record request count metric
         self.record_metric("llm.requests", 1.0, 1, &tags, None)
-            .await;
+            .await?;
 
         // Log the request start
         self.record_log(
@@ -462,7 +575,7 @@ impl Integration for DataDogIntegration {
             "info",
             &tags,
         )
-        .await;
+        .await?;
 
         Ok(())
     }
@@ -484,7 +597,7 @@ impl Integration for DataDogIntegration {
             &tags,
             Some("millisecond"),
         )
-        .await;
+        .await?;
 
         // Record token metrics
         if let Some(input_tokens) = event.input_tokens {
@@ -495,7 +608,7 @@ impl Integration for DataDogIntegration {
                 &tags,
                 None,
             )
-            .await;
+            .await?;
         }
 
         if let Some(output_tokens) = event.output_tokens {
@@ -506,18 +619,18 @@ impl Integration for DataDogIntegration {
                 &tags,
                 None,
             )
-            .await;
+            .await?;
         }
 
         if let (Some(input), Some(output)) = (event.input_tokens, event.output_tokens) {
             self.record_metric("llm.tokens.total", (input + output) as f64, 1, &tags, None)
-                .await;
+                .await?;
         }
 
         // Record cost metric
         if let Some(cost) = event.cost_usd {
             self.record_metric("llm.cost", cost, 1, &tags, Some("dollar"))
-                .await;
+                .await?;
         }
 
         // Log completion
@@ -529,7 +642,7 @@ impl Integration for DataDogIntegration {
             "info",
             &tags,
         )
-        .await;
+        .await?;
 
         Ok(())
     }
@@ -546,7 +659,8 @@ impl Integration for DataDogIntegration {
         ];
 
         // Record error count
-        self.record_metric("llm.errors", 1.0, 1, &tags, None).await;
+        self.record_metric("llm.errors", 1.0, 1, &tags, None)
+            .await?;
 
         // Log the error
         self.record_log(
@@ -557,7 +671,7 @@ impl Integration for DataDogIntegration {
             "error",
             &tags,
         )
-        .await;
+        .await?;
 
         Ok(())
     }
@@ -567,7 +681,7 @@ impl Integration for DataDogIntegration {
         let tags: [(&str, &str); 0] = [];
 
         self.record_metric("llm.stream.chunks", 1.0, 1, &tags, None)
-            .await;
+            .await?;
 
         Ok(())
     }
@@ -579,7 +693,7 @@ impl Integration for DataDogIntegration {
         ];
 
         self.record_metric("embedding.requests", 1.0, 1, &tags, None)
-            .await;
+            .await?;
 
         Ok(())
     }
@@ -597,11 +711,11 @@ impl Integration for DataDogIntegration {
             &tags,
             Some("millisecond"),
         )
-        .await;
+        .await?;
 
         if let Some(tokens) = event.total_tokens {
             self.record_metric("embedding.tokens", tokens as f64, 1, &tags, None)
-                .await;
+                .await?;
         }
 
         Ok(())
@@ -610,40 +724,20 @@ impl Integration for DataDogIntegration {
     async fn on_cache_hit(&self, event: &CacheHitEvent) -> IntegrationResult<()> {
         let tags = [("cache_backend", event.cache_backend.as_str())];
 
-        self.record_metric("cache.hits", 1.0, 1, &tags, None).await;
+        self.record_metric("cache.hits", 1.0, 1, &tags, None)
+            .await?;
 
         Ok(())
     }
 
     async fn flush(&self) -> IntegrationResult<()> {
-        let events = {
-            let mut buffer = self.buffer.write().await;
-            std::mem::take(&mut *buffer)
+        let batch_count = {
+            let buffer = self.buffer()?;
+            buffer.len().div_ceil(self.batch_size())
         };
-
-        if events.is_empty() {
-            return Ok(());
+        for _ in 0..batch_count {
+            self.flush_batch(true).await?;
         }
-
-        debug!("DataDog: Flushing {} events", events.len());
-
-        let mut metrics = Vec::new();
-        let mut logs = Vec::new();
-
-        for event in events {
-            match event {
-                BufferedEvent::Metric(m) => metrics.push(m),
-                BufferedEvent::Log(l) => logs.push(l),
-            }
-        }
-
-        // Send metrics and logs in parallel
-        let (metrics_result, logs_result) =
-            tokio::join!(self.send_metrics(metrics), self.send_logs(logs));
-
-        metrics_result?;
-        logs_result?;
-
         Ok(())
     }
 
@@ -654,77 +748,5 @@ impl Integration for DataDogIntegration {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_datadog_config_builder() {
-        let config = DataDogConfig::new("test-api-key")
-            .site("datadoghq.eu")
-            .service("my-service")
-            .env("production")
-            .version("1.0.0")
-            .tag("team", "platform");
-
-        assert_eq!(config.api_key, "test-api-key");
-        assert_eq!(config.site, "datadoghq.eu");
-        assert_eq!(config.service, "my-service");
-        assert_eq!(config.env, Some("production".to_string()));
-        assert_eq!(config.version, Some("1.0.0".to_string()));
-        assert_eq!(config.tags.get("team"), Some(&"platform".to_string()));
-    }
-
-    #[test]
-    fn test_datadog_config_urls() {
-        let config = DataDogConfig::new("test-key").site("datadoghq.eu");
-
-        assert!(config.metrics_url().contains("datadoghq.eu"));
-        assert!(config.logs_url().contains("datadoghq.eu"));
-        assert!(config.traces_url().contains("datadoghq.eu"));
-    }
-
-    #[test]
-    fn test_datadog_config_default() {
-        let config = DataDogConfig::default();
-
-        assert_eq!(config.site, "datadoghq.com");
-        assert_eq!(config.service, "litellm-gateway");
-        assert!(config.enable_metrics);
-        assert!(config.enable_traces);
-        assert!(config.enable_logs);
-    }
-
-    #[test]
-    fn test_datadog_integration_requires_api_key() {
-        let config = DataDogConfig::default();
-        let result = DataDogIntegration::new(config);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_datadog_integration_creation() {
-        let config = DataDogConfig::new("test-api-key");
-        let result = DataDogIntegration::new(config);
-        assert!(result.is_ok());
-
-        let integration = result.unwrap();
-        assert_eq!(integration.name(), "datadog");
-        assert!(integration.is_enabled());
-    }
-
-    #[test]
-    fn test_build_tags() {
-        let config = DataDogConfig::new("test-key")
-            .service("test-service")
-            .env("test")
-            .tag("custom", "value");
-        let integration = DataDogIntegration::new(config).unwrap();
-
-        let tags = integration.build_tags(&[("extra", "tag")]);
-
-        assert!(tags.contains(&"service:test-service".to_string()));
-        assert!(tags.contains(&"env:test".to_string()));
-        assert!(tags.contains(&"custom:value".to_string()));
-        assert!(tags.contains(&"extra:tag".to_string()));
-    }
-}
+#[path = "datadog_tests.rs"]
+mod tests;
