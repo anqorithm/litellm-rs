@@ -10,6 +10,10 @@ mod tests {
     use futures::stream;
     use litellm_rs::Config;
     use litellm_rs::config::models::provider::ProviderConfig;
+    use litellm_rs::core::integrations::{
+        CallbackRuntime, Integration, IntegrationManager, IntegrationResult, LlmEndEvent,
+        LlmErrorEvent, LlmStartEvent,
+    };
     use litellm_rs::core::types::context::RequestContext;
     use litellm_rs::server::HttpServer as GatewayHttpServer;
     use litellm_rs::server::state::AppState;
@@ -22,6 +26,57 @@ mod tests {
     enum MockScenario {
         NonStreaming,
         Streaming,
+        StreamingIdle,
+    }
+
+    #[derive(Clone)]
+    enum RecordedCallback {
+        Start,
+        End,
+        Error(LlmErrorEvent),
+    }
+
+    struct RecordingCallback {
+        events: Arc<Mutex<Vec<RecordedCallback>>>,
+        error_notify: Arc<tokio::sync::Notify>,
+    }
+
+    #[async_trait::async_trait]
+    impl Integration for RecordingCallback {
+        fn name(&self) -> &'static str {
+            "responses-route-test-recorder"
+        }
+
+        fn is_enabled(&self) -> bool {
+            true
+        }
+
+        async fn on_llm_start(&self, _event: &LlmStartEvent) -> IntegrationResult<()> {
+            self.events.lock().unwrap().push(RecordedCallback::Start);
+            Ok(())
+        }
+
+        async fn on_llm_end(&self, _event: &LlmEndEvent) -> IntegrationResult<()> {
+            self.events.lock().unwrap().push(RecordedCallback::End);
+            Ok(())
+        }
+
+        async fn on_llm_error(&self, event: &LlmErrorEvent) -> IntegrationResult<()> {
+            self.events
+                .lock()
+                .unwrap()
+                .push(RecordedCallback::Error(event.clone()));
+            self.error_notify.notify_one();
+            Ok(())
+        }
+
+        async fn flush(&self) -> IntegrationResult<()> {
+            Ok(())
+        }
+
+        async fn shutdown(&self) -> IntegrationResult<()> {
+            Ok(())
+        }
     }
 
     #[derive(Clone)]
@@ -80,6 +135,11 @@ mod tests {
                 panic!("mock server should stop cleanly: {error}");
             }
         }
+
+        async fn abort(self) {
+            self.handle.stop(false).await;
+            let _ = self.task.await;
+        }
     }
 
     async fn mock_chat_completions(
@@ -124,6 +184,12 @@ mod tests {
                     .insert_header(("Content-Type", "text/event-stream"))
                     .streaming(stream)
             }
+            MockScenario::StreamingIdle => {
+                let stream = stream::pending::<Result<Bytes, actix_web::Error>>();
+                HttpResponse::Ok()
+                    .insert_header(("Content-Type", "text/event-stream"))
+                    .streaming(stream)
+            }
         }
     }
 
@@ -140,9 +206,19 @@ mod tests {
     }
 
     async fn app_state(base_url: &str) -> AppState {
+        app_state_with_idle_timeout(base_url, None).await
+    }
+
+    async fn app_state_with_idle_timeout(
+        base_url: &str,
+        stream_idle_timeout: Option<u64>,
+    ) -> AppState {
         let mut config = Config::default();
         config.gateway.storage.database.enabled = false;
         config.gateway.storage.redis.enabled = false;
+        if let Some(stream_idle_timeout) = stream_idle_timeout {
+            config.gateway.server.stream_idle_timeout = stream_idle_timeout;
+        }
         config.gateway.providers = vec![provider_config(base_url)];
 
         GatewayHttpServer::new(&config)
@@ -150,6 +226,20 @@ mod tests {
             .expect("gateway server should initialize")
             .state()
             .clone()
+    }
+
+    async fn callback_runtime(
+        events: Arc<Mutex<Vec<RecordedCallback>>>,
+        error_notify: Arc<tokio::sync::Notify>,
+    ) -> CallbackRuntime {
+        let manager = Arc::new(IntegrationManager::with_defaults());
+        manager
+            .register(Arc::new(RecordingCallback {
+                events,
+                error_notify,
+            }))
+            .await;
+        CallbackRuntime::new(manager, 8).expect("callback runtime should initialize")
     }
 
     macro_rules! with_user {
@@ -311,6 +401,53 @@ mod tests {
         assert_eq!(fetched["output"][0]["content"][0]["text"], "Hello");
 
         mock.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn streamed_response_zero_timeout_observes_client_disconnect() {
+        let mock = MockOpenAiServer::start(MockScenario::StreamingIdle).await;
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let error_notify = Arc::new(tokio::sync::Notify::new());
+        let runtime = callback_runtime(Arc::clone(&events), Arc::clone(&error_notify)).await;
+        let state = app_state_with_idle_timeout(&mock.base_url, Some(0))
+            .await
+            .with_callbacks(runtime.dispatcher());
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(state))
+                .configure(litellm_rs::server::routes::ai::configure_routes),
+        )
+        .await;
+
+        let request = with_user!(
+            test::TestRequest::post()
+                .uri("/v1/responses")
+                .set_json(response_request(Some(true)))
+                .to_request(),
+            "disconnect-owner"
+        );
+        let response = test::call_service(&app, request).await;
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let disconnected = error_notify.notified();
+        drop(response);
+        tokio::time::timeout(Duration::from_secs(2), disconnected)
+            .await
+            .expect("responses worker should observe the dropped response body");
+        runtime
+            .shutdown()
+            .await
+            .expect("callback runtime should drain");
+
+        let events = events.lock().unwrap().clone();
+        assert_eq!(events.len(), 2);
+        assert!(matches!(events[0], RecordedCallback::Start));
+        let RecordedCallback::Error(error) = &events[1] else {
+            panic!("client disconnect should emit one terminal error callback");
+        };
+        assert_eq!(error.error_type.as_deref(), Some("client_disconnect"));
+
+        mock.abort().await;
     }
 
     fn response_id_from_sse(body: &str) -> String {
