@@ -15,6 +15,7 @@ use crate::core::types::{context::SharedRequestContext, model::ProviderCapabilit
 use crate::server::state::AppState;
 
 use super::super::budgeted::{ApiKeyBudgetPolicy, SettledStream, run_stream};
+use super::super::callbacks::CallbackLifecycle;
 use super::super::openai_errors;
 use super::super::{spend, token_policy};
 
@@ -45,6 +46,12 @@ pub(super) async fn handle_streaming_chat_completion(
     };
 
     let requested_model = core_request.model.clone();
+    let callback = CallbackLifecycle::new(
+        &state.callbacks,
+        state.budgeted.pricing(),
+        &requested_model,
+        context.as_ref(),
+    );
     let context_for_execution = Arc::clone(&context);
     let request_for_execution = Arc::clone(&request);
     let budgeted = state.budgeted.clone();
@@ -54,6 +61,7 @@ pub(super) async fn handle_streaming_chat_completion(
     let pricing_config = state.config().gateway.pricing.clone();
     let api_key_id = context.api_key_id();
     let api_key_budget_id = context.api_key_budget_id();
+    let callback_for_execution = callback.clone();
     match run_stream(
         state.unified_router.clone(),
         &requested_model,
@@ -67,6 +75,7 @@ pub(super) async fn handle_streaming_chat_completion(
             let budget_limits = budget_limits.clone();
             let key_manager = key_manager.clone();
             let pricing_config = pricing_config.clone();
+            let callback = callback_for_execution.clone();
             async move {
                 let provider_name = provider.name().to_string();
                 let (pricing_provider, pricing_model) = spend::pricing_identity_for_provider(
@@ -91,6 +100,10 @@ pub(super) async fn handle_streaming_chat_completion(
                 let reserve_pricing_config = pricing_config.clone();
                 let reserve_pricing_provider = pricing_provider.clone();
                 let reserve_pricing_model = pricing_model.clone();
+                let callback_provider = provider_name.clone();
+                let callback_model = selected_model.clone();
+                let callback_pricing_provider = reserve_pricing_provider.clone();
+                let callback_pricing_model = reserve_pricing_model.clone();
                 let (stream, reservations) = budgeted
                     .for_selected_with_api_key_budget(
                         provider_name.clone(),
@@ -111,7 +124,15 @@ pub(super) async fn handle_streaming_chat_completion(
                                 request_for_budget,
                             )
                         },
-                        || provider.chat_completion_stream(request_for_provider, provider_context),
+                        || {
+                            callback.begin_provider_execution(
+                                callback_provider,
+                                callback_model,
+                                callback_pricing_provider,
+                                callback_pricing_model,
+                            );
+                            provider.chat_completion_stream(request_for_provider, provider_context)
+                        },
                     )
                     .await?;
                 let (budget_reservation, key_budget_reservation) = reservations.into_parts();
@@ -181,6 +202,10 @@ pub(super) async fn handle_streaming_chat_completion(
                                     );
                                     lease.finish_failure(&error);
                                 }
+                                callback.fail(
+                                    format!("stream idle timeout after {}s", idle_timeout_secs),
+                                    "timeout",
+                                );
                                 settle_after_upstream_output!();
                                 return;
                             }
@@ -218,6 +243,7 @@ pub(super) async fn handle_streaming_chat_completion(
                                     if let Some(lease) = lease.take() {
                                         lease.finish_failure(&e);
                                     }
+                                    callback.fail(e.to_string(), "conversion_error");
                                     settle_after_upstream_output!();
                                     return;
                                 }
@@ -252,6 +278,10 @@ pub(super) async fn handle_streaming_chat_completion(
                                         );
                                         lease.finish_failure(&error);
                                     }
+                                    callback.fail(
+                                        format!("Serialization error: {}", e),
+                                        "serialization_error",
+                                    );
                                     settle_after_upstream_output!();
                                     return;
                                 }
@@ -268,6 +298,7 @@ pub(super) async fn handle_streaming_chat_completion(
                             if let Some(lease) = lease.take() {
                                 lease.finish_failure(&e);
                             }
+                            callback.fail(e.to_string(), "provider_error");
                             settle_after_upstream_output!();
                             return;
                         }
@@ -275,6 +306,7 @@ pub(super) async fn handle_streaming_chat_completion(
 
                     if tx.send(bytes).await.is_err() {
                         info!("Client disconnected during streaming, cancelling upstream");
+                        callback.fail("client disconnected", "client_disconnect");
                         settlement.record_disconnect(final_usage.as_ref()).await;
                         return;
                     }
@@ -287,6 +319,7 @@ pub(super) async fn handle_streaming_chat_completion(
                 settlement
                     .record_completion(final_usage.as_ref(), saw_upstream_output)
                     .await;
+                callback.complete_usage(final_usage.as_ref(), "success");
                 if let Some(lease) = lease.take() {
                     lease.finish_success(tokens_used);
                 }
@@ -304,6 +337,7 @@ pub(super) async fn handle_streaming_chat_completion(
         }
         Err(e) => {
             error!("Failed to create streaming response: {}", e);
+            callback.fail(e.to_string(), "provider_error");
             Ok(openai_errors::gateway_error_response(&e))
         }
     }

@@ -23,6 +23,7 @@ use std::sync::Arc;
 use tracing::{error, info, warn};
 
 use super::budgeted::{ApiKeyBudgetPolicy, run_unary};
+use super::callbacks::CallbackLifecycle;
 use super::openai_errors;
 #[path = "chat_delta.rs"]
 mod chat_delta;
@@ -113,6 +114,12 @@ async fn handle_chat_completion_internal(
         return Ok(cached);
     }
     let requested_model = core_request.model.clone();
+    let callback = CallbackLifecycle::new(
+        &state.callbacks,
+        state.budgeted.pricing(),
+        &requested_model,
+        context.as_ref(),
+    );
     let context_for_execution = Arc::clone(&context);
     let request_for_execution = Arc::clone(&request);
 
@@ -124,8 +131,9 @@ async fn handle_chat_completion_internal(
     let api_key_id = context.api_key_id();
     let api_key_budget_id = context.api_key_budget_id();
     let budgeted = state.budgeted.clone();
+    let callback_for_execution = callback.clone();
 
-    let core_response = run_unary(
+    let core_response = match run_unary(
         unified_router,
         &requested_model,
         ProviderCapability::ChatCompletion,
@@ -137,6 +145,7 @@ async fn handle_chat_completion_internal(
             let key_manager = key_manager.clone();
             let budgeted = budgeted.clone();
             let pricing_config = pricing_config.clone();
+            let callback = callback_for_execution.clone();
             async move {
                 let provider_name = provider.name().to_string();
                 let (pricing_provider, pricing_model) = super::spend::pricing_identity_for_provider(
@@ -166,6 +175,10 @@ async fn handle_chat_completion_internal(
                 let settle_pricing_provider = pricing_provider;
                 let settle_pricing_model = pricing_model;
                 let settle_key_manager = key_manager.clone();
+                let callback_provider = provider_name.clone();
+                let callback_model = selected_model.clone();
+                let callback_pricing_provider = reserve_pricing_provider.clone();
+                let callback_pricing_model = reserve_pricing_model.clone();
                 budgeted
                     .for_selected_with_api_key_budget(
                         provider_name.clone(),
@@ -186,7 +199,15 @@ async fn handle_chat_completion_internal(
                                 request_for_budget,
                             )
                         },
-                        || provider.chat_completion(request_for_provider, provider_context),
+                        || {
+                            callback.begin_provider_execution(
+                                callback_provider,
+                                callback_model,
+                                callback_pricing_provider,
+                                callback_pricing_model,
+                            );
+                            provider.chat_completion(request_for_provider, provider_context)
+                        },
                         |response, reservations, budget| {
                             let (budget_reservation, key_budget_reservation) =
                                 reservations.into_parts();
@@ -220,10 +241,24 @@ async fn handle_chat_completion_internal(
             }
         },
     )
-    .await?;
+    .await
+    {
+        Ok(response) => response,
+        Err(error) => {
+            callback.fail(error.to_string(), "provider_error");
+            return Err(error);
+        }
+    };
 
     let response = convert_core_chat_response(core_response);
-    super::response_cache::store_chat(state, request.as_ref(), &response, context.as_ref()).await?;
+    if let Err(error) =
+        super::response_cache::store_chat(state, request.as_ref(), &response, context.as_ref())
+            .await
+    {
+        callback.fail(error.to_string(), "cache_error");
+        return Err(error);
+    }
+    callback.complete_usage(response.usage.as_ref(), "success");
     Ok(response)
 }
 
