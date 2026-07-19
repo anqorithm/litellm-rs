@@ -39,7 +39,7 @@ impl AlertManager {
                 None,
                 Some("Gateway Alert".to_string()),
                 AlertSeverity::Info,
-            )));
+            )?));
         }
 
         // Add email channel if configured
