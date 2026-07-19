@@ -78,6 +78,15 @@ fn enforce(
                 "{subject} blocked by {surface} guardrails"
             )))
         }
+        Ok(result) if result.is_modified() => {
+            error!(
+                surface,
+                "Guardrail masking reached a non-mutating gateway boundary"
+            );
+            Err(GatewayError::Internal(format!(
+                "{surface} guardrail masking is not supported"
+            )))
+        }
         Ok(_) => Ok(()),
         Err(cause) => {
             error!(%cause, surface, "Guardrail execution failed closed");
@@ -156,6 +165,23 @@ mod tests {
                 .await
                 .is_ok()
         );
+    }
+
+    #[tokio::test]
+    async fn masking_fails_closed_instead_of_forwarding_original_content() {
+        use crate::core::guardrails::{GuardrailAction, PIIConfig};
+
+        let mut config = GatewayConfig::default().guardrails;
+        config.pii = Some(PIIConfig {
+            enabled: true,
+            action: GuardrailAction::Mask,
+            ..PIIConfig::default()
+        });
+        let engine = GuardrailEngine::new(config).expect("PII policy must compile");
+
+        let result = check_input(&engine, &request("email me at user@example.com")).await;
+
+        assert!(matches!(result, Err(GatewayError::Internal(_))));
     }
 
     #[tokio::test]

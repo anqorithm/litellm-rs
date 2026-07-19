@@ -58,6 +58,7 @@ impl Validate for GatewayConfig {
         Validate::validate(&self.cache)?;
         Validate::validate(&self.rate_limit)?;
         self.guardrails.validate()?;
+        crate::config::models::validate_gateway_guardrails(&self.guardrails)?;
         self.ip_access.validate()?;
         Validate::validate(&self.enterprise)?;
         Validate::validate(&self.pricing)?;
