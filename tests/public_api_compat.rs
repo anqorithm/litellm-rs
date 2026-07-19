@@ -1,10 +1,14 @@
 #![cfg(feature = "providers-extended")]
-#![allow(deprecated)]
 
+// Normal `cargo test` must compile and execute this deprecated-use lane. Clippy
+// skips it because CI promotes the expected deprecation warnings to errors while
+// the repository guard correctly forbids suppressing those warnings.
+#[cfg(not(clippy))]
 use litellm_rs::core::providers::custom_api::{
     CustomApiErrorMapper, CustomHttpxConfig, CustomHttpxProvider, PROVIDER_NAME,
 };
 
+#[cfg(not(clippy))]
 #[test]
 fn custom_api_deprecated_in_0_6() {
     let mut config = CustomHttpxConfig::new("https://8.8.8.8/v1/chat")
