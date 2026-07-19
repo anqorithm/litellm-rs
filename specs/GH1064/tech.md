@@ -28,10 +28,16 @@ Anchors below were verified against `origin/main@bdc06ba364e8b9e095bb91f1c75572a
   `e1e2907e3e1e62da733901eaf751dca1faaa21fd`.
 - Its exact changed paths were the roadmap and the three GH1064 packet files;
   no production or child-spec file changed.
-- The two inline comments were resolved and outdated on the final head. The only
-  submitted review was on old head `88a20e8dfaa9435d573241bd7e86814faf4c3cd9`,
-  and the Codex reviewer lane reported a usage-limit failure. Therefore PR #1084
-  supplies no reusable independent exact-head PASS.
+- The two GitHub inline comments were resolved and outdated on the final head.
+  GitHub's only submitted review was on old head
+  `88a20e8dfaa9435d573241bd7e86814faf4c3cd9`. Separately, the current `implx`
+  run performed an independent post-merge exact-head review of
+  `1d5502fdba342a53df8f766720d1affa4e344384`; its verdict was `FAIL` with
+  structural findings: missing stable `B-xxx` IDs, missing ten-category boundary
+  coverage, missing single complete planned-changes manifest, missing per-B
+  mapping, and missing task `Covers:` fields. PR #1084 therefore has no clean,
+  reusable exact-head `PASS`; the failed review remains durable evidence and is
+  not erased by this reconciliation.
 - Fresh issue evidence on 2026-07-19 reports #1064 as `OPEN`. Historical merge
   and resolved comments do not satisfy the new PR's review, gate, merge, or
   closure requirements.
@@ -84,7 +90,7 @@ Reconcile the existing packet without changing product scope:
 | --- | --- | --- |
 | `B-001` durable classified roadmap | Roadmap method and sections | `rg -n '^> 方法：|^### 事实|^### 推断$|^### 建议' docs/plan/2026-07-18-best-gateway-gap-analysis.md` |
 | `B-002` focused ownership | Roadmap lifecycle and ownership table | `sed -n '8,17p;102,110p' docs/plan/2026-07-18-best-gateway-gap-analysis.md` plus manual confirmation that each implementation-sized row names an issue. |
-| `B-003` parent closure semantics | Roadmap lifecycle, new PR body, post-merge audit | `sed -n '8,17p' docs/plan/2026-07-18-best-gateway-gap-analysis.md`; after merge, verify `$CLOSURE_AUDIT` records `issue_state=CLOSED` and no linked-issue mutation. |
+| `B-003` parent closure semantics | Roadmap lifecycle, new PR body, post-merge audit | `sed -n '8,17p' docs/plan/2026-07-18-best-gateway-gap-analysis.md`; after merge, run the complete `verify_t3_closure.sh` command block below. |
 | `B-004` future discoveries use focused work | Roadmap lifecycle | `rg -n 'Future implementation-sized discoveries' docs/plan/2026-07-18-best-gateway-gap-analysis.md` |
 | `B-005` documentation-only change | Reconciliation diff scope | `base="$(git merge-base origin/main HEAD)"; test -z "$(git diff --name-only "$base"..HEAD -- . ':(exclude)specs/GH1064/product.md' ':(exclude)specs/GH1064/tech.md' ':(exclude)specs/GH1064/tasks.md')"` |
 
@@ -101,8 +107,10 @@ modify the merged head.
 - Mark T3 complete in this packet: rejected because review, PR gate, merge, and
   closure have not happened for the new head and changing the checkbox after
   them would create a self-referential head.
-- Reuse PR #1084 review: rejected because its only review targeted an older head
-  and the independent Codex reviewer lane failed.
+- Reuse PR #1084 review: rejected because GitHub's submitted review targeted an
+  older head and the independent post-merge exact-head review returned `FAIL`.
+  Resolved/outdated threads and this structural repair do not convert or erase
+  that failure.
 - Modify the roadmap or child specs again: rejected because reconciliation is
   structural and their content remains owned by prior/focused work.
 
@@ -128,11 +136,87 @@ modify the merged head.
       three GH1064 packet files.
 - [x] Historical review-comment resolution: both PR #1084 inline threads are
       resolved and outdated at final head `1d5502fdba342a53df8f766720d1affa4e344384`.
+- [x] Historical exact-head review truth: the current `implx` run's independent
+      post-merge review of that final head returned `FAIL` with the five packet
+      structure findings listed above; no clean/reusable `PASS` exists.
 - [ ] A new independent reviewer has returned a clean verdict bound to the
       structural reconciliation PR exact head.
 - [ ] Fresh required `pr_gate.py` evidence for that exact head is allowed.
 - [ ] The new PR is merged and post-merge runtime-ledger plus issue-closure
       audit evidence is complete.
+
+### `verify_t3_closure.sh` canonical command block
+
+Run this complete block from the repository root after merge. `PR_EVIDENCE`,
+`CHECKPOINT`, and `CLOSURE_AUDIT` are coordinator-owned external JSON artifacts;
+any missing field, duplicate issue-1064 checkpoint item, mismatch, API failure,
+or nonzero exit blocks T3.
+
+```bash
+set -euo pipefail
+
+: "${PR_EVIDENCE:?set PR_EVIDENCE to post-merge PR evidence JSON}"
+: "${CHECKPOINT:?set CHECKPOINT to the runtime checkpoint JSON}"
+: "${CLOSURE_AUDIT:?set CLOSURE_AUDIT to the post-merge issue audit JSON}"
+
+expected_pr="$(jq -er '.pr | select(type == "number" and . > 0)' "$CLOSURE_AUDIT")"
+expected_head="$(jq -er '.head_sha | select(type == "string" and test("^[0-9a-f]{40}$"))' "$CLOSURE_AUDIT")"
+expected_merge="$(jq -er '.merge_sha | select(type == "string" and test("^[0-9a-f]{40}$"))' "$CLOSURE_AUDIT")"
+
+jq -e --argjson pr "$expected_pr" --arg head "$expected_head" --arg merge "$expected_merge" '
+  .issue == 1064
+  and .pr == $pr
+  and .head_sha == $head
+  and .merge_sha == $merge
+  and .pr_state == "MERGED"
+  and .issue_state == "CLOSED"
+  and .closing_issue_numbers == [1064]
+  and ((.queried_at | type) == "string")
+  and ((.queried_at | length) > 0)
+' "$CLOSURE_AUDIT" >/dev/null
+
+python3 checks/pr_gate.py --repo . --evidence "$PR_EVIDENCE" --mode required --json
+python3 checks/runtime_ledger_gate.py --checkpoint "$CHECKPOINT" --json
+
+jq -e --argjson pr "$expected_pr" --arg head "$expected_head" --arg merge "$expected_merge" '
+  .pr == $pr
+  and .head_sha == $head
+  and .merge_record.remote_confirmed == true
+  and .merge_record.merge_commit_sha == $merge
+' "$PR_EVIDENCE" >/dev/null
+
+jq -e --argjson pr "$expected_pr" --arg head "$expected_head" --arg merge "$expected_merge" '
+  [.items[] | select(.issue == 1064)] as $matches
+  | ($matches | length) == 1
+    and $matches[0].pr == $pr
+    and $matches[0].head_sha == $head
+    and $matches[0].merge_commit == $merge
+    and $matches[0].state == "merged"
+' "$CHECKPOINT" >/dev/null
+
+live_pr="$(
+  gh pr view "$expected_pr" \
+    --repo majiayu000/litellm-rs \
+    --json number,state,headRefOid,mergeCommit,body,closingIssuesReferences
+)"
+jq -e --argjson pr "$expected_pr" --arg head "$expected_head" --arg merge "$expected_merge" '
+  .number == $pr
+  and .state == "MERGED"
+  and .headRefOid == $head
+  and .mergeCommit.oid == $merge
+  and (.body | contains("Refs #1068"))
+  and (.body | contains("Refs #1084"))
+  and (.body | contains("Fixes #1064"))
+  and (([.closingIssuesReferences[].number] | sort) == [1064])
+' <<<"$live_pr" >/dev/null
+
+live_issue="$(
+  gh issue view 1064 \
+    --repo majiayu000/litellm-rs \
+    --json number,state
+)"
+jq -e '.number == 1064 and .state == "CLOSED"' <<<"$live_issue" >/dev/null
+```
 
 ## Rollback Plan
 

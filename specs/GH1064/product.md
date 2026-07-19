@@ -80,8 +80,10 @@ remaining with focused issues.
   may refresh it without reopening the umbrella.
 - A newly discovered gap without an owner requires a focused issue before
   implementation begins.
-- A merged documentation PR without final-head independent review is historical
-  evidence, not reusable approval for a later reconciliation head.
+- PR #1084 has a GitHub-submitted review on an older head and a separate
+  independent post-merge exact-head review with verdict `FAIL`. Neither is a
+  clean, reusable `PASS` for a later reconciliation head, and resolved threads
+  or subsequent repairs must not erase the failed-review record.
 
 ## Rollout Notes
 
