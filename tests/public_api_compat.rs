@@ -1,12 +1,39 @@
 #![cfg(feature = "providers-extended")]
 
-// Normal `cargo test` must compile and execute this deprecated-use lane. Clippy
-// skips it because CI promotes the expected deprecation warnings to errors while
+// Normal `cargo test` must compile and execute these deprecated-use lanes. Clippy
+// skips them because CI promotes the expected deprecation warnings to errors while
 // the repository guard correctly forbids suppressing those warnings.
+#[cfg(not(clippy))]
+use litellm_rs::core::providers::amazon_nova::{
+    AmazonNovaConfig, AmazonNovaErrorMapper, AmazonNovaModel, AmazonNovaModelRegistry,
+    AmazonNovaProvider,
+};
 #[cfg(not(clippy))]
 use litellm_rs::core::providers::custom_api::{
     CustomApiErrorMapper, CustomHttpxConfig, CustomHttpxProvider, PROVIDER_NAME,
 };
+
+#[cfg(not(clippy))]
+#[test]
+fn amazon_nova_deprecated_in_0_6() {
+    let registry = AmazonNovaModelRegistry::new();
+    assert!(registry.is_supported("amazon.nova-pro-v1:0"));
+
+    let model = AmazonNovaModel::new(
+        "compat-only",
+        "Compatibility Only",
+        "compile-time public API probe",
+        1_024,
+        128,
+    );
+    assert_eq!(model.id, "compat-only");
+
+    let _mapper = AmazonNovaErrorMapper;
+    let mut config = AmazonNovaConfig::with_api_key("compat-only-key");
+    config.base.api_base = Some("https://8.8.8.8/v1".to_string());
+    let _provider = AmazonNovaProvider::new(config)
+        .expect("0.6 public construction must remain available without issuing a request");
+}
 
 #[cfg(not(clippy))]
 #[test]
