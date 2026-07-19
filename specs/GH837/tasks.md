@@ -8,36 +8,51 @@ GH-837 / #837
 
 - Product: `product.md`
 - Tech: `tech.md`
+- Remaining-six authority: <https://github.com/majiayu000/litellm-rs/issues/837#issuecomment-4982855968>
 
-## 实现任务
+## 历史任务（T1–T9 ID/含义不变）
 
-- [ ] `SP837-T1` Owner: coordinator. Done when: `specs/GH837/` 三件套通过 SpecRail packet validation. Verify: `SPEC_RAIL=/path/to/specrail; python3 "$SPEC_RAIL/checks/check_workflow.py" --repo "$SPEC_RAIL" --spec-dir "$PWD/specs/GH837"`.
-- [ ] `SP837-T2` Owner: coordinator. Done when: 66 目录全量处置矩阵（wired-native/delete-native/demote-to-catalog/keep-infra/non-llm-lane/exempt + 每行 construction/dispatch、catalog、public export、macro、capability、internal dependency/metadata-use、endpoint/auth/capability equivalence 证据）作为附录追加到本 spec. Verify: `git diff -- specs/GH837/`; 每目录一行且附判定命令输出，裸 `rg "<TypeName>" src` 文本命中不得作为可达性证据；声明 `ProviderCapability::ChatCompletion` 的 adapter 不得进入 non-LLM baseline；demote 候选必须记录 static/dynamic endpoint、alternate auth env vars、provider-specific non-chat endpoint、capability equality。
-- [ ] `SP837-T3` Owner: maintainer. Done when: 维护者在 #837 批复处置矩阵（SpecRail human gate `spec_approval`），特别是 non-llm-lane 的产品定位与 delete 清单. Verify: #837 issue thread 中的明确批复。
-- [ ] `SP837-T4` Owner: coordinator. Done when: registry conformance 守护测试合入——扫描 literal `impl LLMProvider`、`define_http_provider_with_hooks!`、`define_pooled_http_provider_with_hooks!` 等 macro-generated provider，并与「native enum/factory/dispatch + catalog-only 完成状态 + 维护者批复的临时 orphan baseline + 豁免清单」求差集，新增非 baseline orphan 即失败；catalog 条目不得抵消仍存在的重复 native module. Verify: `cargo test core::providers::registry --lib --all-features`; 人为添加 literal impl、macro provider、pooled macro provider、catalog/native duplicate 四类孤儿 fixture 的负测试通过验证后移除。
-- [ ] `SP837-T5` Owner: coordinator. Done when: delete-native lane 按 tranche 执行完毕，每 PR 一个目录家族，`pub mod` 与 registry 元数据同步清理；有 internal dependency/metadata-use 的目录先迁移依赖或拆出 shared metadata；image/video/translation/search/vector/embedding-only provider 不进入此 lane，除非 non-LLM 产品决策明确批准，且 chat-capable adapter 不得按 non-LLM 删除. Verify: 每 tranche `cargo check --all-features` + `cargo test --all-features`; `rg -n "pub mod (petals|nlp_cloud|spark|gigachat)" src/core/providers/mod.rs` 无残留（以批复清单为准）。
-- [ ] `SP837-T6` Owner: coordinator. Done when: demote-to-catalog lane 执行完毕，每 provider 一个 PR（已有 catalog route 或维护者批准新增 catalog route + `def()`/完整 `ProviderDefinition` + 删 native 目录 + smoke 等价验证）；Snowflake、自定义/dynamic endpoint、native-only FIM/非 chat endpoint、catalog 无法表达 alternate auth env vars 或 capability set 不等价的 provider 不可 plain demote，必须 wire/delete/exempt 或先扩展 catalog；若 native 目录暂留，必须进入带 issue/owner/期限的豁免清单. Verify: `cargo test core::providers::registry::catalog --lib --all-features`; 每 PR 附 base_url/env-key/alternate env vars、是否新增 route 的产品批准、capability equality、provider-specific endpoint 检查、无重复 native impl 证据。
-- [ ] `SP837-T7` Owner: verification owner. Done when: 收尾扫描确认无不可达 `impl LLMProvider`（豁免清单除外），README / CLAUDE.md provider 描述已同步. Verify: conformance 测试绿色; `rg -c "impl LLMProvider" src/core/providers | wc -l` 与矩阵一致。
-- [ ] `SP837-T9` Owner: coordinator. Done when: 删除任何 `pub mod` provider 前完成 public API / semver 影响表，标明 refactor、deprecation、或 breaking-change 路径. Verify: 每个 delete/demote tranche PR 描述或 CHANGELOG 草案包含 compatibility 决策；`src/core/providers/mod.rs` 删除项均能追溯到矩阵行。
+- [x] `SP837-T1` Owner: coordinator. Covers: B-001. Dependencies: none. Done when: `specs/GH837/` 三件套通过 SpecRail packet validation. Verify: `env PYTHONDONTWRITEBYTECODE=1 python3 checks/check_workflow.py --repo . --spec-dir specs/GH837`.
+- [ ] `SP837-T2` Owner: coordinator. Covers: B-001, B-004, B-008, B-009. Dependencies: T1. Done when: 历史 66 目录 baseline 的每行均有 construction/dispatch、catalog、public export、macro、capability、internal dependency/metadata-use、endpoint/auth/capability equivalence 完整证据. Verify: 运行 Appendix 66-row check 并逐行核验 evidence ledger；当前短摘要不满足 done-when。
+- [ ] `SP837-T3` Owner: maintainer. Covers: B-001. Dependencies: T2. Done when: 维护者批准历史 66 行全量处置矩阵，特别是全部 delete 与 non-LLM lane. Verify: #837 issue thread 中明确覆盖全矩阵的批复；comment `4982855968` 只批准 remaining six，不满足本 task。
+- [x] `SP837-T4` Owner: coordinator. Covers: B-005. Dependencies: T1. Done when: registry conformance guard 扫描 literal/macro provider、duplicate catalog/native 和有期限 baseline，新增 orphan 会失败. Verify: `git merge-base --is-ancestor c4f5e9f7 HEAD && cargo test core::providers::registry --lib --all-features`.
+- [ ] `SP837-T5` Owner: coordinator. Covers: B-003, B-006, B-008, B-009. Dependencies: T2, T3, T23. Done when: 原 delete-native lane 按 tranche 完成，每 PR 一个目录家族并同步 `pub mod`/registry；internal dependency 先迁移；未经产品批准不混入 non-LLM/chat-capable adapter. Verify: 每 tranche `cargo check --all-features && cargo test --all-features`，且 `custom_api` 的 T23 removal evidence 完整。
+- [ ] `SP837-T6` Owner: coordinator. Covers: B-004, B-006, B-007, B-010, B-011. Dependencies: T2, T3, T12, T14, T16, T18. Done when: 原 demote lane 每 provider 一个 PR，获批 catalog route 与 endpoint/auth/capability 等价，native directory 删除或进入时限豁免；remaining four child removals 完成. Verify: `for p in amazon_nova github meta_llama v0; do test ! -d "src/core/providers/$p" || exit 1; done; cargo test core::providers::registry::catalog --lib --all-features`.
+- [ ] `SP837-T7` Owner: verification owner. Covers: B-002, B-003, B-005, B-008, B-012, B-014. Dependencies: T2, T3, T5, T6, T9, T20. Done when: 最终扫描无不可达 `LLMProvider`（批准豁免除外），baseline 与 README/CLAUDE 已按最终矩阵同步. Verify: `cargo test core::providers::registry --lib --all-features && rg -n 'amazon_nova|github|meta_llama|v0|ollama|custom_api' README.md CLAUDE.md src/core/providers/registry/lifecycle.rs`.
+- [ ] `SP837-T9` Owner: coordinator. Covers: B-007, B-010, B-013. Dependencies: T11, T13, T15, T17, T21, T22. Done when: 所有计划删除的 public surfaces 已在 0.6 deprecate，compatibility table/CHANGELOG/migration 与 breaking workflow evidence 完整；此 gate 必须先于任何 removal. Verify: `rg -n 'amazon_nova|github|meta_llama|v0|custom_api' CHANGELOG.md docs/providers && bash scripts/guards/check_version_bump.sh`.
 
-## 并行拆分
+## Remaining-six amendment and implementation
 
-- SP837-T4（守护测试，只动 `registry/`）与 SP837-T2（纯文档附录）可并行。
-- SP837-T5 各 tranche 之间文件不相交，可多 lane 并行（W-14：每 tranche 独占自己的目录集）。
-- SP837-T5/T6 依赖 T3 批复与 T9 compatibility 决策；T4 可在 T5/T6 前合入，但必须把 T3 批复矩阵中的当前 orphan 列为带 issue/owner/期限的临时 baseline，只对新增或未批准 orphan hard-fail。T5/T6 完成后逐步清空 baseline。
+Hard cap：每 task ≤500 non-doc changed lines（按 B-006 排除纯删除行，non-doc additions/edits 绝不豁免）；可建议 ≤4 个非纯删除文件。单一 provider 的纯删除只可例外物理 file count；一个 task/PR 不得混入第二 provider。
+
+- [x] `SP837-T10` Owner: coordinator. Covers: B-010, B-011, B-012, B-013, B-014. Dependencies: T1, T4. Done when: remaining-six maintainer decision 已与 `main@12faaf56` 当前 packet/source reconciliation，且未冒充全 66 matrix approval. Verify: `gh api repos/majiayu000/litellm-rs/issues/comments/4982855968 --jq '[.user.login,.author_association,.created_at,.html_url,.body] | @tsv' && env PYTHONDONTWRITEBYTECODE=1 python3 checks/check_workflow.py --repo . --spec-dir specs/GH837`.
+- [ ] `SP837-T11` Owner: amazon_nova provider owner. Covers: B-004, B-007, B-010, B-011, B-014. Dependencies: T10. Done when: catalog model/pricing/capability policy/equivalence 与 0.6 deprecation/notes 完成，native 保留. Verify: `test -d src/core/providers/amazon_nova && cargo test --lib --all-features amazon_nova_catalog_policy && rg -n '0\.6\.0|deprecat' src/core/providers/amazon_nova CHANGELOG.md docs/providers`.
+- [ ] `SP837-T12` Owner: amazon_nova provider owner. Covers: B-003, B-004, B-006, B-007, B-010, B-014. Dependencies: T11, T9. Done when: 仅该 provider native surface 在 0.7 删除且 baseline 收缩，catalog tests 仍绿. Verify: `test ! -d src/core/providers/amazon_nova && ! rg -n 'pub mod amazon_nova|AmazonNovaProvider' src/core/providers/mod.rs src/core/providers/registry && cargo test --lib --all-features amazon_nova`.
+- [ ] `SP837-T13` Owner: github provider owner. Covers: B-004, B-007, B-010, B-011, B-014. Dependencies: T10. Done when: catalog 保留 `GITHUB_MODELS_API_BASE`、model/pricing/capability/health 且完成 0.6 deprecation/notes，native 保留. Verify: `test -d src/core/providers/github && cargo test --lib --all-features github_catalog_policy && rg -n 'GITHUB_MODELS_API_BASE|0\.6\.0|deprecat' src/core/providers/github src/core/providers/registry/catalog.rs CHANGELOG.md docs/providers`.
+- [ ] `SP837-T14` Owner: github provider owner. Covers: B-003, B-004, B-006, B-007, B-010, B-014. Dependencies: T13, T9. Done when: 仅 `github` native surface 在 0.7 删除，`github_copilot` 不变. Verify: `test ! -d src/core/providers/github && test -d src/core/providers/github_copilot && ! rg -n 'pub mod github;' src/core/providers/mod.rs && cargo test --lib --all-features github_catalog_policy`.
+- [ ] `SP837-T15` Owner: meta_llama provider owner. Covers: B-004, B-007, B-010, B-011, B-014. Dependencies: T10. Done when: catalog auth/identity/filtering/streaming/model metadata/capability equivalence 与 0.6 deprecation/notes 完成，native 保留. Verify: `test -d src/core/providers/meta_llama && cargo test --lib --all-features meta_llama_catalog_policy && rg -n '0\.6\.0|deprecat' src/core/providers/meta_llama CHANGELOG.md docs/providers`.
+- [ ] `SP837-T16` Owner: meta_llama provider owner. Covers: B-003, B-004, B-006, B-007, B-010, B-014. Dependencies: T15, T9. Done when: 仅该 provider native surface 在 0.7 删除且 policy tests 仍绿. Verify: `test ! -d src/core/providers/meta_llama && ! rg -n 'pub mod meta_llama|MetaLlamaProvider' src/core/providers/mod.rs src/core/providers/registry && cargo test --lib --all-features meta_llama_catalog_policy`.
+- [ ] `SP837-T17` Owner: v0 provider owner. Covers: B-004, B-007, B-010, B-011, B-014. Dependencies: T10. Done when: authoritative aliases/model metadata/pricing/health/error policy 拒绝 no-model/zero-cost canonical fallback，并完成 0.6 deprecation/notes，native 保留. Verify: `test -d src/core/providers/v0 && cargo test --lib --all-features v0_catalog_policy && rg -n 'aliases|pricing|health|error|0\.6\.0|deprecat' src/core/providers/v0 src/core/providers/registry/catalog.rs CHANGELOG.md docs/providers`.
+- [ ] `SP837-T18` Owner: v0 provider owner. Covers: B-003, B-004, B-006, B-007, B-010, B-014. Dependencies: T17, T9. Done when: 仅该 provider native surface 在 0.7 删除且 authoritative policy tests 仍绿. Verify: `test ! -d src/core/providers/v0 && ! rg -n 'pub mod v0|V0Provider' src/core/providers/mod.rs src/core/providers/registry && cargo test --lib --all-features v0_catalog_policy`.
+- [ ] `SP837-T19` Owner: ollama provider owner. Covers: B-002, B-012, B-014. Dependencies: T10. Done when: 普通与 streaming Ollama 请求均使用 policy-aware client；`api_base`、SSRF 与 private-network authority tests 完整；移除 `ollama/provider.rs` unwired raw-HTTP exception. Verify: `cargo test --lib --all-features ollama && cargo test --lib --all-features endpoint_access && ! rg -n 'src/core/providers/ollama/provider.rs' src/core/providers/base/http/source_boundary_tests.rs && bash scripts/guards/check_outbound_http_clients.sh`.
+- [ ] `SP837-T20` Owner: ollama provider owner. Covers: B-002, B-012, B-014. Dependencies: T19. Done when: hardened native protocol 接入 core `ProviderType`/registry/factory/dispatch 并覆盖 request/response/streaming，无 generic catalog route. Verify: wiring exact head 必须重跑 `cargo test --lib --all-features ollama && cargo test --lib --all-features endpoint_access && ! rg -n 'src/core/providers/ollama/provider.rs' src/core/providers/base/http/source_boundary_tests.rs && bash scripts/guards/check_outbound_http_clients.sh`，再运行 `rg -n 'Ollama' src/core/providers/{mod.rs,factory,registry} && ! rg -n 'def\([^\n]*ollama|provider_id: "ollama"' src/core/providers/registry/catalog.rs`.
+- [ ] `SP837-T21` Owner: custom_api provider owner. Covers: B-007, B-008, B-013, B-014. Dependencies: T10. Done when: public module/types 在 0.6 deprecate 但仍可编译，notes 说明任意 URL/method/template/parser 不再是产品目标. Verify: `test -d src/core/providers/custom_api && cargo test --test public_api_compat custom_api_deprecated_in_0_6 && rg -n 'custom_api|0\.6\.0|deprecat' src/core/providers/custom_api src/core/providers/mod.rs CHANGELOG.md docs/providers`.
+- [ ] `SP837-T22` Owner: release workflow owner. Covers: B-007, B-010, B-013, B-014. Dependencies: T11, T13, T15, T17, T21. Done when: version workflow 显式验证 0.6.x→0.7.0 breaking bump并拒绝把 public removal 伪装成 non-breaking，测试无发布副作用. Verify: `bash scripts/guards/check_version_bump.sh && ruby -e 'require "yaml"; YAML.safe_load(File.read(".github/workflows/version-bump.yml"), aliases: true)'`.
+- [ ] `SP837-T23` Owner: custom_api provider owner. Covers: B-003, B-006, B-007, B-008, B-013, B-014. Dependencies: T21, T9. Done when: 0.7 删除该 public/native surface、registry/lifecycle entries，并有 migration alternative. Verify: `test ! -d src/core/providers/custom_api && ! rg -n 'custom_api|CustomApi' src/core/providers/mod.rs src/core/providers/registry && cargo check --all-features && cargo test --all-features`.
+
+## 执行顺序
+
+- T11/T13/T15/T17/T21 在 T10 后准备 0.6 compatibility；共享 catalog/docs files 时串行。
+- T22 在上述五个 0.6 tasks 后执行；T9 汇总并验证 compatibility evidence。
+- T12/T14/T16/T18/T23 仅在 T9 后 removal；T19 hardening 完成后才可 T20 Ollama wiring。
+- T5/T6 仍被开放 T2/T3 fail-closed；T7 closure 后才执行 T8。
 
 ## 验证
 
-- [ ] `SP837-T8` Owner: verification owner. Done when: 全部 tranche 合并后全量验证通过且编译时间对比有记录. Verify: `cargo fmt --all -- --check`; `cargo clippy --all-targets --all-features -- -D warnings`; `cargo test --all-features`; `cargo build --all-features --timings` 前后对比。
+- [ ] `SP837-T8` Owner: verification owner. Covers: B-003, B-005, B-014. Dependencies: T2, T3, T7. Done when: 全部 tranche 合并后全量验证通过且编译时间对比有记录. Verify: `cargo fmt --all -- --check && cargo clippy --all-targets --all-features -- -D warnings && cargo test --all-features && cargo build --all-features --timings`.
 
 ## Handoff Notes
 
-- U-05 约束：任何目录在 SP837-T3 批复前不得删除；「看起来没用」不是删除依据，零构造路径 + 维护者批复才是。
-- catalog 条目只能证明 `Provider::OpenAILike` 路径；当同名 native module 仍存在（如 v0 / meta_llama）时，
-  不能把 catalog 计为 native impl 可达。
-- `custom_api` 是 macro-generated provider，不是 shared infra；必须 wire/delete/demote/exempt 明确归类。
-- non-llm-lane（搜索/向量/语音/image/video/translation/embedding-only 目录）本质是产品范围问题：
-  litellm-rs 是否要做非 LLM 网关能力。必须先按 declared capability 过滤；声明 chat completion
-  的 adapter 即使名称像 search/translation，也必须走 LLM provider 矩阵。建议维护者在 #837 一并表态。
-- 可达性证据只接受 construction/dispatch/symbol/capability 证据；文档、注释、tests 或无关同名 raw text hit 只能作为旁证。
-- 与 #519 A-4 的边界：本 issue 不改 dispatch 架构；若 A-4 先落地（enum → trait object），wire lane 的接线方式随之变化，处置矩阵仍然有效。
+- 缺 catalog data 等于“不满足等价”，不得以空 model/zero pricing 或猜测值降级。
+- 每 task/PR 只处理一个 provider；`github` 与 `github_copilot` 是不同 scope。
+- T2/T3/T5/T6/T7/T8 开放期间不得把 GH837 标记 complete。
