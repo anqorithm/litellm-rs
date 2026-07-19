@@ -17,6 +17,10 @@ pub enum SDKError {
 
     /// Error
     #[error("Provider error: {0}")]
+    #[deprecated(
+        since = "0.6.0",
+        note = "use the existing typed SDK categories returned by ProviderError conversion"
+    )]
     ProviderError(String),
 
     /// Configuration
@@ -86,6 +90,8 @@ impl From<crate::utils::error::gateway_error::GatewayError> for SDKError {
             crate::utils::error::gateway_error::GatewayError::RateLimit { message, .. } => {
                 SDKError::RateLimitError(message)
             }
+            // SP965-T010 links 0.7 removal follow-up for SDKError::ProviderError
+            #[allow(deprecated)]
             crate::utils::error::gateway_error::GatewayError::Unavailable(msg) => {
                 SDKError::ProviderError(msg)
             }
@@ -116,6 +122,8 @@ impl From<crate::core::providers::ProviderError> for SDKError {
             ErrorCode::InvalidRequest | ErrorCode::Conflict => SDKError::InvalidRequest(message),
             ErrorCode::NotFound => SDKError::ModelNotFound(message),
             ErrorCode::Timeout | ErrorCode::Network => SDKError::NetworkError(message),
+            // SP965-T010 links 0.7 removal follow-up for SDKError::ProviderError
+            #[allow(deprecated)]
             ErrorCode::Unavailable => SDKError::ProviderError(message),
             ErrorCode::Configuration => SDKError::ConfigError(message),
             ErrorCode::Parsing => SDKError::ParseError(message),
@@ -130,6 +138,8 @@ pub type Result<T> = std::result::Result<T, SDKError>;
 
 impl SDKError {
     /// Error
+    // SP965-T010 links 0.7 removal follow-up for SDKError::ProviderError
+    #[allow(deprecated)]
     pub fn is_retryable(&self) -> bool {
         matches!(
             self,
@@ -157,6 +167,8 @@ mod tests {
     use crate::core::providers::ProviderError;
     use crate::utils::error::gateway_error::GatewayError;
 
+    // SP965-T010 links 0.7 removal follow-up for SDKError::ProviderError
+    #[allow(deprecated)]
     fn sdk_variant(error: &SDKError) -> &'static str {
         match error {
             SDKError::ProviderNotFound(_) => "provider_not_found",
@@ -192,6 +204,8 @@ mod tests {
         assert_eq!(error.to_string(), "No default provider configured");
     }
 
+    // SP965-T010 links 0.7 removal follow-up for SDKError::ProviderError
+    #[allow(deprecated)]
     #[test]
     fn test_sdk_error_provider_error() {
         let error = SDKError::ProviderError("API unavailable".to_string());
@@ -381,6 +395,8 @@ mod tests {
         assert!(error.is_retryable());
     }
 
+    // SP965-T010 links 0.7 removal follow-up for SDKError::ProviderError
+    #[allow(deprecated)]
     #[test]
     fn test_is_retryable_provider_error() {
         let error = SDKError::ProviderError("unavailable".to_string());
@@ -503,6 +519,8 @@ mod tests {
         assert!(sdk_error.is_retryable());
     }
 
+    // SP965-T010 links 0.7 removal follow-up for SDKError::ProviderError
+    #[allow(deprecated)]
     #[test]
     fn test_from_gateway_error_provider_unavailable() {
         let gateway_error = GatewayError::Unavailable("OpenAI down".to_string());
@@ -556,6 +574,8 @@ mod tests {
 
     // ==================== SDKError Edge Cases ====================
 
+    // SP965-T010 links 0.7 removal follow-up for SDKError::ProviderError
+    #[allow(deprecated)]
     #[test]
     fn test_sdk_error_empty_message() {
         let error = SDKError::ProviderError("".to_string());
@@ -573,5 +593,9 @@ mod tests {
         let long_msg = "a".repeat(1000);
         let error = SDKError::Internal(long_msg.clone());
         assert!(error.to_string().contains(&long_msg));
+    }
+
+    mod provider_error_deprecation_guard_tests {
+        include!("provider_error_deprecation_guard_tests.rs");
     }
 }
