@@ -12,7 +12,7 @@ pub mod base;
 // aleph_alpha: Tier 1 -> registry/catalog.rs
 #[cfg(feature = "providers-extended")]
 #[cfg_attr(
-    not(any(test, clippy)),
+    not(test),
     deprecated(since = "0.6.0", note = "use catalog amazon_nova before 0.7")
 )]
 pub mod amazon_nova;

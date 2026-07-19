@@ -325,22 +325,16 @@ fn get_bedrock_pricing(model: &str) -> Result<ModelPricing, CostError> {
 }
 
 fn get_amazon_nova_pricing(model: &str) -> Result<ModelPricing, CostError> {
-    #[cfg(feature = "providers-extended")]
-    {
-        let registry = crate::core::providers::amazon_nova::AmazonNovaModelRegistry::new();
-        if let Some(model_info) = registry.get(model) {
-            return Ok(ModelPricing {
-                model: model_info.id.clone(),
-                input_cost_per_1k_tokens: model_info.input_cost_per_1k,
-                output_cost_per_1k_tokens: model_info.output_cost_per_1k,
-                ..Default::default()
-            });
-        }
-    }
-
-    Err(CostError::ModelNotSupported {
-        model: model.to_string(),
-        provider: "amazon_nova".to_string(),
+    let entry = crate::core::providers::registry::catalog::amazon_nova_catalog_model(model)
+        .ok_or_else(|| CostError::ModelNotSupported {
+            model: model.to_string(),
+            provider: "amazon_nova".to_string(),
+        })?;
+    Ok(ModelPricing {
+        model: entry.model_id.to_string(),
+        input_cost_per_1k_tokens: entry.input_cost_per_million / 1_000.0,
+        output_cost_per_1k_tokens: entry.output_cost_per_million / 1_000.0,
+        ..Default::default()
     })
 }
 
