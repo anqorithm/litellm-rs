@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 /// Log destinations
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum LogDestination {
     /// Elasticsearch
     Elasticsearch {
@@ -36,6 +36,12 @@ pub enum LogDestination {
         url: String,
         headers: HashMap<String, String>,
     },
+}
+
+impl std::fmt::Debug for LogDestination {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("LogDestination { redacted }")
+    }
 }
 
 /// Alert channels
