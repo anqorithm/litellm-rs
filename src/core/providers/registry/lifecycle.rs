@@ -64,7 +64,7 @@ pub static PROVIDER_MODULE_LIFECYCLE: &[ProviderModuleLifecycleEntry] = &[
     ),
     stub(
         "custom_api",
-        "specialized provider module; not wired through the LLM factory yet",
+        "public surface deprecated in 0.6.0; retained unchanged until approved breaking removal in 0.7.0 after release and compatibility gates",
     ),
     internal("factory", "provider construction infrastructure"),
     providers_extended_wire(
@@ -117,10 +117,9 @@ pub static PROVIDER_ORPHAN_BASELINE: &[ProviderOrphanBaselineEntry] = &[
         "demote-to-catalog",
         "catalog-backed duplicate with native macro provider retained until demote tranche",
     ),
-    baseline(
+    approved_removal_baseline(
         "custom_api",
-        "exempt",
-        "macro-generated custom provider needs explicit product/architecture decision",
+        "0.6.0 deprecation precedes the maintainer-approved 0.7.0 public/native removal route",
     ),
     baseline(
         "github",
@@ -175,6 +174,20 @@ const fn baseline(
         issue: "GH837",
         owner: "coordinator",
         expires: "remove after GH837 disposition approval and tranche execution",
+        reason,
+    }
+}
+
+const fn approved_removal_baseline(
+    module_name: &'static str,
+    reason: &'static str,
+) -> ProviderOrphanBaselineEntry {
+    ProviderOrphanBaselineEntry {
+        module_name,
+        lane: "delete-native",
+        issue: "GH837",
+        owner: "custom_api provider owner",
+        expires: "remove in 0.7.0 after SP837-T22 version and SP837-T9 compatibility gates",
         reason,
     }
 }

@@ -4,10 +4,8 @@
 //! plus the built-in provider implementations wired into that enum. Implementing
 //! `LLMProvider` alone does not make a provider routeable; new routed providers
 //! must be added to the enum, dispatch arms, and factory wiring.
-
 // Base infrastructure
 pub mod base;
-
 // Provider modules - alphabetically ordered
 // Tier 1 providers removed in favor of registry/catalog.rs are commented with their tier.
 // aiml_api: Tier 1 -> registry/catalog.rs
@@ -30,6 +28,13 @@ pub mod cohere;
 // comet_api: Tier 1 -> registry/catalog.rs
 // compactifai: Tier 1 -> registry/catalog.rs
 #[cfg(feature = "providers-extended")]
+#[cfg_attr(
+    not(test),
+    deprecated(
+        since = "0.6.0",
+        note = "use a catalog or typed provider before 0.7.0 removal"
+    )
+)]
 pub mod custom_api;
 // dashscope: Tier 1 -> registry/catalog.rs
 // deepinfra: Tier 1 -> registry/catalog.rs
@@ -95,16 +100,13 @@ pub mod vertex_ai;
 // xinference: Tier 1 -> registry/catalog.rs
 // yi: Tier 1 -> registry/catalog.rs
 // zhipu: Tier 1 -> registry/catalog.rs
-
 // Shared utilities and architecture
 pub mod macros; // Macros for reducing boilerplate
 pub mod shared; // Shared utilities for all providers // Compile-time capability verification
 pub mod thinking; // Thinking/reasoning provider trait (modular)
-
 // Provider type enumeration (extracted from this module)
 pub mod provider_type;
 pub use provider_type::ProviderType;
-
 // Factory: create_provider, from_config_async, config builders
 pub mod factory;
 pub use factory::{create_provider, is_provider_selector_supported};
