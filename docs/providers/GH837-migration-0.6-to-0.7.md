@@ -19,10 +19,11 @@ Catalog route 保留 native 的固定 endpoint
 `AMAZON_NOVA_API_KEY` contract，并只声明 native provider 已实现的 chat、
 streaming chat 与 tool-calling capabilities。
 
-Catalog policy 以 native registry 为权威，保留五个 canonical model：
-Nova 2 Lite、Pro、Lite、Micro 与 Premier，以及各自的 context/output limits、
-token pricing、tool 和 multimodal metadata。缺少其中任一项都不满足后续
-0.7.0 demotion gate。
+Catalog policy 是模型、能力、价格与 alias 的唯一权威；保留的 native registry
+仅是 0.6 compatibility projection。Catalog 保留五个 canonical model：Nova 2
+Lite、Pro、Lite、Micro 与 Premier，以及各自的 context/output limits、token
+pricing、tool 和 multimodal metadata。缺少其中任一项都不满足后续 0.7.0
+demotion gate。
 
 ### 迁移
 

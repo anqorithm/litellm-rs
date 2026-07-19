@@ -9,7 +9,6 @@ use std::sync::LazyLock;
 use super::definition::{AuthType, ProviderDefinition};
 use crate::core::providers::openai_like::provider::OPENAI_LIKE_CATALOG_CAPABILITIES;
 use crate::core::types::model::{ModelInfo, ProviderCapability};
-
 pub(crate) const AMAZON_NOVA_CATALOG_CAPABILITIES: &[ProviderCapability] = &[
     ProviderCapability::ChatCompletion,
     ProviderCapability::ChatCompletionStream,
@@ -17,11 +16,6 @@ pub(crate) const AMAZON_NOVA_CATALOG_CAPABILITIES: &[ProviderCapability] = &[
 ];
 pub(crate) const AMAZON_NOVA_SUPPORTS_STREAMING: bool = true;
 pub(crate) const AMAZON_NOVA_SUPPORTS_TOOLS: bool = true;
-/// Canonical Amazon Nova models retained by the catalog after native demotion.
-///
-/// Pricing uses the shared catalog unit of USD per million tokens. The values
-/// are the single production authority projected into both catalog and native
-/// compatibility runtimes.
 pub(crate) struct AmazonNovaCatalogModel {
     pub(crate) model_id: &'static str,
     pub(crate) display_name: &'static str,
@@ -103,27 +97,21 @@ static AMAZON_NOVA_MODEL_INFOS: LazyLock<Vec<ModelInfo>> = LazyLock::new(|| {
         .map(amazon_nova_model_info_from_entry)
         .collect()
 });
-/// Resolve a canonical Amazon Nova model or one of its retained short aliases.
 pub(crate) fn amazon_nova_catalog_model(model: &str) -> Option<&'static AmazonNovaCatalogModel> {
     let canonical = AMAZON_NOVA_MODEL_ALIASES
         .iter()
-        .find_map(|(alias, canonical)| (*alias == model).then_some(*canonical))
-        .unwrap_or(model);
+        .find(|(alias, _)| *alias == model)
+        .map_or(model, |(_, canonical)| *canonical);
     AMAZON_NOVA_CATALOG_MODELS
         .iter()
         .find(|entry| entry.model_id == canonical)
 }
-
-/// Return the five canonical Amazon Nova models projected for catalog runtime.
 pub(crate) fn amazon_nova_catalog_model_infos() -> &'static [ModelInfo] {
     &AMAZON_NOVA_MODEL_INFOS
 }
-
-/// Project catalog authority metadata for canonical IDs and retained aliases.
 pub(crate) fn amazon_nova_catalog_model_info(model: &str) -> Option<ModelInfo> {
     amazon_nova_catalog_model(model).map(amazon_nova_model_info_from_entry)
 }
-
 fn amazon_nova_model_info_from_entry(entry: &AmazonNovaCatalogModel) -> ModelInfo {
     ModelInfo {
         id: entry.model_id.to_string(),
@@ -601,21 +589,19 @@ mod tests {
     async fn amazon_nova_catalog_runtime_exposes_models_and_pricing() {
         use crate::core::providers::openai_like::{OpenAILikeConfig, OpenAILikeProvider};
         use crate::core::traits::provider::llm_provider::trait_definition::LLMProvider;
-
-        let config =
+        let provider = OpenAILikeProvider::new_for_catalog(
             OpenAILikeConfig::with_api_key("https://8.8.8.8/v1", "catalog-runtime-test-key")
-                .with_provider_name("amazon_nova");
-        let provider =
-            OpenAILikeProvider::new_for_catalog(config, AMAZON_NOVA_CATALOG_CAPABILITIES)
-                .await
-                .expect("Amazon Nova catalog provider must construct without issuing a request");
-
+                .with_provider_name("amazon_nova"),
+            AMAZON_NOVA_CATALOG_CAPABILITIES,
+        )
+        .await
+        .expect("catalog provider must construct");
         assert_eq!(provider.models().len(), 5);
         for model in ["amazon.nova-pro-v1:0", "nova-pro"] {
             let cost = provider
                 .calculate_cost(model, 1_000, 1_000)
                 .await
-                .expect("Amazon Nova catalog pricing must calculate");
+                .expect("pricing");
             assert!((cost - 0.004).abs() < f64::EPSILON);
         }
         let unknown = provider

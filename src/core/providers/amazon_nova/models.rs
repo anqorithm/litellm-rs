@@ -8,7 +8,6 @@ use crate::core::providers::registry::catalog::{
     AMAZON_NOVA_CATALOG_MODELS, AMAZON_NOVA_MODEL_ALIASES, AMAZON_NOVA_SUPPORTS_STREAMING,
     AMAZON_NOVA_SUPPORTS_TOOLS, AmazonNovaCatalogModel,
 };
-
 /// Amazon Nova model definition
 #[derive(Debug, Clone)]
 pub struct AmazonNovaModel {
@@ -210,19 +209,34 @@ mod tests {
     #[test]
     fn amazon_nova_native_registry_is_exact_catalog_authority_projection() {
         let registry = AmazonNovaModelRegistry::new();
-        let native_models = registry.list_models();
-        let native_ids: std::collections::HashSet<_> = native_models
-            .iter()
+        let native_ids: std::collections::HashSet<_> = registry
+            .list_models()
+            .into_iter()
             .map(|model| model.id.as_str())
             .collect();
         let catalog_ids: std::collections::HashSet<_> = AMAZON_NOVA_CATALOG_MODELS
             .iter()
             .map(|entry| entry.model_id)
             .collect();
-        assert_eq!(native_ids.len(), native_models.len());
+        assert_eq!(native_ids.len(), registry.list_models().len());
         assert_eq!(catalog_ids.len(), AMAZON_NOVA_CATALOG_MODELS.len());
         assert_eq!(native_ids, catalog_ids);
-
+        let native_aliases: std::collections::HashSet<_> = registry
+            .models
+            .keys()
+            .map(String::as_str)
+            .filter(|key| !catalog_ids.contains(key))
+            .collect();
+        let catalog_aliases: std::collections::HashSet<_> = AMAZON_NOVA_MODEL_ALIASES
+            .iter()
+            .map(|(alias, _)| *alias)
+            .collect();
+        assert_eq!(
+            native_aliases.len() + native_ids.len(),
+            registry.models.len()
+        );
+        assert_eq!(catalog_aliases.len(), AMAZON_NOVA_MODEL_ALIASES.len());
+        assert_eq!(native_aliases, catalog_aliases);
         for (alias, canonical) in AMAZON_NOVA_MODEL_ALIASES {
             assert_eq!(
                 registry.get(alias).map(|model| model.id.as_str()),
