@@ -181,17 +181,35 @@ python3 checks/runtime_ledger_gate.py --checkpoint "$CHECKPOINT" --json
 jq -e --argjson pr "$expected_pr" --arg head "$expected_head" --arg merge "$expected_merge" '
   .pr == $pr
   and .head_sha == $head
-  and .merge_record.remote_confirmed == true
-  and .merge_record.merge_commit_sha == $merge
+  and (
+    .merge_record
+    | if . then
+        if type == "object" then
+          (.remote_confirmed == true and .merge_commit_sha == $merge)
+        else
+          false
+        end
+      else
+        false
+      end
+  )
 ' "$PR_EVIDENCE" >/dev/null
 
 jq -e --argjson pr "$expected_pr" --arg head "$expected_head" --arg merge "$expected_merge" '
-  [.items[] | select(.issue == 1064)] as $matches
+  (if .items then
+    [
+      .items[]?
+      | select(if type == "object" then .issue == 1064 else false end)
+    ]
+  else
+    []
+  end) as $matches
+  | ($matches[0]? // {}) as $match
   | ($matches | length) == 1
-    and $matches[0].pr == $pr
-    and $matches[0].head_sha == $head
-    and $matches[0].merge_commit == $merge
-    and $matches[0].state == "merged"
+    and $match.pr == $pr
+    and $match.head_sha == $head
+    and $match.merge_commit == $merge
+    and $match.state == "merged"
 ' "$CHECKPOINT" >/dev/null
 
 live_pr="$(
@@ -203,11 +221,40 @@ jq -e --argjson pr "$expected_pr" --arg head "$expected_head" --arg merge "$expe
   .number == $pr
   and .state == "MERGED"
   and .headRefOid == $head
-  and .mergeCommit.oid == $merge
-  and (.body | contains("Refs #1068"))
-  and (.body | contains("Refs #1084"))
-  and (.body | contains("Fixes #1064"))
-  and (([.closingIssuesReferences[].number] | sort) == [1064])
+  and (
+    .mergeCommit
+    | if type == "object" then .oid == $merge else false end
+  )
+  and (
+    .body
+    | if type == "string" then
+        (
+          contains("Refs #1068")
+          and contains("Refs #1084")
+          and contains("Fixes #1064")
+        )
+      else
+        false
+      end
+  )
+  and (
+    .closingIssuesReferences
+    | if type == "array" then
+        (
+          [
+            .[]?
+            | if type == "object" then
+                (.number | select(type == "number"))
+              else
+                empty
+              end
+          ]
+          | sort
+        ) == [1064]
+      else
+        false
+      end
+  )
 ' <<<"$live_pr" >/dev/null
 
 live_issue="$(
