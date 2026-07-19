@@ -100,7 +100,22 @@ pub(crate) fn gateway_error_response(error: &GatewayError) -> HttpResponse {
 
 fn openai_error_spec(error: &GatewayError) -> OpenAiErrorSpec {
     let facts = gateway_http_error_facts(error);
-    let message = openai_error_message(error);
+    let redacted = match error {
+        GatewayError::Provider(provider_error) => GatewayError::Provider(provider_error.redacted()),
+        _ => return openai_error_spec_from_safe_error(error, facts),
+    };
+    openai_error_spec_from_safe_error(&redacted, facts)
+}
+
+fn openai_error_spec_from_safe_error(
+    error: &GatewayError,
+    facts: HttpErrorFacts,
+) -> OpenAiErrorSpec {
+    let message = match error {
+        GatewayError::Provider(ProviderError::ApiError { message, .. }) => message.clone(),
+        GatewayError::Provider(provider_error) => provider_error.to_string(),
+        _ => error.to_string(),
+    };
     let mut spec = spec_from_facts(facts, message);
 
     if let GatewayError::Provider(ProviderError::ApiError { .. }) = error
@@ -122,15 +137,6 @@ fn openai_error_spec(error: &GatewayError) -> OpenAiErrorSpec {
 
     spec
 }
-
-fn openai_error_message(error: &GatewayError) -> String {
-    match error {
-        GatewayError::Provider(ProviderError::ApiError { message, .. }) => message.clone(),
-        GatewayError::Provider(provider_error) => provider_error.to_string(),
-        _ => error.to_string(),
-    }
-}
-
 fn build_response(spec: OpenAiErrorSpec) -> HttpResponse {
     HttpResponse::build(spec.status).json(response_body(
         spec.message,
@@ -331,9 +337,10 @@ mod tests {
 
     #[actix_web::test]
     async fn provider_api_error_preserves_upstream_openai_error_fields() {
+        let secret = "sk-live-upstream-secret";
         let upstream = serde_json::json!({
             "error": {
-                "message": "context window exceeded",
+                "message": format!("context window exceeded {secret}"),
                 "type": "invalid_request_error",
                 "param": "messages",
                 "code": "context_length_exceeded"
@@ -349,10 +356,14 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
         let body = to_json(response).await;
-        assert_eq!(body["error"]["message"], "context window exceeded");
+        assert_eq!(
+            body["error"]["message"],
+            "context window exceeded [REDACTED]"
+        );
         assert_eq!(body["error"]["type"], "invalid_request_error");
         assert_eq!(body["error"]["param"], "messages");
         assert_eq!(body["error"]["code"], "context_length_exceeded");
+        assert!(!body.to_string().contains(secret));
     }
 
     #[test]

@@ -37,7 +37,7 @@ impl GatewayError {
     pub fn error_response_with_request_id(&self, request_id: Option<String>) -> HttpResponse {
         let facts = gateway_http_error_facts(self);
         let message = match self {
-            GatewayError::Provider(provider_error) => provider_error.to_string(),
+            GatewayError::Provider(provider_error) => provider_error.redacted().to_string(),
             _ => self.to_string(),
         };
 
