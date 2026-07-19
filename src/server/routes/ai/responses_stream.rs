@@ -5,9 +5,8 @@
 
 use crate::core::models::openai::requests::{ChatCompletionRequest, StreamOptions};
 use crate::core::models::openai::responses_api::{
-    ResponseFunctionCall, ResponseInputTokensDetails, ResponseOutputContent, ResponseOutputItem,
-    ResponseOutputMessage, ResponseOutputTokensDetails, ResponseReasoningItem, ResponseStreamEvent,
-    ResponseUsage, ResponsesApiRequest, ResponsesApiResponse,
+    ResponseFunctionCall, ResponseOutputContent, ResponseOutputItem, ResponseOutputMessage,
+    ResponseStreamEvent, ResponsesApiRequest, ResponsesApiResponse,
 };
 use crate::core::providers::ProviderError;
 use crate::core::streaming::types::Event;
@@ -23,7 +22,6 @@ use actix_web::http::header::{CACHE_CONTROL, CONTENT_TYPE};
 use actix_web::{HttpResponse, Result as ActixResult};
 use bytes::Bytes;
 use futures::StreamExt;
-use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -31,10 +29,17 @@ use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 
 use super::budgeted::{ApiKeyBudgetPolicy, run_stream};
+use super::callbacks::CallbackLifecycle;
 use super::{openai_errors, spend};
 #[path = "responses_stream_budget.rs"]
 mod responses_stream_budget;
 use responses_stream_budget::StreamBudgetSettlement;
+#[path = "responses_stream_support.rs"]
+mod responses_stream_support;
+use responses_stream_support::{
+    classify, completed_reasoning_item, emit, in_progress_reasoning_item, make_shell,
+    output_items_in_stream_order, response_usage_from_chat_usage, sse_error,
+};
 
 /// Accumulated state for one in-progress tool call during streaming.
 struct ToolCallAccum {
@@ -76,6 +81,12 @@ pub(crate) async fn handle_streaming_response(
         };
 
     let requested_model = core_request.model.clone();
+    let callback = CallbackLifecycle::new(
+        &state.callbacks,
+        state.budgeted.pricing(),
+        &requested_model,
+        context.as_ref(),
+    );
     let context_clone = Arc::clone(&context);
     let request_for_execution = Arc::clone(&chat_request);
     let budgeted = state.budgeted.clone();
@@ -84,6 +95,7 @@ pub(crate) async fn handle_streaming_response(
     let api_key_id = context.api_key_id();
     let api_key_budget_id = context.api_key_budget_id();
     let settlement_budgeted = state.budgeted.clone();
+    let callback_for_execution = callback.clone();
 
     match run_stream(
         state.unified_router.clone(),
@@ -96,6 +108,7 @@ pub(crate) async fn handle_streaming_response(
             let budgeted = budgeted.clone();
             let pricing_service = pricing_service.clone();
             let pricing_config = pricing_config.clone();
+            let callback = callback_for_execution.clone();
             async move {
                 let provider_name = provider.name().to_string();
                 let (pricing_provider, pricing_model) = spend::pricing_identity_for_provider(
@@ -117,6 +130,10 @@ pub(crate) async fn handle_streaming_response(
                 let reserve_pricing_config = pricing_config.clone();
                 let reserve_pricing_provider = pricing_provider.clone();
                 let reserve_pricing_model = pricing_model.clone();
+                let callback_provider = provider_name.clone();
+                let callback_model = selected_model.clone();
+                let callback_pricing_provider = reserve_pricing_provider.clone();
+                let callback_pricing_model = reserve_pricing_model.clone();
                 let (stream, reservations) = budgeted
                     .for_selected_with_api_key_budget(
                         provider_name.clone(),
@@ -137,7 +154,15 @@ pub(crate) async fn handle_streaming_response(
                                 request_for_budget,
                             )
                         },
-                        || provider.chat_completion_stream(req, provider_context),
+                        || {
+                            callback.begin_provider_execution(
+                                callback_provider,
+                                callback_model,
+                                callback_pricing_provider,
+                                callback_pricing_model,
+                            );
+                            provider.chat_completion_stream(req, provider_context)
+                        },
                     )
                     .await?;
                 let (budget_reservation, key_budget_reservation) = reservations.into_parts();
@@ -197,6 +222,7 @@ pub(crate) async fn handle_streaming_response(
                 .await
                 .is_err()
                 {
+                    callback.fail("client disconnected", "client_disconnect");
                     return;
                 }
 
@@ -218,6 +244,7 @@ pub(crate) async fn handle_streaming_response(
                 let mut reasoning_started = false;
                 macro_rules! return_after_disconnect {
                     () => {
+                        callback.fail("client disconnected", "client_disconnect");
                         if final_usage.is_some() || saw_upstream_output {
                             settlement.record_disconnect(final_usage.as_ref()).await;
                         }
@@ -249,6 +276,10 @@ pub(crate) async fn handle_streaming_response(
                                     );
                                     lease.finish_failure(&error);
                                 }
+                                callback.fail(
+                                    format!("stream idle timeout after {idle_timeout}s"),
+                                    "timeout",
+                                );
                                 return_after_disconnect!();
                             }
                         }
@@ -480,6 +511,7 @@ pub(crate) async fn handle_streaming_response(
                             if let Some(lease) = lease.take() {
                                 lease.finish_failure(&e);
                             }
+                            callback.fail(e.to_string(), "provider_error");
                             return_after_disconnect!();
                         }
                     }
@@ -633,6 +665,7 @@ pub(crate) async fn handle_streaming_response(
                 settlement
                     .record_completion(budget_usage.as_ref(), saw_upstream_output)
                     .await;
+                callback.complete_usage(budget_usage.as_ref(), "success");
                 if let Some(lease) = lease.take() {
                     let tokens_used = budget_usage
                         .as_ref()
@@ -677,108 +710,9 @@ pub(crate) async fn handle_streaming_response(
         }
         Err(e) => {
             error!("Failed to start Responses API stream: {e}");
+            callback.fail(e.to_string(), "provider_error");
             Ok(openai_errors::gateway_error_response(&e))
         }
-    }
-}
-
-fn completed_reasoning_item(
-    item_id: String,
-    status: &str,
-    summary_text: String,
-) -> ResponseOutputItem {
-    ResponseOutputItem::Reasoning(ResponseReasoningItem {
-        id: item_id,
-        status: status.to_string(),
-        summary: Some(vec![json!({
-            "type": "summary_text",
-            "text": summary_text,
-        })]),
-    })
-}
-
-fn in_progress_reasoning_item(item_id: String) -> ResponseOutputItem {
-    ResponseOutputItem::Reasoning(ResponseReasoningItem {
-        id: item_id,
-        status: "in_progress".to_string(),
-        summary: Some(vec![]),
-    })
-}
-
-fn output_items_in_stream_order(
-    mut all_output: Vec<(u32, ResponseOutputItem)>,
-) -> Vec<ResponseOutputItem> {
-    all_output.sort_by_key(|(i, _)| *i);
-    all_output.into_iter().map(|(_, item)| item).collect()
-}
-
-fn response_usage_from_chat_usage(usage: &ChatUsage) -> ResponseUsage {
-    ResponseUsage {
-        input_tokens: usage.prompt_tokens,
-        output_tokens: usage.completion_tokens,
-        total_tokens: usage.total_tokens,
-        input_tokens_details: usage.prompt_tokens_details.as_ref().map(|d| {
-            ResponseInputTokensDetails {
-                cached_tokens: d.cached_tokens.unwrap_or(0),
-            }
-        }),
-        output_tokens_details: usage.completion_tokens_details.as_ref().map(|d| {
-            ResponseOutputTokensDetails {
-                reasoning_tokens: d.reasoning_tokens.unwrap_or(0),
-            }
-        }),
-    }
-}
-
-fn make_shell(
-    id: &str,
-    created_at: i64,
-    model: &str,
-    status: &str,
-    original: &ResponsesApiRequest,
-) -> ResponsesApiResponse {
-    ResponsesApiResponse {
-        id: id.to_string(),
-        object: "response".to_string(),
-        created_at,
-        status: status.to_string(),
-        model: model.to_string(),
-        output: vec![],
-        usage: None,
-        error: None,
-        previous_response_id: original.previous_response_id.clone(),
-        metadata: None,
-    }
-}
-
-async fn emit(tx: &mpsc::Sender<Bytes>, event: &ResponseStreamEvent) -> Result<(), ()> {
-    match serde_json::to_string(event) {
-        Ok(json) => tx
-            .send(Event::default().data(&json).to_bytes())
-            .await
-            .map_err(|_| ()),
-        Err(e) => {
-            error!("Failed to serialise stream event: {e}");
-            Err(())
-        }
-    }
-}
-
-fn sse_error(message: &str, error_type: &str, code: &str) -> Bytes {
-    let err = json!({"type":"error","error":{"type":error_type,"code":code,"message":message}});
-    let err_ev = Event::default().data(&err.to_string());
-    let done_ev = Event::default().data("[DONE]");
-    let mut v = err_ev.to_bytes().to_vec();
-    v.extend_from_slice(&done_ev.to_bytes());
-    Bytes::from(v)
-}
-
-fn classify(e: &ProviderError) -> (&'static str, &'static str) {
-    match e {
-        ProviderError::Authentication { .. } => ("invalid_request_error", "authentication_error"),
-        ProviderError::RateLimit { .. } => ("rate_limit_error", "rate_limit_exceeded"),
-        ProviderError::Timeout { .. } => ("server_error", "timeout"),
-        _ => ("server_error", "internal_error"),
     }
 }
 
