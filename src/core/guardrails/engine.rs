@@ -19,6 +19,15 @@ pub struct GuardrailEngine {
 }
 
 impl GuardrailEngine {
+    /// Create an explicitly disabled engine for state construction before the
+    /// validated gateway configuration is attached.
+    pub fn disabled() -> Self {
+        Self {
+            config: GuardrailConfig::default(),
+            guardrails: Vec::new(),
+        }
+    }
+
     /// Create a new guardrail engine from configuration
     pub fn new(config: GuardrailConfig) -> GuardrailResult<Self> {
         let mut guardrails: Vec<BoxedGuardrail> = Vec::new();

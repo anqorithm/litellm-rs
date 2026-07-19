@@ -35,9 +35,7 @@ pub const GH838_TEMPORARY_EXEMPTION_ISSUE: u32 = 838;
 pub const GH838_TEMPORARY_EXEMPTIONS: &[&str] = &[
     "a2a",
     "batch",
-    "guardrails",
     "integrations",
-    "ip_access",
     "mcp",
     "observability",
     "user_management",
@@ -147,9 +145,9 @@ pub const CORE_SUBSYSTEMS: &[CoreSubsystem] = &[
     },
     CoreSubsystem {
         name: "guardrails",
-        decision: SubsystemDecision::TemporaryExemption,
-        runtime_path: None,
-        note: "GuardrailEngine is not configured or executed on completion requests.",
+        decision: SubsystemDecision::Wired,
+        runtime_path: Some("AppState GuardrailEngine and canonical chat request/response paths"),
+        note: "Prompt-injection checks run before provider execution and on non-streaming output.",
     },
     CoreSubsystem {
         name: "health",
@@ -171,9 +169,9 @@ pub const CORE_SUBSYSTEMS: &[CoreSubsystem] = &[
     },
     CoreSubsystem {
         name: "ip_access",
-        decision: SubsystemDecision::TemporaryExemption,
-        runtime_path: None,
-        note: "IP access middleware exists but is not registered in the Actix middleware stack.",
+        decision: SubsystemDecision::Wired,
+        runtime_path: Some("IpAccessMiddleware outer HTTP policy layer"),
+        note: "Configured IP policies short-circuit before auth, handlers, or providers.",
     },
     CoreSubsystem {
         name: "keys",

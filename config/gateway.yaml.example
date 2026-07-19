@@ -119,6 +119,31 @@ auth:
     default_role: "user"
     admin_roles: ["admin", "superuser"]
 
+# Content safety is enforced on LLM request input and non-streaming output.
+# Prompt-injection protection is enabled by default; this explicit switch is
+# the operational escape hatch for deployments that accept that risk.
+guardrails:
+  enabled: true
+  prompt_injection:
+    enabled: true
+    action: block
+    sensitivity: 0.7
+    use_heuristics: true
+  check_input: true
+  check_output: true
+  fail_open: false
+
+# Empty/default rules preserve allow-all behavior. Enable a configured
+# allowlist or blocklist to reject traffic before auth, handlers, or providers.
+ip_access:
+  enabled: false
+  mode: blocklist
+  allowlist: []
+  blocklist: []
+  always_allow: []
+  trust_proxy: false
+  max_proxy_hops: 1
+
 monitoring:
   metrics:
     enabled: true

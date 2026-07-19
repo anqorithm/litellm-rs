@@ -5,7 +5,9 @@
 use crate::config::Config;
 use crate::core::budget::{BudgetManager, UnifiedBudgetLimits};
 use crate::core::cache::{DualCacheConfig, LLMCache, LLMCacheConfig};
+use crate::core::guardrails::GuardrailEngine;
 use crate::core::integrations::CallbackDispatcher;
+use crate::core::ip_access::IpAccessControl;
 use crate::core::keys::{DatabaseKeyRepository, KeyManager};
 use crate::core::pricing_service::PricingService;
 use crate::core::teams::TeamManager;
@@ -52,6 +54,10 @@ pub struct AppState {
     pub response_cache: Option<Arc<LLMCache>>,
     /// Non-blocking external request lifecycle callback dispatcher
     pub callbacks: CallbackDispatcher,
+    /// Content guardrails executed on real LLM request/response paths.
+    pub guardrails: Arc<GuardrailEngine>,
+    /// IP policy consumed by the outer HTTP middleware.
+    pub ip_access: Arc<IpAccessControl>,
 }
 
 impl AppState {
@@ -91,12 +97,25 @@ impl AppState {
             budgeted,
             response_cache,
             callbacks: CallbackDispatcher::disabled(),
+            guardrails: Arc::new(GuardrailEngine::disabled()),
+            ip_access: Arc::new(IpAccessControl::disabled()),
         }
     }
 
     /// Attach a configured callback dispatcher.
     pub fn with_callbacks(mut self, callbacks: CallbackDispatcher) -> Self {
         self.callbacks = callbacks;
+        self
+    }
+
+    /// Attach validated content and network policy engines.
+    pub fn with_request_policies(
+        mut self,
+        guardrails: Arc<GuardrailEngine>,
+        ip_access: Arc<IpAccessControl>,
+    ) -> Self {
+        self.guardrails = guardrails;
+        self.ip_access = ip_access;
         self
     }
 

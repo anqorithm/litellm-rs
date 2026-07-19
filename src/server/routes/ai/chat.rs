@@ -96,6 +96,7 @@ pub async fn handle_chat_completion_with_shared_state(
     request: Arc<ChatCompletionRequest>,
     context: SharedRequestContext,
 ) -> Result<ChatCompletionResponse, GatewayError> {
+    crate::server::guardrails::check_chat_input(state, request.as_ref()).await?;
     handle_chat_completion_internal(state, request, context).await
 }
 
@@ -111,6 +112,7 @@ async fn handle_chat_completion_internal(
         super::response_cache::lookup_chat(state, request.as_ref(), context.as_ref()).await?
     {
         super::response_cache::ensure_chat_cache_pricing_gate(state, request.as_ref())?;
+        crate::server::guardrails::check_chat_output(state, &cached).await?;
         return Ok(cached);
     }
     let requested_model = core_request.model.clone();
@@ -251,6 +253,10 @@ async fn handle_chat_completion_internal(
     };
 
     let response = convert_core_chat_response(core_response);
+    if let Err(error) = crate::server::guardrails::check_chat_output(state, &response).await {
+        callback.fail(error.to_string(), "guardrail_output");
+        return Err(error);
+    }
     if let Err(error) =
         super::response_cache::store_chat(state, request.as_ref(), &response, context.as_ref())
             .await

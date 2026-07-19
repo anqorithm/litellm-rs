@@ -57,6 +57,8 @@ impl Validate for GatewayConfig {
         Validate::validate(&self.monitoring)?;
         Validate::validate(&self.cache)?;
         Validate::validate(&self.rate_limit)?;
+        self.guardrails.validate()?;
+        self.ip_access.validate()?;
         Validate::validate(&self.enterprise)?;
         Validate::validate(&self.pricing)?;
 

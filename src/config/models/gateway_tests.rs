@@ -81,6 +81,15 @@ fn test_gateway_config_default() {
     let config = GatewayConfig::default();
     assert!(config.providers.is_empty());
     assert_eq!(config.server.port, 8000);
+    assert!(config.guardrails.enabled);
+    assert!(
+        config
+            .guardrails
+            .prompt_injection
+            .as_ref()
+            .is_some_and(|policy| policy.enabled)
+    );
+    assert!(!config.ip_access.enabled);
 }
 
 #[test]
