@@ -81,7 +81,10 @@ impl Integration for LangfuseIntegration {
     }
 
     async fn shutdown(&self) -> IntegrationResult<()> {
-        self.flush().await
+        self.logger
+            .shutdown_ref()
+            .await
+            .map_err(IntegrationError::other)
     }
 }
 
@@ -116,5 +119,13 @@ mod tests {
             .latency(20);
         assert!(integration.on_llm_end(&end).await.is_ok());
         assert_eq!(integration.logger.active_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn adapter_shutdown_stops_and_joins_logger_worker() {
+        let integration = LangfuseIntegration::new(debug_config()).unwrap();
+
+        assert!(Integration::shutdown(&integration).await.is_ok());
+        assert!(integration.logger.worker_stopped());
     }
 }

@@ -21,7 +21,9 @@ GH-1066 / #1066
 
 - [x] `SP1066-T5` Covers: all. Owner: verification owner. Dependencies: T1-T4. Done when: focused tests, formatting, build, strict clippy, full test suite, SpecRail workflow/spec checks, scope guard, and overlap guard pass from this worktree with evidence saved under `artifacts/logs/gh1066/`. Verify: commands listed below.
 
-- [ ] `SP1066-T6` Covers: all acceptance criteria. Owner: coordinator and independent reviewer. Dependencies: T5. Done when: one final-slice `mixed_impl` PR closes #1066; independent exact-head review has no blocking findings; blocking CI wait, GraphQL review-thread query, merge-state check, and `pr_gate.py` are current and green; merge and issue closure are remotely confirmed. Verify: PR/check/gate/merge evidence recorded in the runtime checkpoint.
+- [ ] `SP1066-T6` Covers: all acceptance criteria. Owner: coordinator and independent reviewer. Dependencies: T5, T7. Done when: the final hardening PR closes #1066; independent exact-head review has no blocking findings; blocking CI wait, GraphQL review-thread query, merge-state check, and `pr_gate.py` are current and green; merge and issue closure are remotely confirmed. Verify: PR/check/gate/merge evidence recorded in the runtime checkpoint.
+
+- [x] `SP1066-T7` Covers: P3-P8 and shutdown. Owner: coordinator. Dependencies: T1-T5. Done when: post-merge blockers are fixed without weakening the product contract: Datadog site validation cannot leak credentials to lookalike hosts and failed batches are retryable; callback start/terminal capacity is reserved as a pair; OTel/Langfuse background work is joined with errors surfaced; embeddings use embedding hooks; and streaming disconnect/final-delivery/Responses serialization paths emit exactly one correct terminal result. Verify: focused regression tests for each blocker, `cargo fmt --check`, `cargo check --all-features --all-targets`, strict all-feature/all-target clippy, serial full all-feature tests, SpecRail workflow/spec checks, scope guard, and overlap guard with raw logs saved under `artifacts/logs/gh1066-hardening/`.
 
 ## Parallelization
 

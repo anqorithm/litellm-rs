@@ -3,6 +3,10 @@ use super::integration_impl::sampling_fraction_from_nanos;
 use super::span::{generate_span_id, generate_trace_id};
 use super::*;
 use crate::core::traits::integration::{Integration, LlmEndEvent, LlmErrorEvent, LlmStartEvent};
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::sync::Notify;
 
 #[tokio::test]
 async fn test_opentelemetry_integration_creation() {
@@ -111,6 +115,63 @@ async fn test_sampling() {
 
     // With 0% sampling, no spans should be created
     assert_eq!(integration.active_span_count(), 0);
+}
+
+#[tokio::test]
+async fn test_shutdown_waits_for_in_flight_batch_export() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("test OTLP listener");
+    let endpoint = format!("http://{}", listener.local_addr().unwrap());
+    let request_started = Arc::new(Notify::new());
+    let release_response = Arc::new(Notify::new());
+    let server = tokio::spawn({
+        let request_started = Arc::clone(&request_started);
+        let release_response = Arc::clone(&release_response);
+        async move {
+            let (mut socket, _) = listener.accept().await.expect("OTLP request");
+            let mut request = vec![0; 8192];
+            let _ = socket.read(&mut request).await.expect("read OTLP request");
+            request_started.notify_one();
+            release_response.notified().await;
+            socket
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n")
+                .await
+                .expect("write OTLP response");
+        }
+    });
+
+    let integration = OpenTelemetryIntegration::try_new(OpenTelemetryConfig {
+        endpoint,
+        max_batch_size: 1,
+        ..Default::default()
+    })
+    .unwrap();
+    integration
+        .on_llm_start(&LlmStartEvent::new("req-shutdown", "gpt-test"))
+        .await
+        .unwrap();
+    integration
+        .on_llm_end(&LlmEndEvent::new("req-shutdown", "gpt-test"))
+        .await
+        .unwrap();
+    request_started.notified().await;
+
+    let mut shutdown = tokio::spawn(async move { integration.shutdown().await });
+    assert!(
+        tokio::time::timeout(Duration::from_millis(50), &mut shutdown)
+            .await
+            .is_err(),
+        "shutdown returned before its in-flight export completed"
+    );
+
+    release_response.notify_one();
+    tokio::time::timeout(Duration::from_secs(1), shutdown)
+        .await
+        .expect("shutdown should finish after export")
+        .expect("shutdown task should join")
+        .expect("shutdown should succeed");
+    server.await.expect("OTLP server should finish");
 }
 
 #[test]

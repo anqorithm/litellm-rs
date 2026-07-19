@@ -87,6 +87,10 @@ async fn handle_embedding_internal(
 ) -> Result<EmbeddingResponse, GatewayError> {
     // Convert OpenAI format request to core format.
     let input = parse_embedding_input(&request.input)?;
+    let input_count = match &input {
+        EmbeddingInput::Text(_) => 1,
+        EmbeddingInput::Array(inputs) => inputs.len(),
+    };
 
     if request.model.trim().is_empty() {
         return Err(GatewayError::validation("Model is required"));
@@ -109,10 +113,11 @@ async fn handle_embedding_internal(
     };
 
     let requested_model = core_request.model.clone();
-    let callback = CallbackLifecycle::new(
+    let callback = CallbackLifecycle::new_embedding(
         &state.callbacks,
         state.budgeted.pricing(),
         &requested_model,
+        input_count,
         &context,
     );
     let context_for_execution = context.clone();

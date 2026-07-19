@@ -8,7 +8,8 @@ use tracing::{error, warn};
 
 use super::IntegrationManager;
 use crate::core::traits::integration::{
-    IntegrationError, IntegrationResult, LlmEndEvent, LlmErrorEvent, LlmStartEvent, LlmStreamEvent,
+    EmbeddingEndEvent, EmbeddingStartEvent, IntegrationError, IntegrationResult, LlmEndEvent,
+    LlmErrorEvent, LlmStartEvent, LlmStreamEvent,
 };
 
 #[derive(Debug)]
@@ -17,6 +18,8 @@ enum CallbackEvent {
     End(LlmEndEvent),
     Error(LlmErrorEvent),
     Stream(LlmStreamEvent),
+    EmbeddingStart(EmbeddingStartEvent),
+    EmbeddingEnd(EmbeddingEndEvent),
 }
 
 /// Error returned when an event cannot enter the non-blocking callback queue.
@@ -37,6 +40,34 @@ pub struct CallbackDispatcher {
     manager: Option<Arc<IntegrationManager>>,
 }
 
+/// Capacity reserved for the terminal event of an admitted lifecycle.
+pub struct CallbackTerminalPermit {
+    permit: Option<mpsc::OwnedPermit<CallbackEvent>>,
+}
+
+impl CallbackTerminalPermit {
+    /// Enqueue an LLM success using its reserved capacity.
+    pub fn emit_end(self, event: LlmEndEvent) {
+        if let Some(permit) = self.permit {
+            permit.send(CallbackEvent::End(event));
+        }
+    }
+
+    /// Enqueue an LLM error using its reserved capacity.
+    pub fn emit_error(self, event: LlmErrorEvent) {
+        if let Some(permit) = self.permit {
+            permit.send(CallbackEvent::Error(event));
+        }
+    }
+
+    /// Enqueue an embedding success using its reserved capacity.
+    pub fn emit_embedding_end(self, event: EmbeddingEndEvent) {
+        if let Some(permit) = self.permit {
+            permit.send(CallbackEvent::EmbeddingEnd(event));
+        }
+    }
+}
+
 impl CallbackDispatcher {
     /// Create a dispatcher that performs no external callback work.
     pub fn disabled() -> Self {
@@ -54,6 +85,22 @@ impl CallbackDispatcher {
             Some(manager) => manager.list_integrations().await,
             None => Vec::new(),
         }
+    }
+
+    /// Atomically admit an LLM start and reserve capacity for its terminal event.
+    pub fn begin_llm(
+        &self,
+        event: LlmStartEvent,
+    ) -> Result<CallbackTerminalPermit, CallbackDispatchError> {
+        self.begin(CallbackEvent::Start(event))
+    }
+
+    /// Atomically admit an embedding start and reserve its terminal capacity.
+    pub fn begin_embedding(
+        &self,
+        event: EmbeddingStartEvent,
+    ) -> Result<CallbackTerminalPermit, CallbackDispatchError> {
+        self.begin(CallbackEvent::EmbeddingStart(event))
     }
 
     /// Enqueue an LLM start event without waiting for exporter I/O.
@@ -85,6 +132,34 @@ impl CallbackDispatcher {
             mpsc::error::TrySendError::Closed(_) => CallbackDispatchError::QueueClosed,
         })
     }
+
+    fn begin(
+        &self,
+        start_event: CallbackEvent,
+    ) -> Result<CallbackTerminalPermit, CallbackDispatchError> {
+        let Some(sender) = &self.sender else {
+            return Ok(CallbackTerminalPermit { permit: None });
+        };
+        let start_permit = sender
+            .clone()
+            .try_reserve_owned()
+            .map_err(map_reserve_error)?;
+        let terminal_permit = sender
+            .clone()
+            .try_reserve_owned()
+            .map_err(map_reserve_error)?;
+        start_permit.send(start_event);
+        Ok(CallbackTerminalPermit {
+            permit: Some(terminal_permit),
+        })
+    }
+}
+
+fn map_reserve_error<T>(error: mpsc::error::TrySendError<T>) -> CallbackDispatchError {
+    match error {
+        mpsc::error::TrySendError::Full(_) => CallbackDispatchError::QueueFull,
+        mpsc::error::TrySendError::Closed(_) => CallbackDispatchError::QueueClosed,
+    }
 }
 
 /// Owns the callback queue worker and its graceful-shutdown signal.
@@ -97,9 +172,9 @@ pub struct CallbackRuntime {
 impl CallbackRuntime {
     /// Start a callback worker around an existing integration manager.
     pub fn new(manager: Arc<IntegrationManager>, queue_capacity: usize) -> IntegrationResult<Self> {
-        if queue_capacity == 0 {
+        if queue_capacity < 2 {
             return Err(IntegrationError::config(
-                "callback queue capacity must be greater than 0",
+                "callback queue capacity must be at least 2",
             ));
         }
 
@@ -192,6 +267,8 @@ async fn dispatch_event(manager: &IntegrationManager, event: CallbackEvent) {
         CallbackEvent::End(event) => manager.on_llm_end(&event).await,
         CallbackEvent::Error(event) => manager.on_llm_error(&event).await,
         CallbackEvent::Stream(event) => manager.on_llm_stream(&event).await,
+        CallbackEvent::EmbeddingStart(event) => manager.on_embedding_start(&event).await,
+        CallbackEvent::EmbeddingEnd(event) => manager.on_embedding_end(&event).await,
     };
     if let Err(error) = result {
         error!("Callback event dispatch failed: {}", error);
@@ -218,6 +295,7 @@ mod tests {
     struct BlockingIntegration {
         entered: Arc<Notify>,
         release: Arc<Notify>,
+        events: Arc<Mutex<Vec<&'static str>>>,
     }
 
     struct FailingIntegration;
@@ -264,12 +342,14 @@ mod tests {
         }
 
         async fn on_llm_start(&self, _event: &LlmStartEvent) -> IntegrationResult<()> {
+            self.events.lock().push("start");
             self.entered.notify_one();
             self.release.notified().await;
             Ok(())
         }
 
         async fn on_llm_end(&self, _event: &LlmEndEvent) -> IntegrationResult<()> {
+            self.events.lock().push("end");
             Ok(())
         }
 
@@ -354,13 +434,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn runtime_rejects_zero_capacity() {
+    async fn runtime_rejects_capacity_below_lifecycle_pair() {
         let manager = Arc::new(IntegrationManager::with_defaults());
-        let error = match CallbackRuntime::new(manager, 0) {
-            Ok(_) => panic!("zero-capacity callback runtime must fail"),
-            Err(error) => error,
-        };
-        assert!(error.to_string().contains("capacity"));
+        for capacity in [0, 1] {
+            let error = match CallbackRuntime::new(Arc::clone(&manager), capacity) {
+                Ok(_) => panic!("callback runtime capacity {capacity} must fail"),
+                Err(error) => error,
+            };
+            assert!(error.to_string().contains("at least 2"));
+        }
     }
 
     #[tokio::test]
@@ -374,9 +456,10 @@ mod tests {
             .register(Arc::new(BlockingIntegration {
                 entered: Arc::clone(&entered),
                 release: Arc::clone(&release),
+                events: Arc::new(Mutex::new(Vec::new())),
             }))
             .await;
-        let runtime = match CallbackRuntime::new(manager, 1) {
+        let runtime = match CallbackRuntime::new(manager, 2) {
             Ok(runtime) => runtime,
             Err(error) => panic!("callback runtime should start: {error}"),
         };
@@ -394,6 +477,11 @@ mod tests {
                 .emit_end(LlmEndEvent::new("req-1", "model"))
                 .is_ok()
         );
+        assert!(
+            dispatcher
+                .emit_end(LlmEndEvent::new("req-1", "model"))
+                .is_ok()
+        );
         assert_eq!(
             dispatcher.emit_error(LlmErrorEvent::new("req-1", "model", "failed")),
             Err(CallbackDispatchError::QueueFull)
@@ -405,6 +493,40 @@ mod tests {
             dispatcher.emit_start(LlmStartEvent::new("req-2", "model")),
             Err(CallbackDispatchError::QueueClosed)
         );
+    }
+
+    #[tokio::test]
+    async fn lifecycle_admission_reserves_terminal_capacity_as_a_pair() {
+        let entered = Arc::new(Notify::new());
+        let release = Arc::new(Notify::new());
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let manager = Arc::new(IntegrationManager::new(
+            IntegrationManagerConfig::default().parallel(false),
+        ));
+        manager
+            .register(Arc::new(BlockingIntegration {
+                entered: Arc::clone(&entered),
+                release: Arc::clone(&release),
+                events: Arc::clone(&events),
+            }))
+            .await;
+        let runtime = CallbackRuntime::new(manager, 2).unwrap();
+        let dispatcher = runtime.dispatcher();
+        let entered_wait = entered.notified();
+
+        let terminal = dispatcher
+            .begin_llm(LlmStartEvent::new("req-1", "model"))
+            .unwrap();
+        entered_wait.await;
+        assert!(matches!(
+            dispatcher.begin_llm(LlmStartEvent::new("req-2", "model")),
+            Err(CallbackDispatchError::QueueFull)
+        ));
+        terminal.emit_end(LlmEndEvent::new("req-1", "model"));
+        release.notify_one();
+        runtime.shutdown().await.unwrap();
+
+        assert_eq!(*events.lock(), vec!["start", "end"]);
     }
 
     #[tokio::test]

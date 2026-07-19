@@ -102,6 +102,31 @@ selected pricing identity and usage used by spend settlement; failure to
 calculate is logged and leaves `cost_usd` absent. Event input/output values
 remain null and headers are never copied.
 
+### Post-merge hardening
+
+The first implementation PR was merged before its independent review blockers
+were resolved. The follow-up implementation keeps the product contract intact
+and closes the identified delivery and secret-handling gaps:
+
+- Datadog accepts only the documented exact site identifiers
+  (`datadoghq.com`, `us3.datadoghq.com`, `us5.datadoghq.com`,
+  `datadoghq.eu`, `ap1.datadoghq.com`, `ap2.datadoghq.com`,
+  `datadoghq.uk`, `ddog-gov.com`, and `us2.ddog-gov.com`). It rejects URL
+  userinfo, paths, queries, and lookalike suffixes before constructing an
+  authenticated endpoint. Non-success exports return an error and failed
+  auto-flush batches are restored for retry.
+- Callback admission atomically reserves capacity for the start and terminal
+  pair. A start event is not accepted unless its corresponding terminal event
+  can later be enqueued, preserving P3-P4 under backpressure.
+- OpenTelemetry export tasks and the Langfuse worker are owned and joined by
+  their integrations. `flush`/`shutdown` wait for outstanding work and surface
+  failures instead of silently detaching or discarding it.
+- Embedding routes use the canonical embedding hooks rather than LLM hooks,
+  while retaining the same ordered start/terminal lifecycle.
+- Streaming workers treat final event serialization/enqueue failure and client
+  disconnect as terminal errors. Responses streaming serializes typed response
+  events and reports success only after the final event is accepted.
+
 ## Product-to-Test Mapping
 
 | Product invariant | Implementation area | Verification |
@@ -113,6 +138,7 @@ remain null and headers are never copied.
 | P7 | existing streaming workers | normal/error/timeout/disconnect terminal-once tests |
 | P8 | canonical event fixtures + Langfuse adapter | negative assertions for prompt/output/header/secret values |
 | Shutdown | `HttpServer::start` + callback runtime | deterministic drain/flush/shutdown unit test |
+| Post-merge hardening | Datadog, callback runtime, OTel/Langfuse, embedding and streaming routes | exact-site/retry, pair-reservation, joined-shutdown, embedding-hook and final-delivery tests |
 
 ## Data Flow
 

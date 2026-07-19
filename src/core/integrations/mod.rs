@@ -71,4 +71,6 @@ pub use crate::core::traits::integration::{
     BoxedIntegration, CacheHitEvent, EmbeddingEndEvent, EmbeddingStartEvent, Integration,
     IntegrationError, IntegrationResult, LlmEndEvent, LlmErrorEvent, LlmStartEvent, LlmStreamEvent,
 };
-pub use callback_runtime::{CallbackDispatchError, CallbackDispatcher, CallbackRuntime};
+pub use callback_runtime::{
+    CallbackDispatchError, CallbackDispatcher, CallbackRuntime, CallbackTerminalPermit,
+};

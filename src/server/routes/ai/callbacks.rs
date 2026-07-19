@@ -7,9 +7,11 @@ use std::time::Instant;
 use parking_lot::Mutex;
 use tracing::{error, warn};
 
-use crate::core::integrations::CallbackDispatcher;
+use crate::core::integrations::{CallbackDispatcher, CallbackTerminalPermit};
 use crate::core::pricing_service::{PricingService, PricingUsage};
-use crate::core::traits::integration::{LlmEndEvent, LlmErrorEvent, LlmStartEvent};
+use crate::core::traits::integration::{
+    EmbeddingEndEvent, EmbeddingStartEvent, LlmEndEvent, LlmErrorEvent, LlmStartEvent,
+};
 use crate::core::types::context::RequestContext;
 
 #[derive(Clone)]
@@ -23,9 +25,18 @@ struct CallbackLifecycleInner {
     request_id: String,
     user_id: Option<String>,
     requested_model: String,
+    kind: CallbackKind,
     started_at: Mutex<Option<Instant>>,
     target: Mutex<Option<CallbackTarget>>,
+    terminal_permit: Mutex<Option<CallbackTerminalPermit>>,
+    begin_attempted: AtomicBool,
     terminal_emitted: AtomicBool,
+}
+
+#[derive(Clone, Copy)]
+enum CallbackKind {
+    Llm,
+    Embedding { input_count: usize },
 }
 
 #[derive(Clone)]
@@ -43,6 +54,38 @@ impl CallbackLifecycle {
         requested_model: impl Into<String>,
         context: &RequestContext,
     ) -> Self {
+        Self::new_with_kind(
+            dispatcher,
+            pricing,
+            requested_model,
+            context,
+            CallbackKind::Llm,
+        )
+    }
+
+    pub(super) fn new_embedding(
+        dispatcher: &CallbackDispatcher,
+        pricing: Arc<PricingService>,
+        requested_model: impl Into<String>,
+        input_count: usize,
+        context: &RequestContext,
+    ) -> Self {
+        Self::new_with_kind(
+            dispatcher,
+            pricing,
+            requested_model,
+            context,
+            CallbackKind::Embedding { input_count },
+        )
+    }
+
+    fn new_with_kind(
+        dispatcher: &CallbackDispatcher,
+        pricing: Arc<PricingService>,
+        requested_model: impl Into<String>,
+        context: &RequestContext,
+        kind: CallbackKind,
+    ) -> Self {
         let requested_model = requested_model.into();
         Self {
             inner: Arc::new(CallbackLifecycleInner {
@@ -51,8 +94,11 @@ impl CallbackLifecycle {
                 request_id: context.request_id.clone(),
                 user_id: context.user_id.clone(),
                 requested_model,
+                kind,
                 started_at: Mutex::new(None),
                 target: Mutex::new(None),
+                terminal_permit: Mutex::new(None),
+                begin_attempted: AtomicBool::new(false),
                 terminal_emitted: AtomicBool::new(false),
             }),
         }
@@ -73,28 +119,45 @@ impl CallbackLifecycle {
         };
         *self.inner.target.lock() = Some(target.clone());
 
-        let should_emit_start = {
-            let mut started_at = self.inner.started_at.lock();
-            if started_at.is_some() {
-                false
-            } else {
-                *started_at = Some(Instant::now());
-                true
-            }
-        };
-        if !should_emit_start {
+        if self
+            .inner
+            .begin_attempted
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .is_err()
+        {
             return;
         }
 
-        let mut event =
-            LlmStartEvent::new(&self.inner.request_id, &target.model).provider(target.provider);
-        event.user_id.clone_from(&self.inner.user_id);
-        if let Err(dispatch_error) = self.inner.dispatcher.emit_start(event) {
-            error!(
-                request_id = %self.inner.request_id,
-                "Failed to enqueue callback start event: {}",
-                dispatch_error
-            );
+        let admission = match self.inner.kind {
+            CallbackKind::Llm => {
+                let mut event = LlmStartEvent::new(&self.inner.request_id, &target.model)
+                    .provider(target.provider);
+                event.user_id.clone_from(&self.inner.user_id);
+                self.inner.dispatcher.begin_llm(event)
+            }
+            CallbackKind::Embedding { input_count } => {
+                self.inner.dispatcher.begin_embedding(EmbeddingStartEvent {
+                    request_id: self.inner.request_id.clone(),
+                    model: target.model,
+                    provider: Some(target.provider),
+                    input_count,
+                    user_id: self.inner.user_id.clone(),
+                    timestamp_ms: chrono::Utc::now().timestamp_millis(),
+                })
+            }
+        };
+        match admission {
+            Ok(permit) => {
+                *self.inner.terminal_permit.lock() = Some(permit);
+                *self.inner.started_at.lock() = Some(Instant::now());
+            }
+            Err(dispatch_error) => {
+                error!(
+                    request_id = %self.inner.request_id,
+                    "Failed to reserve callback lifecycle capacity: {}",
+                    dispatch_error
+                );
+            }
         }
     }
 
@@ -118,6 +181,9 @@ impl CallbackLifecycle {
         if !self.claim_terminal() {
             return;
         }
+        let Some(terminal_permit) = self.inner.terminal_permit.lock().take() else {
+            return;
+        };
 
         let target = self.inner.target.lock().clone();
         let model = target
@@ -134,13 +200,7 @@ impl CallbackLifecycle {
         if let Some(target) = target {
             event = event.provider(target.provider);
         }
-        if let Err(dispatch_error) = self.inner.dispatcher.emit_error(event) {
-            error!(
-                request_id = %self.inner.request_id,
-                "Failed to enqueue callback error event: {}",
-                dispatch_error
-            );
-        }
+        terminal_permit.emit_error(event);
     }
 
     fn complete(
@@ -155,21 +215,18 @@ impl CallbackLifecycle {
         if !self.claim_terminal() {
             return;
         }
+        let Some(terminal_permit) = self.inner.terminal_permit.lock().take() else {
+            return;
+        };
 
         let target = self.inner.target.lock().clone();
         let model = target
             .as_ref()
             .map(|target| target.model.as_str())
             .unwrap_or(&self.inner.requested_model);
-        let mut event = LlmEndEvent::new(&self.inner.request_id, model)
-            .latency(self.elapsed_ms())
-            .metadata("outcome", serde_json::json!(outcome));
-        if let Some((input_tokens, output_tokens)) = tokens {
-            event = event.tokens(input_tokens, output_tokens);
-        }
-        if let Some(target) = target {
-            event = event.provider(target.provider);
-            if let Some(usage) = pricing_usage {
+        let provider = target.as_ref().map(|target| target.provider.clone());
+        let cost = target.as_ref().and_then(|target| {
+            pricing_usage.and_then(|usage| {
                 match self
                     .inner
                     .pricing
@@ -178,23 +235,48 @@ impl CallbackLifecycle {
                         &target.pricing_model,
                         usage,
                     ) {
-                    Ok(cost) => event = event.cost(cost.total_cost),
-                    Err(cost_error) => warn!(
-                        request_id = %self.inner.request_id,
-                        provider = %target.pricing_provider,
-                        model = %target.pricing_model,
-                        "Callback cost is unavailable: {}",
-                        cost_error
-                    ),
+                    Ok(cost) => Some(cost.total_cost),
+                    Err(cost_error) => {
+                        warn!(
+                            request_id = %self.inner.request_id,
+                            provider = %target.pricing_provider,
+                            model = %target.pricing_model,
+                            "Callback cost is unavailable: {}",
+                            cost_error
+                        );
+                        None
+                    }
                 }
+            })
+        });
+
+        match self.inner.kind {
+            CallbackKind::Llm => {
+                let mut event = LlmEndEvent::new(&self.inner.request_id, model)
+                    .latency(self.elapsed_ms())
+                    .metadata("outcome", serde_json::json!(outcome));
+                if let Some((input_tokens, output_tokens)) = tokens {
+                    event = event.tokens(input_tokens, output_tokens);
+                }
+                if let Some(provider) = provider {
+                    event = event.provider(provider);
+                }
+                if let Some(cost) = cost {
+                    event = event.cost(cost);
+                }
+                terminal_permit.emit_end(event);
             }
-        }
-        if let Err(dispatch_error) = self.inner.dispatcher.emit_end(event) {
-            error!(
-                request_id = %self.inner.request_id,
-                "Failed to enqueue callback success event: {}",
-                dispatch_error
-            );
+            CallbackKind::Embedding { .. } => {
+                terminal_permit.emit_embedding_end(EmbeddingEndEvent {
+                    request_id: self.inner.request_id.clone(),
+                    model: model.to_string(),
+                    provider,
+                    total_tokens: tokens.map(|(input, output)| input.saturating_add(output)),
+                    cost_usd: cost,
+                    latency_ms: self.elapsed_ms(),
+                    timestamp_ms: chrono::Utc::now().timestamp_millis(),
+                });
+            }
         }
     }
 
@@ -206,7 +288,7 @@ impl CallbackLifecycle {
     }
 
     fn has_started(&self) -> bool {
-        self.inner.started_at.lock().is_some()
+        self.inner.terminal_permit.lock().is_some()
     }
 
     fn elapsed_ms(&self) -> u64 {
