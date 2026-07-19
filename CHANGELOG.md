@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Breaking behavior: runtime requests for unpriced models now fail closed by default even when `pricing.allow_degraded=true`; deployments that intentionally allow unpriced traffic must set `pricing.unpriced_model_policy=allow_unpriced` and configure a finite `pricing.unpriced_fallback_cost_per_1k_tokens`.
 
+### Deprecated
+- Deprecated the `providers-extended` public `custom_api` module and its `CustomHttpxConfig`, `CustomApiErrorMapper`, and `CustomHttpxProvider` exports for the 0.6.0 line. Existing symbols, signatures, and runtime behavior remain available in 0.6.x, but arbitrary URL/method/template/parser support is no longer a product goal and the surface is scheduled for removal in 0.7.0. See `docs/providers/GH837-migration-0.6-to-0.7.md` for alternatives.
+
 ### Removed
 - Removed the module-only `topaz` provider implementation from the `providers-extended` surface for #837. It had no gateway factory or dispatch path, so runtime provider selection is unchanged; downstream crates directly importing `litellm_rs::core::providers::topaz` must remove that import or restore the old implementation from git history.
 - Removed the module-only `sap_ai` provider implementation from the `providers-extended` surface for #837. It had no gateway factory or dispatch path, so runtime provider selection is unchanged; downstream crates directly importing `litellm_rs::core::providers::sap_ai` must remove that import or restore the old implementation from git history.
