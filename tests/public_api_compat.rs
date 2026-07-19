@@ -23,7 +23,6 @@ fn amazon_nova_deprecated_in_0_6() {
     let _provider = AmazonNovaProvider::new(AmazonNovaConfig::with_api_key("compat-only-key"))
         .expect("0.6 public construction must remain available without issuing a request");
 }
-
 #[cfg(not(clippy))]
 #[test]
 fn custom_api_deprecated_in_0_6() {

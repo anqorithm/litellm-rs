@@ -129,6 +129,10 @@ fn amazon_nova_model_info_from_entry(entry: &AmazonNovaCatalogModel) -> ModelInf
             ProviderCapability::ChatCompletion,
             ProviderCapability::ChatCompletionStream,
         ],
+        metadata: HashMap::from([
+            ("description".into(), entry.description.into()),
+            ("supports_reasoning".into(), entry.supports_reasoning.into()),
+        ]),
         ..Default::default()
     }
 }
@@ -610,7 +614,6 @@ mod tests {
             .unwrap();
         assert_eq!(unknown, 0.0);
     }
-
     #[test]
     fn test_xai_openai_compatible_pass_through_definition() {
         let Some(definition) = get_definition("xai") else {

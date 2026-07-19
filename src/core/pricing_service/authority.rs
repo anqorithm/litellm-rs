@@ -688,7 +688,6 @@ fn extract_tier_threshold(key: &str) -> Option<u32> {
 #[cfg(test)]
 mod amazon_nova_catalog_authority_tests {
     use super::*;
-
     #[test]
     fn amazon_nova_catalog_authority_is_feature_independent() {
         let service = PricingService::with_embedded_default().unwrap();
@@ -698,6 +697,9 @@ mod amazon_nova_catalog_authority_tests {
                 .unwrap();
             assert_eq!(resolved, "amazon.nova-pro-v1:0");
             assert_eq!(info.max_output_tokens, Some(5_000));
+            let expected = "High-capability multimodal model for complex tasks";
+            assert_eq!(info.extra["description"], expected);
+            assert_eq!(info.extra["supports_reasoning"], true);
         }
         assert!(
             service
@@ -706,7 +708,6 @@ mod amazon_nova_catalog_authority_tests {
         );
     }
 }
-
 #[cfg(test)]
 #[path = "authority_tests.rs"]
 mod tests;

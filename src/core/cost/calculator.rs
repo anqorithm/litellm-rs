@@ -191,7 +191,6 @@ fn amazon_nova_fallback_pricing_prefers_catalog_over_shared_bedrock() {
         assert_eq!(pricing.input_cost_per_1k_tokens, 0.0008);
     }
 }
-
 fn pricing_usage_from_cost_usage(usage: &UsageTokens) -> PricingUsage {
     PricingUsage {
         prompt_tokens: usage.prompt_tokens,

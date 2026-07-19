@@ -51,7 +51,6 @@ impl AmazonNovaModel {
             supports_streaming: AMAZON_NOVA_SUPPORTS_STREAMING,
         }
     }
-
     /// Create a new Amazon Nova model definition
     pub fn new(
         id: &str,
@@ -244,7 +243,6 @@ mod tests {
             );
         }
     }
-
     #[test]
     fn test_model_registry_aliases() {
         let registry = AmazonNovaModelRegistry::new();
