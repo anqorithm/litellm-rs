@@ -1,7 +1,8 @@
 use async_trait::async_trait;
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use std::collections::HashMap;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tokio::task::JoinSet;
 use tracing::warn;
 
 use crate::core::traits::integration::{
@@ -22,6 +23,42 @@ struct ActiveSpan {
 struct SpanBatch {
     spans: Vec<Span>,
     created_at: SystemTime,
+}
+
+const MAX_EXPORT_ERROR_SAMPLES: usize = 8;
+
+#[derive(Default)]
+struct ExportFailures {
+    total: usize,
+    samples: Vec<String>,
+}
+
+impl ExportFailures {
+    fn record(&mut self, error: String) {
+        self.total += 1;
+        if self.samples.len() < MAX_EXPORT_ERROR_SAMPLES {
+            self.samples.push(error);
+        }
+    }
+
+    fn into_result(mut self) -> IntegrationResult<()> {
+        if self.total == 0 {
+            return Ok(());
+        }
+
+        let omitted = self.total - self.samples.len();
+        if omitted > 0 {
+            self.samples
+                .push(format!("{omitted} additional OTLP export task(s) failed"));
+        }
+        Err(IntegrationError::other(self.samples.join("; ")))
+    }
+}
+
+#[derive(Default)]
+struct ExportState {
+    tasks: JoinSet<Result<(), String>>,
+    failures: ExportFailures,
 }
 
 impl SpanBatch {
@@ -58,6 +95,7 @@ pub struct OpenTelemetryIntegration {
     config: OpenTelemetryConfig,
     active_spans: RwLock<HashMap<String, ActiveSpan>>,
     pending_spans: RwLock<SpanBatch>,
+    export_state: Mutex<ExportState>,
     http_client: reqwest::Client,
 }
 
@@ -75,6 +113,7 @@ impl OpenTelemetryIntegration {
             config,
             active_spans: RwLock::new(HashMap::new()),
             pending_spans: RwLock::new(SpanBatch::new()),
+            export_state: Mutex::new(ExportState::default()),
             http_client,
         })
     }
@@ -93,6 +132,7 @@ impl OpenTelemetryIntegration {
                     config,
                     active_spans: RwLock::new(HashMap::new()),
                     pending_spans: RwLock::new(SpanBatch::new()),
+                    export_state: Mutex::new(ExportState::default()),
                     http_client: reqwest::Client::new(),
                 }
             }
@@ -132,22 +172,28 @@ impl OpenTelemetryIntegration {
 
         if should_flush {
             let spans = batch.take();
-            drop(batch);
 
-            // Spawn async export task
             let client = self.http_client.clone();
             let endpoint = self.config.endpoint.clone();
             let headers = self.config.headers.clone();
             let service_name = self.config.service_name.clone();
 
-            tokio::spawn(async move {
-                if let Err(e) =
-                    export_spans(&client, &endpoint, &headers, &service_name, spans).await
-                {
-                    warn!("Failed to export spans to OTLP: {}", e);
-                }
+            let mut state = self.export_state.lock();
+            let ExportState { tasks, failures } = &mut *state;
+            while let Some(result) = tasks.try_join_next() {
+                record_export_result(failures, result);
+            }
+            tasks.spawn(async move {
+                export_spans(&client, &endpoint, &headers, &service_name, spans).await
             });
         }
+    }
+
+    async fn wait_for_exports(mut state: ExportState) -> IntegrationResult<()> {
+        while let Some(result) = state.tasks.join_next().await {
+            record_export_result(&mut state.failures, result);
+        }
+        state.failures.into_result()
     }
 
     /// Get the number of active spans
@@ -158,6 +204,27 @@ impl OpenTelemetryIntegration {
     /// Get the number of pending spans
     pub fn pending_span_count(&self) -> usize {
         self.pending_spans.read().len()
+    }
+
+    #[cfg(test)]
+    pub(super) fn export_task_count(&self) -> usize {
+        self.export_state.lock().tasks.len()
+    }
+
+    #[cfg(test)]
+    pub(super) fn export_failure_count(&self) -> usize {
+        self.export_state.lock().failures.total
+    }
+}
+
+fn record_export_result(
+    failures: &mut ExportFailures,
+    result: Result<Result<(), String>, tokio::task::JoinError>,
+) {
+    match result {
+        Ok(Ok(())) => {}
+        Ok(Err(error)) => failures.record(error),
+        Err(error) => failures.record(format!("OTLP export task failed: {error}")),
     }
 }
 
@@ -349,23 +416,30 @@ impl Integration for OpenTelemetryIntegration {
     }
 
     async fn flush(&self) -> IntegrationResult<()> {
-        let spans = self.pending_spans.write().take();
+        let (spans, export_state) = {
+            let mut pending = self.pending_spans.write();
+            let spans = pending.take();
+            let export_state = std::mem::take(&mut *self.export_state.lock());
+            (spans, export_state)
+        };
 
-        if spans.is_empty() {
-            return Ok(());
-        }
+        let pending_result = if spans.is_empty() {
+            Ok(())
+        } else {
+            export_spans(
+                &self.http_client,
+                &self.config.endpoint,
+                &self.config.headers,
+                &self.config.service_name,
+                spans,
+            )
+            .await
+            .map_err(IntegrationError::other)
+        };
+        let in_flight_result = Self::wait_for_exports(export_state).await;
 
-        export_spans(
-            &self.http_client,
-            &self.config.endpoint,
-            &self.config.headers,
-            &self.config.service_name,
-            spans,
-        )
-        .await
-        .map_err(IntegrationError::other)?;
-
-        Ok(())
+        pending_result?;
+        in_flight_result
     }
 
     async fn shutdown(&self) -> IntegrationResult<()> {

@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
@@ -215,6 +215,12 @@ struct ActiveRequest {
     request: LlmRequest,
 }
 
+#[derive(Debug)]
+enum LoggerCommand {
+    Flush,
+    Shutdown,
+}
+
 /// Langfuse logger for LLM call tracing
 pub struct LangfuseLogger {
     /// Batch sender
@@ -222,9 +228,9 @@ pub struct LangfuseLogger {
     /// Active requests
     active_requests: Arc<RwLock<HashMap<String, ActiveRequest>>>,
     /// Flush task handle
-    flush_handle: Option<tokio::task::JoinHandle<()>>,
-    /// Shutdown signal
-    shutdown_tx: Option<mpsc::Sender<()>>,
+    flush_handle: Mutex<Option<tokio::task::JoinHandle<Result<(), LangfuseError>>>>,
+    /// Flush and shutdown command sender
+    command_tx: Mutex<Option<mpsc::Sender<LoggerCommand>>>,
     /// Release version
     release: Option<String>,
 }
@@ -238,7 +244,7 @@ impl LangfuseLogger {
         let client = LangfuseClient::new(config)?;
         let sender = Arc::new(BatchSender::new(client));
 
-        let (shutdown_tx, mut shutdown_rx) = mpsc::channel::<()>(1);
+        let (command_tx, mut command_rx) = mpsc::channel(1);
 
         // Spawn background flush task
         let sender_clone = Arc::clone(&sender);
@@ -252,13 +258,18 @@ impl LangfuseLogger {
                                 warn!("Langfuse flush error: {}", e);
                             }
                     }
-                    _ = shutdown_rx.recv() => {
-                        debug!("Langfuse logger shutting down");
-                        // Final flush
-                        if let Err(e) = sender_clone.flush().await {
-                            warn!("Langfuse final flush error: {}", e);
+                    command = command_rx.recv() => {
+                        match command {
+                            Some(LoggerCommand::Flush) => {
+                                if let Err(error) = sender_clone.flush().await {
+                                    warn!("Langfuse requested flush error: {}", error);
+                                }
+                            }
+                            Some(LoggerCommand::Shutdown) | None => {
+                                debug!("Langfuse logger shutting down");
+                                return sender_clone.flush().await.map(|_| ());
+                            }
                         }
-                        break;
                     }
                 }
             }
@@ -267,8 +278,8 @@ impl LangfuseLogger {
         Ok(Self {
             sender,
             active_requests: Arc::new(RwLock::new(HashMap::new())),
-            flush_handle: Some(flush_handle),
-            shutdown_tx: Some(shutdown_tx),
+            flush_handle: Mutex::new(Some(flush_handle)),
+            command_tx: Mutex::new(Some(command_tx)),
             release,
         })
     }
@@ -481,35 +492,61 @@ impl LangfuseLogger {
 
     /// Trigger async flush
     fn trigger_flush(&self) {
-        let sender = Arc::clone(&self.sender);
-        tokio::spawn(async move {
-            if let Err(e) = sender.flush().await {
-                warn!("Langfuse async flush error: {}", e);
+        let command_tx = self.command_tx.lock();
+        if let Some(command_tx) = command_tx.as_ref() {
+            match command_tx.try_send(LoggerCommand::Flush) {
+                Ok(()) | Err(mpsc::error::TrySendError::Full(_)) => {}
+                Err(mpsc::error::TrySendError::Closed(_)) => {
+                    error!("Langfuse flush worker is closed");
+                }
             }
-        });
+        }
+    }
+
+    pub(crate) async fn shutdown_ref(&self) -> Result<(), String> {
+        let mut errors = Vec::new();
+        let command_tx = self.command_tx.lock().take();
+        if let Some(command_tx) = command_tx
+            && command_tx.send(LoggerCommand::Shutdown).await.is_err()
+        {
+            errors.push("Langfuse flush worker is closed".to_string());
+        }
+
+        let flush_handle = self.flush_handle.lock().take();
+        if let Some(flush_handle) = flush_handle {
+            match flush_handle.await {
+                Ok(Ok(())) => {}
+                Ok(Err(error)) => errors.push(format!("Langfuse final flush failed: {error}")),
+                Err(error) => errors.push(format!("Langfuse flush worker failed: {error}")),
+            }
+        }
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors.join("; "))
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn worker_stopped(&self) -> bool {
+        self.command_tx.lock().is_none() && self.flush_handle.lock().is_none()
     }
 
     /// Shutdown the logger gracefully
-    pub async fn shutdown(mut self) {
+    pub async fn shutdown(self) {
         info!("Shutting down Langfuse logger");
-
-        // Send shutdown signal
-        if let Some(tx) = self.shutdown_tx.take() {
-            let _ = tx.send(()).await;
-        }
-
-        // Wait for flush task to complete
-        if let Some(handle) = self.flush_handle.take() {
-            let _ = handle.await;
+        if let Err(error) = self.shutdown_ref().await {
+            error!("{}", error);
         }
     }
 }
 
 impl Drop for LangfuseLogger {
     fn drop(&mut self) {
-        // Note: Can't do async flush in drop, but shutdown signal helps
-        if let Some(tx) = self.shutdown_tx.take() {
-            let _ = tx.try_send(());
+        if let Some(command_tx) = self.command_tx.lock().take()
+            && let Err(error) = command_tx.try_send(LoggerCommand::Shutdown)
+        {
+            debug!("Langfuse drop shutdown signal was not queued: {}", error);
         }
     }
 }

@@ -3,6 +3,63 @@ use super::integration_impl::sampling_fraction_from_nanos;
 use super::span::{generate_span_id, generate_trace_id};
 use super::*;
 use crate::core::traits::integration::{Integration, LlmEndEvent, LlmErrorEvent, LlmStartEvent};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::Duration;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::sync::Notify;
+
+async fn status_response_server(
+    statuses: Vec<u16>,
+) -> (String, Arc<AtomicUsize>, tokio::task::JoinHandle<()>) {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("test OTLP listener");
+    let endpoint = format!("http://{}", listener.local_addr().unwrap());
+    let completed = Arc::new(AtomicUsize::new(0));
+    let server = tokio::spawn({
+        let completed = Arc::clone(&completed);
+        async move {
+            for status in statuses {
+                let (mut socket, _) = listener.accept().await.expect("OTLP request");
+                let mut request = vec![0; 8192];
+                let _ = socket.read(&mut request).await.expect("read OTLP request");
+                let response = format!(
+                    "HTTP/1.1 {status} test\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                );
+                socket
+                    .write_all(response.as_bytes())
+                    .await
+                    .expect("write OTLP response");
+                socket.shutdown().await.expect("close OTLP response");
+                completed.fetch_add(1, Ordering::SeqCst);
+            }
+        }
+    });
+    (endpoint, completed, server)
+}
+
+async fn wait_for_completed_requests(completed: &AtomicUsize, expected: usize) {
+    tokio::time::timeout(Duration::from_secs(2), async {
+        while completed.load(Ordering::SeqCst) < expected {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("OTLP requests should complete");
+    tokio::time::sleep(Duration::from_millis(25)).await;
+}
+
+async fn export_one_span(integration: &OpenTelemetryIntegration, request_id: &str) {
+    integration
+        .on_llm_start(&LlmStartEvent::new(request_id, "gpt-test"))
+        .await
+        .unwrap();
+    integration
+        .on_llm_end(&LlmEndEvent::new(request_id, "gpt-test"))
+        .await
+        .unwrap();
+}
 
 #[tokio::test]
 async fn test_opentelemetry_integration_creation() {
@@ -111,6 +168,118 @@ async fn test_sampling() {
 
     // With 0% sampling, no spans should be created
     assert_eq!(integration.active_span_count(), 0);
+}
+
+#[tokio::test]
+async fn test_shutdown_waits_for_in_flight_batch_export() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("test OTLP listener");
+    let endpoint = format!("http://{}", listener.local_addr().unwrap());
+    let request_started = Arc::new(Notify::new());
+    let release_response = Arc::new(Notify::new());
+    let server = tokio::spawn({
+        let request_started = Arc::clone(&request_started);
+        let release_response = Arc::clone(&release_response);
+        async move {
+            let (mut socket, _) = listener.accept().await.expect("OTLP request");
+            let mut request = vec![0; 8192];
+            let _ = socket.read(&mut request).await.expect("read OTLP request");
+            request_started.notify_one();
+            release_response.notified().await;
+            socket
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n")
+                .await
+                .expect("write OTLP response");
+        }
+    });
+
+    let integration = OpenTelemetryIntegration::try_new(OpenTelemetryConfig {
+        endpoint,
+        max_batch_size: 1,
+        ..Default::default()
+    })
+    .unwrap();
+    integration
+        .on_llm_start(&LlmStartEvent::new("req-shutdown", "gpt-test"))
+        .await
+        .unwrap();
+    integration
+        .on_llm_end(&LlmEndEvent::new("req-shutdown", "gpt-test"))
+        .await
+        .unwrap();
+    request_started.notified().await;
+
+    let mut shutdown = tokio::spawn(async move { integration.shutdown().await });
+    assert!(
+        tokio::time::timeout(Duration::from_millis(50), &mut shutdown)
+            .await
+            .is_err(),
+        "shutdown returned before its in-flight export completed"
+    );
+
+    release_response.notify_one();
+    tokio::time::timeout(Duration::from_secs(1), shutdown)
+        .await
+        .expect("shutdown should finish after export")
+        .expect("shutdown task should join")
+        .expect("shutdown should succeed");
+    server.await.expect("OTLP server should finish");
+}
+
+#[tokio::test]
+async fn test_completed_export_tasks_are_reaped_during_continuous_operation() {
+    let (endpoint, completed, server) = status_response_server(vec![200; 9]).await;
+    let integration = OpenTelemetryIntegration::try_new(OpenTelemetryConfig {
+        endpoint,
+        max_batch_size: 1,
+        ..Default::default()
+    })
+    .unwrap();
+
+    for index in 0..8 {
+        export_one_span(&integration, &format!("req-reap-{index}")).await;
+    }
+    wait_for_completed_requests(&completed, 8).await;
+
+    export_one_span(&integration, "req-reap-trigger").await;
+    assert!(
+        integration.export_task_count() <= 1,
+        "completed export tasks should be reaped before tracking the next batch"
+    );
+
+    wait_for_completed_requests(&completed, 9).await;
+    integration.flush().await.unwrap();
+    assert_eq!(integration.export_task_count(), 0);
+    server.await.expect("OTLP server should finish");
+}
+
+#[tokio::test]
+async fn test_reaped_export_failure_is_reported_by_flush() {
+    let (endpoint, completed, server) = status_response_server(vec![500, 200]).await;
+    let integration = OpenTelemetryIntegration::try_new(OpenTelemetryConfig {
+        endpoint,
+        max_batch_size: 1,
+        ..Default::default()
+    })
+    .unwrap();
+
+    export_one_span(&integration, "req-failed-export").await;
+    wait_for_completed_requests(&completed, 1).await;
+    export_one_span(&integration, "req-reap-failure").await;
+    assert_eq!(
+        integration.export_failure_count(),
+        1,
+        "the completed failed task must be reaped before flush"
+    );
+    wait_for_completed_requests(&completed, 2).await;
+
+    let error = integration
+        .flush()
+        .await
+        .expect_err("reaped export failure must remain observable");
+    assert!(error.to_string().contains("500"));
+    server.await.expect("OTLP server should finish");
 }
 
 #[test]

@@ -11,6 +11,13 @@ mod tests {
     use litellm_rs::Config;
     use litellm_rs::config::models::provider::ProviderConfig;
     use litellm_rs::core::budget::{ProviderLimitConfig, ResetPeriod};
+    use litellm_rs::core::integrations::{
+        CallbackRuntime, IntegrationManager, IntegrationManagerConfig,
+    };
+    use litellm_rs::core::traits::integration::{
+        EmbeddingEndEvent, EmbeddingStartEvent, Integration, IntegrationResult, LlmEndEvent,
+        LlmErrorEvent, LlmStartEvent,
+    };
     use litellm_rs::server::HttpServer as GatewayHttpServer;
     use litellm_rs::server::middleware::AuthMiddleware;
     use litellm_rs::server::routes;
@@ -18,6 +25,75 @@ mod tests {
     use serde_json::Value;
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
+
+    #[derive(Clone)]
+    enum RecordedEmbeddingCallback {
+        Start(EmbeddingStartEvent),
+        End(EmbeddingEndEvent),
+    }
+
+    struct EmbeddingCallbackRecorder {
+        events: Arc<Mutex<Vec<RecordedEmbeddingCallback>>>,
+    }
+
+    #[async_trait::async_trait]
+    impl Integration for EmbeddingCallbackRecorder {
+        fn name(&self) -> &'static str {
+            "embedding-route-recorder"
+        }
+
+        fn is_enabled(&self) -> bool {
+            true
+        }
+
+        async fn on_llm_start(&self, _event: &LlmStartEvent) -> IntegrationResult<()> {
+            Ok(())
+        }
+
+        async fn on_llm_end(&self, _event: &LlmEndEvent) -> IntegrationResult<()> {
+            Ok(())
+        }
+
+        async fn on_llm_error(&self, _event: &LlmErrorEvent) -> IntegrationResult<()> {
+            Ok(())
+        }
+
+        async fn on_embedding_start(&self, event: &EmbeddingStartEvent) -> IntegrationResult<()> {
+            self.events
+                .lock()
+                .expect("embedding callback events")
+                .push(RecordedEmbeddingCallback::Start(event.clone()));
+            Ok(())
+        }
+
+        async fn on_embedding_end(&self, event: &EmbeddingEndEvent) -> IntegrationResult<()> {
+            self.events
+                .lock()
+                .expect("embedding callback events")
+                .push(RecordedEmbeddingCallback::End(event.clone()));
+            Ok(())
+        }
+
+        async fn flush(&self) -> IntegrationResult<()> {
+            Ok(())
+        }
+
+        async fn shutdown(&self) -> IntegrationResult<()> {
+            Ok(())
+        }
+    }
+
+    async fn build_embedding_callback_runtime(
+        events: Arc<Mutex<Vec<RecordedEmbeddingCallback>>>,
+    ) -> CallbackRuntime {
+        let manager = Arc::new(IntegrationManager::new(
+            IntegrationManagerConfig::default().parallel(false),
+        ));
+        manager
+            .register(Arc::new(EmbeddingCallbackRecorder { events }))
+            .await;
+        CallbackRuntime::new(manager, 8).expect("embedding callback runtime")
+    }
 
     async fn build_state_with_config(config: Config) -> AppState {
         let server = match GatewayHttpServer::new(&config).await {
@@ -412,6 +488,64 @@ mod tests {
             1,
             "second identical embedding request should hit cache"
         );
+    }
+
+    #[tokio::test]
+    async fn test_embeddings_route_emits_embedding_hooks() {
+        let captured_requests = Arc::new(Mutex::new(Vec::<Value>::new()));
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("mock server should bind");
+        let address = listener
+            .local_addr()
+            .expect("mock server should have local address");
+        let captured_for_server = Arc::clone(&captured_requests);
+        let server = HttpServer::new(move || {
+            App::new()
+                .app_data(web::Data::new(Arc::clone(&captured_for_server)))
+                .route("/embeddings", web::post().to(mock_embeddings))
+        })
+        .listen(listener)
+        .expect("mock server should listen")
+        .run();
+        let handle = server.handle();
+        let task = tokio::spawn(server);
+        tokio::time::sleep(Duration::from_millis(20)).await;
+
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let runtime = build_embedding_callback_runtime(Arc::clone(&events)).await;
+        let state = build_openai_alias_state(&format!("http://{address}"))
+            .await
+            .with_callbacks(runtime.dispatcher());
+        let app = test::init_service(build_test_app(state)).await;
+        let req = test::TestRequest::post()
+            .uri("/v1/embeddings")
+            .set_json(serde_json::json!({
+                "model": "text-embedding-3-small",
+                "input": ["hello", "world"]
+            }))
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        runtime.shutdown().await.expect("callback runtime shutdown");
+        handle.stop(true).await;
+        task.await
+            .expect("mock embedding server task")
+            .expect("mock embedding server result");
+
+        let events = events.lock().expect("embedding callback events").clone();
+        assert_eq!(events.len(), 2);
+        let RecordedEmbeddingCallback::Start(start) = &events[0] else {
+            panic!("first callback must be embedding start");
+        };
+        let RecordedEmbeddingCallback::End(end) = &events[1] else {
+            panic!("second callback must be embedding end");
+        };
+        assert_eq!(start.request_id, end.request_id);
+        assert_eq!(start.model, "text-embedding-3-small");
+        assert_eq!(start.provider.as_deref(), Some("mock-openai"));
+        assert_eq!(start.input_count, 2);
+        assert_eq!(end.provider.as_deref(), Some("mock-openai"));
+        assert_eq!(end.total_tokens, Some(1));
     }
 
     #[tokio::test]
