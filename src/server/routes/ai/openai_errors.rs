@@ -100,7 +100,18 @@ pub(crate) fn gateway_error_response(error: &GatewayError) -> HttpResponse {
 
 fn openai_error_spec(error: &GatewayError) -> OpenAiErrorSpec {
     let facts = gateway_http_error_facts(error);
-    let message = openai_error_message(error);
+    let redacted = match error {
+        GatewayError::Provider(provider_error) => GatewayError::Provider(provider_error.redacted()),
+        _ => return openai_error_spec_from_safe_error(error, facts),
+    };
+    openai_error_spec_from_safe_error(&redacted, facts)
+}
+
+fn openai_error_spec_from_safe_error(
+    error: &GatewayError,
+    facts: HttpErrorFacts,
+) -> OpenAiErrorSpec {
+    let message = error.to_string();
     let mut spec = spec_from_facts(facts, message);
 
     if let GatewayError::Provider(ProviderError::ApiError { .. }) = error
@@ -122,15 +133,6 @@ fn openai_error_spec(error: &GatewayError) -> OpenAiErrorSpec {
 
     spec
 }
-
-fn openai_error_message(error: &GatewayError) -> String {
-    match error {
-        GatewayError::Provider(ProviderError::ApiError { message, .. }) => message.clone(),
-        GatewayError::Provider(provider_error) => provider_error.to_string(),
-        _ => error.to_string(),
-    }
-}
-
 fn build_response(spec: OpenAiErrorSpec) -> HttpResponse {
     HttpResponse::build(spec.status).json(response_body(
         spec.message,

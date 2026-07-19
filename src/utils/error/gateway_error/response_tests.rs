@@ -1,5 +1,6 @@
 use super::*;
 use crate::core::providers::unified_provider::ProviderError;
+use actix_web::body::to_bytes;
 use actix_web::http::StatusCode;
 
 fn assert_header(response: &actix_web::HttpResponse, name: &str, expected: &str) {
@@ -10,6 +11,53 @@ fn assert_header(response: &actix_web::HttpResponse, name: &str, expected: &str)
             .and_then(|value| value.to_str().ok()),
         Some(expected)
     );
+}
+
+#[actix_web::test]
+async fn provider_error_secrets_are_redacted_at_gateway_and_http_boundaries() {
+    let secrets = [
+        "sk-live-secret",
+        "cookie-secret",
+        "signed-secret",
+        "provider-body-secret",
+    ];
+    let raw = ProviderError::api_error(
+        "openai",
+        503,
+        format!(
+            "Authorization: Bearer {}; Cookie: session={}; https://example.test?a=1&X-Amz-Signature={}; api_key={}",
+            secrets[0], secrets[1], secrets[2], secrets[3]
+        ),
+    );
+    let error: GatewayError = raw.into();
+    let display = error.to_string();
+    let debug = format!("{error:?}");
+    let body = String::from_utf8(
+        to_bytes(error.error_response().into_body())
+            .await
+            .expect("response body")
+            .to_vec(),
+    )
+    .expect("utf-8 response");
+
+    for secret in secrets {
+        assert!(!display.contains(secret), "Display leaked {secret}");
+        assert!(!debug.contains(secret), "Debug leaked {secret}");
+        assert!(!body.contains(secret), "HTTP body leaked {secret}");
+    }
+    assert!(body.contains("[REDACTED]"));
+}
+
+#[test]
+fn provider_response_emitters_do_not_stringify_raw_provider_errors() {
+    let gateway_response = include_str!("response.rs");
+    let openai_response = include_str!("../../../server/routes/ai/openai_errors.rs");
+
+    for source in [gateway_response, openai_response] {
+        assert!(!source.contains("provider_error.to_string()"));
+    }
+    assert!(openai_response.contains("provider_error.redacted()"));
+    assert!(openai_response.contains("gateway_http_error_facts(error)"));
 }
 
 // ==================== ErrorDetail Tests ====================

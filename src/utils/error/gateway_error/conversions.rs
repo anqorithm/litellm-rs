@@ -12,7 +12,7 @@ use crate::core::providers::unified_provider::ProviderError;
 // via GatewayError::Provider, so no destructuring is needed here.
 impl From<ProviderError> for GatewayError {
     fn from(err: ProviderError) -> Self {
-        GatewayError::Provider(err)
+        GatewayError::Provider(err.redacted())
     }
 }
 
