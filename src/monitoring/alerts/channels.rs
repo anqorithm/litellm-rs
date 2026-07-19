@@ -1,9 +1,15 @@
 //! Notification channel implementations
 
-use crate::core::http::outbound::default_outbound_client;
+use crate::core::net::ProviderEndpointPolicy;
 use crate::monitoring::types::{Alert, AlertSeverity};
 use crate::utils::error::gateway_error::{GatewayError, Result};
+use crate::utils::net::http::ProviderHttpClient;
+use std::time::Duration;
 use tracing::warn;
+
+pub(super) const SLACK_WEBHOOK_TIMEOUT: Duration = Duration::from_secs(120);
+const INVALID_SLACK_WEBHOOK_URL: &str =
+    "Slack webhook URL is invalid or disallowed by outbound policy";
 
 /// Notification channel trait
 #[async_trait::async_trait]
@@ -19,12 +25,18 @@ pub trait NotificationChannel: Send + Sync + std::fmt::Debug {
 }
 
 /// Slack notification channel
-#[derive(Debug)]
 pub struct SlackChannel {
     webhook_url: String,
+    client: ProviderHttpClient,
     channel: Option<String>,
     username: Option<String>,
     min_severity: AlertSeverity,
+}
+
+impl std::fmt::Debug for SlackChannel {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("SlackChannel { webhook_url: [REDACTED], .. }")
+    }
 }
 
 /// Email notification channel
@@ -52,13 +64,54 @@ impl SlackChannel {
         channel: Option<String>,
         username: Option<String>,
         min_severity: AlertSeverity,
-    ) -> Self {
-        Self {
-            webhook_url,
+    ) -> Result<Self> {
+        let client = ProviderHttpClient::no_redirect(
+            ProviderEndpointPolicy::public_only(),
+            SLACK_WEBHOOK_TIMEOUT,
+        )
+        .map_err(|_| {
+            GatewayError::Network("Failed to create policy-bound Slack webhook client".to_string())
+        })?;
+        Self::with_client(webhook_url, channel, username, min_severity, client)
+    }
+
+    fn with_client(
+        webhook_url: String,
+        channel: Option<String>,
+        username: Option<String>,
+        min_severity: AlertSeverity,
+        client: ProviderHttpClient,
+    ) -> Result<Self> {
+        let url = reqwest::Url::parse(&webhook_url)
+            .map_err(|_| GatewayError::Validation(INVALID_SLACK_WEBHOOK_URL.to_string()))?;
+        if !matches!(url.scheme(), "http" | "https")
+            || ProviderEndpointPolicy::public_only()
+                .validate_url_without_resolution(&url)
+                .is_err()
+        {
+            return Err(GatewayError::Validation(
+                INVALID_SLACK_WEBHOOK_URL.to_string(),
+            ));
+        }
+
+        Ok(Self {
+            webhook_url: url.to_string(),
+            client,
             channel,
             username,
             min_severity,
-        }
+        })
+    }
+
+    #[cfg(test)]
+    pub(super) fn with_client_for_test(
+        webhook_url: String,
+        channel: Option<String>,
+        username: Option<String>,
+        min_severity: AlertSeverity,
+        client: ProviderHttpClient,
+    ) -> Result<Self> {
+        Self::with_client(webhook_url, channel, username, min_severity, client)
     }
 }
 
@@ -101,15 +154,17 @@ impl NotificationChannel for SlackChannel {
             }]
         });
 
-        let client = default_outbound_client().clone();
-        let response = client
-            .post(&self.webhook_url)
-            .json(&payload)
-            .send()
-            .await
-            .map_err(|e| {
-                GatewayError::Internal(format!("Failed to send Slack notification: {}", e))
-            })?;
+        let request = self.client.post(&self.webhook_url).map_err(|_| {
+            GatewayError::Network("Slack webhook rejected by outbound endpoint policy".to_string())
+        })?;
+        let response = request.json(&payload).send().await.map_err(|error| {
+            let message = if ProviderHttpClient::request_error_is_endpoint_policy(&error) {
+                "Slack webhook rejected by outbound endpoint policy"
+            } else {
+                "Failed to send Slack notification"
+            };
+            GatewayError::Network(message.to_string())
+        })?;
 
         if !response.status().is_success() {
             return Err(GatewayError::Internal(format!(
@@ -241,7 +296,8 @@ mod tests {
             Some("#alerts".to_string()),
             Some("AlertBot".to_string()),
             AlertSeverity::Warning,
-        );
+        )
+        .unwrap();
 
         assert_eq!(channel.webhook_url, "https://hooks.slack.com/services/xxx");
         assert_eq!(channel.channel, Some("#alerts".to_string()));
@@ -255,7 +311,8 @@ mod tests {
             None,
             None,
             AlertSeverity::Info,
-        );
+        )
+        .unwrap();
 
         assert!(channel.channel.is_none());
         assert!(channel.username.is_none());
@@ -268,7 +325,8 @@ mod tests {
             None,
             None,
             AlertSeverity::Info,
-        );
+        )
+        .unwrap();
 
         assert_eq!(channel.name(), "slack");
     }
@@ -280,7 +338,8 @@ mod tests {
             None,
             None,
             AlertSeverity::Info,
-        );
+        )
+        .unwrap();
 
         assert!(channel.supports_severity(AlertSeverity::Info));
         assert!(channel.supports_severity(AlertSeverity::Warning));
@@ -295,7 +354,8 @@ mod tests {
             None,
             None,
             AlertSeverity::Warning,
-        );
+        )
+        .unwrap();
 
         assert!(!channel.supports_severity(AlertSeverity::Info));
         assert!(channel.supports_severity(AlertSeverity::Warning));
@@ -310,7 +370,8 @@ mod tests {
             None,
             None,
             AlertSeverity::Critical,
-        );
+        )
+        .unwrap();
 
         assert!(!channel.supports_severity(AlertSeverity::Info));
         assert!(!channel.supports_severity(AlertSeverity::Warning));
@@ -325,7 +386,8 @@ mod tests {
             None,
             None,
             AlertSeverity::Emergency,
-        );
+        )
+        .unwrap();
 
         assert!(!channel.supports_severity(AlertSeverity::Info));
         assert!(!channel.supports_severity(AlertSeverity::Warning));
@@ -480,7 +542,8 @@ mod tests {
             Some("#test".to_string()),
             None,
             AlertSeverity::Info,
-        );
+        )
+        .unwrap();
 
         let debug_str = format!("{:?}", channel);
         assert!(debug_str.contains("SlackChannel"));
