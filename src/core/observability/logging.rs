@@ -42,33 +42,27 @@ impl LogAggregator {
     }
 
     /// Add log destination
-    pub fn add_destination(self, destination: LogDestination) -> Result<Self> {
-        self.add_destination_with_client(destination, None)
-    }
-
-    fn add_destination_with_client(
-        mut self,
-        destination: LogDestination,
-        client: Option<ProviderHttpClient>,
-    ) -> Result<Self> {
+    pub fn add_destination(mut self, destination: LogDestination) -> Result<Self> {
         let destination = if let LogDestination::Webhook { url, headers } = destination {
             let url = reqwest::Url::parse(&url)
                 .map_err(|_| GatewayError::Validation(INVALID_LOG_WEBHOOK_URL.to_string()))?;
-            ProviderEndpointPolicy::public_only()
-                .validate_url_without_resolution(&url)
-                .map_err(|_| GatewayError::Validation(INVALID_LOG_WEBHOOK_URL.to_string()))?;
-            self.webhook_client = Some(match client {
-                Some(client) => client,
-                None => ProviderHttpClient::no_redirect(
-                    ProviderEndpointPolicy::public_only(),
-                    LOG_WEBHOOK_TIMEOUT,
-                )
-                .map_err(|_| {
-                    GatewayError::Network(
-                        "Failed to create policy-bound log webhook client".to_string(),
-                    )
-                })?,
-            });
+            let policy = ProviderEndpointPolicy::public_only();
+            if !matches!(url.scheme(), "http" | "https")
+                || policy.validate_url_without_resolution(&url).is_err()
+            {
+                return Err(GatewayError::Validation(
+                    INVALID_LOG_WEBHOOK_URL.to_string(),
+                ));
+            }
+            if self.webhook_client.is_none() {
+                self.webhook_client = Some(
+                    ProviderHttpClient::no_redirect(policy, LOG_WEBHOOK_TIMEOUT).map_err(|_| {
+                        GatewayError::Network(
+                            "Failed to create policy-bound log webhook client".to_string(),
+                        )
+                    })?,
+                );
+            }
             LogDestination::Webhook {
                 url: url.to_string(),
                 headers,
@@ -81,13 +75,9 @@ impl LogAggregator {
     }
 
     #[cfg(test)]
-    pub(super) fn add_webhook_with_client_for_test(
-        self,
-        url: String,
-        headers: std::collections::HashMap<String, String>,
-        client: ProviderHttpClient,
-    ) -> Result<Self> {
-        self.add_destination_with_client(LogDestination::Webhook { url, headers }, Some(client))
+    pub(super) fn with_webhook_client_for_test(mut self, client: ProviderHttpClient) -> Self {
+        self.webhook_client = Some(client);
+        self
     }
 
     /// Log an entry

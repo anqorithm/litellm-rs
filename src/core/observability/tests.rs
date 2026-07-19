@@ -244,7 +244,7 @@ async fn test_log_aggregation() {
 
 #[test]
 fn log_webhook_admission_rejects_complete_unsafe_url_table() {
-    for url in "\n \nnot a url\nfile:///tmp/hook\nftp://example.com/hook\nhttp://secret-user:secret-pass@127.0.0.1/hook?token=secret-query\nhttp://10.0.0.1/hook\nhttp://169.254.169.254/latest/meta-data\nhttp://localhost/hook\nhttp://foo.localhost/hook\nhttp://internal/hook\nhttp://foo.internal/hook\nhttp://local/hook\nhttp://foo.local/hook\nhttp://metadata/hook\nhttp://metadata.google.internal/hook\nhttp://metadata.goog/hook\nhttp://[::1]/hook\nhttp://[fd00::1]/hook\nhttp://[fe80::1]/hook\nhttp://[::ffff:169.254.169.254]/hook\nhttp://[64:ff9b::a9fe:a9fe]/hook".split('\n') {
+    for url in "\n \nnot a url\nfile:///tmp/hook\nftp://example.com/hook\nws://secret-user:secret-pass@example.com/hook?token=secret-query\nwss://secret-user:secret-pass@example.com/hook?token=secret-query\nhttp://secret-user:secret-pass@127.0.0.1/hook?token=secret-query\nhttp://10.0.0.1/hook\nhttp://169.254.169.254/latest/meta-data\nhttp://localhost/hook\nhttp://foo.localhost/hook\nhttp://internal/hook\nhttp://foo.internal/hook\nhttp://local/hook\nhttp://foo.local/hook\nhttp://metadata/hook\nhttp://metadata.google.internal/hook\nhttp://metadata.goog/hook\nhttp://[::1]/hook\nhttp://[fd00::1]/hook\nhttp://[fe80::1]/hook\nhttp://[::ffff:169.254.169.254]/hook\nhttp://[64:ff9b::a9fe:a9fe]/hook".split('\n') {
         let result = LogAggregator::new().add_destination(LogDestination::Webhook {
             url: url.to_string(),
             headers: HashMap::new(),
@@ -255,6 +255,19 @@ fn log_webhook_admission_rejects_complete_unsafe_url_table() {
         for secret in ["secret-user", "secret-pass", "secret-query", "token="] {
             assert!(!error.to_string().contains(secret), "{error}");
         }
+    }
+}
+
+#[test]
+fn log_destination_debug_redacts_webhook_url_and_headers() {
+    let destination = LogDestination::Webhook {
+        url: "https://du:dp@example.com/hook?token=dq".to_string(),
+        headers: HashMap::from([("auth".to_string(), "dh".to_string())]),
+    };
+    let debug = format!("{destination:?}");
+    assert_eq!(debug, "LogDestination { redacted }");
+    for secret in "du dp dq auth dh token=".split_whitespace() {
+        assert!(!debug.contains(secret), "{debug}");
     }
 }
 
@@ -277,11 +290,9 @@ async fn legal_log_webhook_preserves_entries_headers_and_120_second_timeout() ->
         url: url.clone(),
         headers: headers.clone(),
     };
-    let aggregator = LogAggregator::new().add_webhook_with_client_for_test(
-        url,
-        headers,
-        policy_client(address)?,
-    )?;
+    let aggregator = LogAggregator::new()
+        .with_webhook_client_for_test(policy_client(address)?)
+        .add_destination(destination.clone())?;
 
     aggregator
         .send_to_destination(&destination, &[test_log_entry()])
@@ -323,24 +334,20 @@ async fn log_webhook_redirect_is_error_not_followed_and_logs_are_secret_safe() -
         "http://source-user:source-pass@source.test:{}/hook?token=source-secret",
         source_address.port()
     );
-    let aggregator = LogAggregator::new().add_webhook_with_client_for_test(
-        url,
-        HashMap::new(),
-        policy_client(source_address)?,
-    )?;
+    let aggregator = LogAggregator::new()
+        .with_webhook_client_for_test(policy_client(source_address)?)
+        .add_destination(LogDestination::Webhook {
+            url,
+            headers: HashMap::new(),
+        })?;
     aggregator.log(test_log_entry()).await;
     aggregator.flush_buffer().await;
     server.await??;
     assert_listener_did_not_accept(&target, "log webhook redirect target").await;
     let logs = String::from_utf8(bytes.lock().expect("log lock").clone())?;
     assert!(logs.contains("302 Found"), "{logs}");
-    for secret in [
-        "source-user",
-        "source-pass",
-        "source-secret",
-        "redirect-secret",
-        "token=",
-    ] {
+    for secret in "source-user source-pass source-secret redirect-secret token=".split_whitespace()
+    {
         assert!(!logs.contains(secret), "{logs}");
     }
     Ok(())
@@ -348,15 +355,10 @@ async fn log_webhook_redirect_is_error_not_followed_and_logs_are_secret_safe() -
 
 #[tokio::test]
 async fn log_webhook_public_then_private_rebind_never_reaches_listener() -> TestResult {
-    for blocked_ip in [
-        "127.0.0.1",
-        "10.0.0.1",
-        "169.254.169.254",
-        "::1",
-        "fd00::1",
-        "::ffff:169.254.169.254",
-        "64:ff9b::a9fe:a9fe",
-    ] {
+    for blocked_ip in
+        "127.0.0.1 10.0.0.1 169.254.169.254 ::1 fd00::1 ::ffff:169.254.169.254 64:ff9b::a9fe:a9fe"
+            .split_whitespace()
+    {
         let tripwire = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
         let address = tripwire.local_addr()?;
         let client = ProviderHttpClient::build_public_then_private_tripwire_for_test(
@@ -372,8 +374,9 @@ async fn log_webhook_public_then_private_rebind_never_reaches_listener() -> Test
             url: url.clone(),
             headers: HashMap::new(),
         };
-        let aggregator =
-            LogAggregator::new().add_webhook_with_client_for_test(url, HashMap::new(), client)?;
+        let aggregator = LogAggregator::new()
+            .with_webhook_client_for_test(client)
+            .add_destination(destination.clone())?;
         let error = aggregator
             .send_to_destination(&destination, &[test_log_entry()])
             .await
@@ -398,12 +401,10 @@ fn all_four_webhook_senders_avoid_generic_clients_and_private_ip_classification(
         include_str!("logging.rs"),
     ];
     for source in sources {
-        for forbidden in [
-            "default_outbound_client",
-            "create_custom_client",
-            "reqwest::Client",
-            "is_private_or_reserved_ip",
-        ] {
+        for forbidden in
+            "default_outbound_client create_custom_client reqwest::Client is_private_or_reserved_ip"
+                .split_whitespace()
+        {
             assert!(!source.contains(forbidden), "found {forbidden}");
         }
     }
