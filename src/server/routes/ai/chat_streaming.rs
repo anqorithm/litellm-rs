@@ -174,10 +174,29 @@ pub(super) async fn handle_streaming_chat_completion(
 
                 loop {
                     let chunk_result = if idle_timeout_secs == 0 {
-                        stream.next().await
+                        tokio::select! {
+                            biased;
+                            _ = tx.closed() => {
+                                info!("Client disconnected while waiting for stream output");
+                                callback.fail("client disconnected", "client_disconnect");
+                                settle_after_upstream_output!();
+                                return;
+                            }
+                            result = stream.next() => result,
+                        }
                     } else {
                         let timeout_dur = Duration::from_secs(idle_timeout_secs);
-                        match tokio::time::timeout(timeout_dur, stream.next()).await {
+                        let timed_result = tokio::select! {
+                            biased;
+                            _ = tx.closed() => {
+                                info!("Client disconnected while waiting for stream output");
+                                callback.fail("client disconnected", "client_disconnect");
+                                settle_after_upstream_output!();
+                                return;
+                            }
+                            result = tokio::time::timeout(timeout_dur, stream.next()) => result,
+                        };
+                        match timed_result {
                             Ok(result) => result,
                             Err(_) => {
                                 warn!(
@@ -307,7 +326,7 @@ pub(super) async fn handle_streaming_chat_completion(
                     if tx.send(bytes).await.is_err() {
                         info!("Client disconnected during streaming, cancelling upstream");
                         callback.fail("client disconnected", "client_disconnect");
-                        settlement.record_disconnect(final_usage.as_ref()).await;
+                        settle_after_upstream_output!();
                         return;
                     }
                 }
@@ -315,6 +334,9 @@ pub(super) async fn handle_streaming_chat_completion(
                 let done_event = Event::default().data("[DONE]");
                 if tx.send(done_event.to_bytes()).await.is_err() {
                     info!("Client disconnected before [DONE] event could be sent");
+                    callback.fail("client disconnected", "client_disconnect");
+                    settle_after_upstream_output!();
+                    return;
                 }
                 settlement
                     .record_completion(final_usage.as_ref(), saw_upstream_output)

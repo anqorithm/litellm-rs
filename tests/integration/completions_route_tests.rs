@@ -33,6 +33,7 @@ mod tests {
 
     struct RecordingCallback {
         events: Arc<Mutex<Vec<RecordedCallback>>>,
+        error_notify: Option<Arc<tokio::sync::Notify>>,
     }
 
     #[async_trait::async_trait]
@@ -66,6 +67,9 @@ mod tests {
                 .lock()
                 .expect("callback events should not be poisoned")
                 .push(RecordedCallback::Error(event.clone()));
+            if let Some(notify) = &self.error_notify {
+                notify.notify_one();
+            }
             Ok(())
         }
 
@@ -141,6 +145,11 @@ mod tests {
 
         async fn shutdown(self) {
             self.handle.stop(true).await;
+            let _ = self.task.await;
+        }
+
+        async fn abort(self) {
+            self.handle.stop(false).await;
             let _ = self.task.await;
         }
     }
@@ -262,7 +271,24 @@ mod tests {
     async fn build_callback_runtime(events: Arc<Mutex<Vec<RecordedCallback>>>) -> CallbackRuntime {
         let manager = Arc::new(IntegrationManager::with_defaults());
         manager
-            .register(Arc::new(RecordingCallback { events }))
+            .register(Arc::new(RecordingCallback {
+                events,
+                error_notify: None,
+            }))
+            .await;
+        CallbackRuntime::new(manager, 8).expect("callback runtime should initialize")
+    }
+
+    async fn build_notifying_callback_runtime(
+        events: Arc<Mutex<Vec<RecordedCallback>>>,
+        error_notify: Arc<tokio::sync::Notify>,
+    ) -> CallbackRuntime {
+        let manager = Arc::new(IntegrationManager::with_defaults());
+        manager
+            .register(Arc::new(RecordingCallback {
+                events,
+                error_notify: Some(error_notify),
+            }))
             .await;
         CallbackRuntime::new(manager, 8).expect("callback runtime should initialize")
     }

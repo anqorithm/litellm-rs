@@ -37,8 +37,8 @@ use responses_stream_budget::StreamBudgetSettlement;
 #[path = "responses_stream_support.rs"]
 mod responses_stream_support;
 use responses_stream_support::{
-    classify, completed_reasoning_item, emit, in_progress_reasoning_item, make_shell,
-    output_items_in_stream_order, response_usage_from_chat_usage, sse_error,
+    ResponseStreamEmitError, classify, completed_reasoning_item, emit, in_progress_reasoning_item,
+    make_shell, output_items_in_stream_order, response_usage_from_chat_usage, sse_error,
 };
 
 /// Accumulated state for one in-progress tool call during streaming.
@@ -213,16 +213,28 @@ pub(crate) async fn handle_streaming_response(
                 let mut settlement = settlement;
 
                 let shell = make_shell(&resp_id, created_at, &model_name, "in_progress", &original);
-                if emit(
+                if let Err(error) = emit(
                     &tx,
                     &ResponseStreamEvent::ResponseCreated {
                         response: Box::new(shell),
                     },
                 )
                 .await
-                .is_err()
                 {
-                    callback.fail("client disconnected", "client_disconnect");
+                    match error {
+                        ResponseStreamEmitError::ClientDisconnected => {
+                            callback.fail("client disconnected", "client_disconnect");
+                        }
+                        ResponseStreamEmitError::Serialization(error) => {
+                            let message = format!("stream serialization failed: {error}");
+                            if let Some(lease) = lease.take() {
+                                let provider_error =
+                                    ProviderError::serialization("router", message.clone());
+                                lease.finish_failure(&provider_error);
+                            }
+                            callback.fail(message, "serialization_error");
+                        }
+                    }
                     return;
                 }
 
@@ -242,23 +254,62 @@ pub(crate) async fn handle_streaming_response(
                 let mut reasoning_item_id = String::new();
                 let mut reasoning_output_index: u32 = 0;
                 let mut reasoning_started = false;
-                macro_rules! return_after_disconnect {
+                macro_rules! settle_if_chargeable {
                     () => {
-                        callback.fail("client disconnected", "client_disconnect");
                         if final_usage.is_some() || saw_upstream_output {
                             settlement.record_disconnect(final_usage.as_ref()).await;
                         }
+                    };
+                }
+                macro_rules! return_after_disconnect {
+                    () => {
+                        callback.fail("client disconnected", "client_disconnect");
+                        settle_if_chargeable!();
+                        return;
+                    };
+                }
+                macro_rules! return_after_emit_error {
+                    ($error:expr) => {
+                        match $error {
+                            ResponseStreamEmitError::ClientDisconnected => {
+                                callback.fail("client disconnected", "client_disconnect");
+                            }
+                            ResponseStreamEmitError::Serialization(error) => {
+                                let message = format!("stream serialization failed: {error}");
+                                if let Some(lease) = lease.take() {
+                                    let provider_error =
+                                        ProviderError::serialization("router", message.clone());
+                                    lease.finish_failure(&provider_error);
+                                }
+                                callback.fail(message, "serialization_error");
+                            }
+                        }
+                        settle_if_chargeable!();
                         return;
                     };
                 }
 
                 loop {
                     let next = if idle_timeout == 0 {
-                        stream.next().await
+                        tokio::select! {
+                            biased;
+                            _ = tx.closed() => {
+                                return_after_disconnect!();
+                            }
+                            result = stream.next() => result,
+                        }
                     } else {
-                        match tokio::time::timeout(Duration::from_secs(idle_timeout), stream.next())
-                            .await
-                        {
+                        let timed_result = tokio::select! {
+                            biased;
+                            _ = tx.closed() => {
+                                return_after_disconnect!();
+                            }
+                            result = tokio::time::timeout(
+                                Duration::from_secs(idle_timeout),
+                                stream.next(),
+                            ) => result,
+                        };
+                        match timed_result {
                             Ok(r) => r,
                             Err(_) => {
                                 warn!("Responses API stream idle timeout after {idle_timeout}s");
@@ -280,7 +331,8 @@ pub(crate) async fn handle_streaming_response(
                                     format!("stream idle timeout after {idle_timeout}s"),
                                     "timeout",
                                 );
-                                return_after_disconnect!();
+                                settle_if_chargeable!();
+                                return;
                             }
                         }
                     };
@@ -319,7 +371,7 @@ pub(crate) async fn handle_streaming_response(
                                         next_output_index += 1;
                                         reasoning_item_id = format!("rs_{}", uuid_v4_hex());
 
-                                        if emit(
+                                        if let Err(error) = emit(
                                             &tx,
                                             &ResponseStreamEvent::ResponseOutputItemAdded {
                                                 output_index: reasoning_output_index,
@@ -329,13 +381,12 @@ pub(crate) async fn handle_streaming_response(
                                             },
                                         )
                                         .await
-                                        .is_err()
                                         {
-                                            return_after_disconnect!();
+                                            return_after_emit_error!(error);
                                         }
                                     }
                                     full_reasoning.push_str(reasoning_text);
-                                    if emit(
+                                    if let Err(error) = emit(
                                         &tx,
                                         &ResponseStreamEvent::ResponseReasoningSummaryTextDelta {
                                             output_index: reasoning_output_index,
@@ -344,9 +395,8 @@ pub(crate) async fn handle_streaming_response(
                                         },
                                     )
                                     .await
-                                    .is_err()
                                     {
-                                        return_after_disconnect!();
+                                        return_after_emit_error!(error);
                                     }
                                 }
 
@@ -366,7 +416,7 @@ pub(crate) async fn handle_streaming_response(
                                                 status: "in_progress".to_string(),
                                                 content: vec![],
                                             });
-                                        if emit(
+                                        if let Err(error) = emit(
                                             &tx,
                                             &ResponseStreamEvent::ResponseOutputItemAdded {
                                                 output_index: text_output_index,
@@ -374,12 +424,11 @@ pub(crate) async fn handle_streaming_response(
                                             },
                                         )
                                         .await
-                                        .is_err()
                                         {
-                                            return_after_disconnect!();
+                                            return_after_emit_error!(error);
                                         }
 
-                                        if emit(
+                                        if let Err(error) = emit(
                                             &tx,
                                             &ResponseStreamEvent::ResponseContentPartAdded {
                                                 output_index: text_output_index,
@@ -392,14 +441,13 @@ pub(crate) async fn handle_streaming_response(
                                             },
                                         )
                                         .await
-                                        .is_err()
                                         {
-                                            return_after_disconnect!();
+                                            return_after_emit_error!(error);
                                         }
                                     }
 
                                     full_text.push_str(text);
-                                    if emit(
+                                    if let Err(error) = emit(
                                         &tx,
                                         &ResponseStreamEvent::ResponseOutputTextDelta {
                                             output_index: text_output_index,
@@ -408,9 +456,8 @@ pub(crate) async fn handle_streaming_response(
                                         },
                                     )
                                     .await
-                                    .is_err()
                                     {
-                                        return_after_disconnect!();
+                                        return_after_emit_error!(error);
                                     }
                                 }
 
@@ -446,7 +493,7 @@ pub(crate) async fn handle_streaming_response(
                                                     call_id: Some(call_id.clone()),
                                                 },
                                             );
-                                            if emit(
+                                            if let Err(error) = emit(
                                                 &tx,
                                                 &ResponseStreamEvent::ResponseOutputItemAdded {
                                                     output_index: out_idx,
@@ -454,9 +501,8 @@ pub(crate) async fn handle_streaming_response(
                                                 },
                                             )
                                             .await
-                                            .is_err()
                                             {
-                                                return_after_disconnect!();
+                                                return_after_emit_error!(error);
                                             }
 
                                             entry.insert(ToolCallAccum {
@@ -485,7 +531,7 @@ pub(crate) async fn handle_streaming_response(
                                                 state.arguments.push_str(args);
                                                 let (cid, oi) =
                                                     (state.call_id.clone(), state.output_index);
-                                                if emit(
+                                                if let Err(error) = emit(
                                                     &tx,
                                                     &ResponseStreamEvent::ResponseFunctionCallArgumentsDelta {
                                                         output_index: oi,
@@ -494,9 +540,8 @@ pub(crate) async fn handle_streaming_response(
                                                     },
                                                 )
                                                 .await
-                                                .is_err()
                                                 {
-                                                    return_after_disconnect!();
+                                                    return_after_emit_error!(error);
                                                 }
                                             }
                                         }
@@ -512,7 +557,8 @@ pub(crate) async fn handle_streaming_response(
                                 lease.finish_failure(&e);
                             }
                             callback.fail(e.to_string(), "provider_error");
-                            return_after_disconnect!();
+                            settle_if_chargeable!();
+                            return;
                         }
                     }
                 }
@@ -521,7 +567,7 @@ pub(crate) async fn handle_streaming_response(
                 let mut all_output: Vec<(u32, ResponseOutputItem)> = Vec::new();
 
                 if reasoning_started {
-                    if emit(
+                    if let Err(error) = emit(
                         &tx,
                         &ResponseStreamEvent::ResponseReasoningSummaryTextDone {
                             output_index: reasoning_output_index,
@@ -530,14 +576,13 @@ pub(crate) async fn handle_streaming_response(
                         },
                     )
                     .await
-                    .is_err()
                     {
-                        return_after_disconnect!();
+                        return_after_emit_error!(error);
                     }
 
                     let reasoning_done =
                         completed_reasoning_item(reasoning_item_id, item_status, full_reasoning);
-                    if emit(
+                    if let Err(error) = emit(
                         &tx,
                         &ResponseStreamEvent::ResponseOutputItemDone {
                             output_index: reasoning_output_index,
@@ -545,15 +590,14 @@ pub(crate) async fn handle_streaming_response(
                         },
                     )
                     .await
-                    .is_err()
                     {
-                        return_after_disconnect!();
+                        return_after_emit_error!(error);
                     }
                     all_output.push((reasoning_output_index, reasoning_done));
                 }
 
                 if text_started {
-                    if emit(
+                    if let Err(error) = emit(
                         &tx,
                         &ResponseStreamEvent::ResponseOutputTextDone {
                             output_index: text_output_index,
@@ -562,12 +606,11 @@ pub(crate) async fn handle_streaming_response(
                         },
                     )
                     .await
-                    .is_err()
                     {
-                        return_after_disconnect!();
+                        return_after_emit_error!(error);
                     }
 
-                    if emit(
+                    if let Err(error) = emit(
                         &tx,
                         &ResponseStreamEvent::ResponseContentPartDone {
                             output_index: text_output_index,
@@ -580,9 +623,8 @@ pub(crate) async fn handle_streaming_response(
                         },
                     )
                     .await
-                    .is_err()
                     {
-                        return_after_disconnect!();
+                        return_after_emit_error!(error);
                     }
 
                     let text_done = ResponseOutputItem::Message(ResponseOutputMessage {
@@ -595,7 +637,7 @@ pub(crate) async fn handle_streaming_response(
                             logprobs: None,
                         }],
                     });
-                    if emit(
+                    if let Err(error) = emit(
                         &tx,
                         &ResponseStreamEvent::ResponseOutputItemDone {
                             output_index: text_output_index,
@@ -603,16 +645,15 @@ pub(crate) async fn handle_streaming_response(
                         },
                     )
                     .await
-                    .is_err()
                     {
-                        return_after_disconnect!();
+                        return_after_emit_error!(error);
                     }
                     all_output.push((text_output_index, text_done));
                 }
 
                 for idx in &tool_order {
                     if let Some(state) = tool_states.get(idx) {
-                        if emit(
+                        if let Err(error) = emit(
                             &tx,
                             &ResponseStreamEvent::ResponseFunctionCallArgumentsDone {
                                 output_index: state.output_index,
@@ -621,9 +662,8 @@ pub(crate) async fn handle_streaming_response(
                             },
                         )
                         .await
-                        .is_err()
                         {
-                            return_after_disconnect!();
+                            return_after_emit_error!(error);
                         }
 
                         let fc_done = ResponseOutputItem::FunctionCall(ResponseFunctionCall {
@@ -633,7 +673,7 @@ pub(crate) async fn handle_streaming_response(
                             status: "completed".to_string(),
                             call_id: Some(state.call_id.clone()),
                         });
-                        if emit(
+                        if let Err(error) = emit(
                             &tx,
                             &ResponseStreamEvent::ResponseOutputItemDone {
                                 output_index: state.output_index,
@@ -641,9 +681,8 @@ pub(crate) async fn handle_streaming_response(
                             },
                         )
                         .await
-                        .is_err()
                         {
-                            return_after_disconnect!();
+                            return_after_emit_error!(error);
                         }
                         all_output.push((state.output_index, fc_done));
                     }
@@ -652,7 +691,7 @@ pub(crate) async fn handle_streaming_response(
                 let output_items = output_items_in_stream_order(all_output);
 
                 let total = in_tokens + out_tokens;
-                let budget_usage = final_usage.or_else(|| {
+                let budget_usage = final_usage.clone().or_else(|| {
                     (total > 0).then_some(ChatUsage {
                         prompt_tokens: in_tokens,
                         completion_tokens: out_tokens,
@@ -662,17 +701,6 @@ pub(crate) async fn handle_streaming_response(
                         thinking_usage: None,
                     })
                 });
-                settlement
-                    .record_completion(budget_usage.as_ref(), saw_upstream_output)
-                    .await;
-                callback.complete_usage(budget_usage.as_ref(), "success");
-                if let Some(lease) = lease.take() {
-                    let tokens_used = budget_usage
-                        .as_ref()
-                        .map(|u| u.total_tokens)
-                        .unwrap_or(total);
-                    lease.finish_success(u64::from(tokens_used));
-                }
                 let usage = budget_usage.as_ref().map(response_usage_from_chat_usage);
                 let completed = ResponsesApiResponse {
                     id: resp_id,
@@ -686,16 +714,37 @@ pub(crate) async fn handle_streaming_response(
                     previous_response_id: original.previous_response_id.clone(),
                     metadata: original.metadata.clone(),
                 };
-                store_response_if_requested(&original, &completed, owner);
-                let _ = emit(
+                if let Err(error) = emit(
                     &tx,
                     &ResponseStreamEvent::ResponseCompleted {
-                        response: Box::new(completed),
+                        response: Box::new(completed.clone()),
                     },
                 )
-                .await;
+                .await
+                {
+                    return_after_emit_error!(error);
+                }
 
-                let _ = tx.send(Event::default().data("[DONE]").to_bytes()).await;
+                if tx
+                    .send(Event::default().data("[DONE]").to_bytes())
+                    .await
+                    .is_err()
+                {
+                    return_after_disconnect!();
+                }
+
+                store_response_if_requested(&original, &completed, owner);
+                settlement
+                    .record_completion(budget_usage.as_ref(), saw_upstream_output)
+                    .await;
+                callback.complete_usage(budget_usage.as_ref(), "success");
+                if let Some(lease) = lease.take() {
+                    let tokens_used = budget_usage
+                        .as_ref()
+                        .map(|u| u.total_tokens)
+                        .unwrap_or(total);
+                    lease.finish_success(u64::from(tokens_used));
+                }
             });
 
             let body = tokio_stream::wrappers::ReceiverStream::new(rx)

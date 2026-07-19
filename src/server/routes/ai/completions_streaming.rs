@@ -172,14 +172,29 @@ pub(super) async fn handle_streaming_completion(
 
                 loop {
                     let chunk_result = if idle_timeout_secs == 0 {
-                        stream.next().await
+                        tokio::select! {
+                            biased;
+                            _ = tx.closed() => {
+                                callback.fail("client disconnected", "client_disconnect");
+                                settle_if_chargeable!();
+                                return;
+                            }
+                            result = stream.next() => result,
+                        }
                     } else {
-                        match tokio::time::timeout(
-                            Duration::from_secs(idle_timeout_secs),
-                            stream.next(),
-                        )
-                        .await
-                        {
+                        let timed_result = tokio::select! {
+                            biased;
+                            _ = tx.closed() => {
+                                callback.fail("client disconnected", "client_disconnect");
+                                settle_if_chargeable!();
+                                return;
+                            }
+                            result = tokio::time::timeout(
+                                Duration::from_secs(idle_timeout_secs),
+                                stream.next(),
+                            ) => result,
+                        };
+                        match timed_result {
                             Ok(result) => result,
                             Err(_) => {
                                 warn!(
@@ -282,7 +297,15 @@ pub(super) async fn handle_streaming_completion(
                     }
                 }
 
-                let _ = tx.send(Event::default().data("[DONE]").to_bytes()).await;
+                if tx
+                    .send(Event::default().data("[DONE]").to_bytes())
+                    .await
+                    .is_err()
+                {
+                    callback.fail("client disconnected", "client_disconnect");
+                    settle_if_chargeable!();
+                    return;
+                }
                 settlement
                     .record_completion(final_usage.as_ref(), saw_upstream_output)
                     .await;

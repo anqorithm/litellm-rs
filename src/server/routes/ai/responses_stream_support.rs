@@ -1,7 +1,8 @@
 use bytes::Bytes;
+use serde::Serialize;
 use serde_json::json;
+use std::fmt;
 use tokio::sync::mpsc;
-use tracing::error;
 
 use crate::core::models::openai::responses_api::{
     ResponseInputTokensDetails, ResponseOutputItem, ResponseOutputTokensDetails,
@@ -81,17 +82,36 @@ pub(super) fn make_shell(
     }
 }
 
-pub(super) async fn emit(tx: &mpsc::Sender<Bytes>, event: &ResponseStreamEvent) -> Result<(), ()> {
-    match serde_json::to_string(event) {
-        Ok(json) => tx
-            .send(Event::default().data(&json).to_bytes())
-            .await
-            .map_err(|_| ()),
-        Err(error) => {
-            error!("Failed to serialise stream event: {error}");
-            Err(())
+#[derive(Debug)]
+pub(super) enum ResponseStreamEmitError {
+    Serialization(serde_json::Error),
+    ClientDisconnected,
+}
+
+impl fmt::Display for ResponseStreamEmitError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Serialization(error) => write!(formatter, "stream serialization failed: {error}"),
+            Self::ClientDisconnected => formatter.write_str("client disconnected"),
         }
     }
+}
+
+pub(super) async fn emit(
+    tx: &mpsc::Sender<Bytes>,
+    event: &ResponseStreamEvent,
+) -> Result<(), ResponseStreamEmitError> {
+    emit_serialized(tx, event).await
+}
+
+async fn emit_serialized<T: Serialize + ?Sized>(
+    tx: &mpsc::Sender<Bytes>,
+    event: &T,
+) -> Result<(), ResponseStreamEmitError> {
+    let json = serde_json::to_string(event).map_err(ResponseStreamEmitError::Serialization)?;
+    tx.send(Event::default().data(&json).to_bytes())
+        .await
+        .map_err(|_| ResponseStreamEmitError::ClientDisconnected)
 }
 
 pub(super) fn sse_error(message: &str, error_type: &str, code: &str) -> Bytes {
@@ -109,5 +129,43 @@ pub(super) fn classify(error: &ProviderError) -> (&'static str, &'static str) {
         ProviderError::RateLimit { .. } => ("rate_limit_error", "rate_limit_exceeded"),
         ProviderError::Timeout { .. } => ("server_error", "timeout"),
         _ => ("server_error", "internal_error"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde::Serializer;
+
+    struct FailingSerialization;
+
+    impl Serialize for FailingSerialization {
+        fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            Err(serde::ser::Error::custom(
+                "intentional serialization failure",
+            ))
+        }
+    }
+
+    #[tokio::test]
+    async fn emit_serialized_preserves_serialization_failure() {
+        let (tx, _rx) = mpsc::channel(1);
+        let error = emit_serialized(&tx, &FailingSerialization)
+            .await
+            .expect_err("serialization should fail");
+        assert!(matches!(error, ResponseStreamEmitError::Serialization(_)));
+    }
+
+    #[tokio::test]
+    async fn emit_serialized_preserves_client_disconnect() {
+        let (tx, rx) = mpsc::channel(1);
+        drop(rx);
+        let error = emit_serialized(&tx, &json!({"type": "test"}))
+            .await
+            .expect_err("closed receiver should reject delivery");
+        assert!(matches!(error, ResponseStreamEmitError::ClientDisconnected));
     }
 }

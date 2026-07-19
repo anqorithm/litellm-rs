@@ -161,6 +161,78 @@ async fn test_completions_stream_timeout_before_output_does_not_record_spend() {
     mock_server.shutdown().await;
 }
 
+async fn assert_zero_idle_timeout_observes_client_disconnect(uri: &str, request: Value) {
+    let mock_server = MockOpenAIServer::start(MockScenario::StreamingIdle).await;
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let error_notify = Arc::new(tokio::sync::Notify::new());
+    let runtime =
+        build_notifying_callback_runtime(Arc::clone(&events), Arc::clone(&error_notify)).await;
+    let state = build_test_app_state_with_idle_timeout(&mock_server.base_url, Some(0))
+        .await
+        .with_callbacks(runtime.dispatcher());
+
+    let app = test::init_service(
+        App::new()
+            .app_data(web::Data::new(state))
+            .configure(litellm_rs::server::routes::ai::configure_routes),
+    )
+    .await;
+    let response = test::call_service(
+        &app,
+        test::TestRequest::post()
+            .uri(uri)
+            .set_json(request)
+            .to_request(),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let disconnected = error_notify.notified();
+    drop(response);
+    tokio::time::timeout(Duration::from_secs(2), disconnected)
+        .await
+        .expect("stream worker should observe the dropped response body");
+    runtime
+        .shutdown()
+        .await
+        .expect("callback runtime should drain");
+
+    let events = events
+        .lock()
+        .expect("callback events should not be poisoned")
+        .clone();
+    assert_eq!(events.len(), 2);
+    assert!(matches!(events[0], RecordedCallback::Start(_)));
+    let RecordedCallback::Error(error) = &events[1] else {
+        panic!("client disconnect should emit one terminal error callback");
+    };
+    assert_eq!(error.error_type.as_deref(), Some("client_disconnect"));
+
+    mock_server.abort().await;
+}
+
+#[tokio::test]
+async fn test_completions_zero_idle_timeout_observes_client_disconnect() {
+    assert_zero_idle_timeout_observes_client_disconnect(
+        "/v1/completions",
+        completion_request(Some(true)),
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_chat_zero_idle_timeout_observes_client_disconnect() {
+    assert_zero_idle_timeout_observes_client_disconnect(
+        "/v1/chat/completions",
+        json!({
+            "model": "gpt-4o",
+            "messages": [{"role": "user", "content": "Hello"}],
+            "stream": true
+        }),
+    )
+    .await;
+}
+
 #[tokio::test]
 async fn test_completions_streaming_response_sends_sse_and_done() {
     let mock_server = MockOpenAIServer::start(MockScenario::StreamingSuccess).await;
