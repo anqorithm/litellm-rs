@@ -2,6 +2,8 @@
 //!
 //! This module contains comprehensive unit tests for error handling.
 
+#![allow(deprecated)]
+
 #[cfg(test)]
 mod contextual_error_tests {
     use crate::core::providers::unified_provider::ProviderError;

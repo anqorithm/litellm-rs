@@ -11,7 +11,8 @@ use crate::core::fine_tuning::providers::{
 use crate::core::fine_tuning::types::{
     CreateJobRequest, FineTuningCheckpoint, ListEventsParams, ListJobsParams,
 };
-use crate::core::router::execution::is_retryable_error;
+use crate::core::router::RouterConfig;
+use crate::core::router::retry_policy::{RetryContext, RetryPolicy};
 use crate::server::state::AppState;
 use crate::utils::error::gateway_error::GatewayError;
 use actix_web::{HttpResponse, Result as ActixResult, web};
@@ -277,7 +278,15 @@ fn ensure_fine_tuning_budget(
 
 fn is_retryable_fine_tuning_route_error(error: &FineTuningRouteError) -> bool {
     match error {
-        FineTuningRouteError::Gateway(GatewayError::Provider(error)) => is_retryable_error(error),
+        FineTuningRouteError::Gateway(GatewayError::Provider(error)) => {
+            RetryPolicy
+                .decide(&RouterConfig::default(), error, RetryContext::unary(1, 2))
+                .should_retry
+                // Budget exhaustion is not a same-provider retry (RetryPolicy
+                // facts correctly say non-retryable) but a failover to the next
+                // provider; preserve the pre-0.6 route behavior.
+                || crate::core::router::execution::retryable_budget_scope(error).is_some()
+        }
         FineTuningRouteError::Gateway(
             GatewayError::Network(_)
             | GatewayError::Timeout(_)

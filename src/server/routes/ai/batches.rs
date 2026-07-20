@@ -6,7 +6,8 @@
 use crate::config::models::provider::ProviderConfig;
 use crate::core::providers::ProviderError;
 use crate::core::providers::base::ProviderRequestBuilder;
-use crate::core::router::execution::is_retryable_error;
+use crate::core::router::RouterConfig;
+use crate::core::router::retry_policy::{RetryContext, RetryPolicy};
 use crate::server::state::AppState;
 use crate::utils::error::gateway_error::GatewayError;
 use actix_web::{HttpResponse, Result as ActixResult, http::StatusCode, http::header, web};
@@ -252,7 +253,15 @@ async fn response_to_http_response(
 
 fn is_retryable_batch_error(error: &GatewayError) -> bool {
     match error {
-        GatewayError::Provider(error) => is_retryable_error(error),
+        GatewayError::Provider(error) => {
+            RetryPolicy
+                .decide(&RouterConfig::default(), error, RetryContext::unary(1, 2))
+                .should_retry
+                // Budget exhaustion is not a same-provider retry (RetryPolicy
+                // facts correctly say non-retryable) but a failover to the next
+                // batch provider; preserve the pre-0.6 route behavior.
+                || crate::core::router::execution::retryable_budget_scope(error).is_some()
+        }
         GatewayError::HttpClient(_)
         | GatewayError::Network(_)
         | GatewayError::Timeout(_)

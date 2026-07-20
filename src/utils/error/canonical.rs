@@ -107,6 +107,7 @@ impl CanonicalError for ProviderError {
         }
     }
 
+    #[allow(deprecated)]
     fn canonical_retryable(&self) -> bool {
         self.is_retryable()
     }

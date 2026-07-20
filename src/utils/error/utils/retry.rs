@@ -30,6 +30,10 @@ impl ErrorUtils {
         None
     }
 
+    #[deprecated(
+        since = "0.6.0",
+        note = "use RetryPolicy::decide with ProviderFailureFacts for provider routing/retry; removal tracked in 0.7.0 follow-up (SP965-T010)"
+    )]
     pub fn should_retry(error: &ProviderError) -> bool {
         matches!(
             error,
@@ -54,6 +58,7 @@ impl ErrorUtils {
 }
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
     use crate::core::providers::unified_provider::ProviderError;

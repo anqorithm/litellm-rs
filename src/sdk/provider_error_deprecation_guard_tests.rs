@@ -210,9 +210,20 @@ fn expected_findings() -> Vec<Finding> {
 }
 fn expected_attrs(sources: &Sources) -> BTreeMap<String, usize> {
     let mut expected = BTreeMap::from([
-        ("src/sdk/errors.rs".into(), 8), ("src/sdk/client/completions.rs".into(), 1),
+        ("src/sdk/errors.rs".into(), 9), ("src/sdk/client/completions.rs".into(), 1),
         ("src/core/traits/provider/llm_provider/sub_traits.rs".into(), 9),
         ("src/server/routes/mod.rs".into(), 1),
+        // SP965-T017 (GH965 D1E-c): allow(deprecated) sites for the six 0.6-deprecated retry helpers.
+        ("src/utils/error/canonical.rs".into(), 1),
+        ("src/core/providers/provider_error_conversions.rs".into(), 1),
+        ("src/core/providers/contextual_error.rs".into(), 2),
+        ("src/core/providers/unified_provider_tests.rs".into(), 1),
+        ("src/core/providers/openai_like/provider/tests.rs".into(), 1),
+        ("tests/integration/error_handling_tests.rs".into(), 1),
+        ("src/core/providers/bedrock/error.rs".into(), 1),
+        ("src/core/providers/bedrock/streaming/event_stream.rs".into(), 1),
+        ("src/core/providers/failure.rs".into(), 1),
+        ("src/utils/error/utils/retry.rs".into(), 1),
     ]);
     for path in ["src/core/router/tests/concurrency_edge_case_tests.rs", "src/core/router/tests/execution_tests.rs",
         "src/core/router/tests/router_tests.rs", "src/core/router/tests/selection_tests.rs",
