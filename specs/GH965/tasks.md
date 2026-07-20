@@ -87,12 +87,22 @@ GH-965 / #965
   与 `api_key`/`api_base` 同类处理；(6) credential 在 deployment publication 时预计算定长 digest，request path
   每请求只 hash 一次后比较；(7) HTTP binding/route ownership 按 D7a-D7i 分 tranche 完成，Gemini 只允许 binding plumbing，background task 在 acceptance 时 pin handle，无 model 的 lifecycle operation 使用 pinned snapshot 的 capability-only runtime attempt plan，batch/fine-tuning 只通过 selected runtime provider 的 closed management dispatch。
   任一项若维护者不同意，需在实现前修订本 packet，实现者不得自行改选。
-  (8) T017 file-budget amendment（2026-07-21）：T017 非文档文件上限由「最多 8 个」修订为「最多 20 个」，
-  500 changed lines 上限及其余约束不变。理由：六个 helper 加 `#[deprecated]` 后，同 crate 内每一处既有调用都会在
-  `clippy --all-targets --all-features -- -D warnings` 下报错，必须逐站点迁移或加局部 `#[allow(deprecated)]`；
-  这些站点天然散布在 bedrock/openai_like/sdk/router/utils 等模块，拆成多个 PR 会产生「部分 helper 已弃用、
-  部分未弃用」的中间态，只能靠本 tranche 明确禁止的 allowlist 扩张维持编译，违反「禁止删除测试、压缩断言或
-  扩大 allowlist 规避 gate」。故不拆分，只放宽文件数上限。新增 allow 站点仅限定义自身、定义侧委托、tests 与
-  compat fixture，且每处由 T023b 的 deprecation guard `expected_attrs` 精确锁定（透明增长，仍为精确锁定）；
-  production provider routing/retry path 零消费、batches/fine-tuning 迁到 `RetryPolicy::decide` 的完成信号不变。
-  本 amendment 不改变 `HD-001`~`HD-004` 任何决策、0.6→0.7 窗口与串行 tranche 顺序。
+  (8) T017 file-budget amendment（2026-07-21，理由按独立 review 实测证据修订）：T017 非文档文件上限由
+  「最多 8 个」修订为「最多 20 个」，500 changed lines 上限及其余约束不变。实测基础（review lane 在 pinned
+  toolchain rustc/clippy 1.96.1 上以最小 crate 实测 + 全仓库 rg 扫描）：rustc 的 `#[deprecated]` 对 inherent
+  方法与自由函数在同 crate 使用点**不产生 warning**（只有 deprecated trait 方法在同 crate 调用点报 warning；
+  六个 helper 中恰一个是 trait 方法 `ProviderErrorTrait::is_retryable`，且全仓库无解析到它的同 crate 调用点）。
+  因此文件散布不是编译器 warning 驱动，而是以下原子耦合的完成信号驱动：(a) production provider routing/retry
+  path 零消费要求 source guard 零命中扫描覆盖散布于 bedrock/openai_like/sdk/router/utils/server routes 的全部
+  production 调用点迁移；(b) T023b 式「marker + 局部 allow + guard 精确锁定」约定要求新增 allow 站点登记
+  `expected_attrs`（已合并 guard 对全部 Rust target/source 执行全仓库精确匹配，未登记站点一律 FAIL）；
+  (c) batches/fine_tuning 迁到 `RetryPolicy::decide`；(d) 六个 helper 的 0.6 返回值锁定 fixtures。拆成多个 PR
+  会产生「部分 helper 已弃用、guard 半登记、production 消费半迁移」的中间态，无法被 exact-head 精确匹配表达，
+  且违反「禁止删除测试、压缩断言或扩大 allowlist 规避 gate」。故不拆分，只放宽文件数上限。新增 allow 站点归入
+  done-when 既有类别——定义（六个 helper 自身 attribute 与定义侧委托）、grandfathered 委托
+  （`CanonicalError::canonical_retryable` presentation 调用）、tests 与 compat fixture——且每处由 T023b 的
+  deprecation guard `expected_attrs` 精确锁定（透明增长，仍为精确锁定）。预算明细（实测 18 文件）：6 个
+  helper 定义文件、1 个定义侧委托、2 个 production 迁移、1 个 grandfathered 委托、6 个 test 模块/站点 allow、
+  1 个 guard 登记、1 个新增 D1E-c 测试文件。production provider routing/retry path 零消费、batches/fine-tuning
+  迁到 `RetryPolicy::decide` 的完成信号不变。本 amendment 不改变 `HD-001`~`HD-004` 任何决策、0.6→0.7 窗口与
+  串行 tranche 顺序。
