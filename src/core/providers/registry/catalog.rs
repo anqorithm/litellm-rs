@@ -336,12 +336,19 @@ fn build_catalog() -> HashMap<&'static str, ProviderDefinition> {
                 "AMAZON_NOVA_API_KEY",
             )
         },
-        def_chat(
-            "github",
-            "GitHub Models",
-            "https://models.inference.ai.azure.com",
-            "GITHUB_TOKEN",
-        ),
+        // github: native module deprecated in 0.6.0, slated for 0.7.0 catalog
+        // demotion. The catalog route is the supported path; its base_url equals
+        // the native `github::config::GITHUB_MODELS_API_BASE` constant (kept in
+        // sync by the github_catalog_policy tests in registry::github_policy).
+        ProviderDefinition {
+            capabilities: super::github_policy::GITHUB_CATALOG_CAPABILITIES,
+            ..def_chat(
+                "github",
+                "GitHub Models",
+                "https://models.inference.ai.azure.com",
+                "GITHUB_TOKEN",
+            )
+        },
         // xAI publishes OpenAI-compatible chat endpoints; model IDs are
         // passed through instead of enumerated in this static provider catalog.
         ProviderDefinition {

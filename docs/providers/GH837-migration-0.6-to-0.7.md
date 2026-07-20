@@ -32,6 +32,39 @@ demotion gate。
 registry/catalog construction path；不要复制 native module 或依赖其内部 macro
 实现。
 
+## `github`
+
+### 时间线
+
+- 0.6.x：`providers-extended` 下的 native `github` module 已标记 deprecated，
+  但 `GitHubConfig`、`GitHubError`、`GitHubModel`、`GitHubProvider` 与
+  `get_available_models` / `get_model_info` 的公开 symbol、构造签名和既有运行时
+  行为保持不变。
+- 0.7.0：在 version workflow 与 public compatibility gate 通过后，移除 duplicate
+  native module，保留 `github` catalog route（`github_copilot` 是不同 scope，
+  不受影响）。这是公开 Rust API 的 breaking change，不是运行时 provider 降级。
+
+### Catalog 等价策略
+
+Catalog route 保留 native 的固定 endpoint `GITHUB_MODELS_API_BASE`
+（`https://models.inference.ai.azure.com`）、Bearer auth 与 `GITHUB_TOKEN`
+contract，并只声明 native provider 已实现的 chat、streaming chat 与 tool-calling
+capabilities。Health 由 OpenAI-compatible catalog route 的标准 `/models` 探针
+提供，没有 github 专属 health 机制。
+
+Catalog policy（`registry::github_policy`）是模型、能力与价格的唯一权威；保留的
+native registry 仅是 0.6 compatibility projection。Catalog 保留全部 16 个 canonical
+model（OpenAI gpt-4o/gpt-4o-mini/o1-preview/o1-mini、Meta Llama 3.1 405B/70B/8B、
+Mistral Large/Small、Cohere Command R+/R、AI21 Jamba 1.5 Large/Mini、Phi 3.5
+MoE/Mini/Vision），以及各自的 context/output limits、token pricing 与 tool /
+multimodal metadata。缺少其中任一项都不满足后续 0.7.0 demotion gate。
+
+### 迁移
+
+通过 gateway/provider configuration 使用 `github` selector 的调用方无需更改
+selector。直接 import native Rust types 的下游 crate 应在 0.7.0 前迁移到
+registry/catalog construction path；不要复制 native module。
+
 ## `custom_api`
 
 ### 时间线

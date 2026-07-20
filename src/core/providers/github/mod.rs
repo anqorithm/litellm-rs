@@ -4,6 +4,12 @@
 //! The API is OpenAI-compatible, making integration straightforward.
 //!
 //! This implementation follows the Python LiteLLM library pattern for GitHub Models.
+//!
+//! Deprecated in 0.6.0; operational until the planned 0.7.0 catalog demotion.
+//! The catalog route at `GITHUB_MODELS_API_BASE`
+//! (<https://models.inference.ai.azure.com>) is the supported path; see
+//! `registry::github_policy` for the authoritative model/pricing/capability
+//! metadata.
 
 mod config;
 mod error;
