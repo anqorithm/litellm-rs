@@ -199,15 +199,17 @@ pub(crate) static GITHUB_CATALOG_MODELS: &[GitHubCatalogModel] = &[
     },
 ];
 
-// The full info list is the single ModelInfo projection source
-// (`github_catalog_model_info`). `OpenAILikeProvider::get_model_info`
-// single-model resolution does not consume it yet (amazon_nova parity is
-// deferred: `openai_like/provider.rs` is at the U-16 800-line hard ceiling);
-// tracked in the GH837 T9/T14 gate alongside the pricing authority hook.
+// The full info list and single-model resolution share one ModelInfo
+// projection (`github_model_info_from_entry`), mapped directly from the
+// catalog entries without a per-entry re-lookup. `OpenAILikeProvider::
+// get_model_info` does not consume the single-model lookup yet (amazon_nova
+// parity is deferred: `openai_like/provider.rs` is at the U-16 800-line hard
+// ceiling); tracked in the GH837 T9/T14 gate alongside the pricing authority
+// hook.
 static GITHUB_MODEL_INFOS: LazyLock<Vec<ModelInfo>> = LazyLock::new(|| {
     GITHUB_CATALOG_MODELS
         .iter()
-        .filter_map(|entry| github_catalog_model_info(entry.model_id))
+        .map(github_model_info_from_entry)
         .collect()
 });
 
