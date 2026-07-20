@@ -5,7 +5,9 @@
 use crate::config::models::server::{CorsConfig, ServerConfig};
 use crate::config::{Config, Validate};
 use crate::core::budget::UnifiedBudgetLimits;
+use crate::core::guardrails::GuardrailEngine;
 use crate::core::integrations::CallbackRuntime;
+use crate::core::ip_access::{IpAccessControl, IpAccessMiddleware};
 use crate::core::pricing_service::PricingService;
 use crate::core::rate_limiter::{get_global_rate_limiter, init_global_rate_limiter_with_redis};
 use crate::server::middleware::{
@@ -152,6 +154,14 @@ impl HttpServer {
         let callback_runtime =
             crate::server::callbacks::build_callback_runtime(&config.gateway.monitoring.callbacks)
                 .await;
+        let guardrails =
+            GuardrailEngine::shared(config.gateway.guardrails.clone()).map_err(|error| {
+                GatewayError::Config(format!("Invalid guardrails configuration: {error}"))
+            })?;
+        let ip_access =
+            IpAccessControl::shared(config.gateway.ip_access.clone()).map_err(|error| {
+                GatewayError::Config(format!("Invalid IP access configuration: {error}"))
+            })?;
         let state = AppState::new_with_unified_router(
             config.clone(),
             auth,
@@ -160,7 +170,8 @@ impl HttpServer {
             pricing,
             budget_limits,
         )
-        .with_callbacks(callback_runtime.dispatcher());
+        .with_callbacks(callback_runtime.dispatcher())
+        .with_request_policies(guardrails, ip_access);
 
         Ok(Self {
             config: config.gateway.server.clone(),
@@ -208,6 +219,7 @@ impl HttpServer {
         let api_key_auth_enabled = cfg.gateway.auth.enable_api_key;
         let default_rate_limit_rpm = rate_limit_enabled.then_some(rate_limit_rpm);
         let metrics_enabled = cfg.gateway.monitoring.metrics.enabled;
+        let ip_access = Arc::clone(&state.ip_access);
         let cors = Self::build_cors_for_app_factory(cors_config);
 
         let budget_limits = web::Data::new(Arc::clone(&state.budget_limits));
@@ -232,6 +244,9 @@ impl HttpServer {
             // preflight may be short-circuited before those layers.
             .wrap(Condition::new(cors_config.enabled, cors))
             .wrap(from_fn(normalize_non_cors_options_before_cors))
+            // These policy layers are registered last so Actix executes them
+            // before authentication, routing, and provider side effects.
+            .wrap(IpAccessMiddleware::new(ip_access))
             .configure(routes::health::configure_routes)
             .configure(routes::auth::configure_routes)
             .configure(routes::keys::configure_routes)

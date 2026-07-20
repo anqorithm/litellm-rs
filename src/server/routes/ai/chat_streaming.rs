@@ -29,6 +29,10 @@ pub(super) async fn handle_streaming_chat_completion(
         request.model
     );
 
+    if let Err(error) = crate::server::guardrails::check_chat_input(state, request.as_ref()).await {
+        return Ok(openai_errors::gateway_error_response(&error));
+    }
+
     let requested_model = request.model.clone();
     let client_requested_usage = request
         .stream_options

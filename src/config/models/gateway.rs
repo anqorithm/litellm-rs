@@ -5,6 +5,7 @@
 use super::auth::AuthConfig;
 use super::cache::CacheConfig;
 use super::enterprise::EnterpriseConfig;
+use super::guardrails::{default_gateway_guardrails, deserialize_gateway_guardrails};
 use super::monitoring::MonitoringConfig;
 use super::provider::ProviderConfig;
 use super::rate_limit::RateLimitConfig;
@@ -17,6 +18,7 @@ use std::env;
 use std::str::FromStr;
 
 use crate::core::net::ProviderEndpointAccess;
+use crate::core::{guardrails::GuardrailConfig, ip_access::IpAccessConfig};
 
 const ENV_HOST: &str = "LITELLM_HOST";
 const ENV_PORT: &str = "LITELLM_PORT";
@@ -477,6 +479,16 @@ pub struct GatewayConfig {
     /// Rate limiting configuration
     #[serde(default)]
     pub rate_limit: RateLimitConfig,
+    /// Content guardrails. Prompt-injection protection is enabled by default
+    /// and can be explicitly disabled with `guardrails.enabled: false`.
+    #[serde(
+        default = "default_gateway_guardrails",
+        deserialize_with = "deserialize_gateway_guardrails"
+    )]
+    pub guardrails: GuardrailConfig,
+    /// IP access policy. Empty/default rules preserve allow-all behavior.
+    #[serde(default)]
+    pub ip_access: IpAccessConfig,
     /// Enterprise features configuration
     #[serde(default)]
     pub enterprise: EnterpriseConfig,
@@ -501,6 +513,8 @@ impl Default for GatewayConfig {
             monitoring: MonitoringConfig::default(),
             cache: CacheConfig::default(),
             rate_limit: RateLimitConfig::default(),
+            guardrails: default_gateway_guardrails(),
+            ip_access: IpAccessConfig::default(),
             enterprise: EnterpriseConfig::default(),
             pricing: GatewayPricingConfig::default(),
         }
@@ -637,6 +651,8 @@ impl GatewayConfig {
         self.monitoring = self.monitoring.merge(other.monitoring);
         self.cache = self.cache.merge(other.cache);
         self.rate_limit = self.rate_limit.merge(other.rate_limit);
+        self.guardrails = other.guardrails;
+        self.ip_access = other.ip_access;
         self.enterprise = self.enterprise.merge(other.enterprise);
         self.pricing = self.pricing.merge(other.pricing);
 

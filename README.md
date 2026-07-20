@@ -12,7 +12,7 @@ A high-performance Rust library and gateway for calling LLM APIs in an OpenAI-co
 - **OpenAI-Compatible API** - Drop-in replacement for OpenAI SDK
 - **High Performance** - 10,000+ requests/second, <10ms routing overhead
 - **Intelligent Routing** - Load balancing, failover, cost optimization
-- **Gateway Controls** - Auth, rate limiting, deterministic caching, metrics, and health endpoints
+- **Gateway Controls** - Default-on prompt-injection guardrails, configured IP access, auth, rate limiting, deterministic caching, metrics, and health endpoints
 
 ## Quick Start (5 Minutes, API-Only Recommended)
 
@@ -93,8 +93,8 @@ Runtime wiring decisions are tracked in [`src/core/subsystem_registry.rs`](./src
 
 | Subsystem | Decision | Runtime status |
 | --- | --- | --- |
-| `core/guardrails` | experimental-gate | Module-only. `GuardrailEngine` is not configured or executed on completion requests. |
-| `core/ip_access` | experimental-gate | Middleware exists but is not registered in the Actix stack. |
+| `core/guardrails` | wire | Default-on prompt-injection checks run before provider execution and on non-streaming output; `guardrails.enabled: false` is the explicit opt-out. |
+| `core/ip_access` | wire | Configured allow/block rules run as an outer Actix middleware and short-circuit before downstream side effects; empty/default rules allow all. |
 | `core/mcp` | experimental-gate | MCP gateway is not mounted; Responses API only passes MCP tool descriptors through to providers. |
 | `core/a2a` | experimental-gate | A2A gateway types compile, but no route or `AppState` entry mounts them. |
 | `core/realtime` | experimental-gate | Realtime WebSocket types exist, but no gateway route is mounted. |

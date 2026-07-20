@@ -20,6 +20,8 @@ pub mod cache;
 pub mod enterprise;
 pub mod file_storage;
 pub mod gateway;
+mod guardrails;
+pub(crate) use guardrails::validate_gateway_guardrails;
 pub mod monitoring;
 pub mod provider;
 pub mod rate_limit;

@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Wired `guardrails` into canonical chat request/response execution with default-on prompt-injection protection and an explicit `guardrails.enabled: false` opt-out.
+- Added gateway `ip_access` configuration and registered its middleware ahead of authentication, handlers, and provider execution; default empty rules remain allow-all.
 - Added the `pricing.unpriced_model_policy` and `pricing.unpriced_fallback_cost_per_1k_tokens` configuration surface for #831 fail-closed unpriced-model enforcement; `pricing.allow_degraded` remains startup-only.
 - Added `gateway_unpriced_events_total{provider,model_bucket,policy,outcome}` and `gateway_unpriced_spend_total{provider,model_bucket,policy,outcome}` Prometheus metrics for unpriced-model rejects, router candidate exclusions, and fallback settlements.
 
@@ -25,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Removed the module-only `empower` provider implementation from the `providers-extended` surface for #837. It had no gateway factory or dispatch path, so runtime provider selection is unchanged; downstream crates directly importing `litellm_rs::core::providers::empower` must remove that import or restore the old implementation from git history.
 
 ### Fixed
+- Fixed IP access denial so blocked requests no longer execute the downstream service before returning `403 Forbidden`.
 - Redis-backed distributed rate limiting now fails closed by default when Redis commands fail, emits `rate_limiter_degraded_total{operation,mode}`, and keeps the old local fallback only behind `rate_limit.redis_failure_mode: fail_open_local`.
 
 ## [0.5.0] - 2026-04-30

@@ -16,6 +16,7 @@ pub struct PromptInjectionGuardrail {
     config: PromptInjectionConfig,
     patterns: Vec<CompiledPattern>,
     ignore_patterns: Vec<Regex>,
+    output_leak_patterns: Vec<Regex>,
 }
 
 struct CompiledPattern {
@@ -55,10 +56,27 @@ impl PromptInjectionGuardrail {
             ignore_patterns.push(regex);
         }
 
+        let output_leak_patterns = [
+            r"(?i)system\s*prompt\s*:",
+            r"(?i)my\s+instructions\s+are",
+            r"(?i)i\s+was\s+told\s+to",
+            r"(?i)my\s+rules\s+are",
+        ]
+        .into_iter()
+        .map(|pattern| {
+            Regex::new(pattern).map_err(|error| {
+                GuardrailError::Config(format!(
+                    "Invalid built-in output leak pattern '{pattern}': {error}"
+                ))
+            })
+        })
+        .collect::<GuardrailResult<Vec<_>>>()?;
+
         Ok(Self {
             config,
             patterns,
             ignore_patterns,
+            output_leak_patterns,
         })
     }
 
@@ -291,18 +309,8 @@ impl Guardrail for PromptInjectionGuardrail {
             return Ok(CheckResult::pass());
         }
 
-        // Only check for system prompt leakage patterns in output
-        let leak_patterns = [
-            r"(?i)system\s*prompt\s*:",
-            r"(?i)my\s+instructions\s+are",
-            r"(?i)i\s+was\s+told\s+to",
-            r"(?i)my\s+rules\s+are",
-        ];
-
-        for pattern in leak_patterns {
-            if let Ok(regex) = Regex::new(pattern)
-                && regex.is_match(content)
-            {
+        for regex in &self.output_leak_patterns {
+            if regex.is_match(content) {
                 let violation = Violation::new(
                     ViolationType::PromptInjection,
                     "Potential system prompt leakage detected in output",
