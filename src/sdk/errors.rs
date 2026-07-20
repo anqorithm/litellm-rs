@@ -138,6 +138,10 @@ pub type Result<T> = std::result::Result<T, SDKError>;
 
 impl SDKError {
     /// Error
+    #[deprecated(
+        since = "0.6.0",
+        note = "use RetryPolicy::decide with ProviderFailureFacts for provider routing/retry; removal tracked in 0.7.0 follow-up (SP965-T010)"
+    )]
     // SP965-T010 links 0.7 removal follow-up for SDKError::ProviderError
     #[allow(deprecated)]
     pub fn is_retryable(&self) -> bool {
@@ -162,6 +166,7 @@ impl SDKError {
 }
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
     use crate::core::providers::ProviderError;

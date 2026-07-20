@@ -3,6 +3,8 @@
 //! Tests for error types, conversions, and error recovery mechanisms.
 //! These tests verify that errors flow correctly through the system.
 
+#![allow(deprecated)]
+
 #[cfg(all(test, feature = "gateway"))]
 mod tests {
     use actix_web::ResponseError;

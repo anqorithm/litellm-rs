@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 use super::*;
 use crate::core::types::chat::ChatMessage;
 use crate::core::types::context::RequestContext;

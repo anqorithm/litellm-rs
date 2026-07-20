@@ -176,6 +176,7 @@ impl ErrorMapper<ProviderError> for BedrockErrorMapper {
 }
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
     use serde_json::json;
