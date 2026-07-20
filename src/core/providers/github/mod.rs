@@ -11,6 +11,15 @@
 //! `registry::github_policy` for the authoritative model/pricing/capability
 //! metadata.
 
+// 0.6.0 deprecation signal for direct downstream imports. The inner attribute
+// is used here because `src/core/providers/mod.rs` is at the U-16 800-line
+// hard ceiling and cannot carry the outer `#[cfg_attr(not(test), deprecated)]`
+// attribute used by amazon_nova/custom_api without a structural split.
+#![cfg_attr(
+    not(test),
+    deprecated(since = "0.6.0", note = "use catalog github before 0.7")
+)]
+
 mod config;
 mod error;
 mod model_info;

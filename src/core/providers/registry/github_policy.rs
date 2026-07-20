@@ -199,9 +199,11 @@ pub(crate) static GITHUB_CATALOG_MODELS: &[GitHubCatalogModel] = &[
     },
 ];
 
-// The full info list is derived from the same per-model lookup the catalog
-// route uses for single-model resolution, keeping one ModelInfo projection
-// source of truth (`github_catalog_model_info`).
+// The full info list is the single ModelInfo projection source
+// (`github_catalog_model_info`). `OpenAILikeProvider::get_model_info`
+// single-model resolution does not consume it yet (amazon_nova parity is
+// deferred: `openai_like/provider.rs` is at the U-16 800-line hard ceiling);
+// tracked in the GH837 T9/T14 gate alongside the pricing authority hook.
 static GITHUB_MODEL_INFOS: LazyLock<Vec<ModelInfo>> = LazyLock::new(|| {
     GITHUB_CATALOG_MODELS
         .iter()
@@ -315,8 +317,10 @@ mod tests {
 
     // The catalog route must keep the fixed GitHub Models endpoint and Bearer
     // auth contract. The literal equals the native `GITHUB_MODELS_API_BASE`
-    // constant; the providers-extended test below asserts that equality
-    // directly against the live constant.
+    // constant (`src/core/providers/github/config.rs`); this test locks the
+    // literal directly. The constant is not re-exported from the deprecated
+    // native module, so a live-constant comparison is intentionally avoided;
+    // the native module is slated for removal in 0.7.0.
     #[test]
     fn github_catalog_policy_base_url_and_auth_contract() {
         let definition = get_definition("github").expect("github catalog definition must exist");
