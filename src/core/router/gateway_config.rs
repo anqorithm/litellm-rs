@@ -4,7 +4,9 @@
 //! a Router from gateway configuration.
 
 use super::config::RouterConfig;
-use super::deployment::{Deployment, DeploymentConfig, HealthCheckPolicy, RetrySchedule};
+use super::deployment::{
+    Deployment, DeploymentConfig, HealthCheckPolicy, LegacySelectorMetadata, RetrySchedule,
+};
 use super::error::RouterError;
 use super::unified::Router;
 use crate::config::Validate;
@@ -63,6 +65,8 @@ impl Router {
                         provider_config.name, e
                     ))
                 })?;
+            let legacy_metadata =
+                LegacySelectorMetadata::from_stored_credential(&provider_config.api_key);
 
             // Determine which models this deployment serves
             let models: Vec<String> = if !provider_config.models.is_empty() {
@@ -84,7 +88,7 @@ impl Router {
                     &provider_config.name,
                     provider_config,
                 )?;
-                router.add_deployment(deployment);
+                router.add_gateway_deployment(deployment, legacy_metadata);
             } else {
                 // Create one deployment per model
                 for model in models {
@@ -95,7 +99,7 @@ impl Router {
                         &model,
                         provider_config,
                     )?;
-                    router.add_deployment(deployment);
+                    router.add_gateway_deployment(deployment, legacy_metadata.clone());
                 }
             }
         }
@@ -177,6 +181,20 @@ mod tests {
     use crate::config::models::router::{
         CircuitBreakerConfig, GatewayRouterConfig, LoadBalancerConfig, RoutingStrategyConfig,
     };
+    use crate::core::providers::unified_provider::ProviderError;
+    use crate::utils::auth::crypto::hmac::CredentialDigest;
+    use std::cell::Cell;
+    use syn::{Fields, Item, Type};
+
+    fn credential_test_provider(name: &str, api_key: &str) -> ProviderConfig {
+        ProviderConfig {
+            name: name.to_string(),
+            provider_type: "openai".to_string(),
+            api_key: api_key.to_string(),
+            models: vec!["credential-model".to_string()],
+            ..ProviderConfig::default()
+        }
+    }
 
     #[test]
     fn test_runtime_router_config_from_gateway_round_robin() {
@@ -335,5 +353,197 @@ mod tests {
             .expect_err("direct factory must validate disabled providers too");
         assert!(matches!(error, RouterError::InvalidConfiguration(_)));
         assert!(error.to_string().contains("requires a configured endpoint"));
+    }
+
+    #[tokio::test]
+    async fn gateway_snapshot_credential_matching_hashes_once_and_fails_closed() {
+        let short_secret = "sk-s";
+        let long_secret = "sk-different-length-secret-for-long-provider";
+        let providers = [
+            credential_test_provider("short", short_secret),
+            credential_test_provider("long", long_secret),
+        ];
+        let router = match Router::from_gateway_config(&providers, None).await {
+            Ok(router) => router,
+            Err(error) => panic!("credential fixture should build: {error}"),
+        };
+        let snapshot = router.load_routing_snapshot();
+        match snapshot.resolve_legacy_credential("credential-model", short_secret) {
+            Ok(deployment_id) => assert_eq!(deployment_id, "short-credential-model"),
+            Err(error) => panic!("short credential should match exactly once: {error}"),
+        }
+
+        let hash_count = Cell::new(0usize);
+        let selected = snapshot.resolve_legacy_credential_with_test_hasher(
+            "credential-model",
+            long_secret,
+            |raw| {
+                hash_count.set(hash_count.get() + 1);
+                CredentialDigest::from_credential(raw)
+            },
+        );
+        assert_eq!(hash_count.get(), 1);
+        match selected {
+            Ok(deployment_id) => assert_eq!(deployment_id, "long-credential-model"),
+            Err(error) => panic!("long credential should match exactly once: {error}"),
+        }
+        let no_match_hash_count = Cell::new(0usize);
+        assert!(matches!(
+            snapshot.resolve_legacy_credential_with_test_hasher(
+                "credential-model",
+                "no-match",
+                |raw| {
+                    no_match_hash_count.set(no_match_hash_count.get() + 1);
+                    CredentialDigest::from_credential(raw)
+                },
+            ),
+            Err(ProviderError::ModelNotFound { .. })
+        ));
+        assert_eq!(no_match_hash_count.get(), 1);
+
+        let replacement = snapshot
+            .deployments
+            .values()
+            .map(|deployment| deployment.as_ref().clone())
+            .collect();
+        router.set_model_list(replacement);
+        match router
+            .load_routing_snapshot()
+            .resolve_legacy_credential("credential-model", short_secret)
+        {
+            Ok(deployment_id) => assert_eq!(deployment_id, "short-credential-model"),
+            Err(error) => panic!("snapshot replacement must retain credential metadata: {error}"),
+        }
+
+        let duplicates = [
+            credential_test_provider("duplicate-a", "sk-duplicate-secret"),
+            credential_test_provider("duplicate-b", "sk-duplicate-secret"),
+        ];
+        let duplicate_router = match Router::from_gateway_config(&duplicates, None).await {
+            Ok(router) => router,
+            Err(error) => panic!("duplicate credential fixture should build: {error}"),
+        };
+        let duplicate_hash_count = Cell::new(0usize);
+        assert!(matches!(
+            duplicate_router
+                .load_routing_snapshot()
+                .resolve_legacy_credential_with_test_hasher(
+                    "credential-model",
+                    "sk-duplicate-secret",
+                    |raw| {
+                        duplicate_hash_count.set(duplicate_hash_count.get() + 1);
+                        CredentialDigest::from_credential(raw)
+                    },
+                ),
+            Err(ProviderError::Configuration { .. })
+        ));
+        assert_eq!(duplicate_hash_count.get(), 1);
+
+        let metadata_debug = format!(
+            "{:?}",
+            LegacySelectorMetadata::from_stored_credential(short_secret)
+        );
+        assert!(!metadata_debug.contains(short_secret));
+        assert!(metadata_debug.contains("[REDACTED]"));
+    }
+
+    #[test]
+    fn credential_metadata_source_has_no_raw_or_serializable_surface() {
+        let deployment_source = include_str!("deployment.rs");
+        let digest_source = include_str!("../../utils/auth/crypto/hmac.rs");
+        let deployment_file = syn::parse_file(deployment_source)
+            .expect("deployment source must remain valid Rust syntax");
+        let digest_file =
+            syn::parse_file(digest_source).expect("digest source must remain valid Rust syntax");
+
+        let metadata = deployment_file
+            .items
+            .iter()
+            .find_map(|item| match item {
+                Item::Struct(item) if item.ident == "LegacySelectorMetadata" => Some(item),
+                _ => None,
+            })
+            .expect("LegacySelectorMetadata must exist");
+        let metadata_fields = match &metadata.fields {
+            Fields::Named(fields) => &fields.named,
+            _ => panic!("LegacySelectorMetadata must use one named digest field"),
+        };
+        assert_eq!(metadata_fields.len(), 1);
+        let metadata_field = &metadata_fields[0];
+        assert_eq!(
+            metadata_field.ident.as_ref().map(ToString::to_string),
+            Some("credential_digest".to_string())
+        );
+        assert!(matches!(
+            &metadata_field.ty,
+            Type::Path(path)
+                if path.path.segments.last().is_some_and(|segment| segment.ident == "CredentialDigest")
+        ));
+
+        let digest = digest_file
+            .items
+            .iter()
+            .find_map(|item| match item {
+                Item::Struct(item) if item.ident == "CredentialDigest" => Some(item),
+                _ => None,
+            })
+            .expect("CredentialDigest must exist");
+        let digest_fields = match &digest.fields {
+            Fields::Unnamed(fields) => &fields.unnamed,
+            _ => panic!("CredentialDigest must remain a private tuple newtype"),
+        };
+        assert_eq!(digest_fields.len(), 1);
+        assert!(matches!(
+            &digest_fields[0].ty,
+            Type::Array(array)
+                if matches!(&*array.elem, Type::Path(path) if path.path.is_ident("u8"))
+                    && matches!(&array.len, syn::Expr::Lit(expr) if matches!(&expr.lit, syn::Lit::Int(length) if length.base10_digits() == "32"))
+        ));
+
+        for (attributes, type_name) in [
+            (&metadata.attrs, "LegacySelectorMetadata"),
+            (&digest.attrs, "CredentialDigest"),
+        ] {
+            for attribute in attributes {
+                if attribute.path().is_ident("derive")
+                    && let syn::Meta::List(derives) = &attribute.meta
+                {
+                    let derives = derives.tokens.to_string();
+                    assert!(
+                        !derives.contains("Serialize"),
+                        "{type_name} must not derive Serialize"
+                    );
+                    assert!(
+                        !derives.contains("Deserialize"),
+                        "{type_name} must not derive Deserialize"
+                    );
+                }
+            }
+        }
+
+        for (file, type_name) in [
+            (&deployment_file, "LegacySelectorMetadata"),
+            (&digest_file, "CredentialDigest"),
+        ] {
+            for item in &file.items {
+                if let Item::Impl(item_impl) = item
+                    && let Type::Path(self_type) = &*item_impl.self_ty
+                    && self_type.path.is_ident(type_name)
+                    && let Some((_, trait_path, _)) = &item_impl.trait_
+                {
+                    let trait_name = trait_path
+                        .segments
+                        .last()
+                        .map(|segment| segment.ident.to_string());
+                    assert!(
+                        !matches!(
+                            trait_name.as_deref(),
+                            Some("Display" | "Serialize" | "Deserialize")
+                        ),
+                        "{type_name} must not implement a formatting or serialization trait"
+                    );
+                }
+            }
+        }
     }
 }
