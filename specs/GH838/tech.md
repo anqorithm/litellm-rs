@@ -87,15 +87,14 @@ git log --since=2026-04-06 --format='%h' -- src/core/<module>
 | audit logging | wire（默认关） | `AuditLogger` / `AuditMiddleware` 与配置必须真实挂入 runtime，默认不开启 |
 | user_management | experimental-gate（default-off） | storage-backed 用户/团队/组织域能力在产品化前不进入默认 gateway surface |
 
-所有受影响 public surface 在 0.6.0 deprecated、0.7.0 removed；0.7.0 breaking removal 必须先通过
+仅 gate/remove 处置影响的 public surface 在 0.6.0 deprecated、0.7.0 removed；0.7.0 breaking removal 必须先通过
 version-workflow gate，并以已验证的 0.6 release/deprecation artifact 为前置证据。
 
 **Phase 3 — 执行**
 
 - wire lane：每子系统一个 PR：`GatewayConfig` 字段 + `Default` + 校验 → 启动初始化（builder.rs）→
   中间件/路由挂载 → 行为测试（U-26 checklist 全项 + 子系统真实执行）。guardrails PR 必须用恶意输入/输出证明
-  engine 被调用并 enforcement；ip_access PR 必须用 sentinel handler/provider 证明 denied IP 不会执行下游副作用；
-  batch wire PR 必须证明 batch item 走真实 provider execution path 或显式保留 upstream proxy 语义。
+  engine 被调用并 enforcement；ip_access PR 必须用 sentinel handler/provider 证明 denied IP 不会执行下游副作用。
 - gate lane：`Cargo.toml` 真 default-off feature（`mcp = []` → gate `core/mcp` 的 `pub mod`，且不被 default
   features 间接启用；`storage` / `sqlite` 等默认或支持性 feature 不算 experimental gate）+ README/docs
   experimental 段；相关 config schema/env/example 同步 gate 或返回显式 validation error，避免用户配置 no-op knob；
