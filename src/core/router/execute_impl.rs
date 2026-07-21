@@ -346,16 +346,21 @@ impl Router {
         Fut: std::future::Future<Output = Result<(T, u64), ProviderError>>,
     {
         let snapshot = self.load_routing_snapshot();
-        self.execute_with_selected_deployment_in_snapshot(snapshot.as_ref(), model_name, operation)
-            .await
+        self.execute_with_selected_deployment_in_snapshot_typed(
+            snapshot.as_ref(),
+            model_name,
+            operation,
+        )
+        .await
+        .map_err(|error| provider_error_to_router_error(error, model_name))
     }
 
-    pub(super) async fn execute_with_selected_deployment_in_snapshot<T, F, Fut>(
+    async fn execute_with_selected_deployment_in_snapshot_typed<T, F, Fut>(
         &self,
         snapshot: &RoutingSnapshot,
         model_name: &str,
         operation: F,
-    ) -> Result<ExecutionResult<T>, RouterError>
+    ) -> Result<ExecutionResult<T>, ProviderError>
     where
         F: Fn(Arc<Deployment>) -> Fut + Clone,
         Fut: std::future::Future<Output = Result<(T, u64), ProviderError>>,
@@ -376,7 +381,7 @@ impl Router {
             .take(max_models)
             .collect();
 
-        let mut last_error = None;
+        let mut last_error: Option<ProviderError> = None;
         let mut total_attempts = 0;
 
         for (model_idx, model) in models_to_try.iter().enumerate() {
@@ -389,7 +394,7 @@ impl Router {
                     original_model = %model_name,
                     fallback_model = %model,
                     fallback_index = model_idx,
-                    error_type = %last_error.as_ref().map_or("unknown".to_string(), |e| format!("{e}")),
+                    error_type = %last_error.as_ref().map_or("unknown".to_string(), |e| e.redacted().to_string()),
                     "fallback triggered, trying next model"
                 );
             }
@@ -418,11 +423,8 @@ impl Router {
             }
         }
 
-        if let Some(err) = last_error {
-            Err(provider_error_to_router_error(err, model_name))
-        } else {
-            Err(RouterError::NoAvailableDeployment(model_name.to_string()))
-        }
+        Err(last_error
+            .unwrap_or_else(|| ProviderError::model_not_found("router", model_name.to_string())))
     }
 
     /// Execute a request with full retry and fallback support.
@@ -528,6 +530,25 @@ impl Router {
 }
 
 impl RuntimeHandle {
+    pub(crate) async fn execute_with_selected_deployment_typed<T, F, Fut>(
+        &self,
+        model_name: &str,
+        operation: F,
+    ) -> Result<ExecutionResult<T>, ProviderError>
+    where
+        F: Fn(Arc<Deployment>) -> Fut + Clone,
+        Fut: std::future::Future<Output = Result<(T, u64), ProviderError>>,
+    {
+        self.binding
+            .router
+            .execute_with_selected_deployment_in_snapshot_typed(
+                self.snapshot.as_ref(),
+                model_name,
+                operation,
+            )
+            .await
+    }
+
     pub async fn execute_with_selected_deployment<T, F, Fut>(
         &self,
         model_name: &str,
@@ -537,13 +558,8 @@ impl RuntimeHandle {
         F: Fn(Arc<Deployment>) -> Fut + Clone,
         Fut: std::future::Future<Output = Result<(T, u64), ProviderError>>,
     {
-        self.binding
-            .router
-            .execute_with_selected_deployment_in_snapshot(
-                self.snapshot.as_ref(),
-                model_name,
-                operation,
-            )
+        self.execute_with_selected_deployment_typed(model_name, operation)
             .await
+            .map_err(|error| provider_error_to_router_error(error, model_name))
     }
 }
