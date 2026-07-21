@@ -49,10 +49,16 @@ GH-838 / #838
    明确 semver 影响、CHANGELOG 条目、deprecation/迁移说明，不能只按「文档收缩」处理。
 7. 守护检查常驻：`core/` 下 gateway-facing 子系统必须被 server/main 引用或在豁免清单（带 issue 引用）中；
    纯库 API 模块（如 `completion`、`function_calling`、`traits`、`secret_managers`）不得因没有 server 路由而被阻断。
+8. Batch 处置遵循兼容窗口：0.6.x 保留公开 `BatchProcessor` 及其既有行为并标记 deprecated，
+   `/v1/batches` 继续保持现有 provider proxy 语义；只有在 0.6 deprecation 已有可验证 release、且版本工作流
+   已能正确执行 0.x breaking release 后，才可在 0.7.0 删除 `BatchProcessor`。
+9. Batch removal 仅覆盖从未接入 gateway 的 `BatchProcessor` 持久化入口；`AsyncBatchExecutor`、共享 batch 类型、
+   database schema 与历史记录不随之删除，除非后续 spec 另行批准。
 
 ## 验收标准
 
-- [ ] 逐子系统处置矩阵（wire / remove / experimental-gate + 证据行）经维护者批复。
+- [x] 逐子系统处置矩阵（wire / remove / experimental-gate + 证据行）经维护者批复
+     （[#838 comment 4982856136](https://github.com/majiayu000/litellm-rs/issues/838#issuecomment-4982856136)）。
 - [ ] 被保留子系统满足 invariant 2 并有 smoke 测试。
 - [ ] 被移除/降级子系统的文档同步完成（README、CLAUDE.md、`docs/README.md`、
       `docs/protocols/{mcp,a2a}.md`），并完成 public API 影响记录。
@@ -62,12 +68,15 @@ GH-838 / #838
 
 - 子系统之间的依赖（如 observability 依赖 integrations，audit logging 依赖 enterprise 配置/中间件）：
   处置必须按依赖拓扑成组决策。
-- 半接线状态（batch：路由存在但绕过持久化层）：按「wire 完整化 or remove 持久化层」二选一，
-  不允许维持绕过态。
+- 半接线状态（batch）：维护者已批准移除从未接线的 `BatchProcessor` 持久化入口，但 public API 必须先经历
+  0.6.x 保留行为的 deprecation 窗口；`/v1/batches` provider proxy 不属于 removal，必须保持现有行为。
+- 0.7.0 removal 不得顺带删除 `AsyncBatchExecutor`、共享 batch 类型、database schema 或历史记录；这些对象若需处置，
+  必须先有独立 spec 决策。
 - `.specrail/runtime`、`docs/` 中引用这些子系统的历史文档：不追溯修改，只改能力宣传文档。
 
 ## 发布说明
 
 若选择 remove/gate，CHANGELOG 需标注能力宣传的收缩；若被处理模块仍通过 `src/lib.rs` → `pub mod core`
 对外可导入，还需记录 semver/deprecation/迁移影响。即使 gateway 运行时路径原本不可达，也可能破坏下游
-库用户的 `litellm_rs::core::<module>` import。
+库用户的 `litellm_rs::core::<module>` import。`BatchProcessor` 因此在 0.6.x 只做保留行为的 deprecation，
+并在版本工作流 breaking-release gate 与已验证 0.6 release 均满足后，才于 0.7.0 删除。

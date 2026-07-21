@@ -67,22 +67,28 @@ git log --since=2026-04-06 --format='%h' -- src/core/<module>
 | `batch` | `BatchProcessor` | 0 | 0 | 0 | storage/database、batch route/proxy | 9 | 70 | 1 | 半接线；HTTP route 存在但 processor 未构造 |
 | `user_management` | `UserManager` | 0 | 0 | 0 | storage-backed user/team/org domain | 9 | 69 | 2 | 未接线；GH838 豁免清单记录其未由 gateway 构造 |
 
-**Phase 2 — 处置矩阵（人工批复）**
+**Phase 2 — 已批准处置矩阵**
 
-预填建议（维护者可改）：
+维护者已在
+[#838 comment 4982856136](https://github.com/majiayu000/litellm-rs/issues/838#issuecomment-4982856136)
+批复以下矩阵：
 
-| 子系统 | 建议 | 理由 |
+| 子系统 | 批准处置 | 理由/约束 |
 | --- | --- | --- |
 | guardrails | wire（默认开，配置可关） | 安全语义，必须证明 `GuardrailEngine::check_input` / `check_output` 在真实请求路径执行并能阻断恶意内容 |
-| ip_access | wire（中间件 + 配置） | 安全语义，必须证明 denied IP 在 handler/provider 前短路，不能只返回最终 403 |
+| ip_access | wire（中间件 + 配置；默认 allow-all） | 安全语义，必须证明 denied IP 在 handler/provider 前短路，不能只返回最终 403 |
 | observability + integrations | wire（启动初始化 + 配置） | 近期仍在投入（edec83d7），删除损失最大 |
-| batch 持久化 | wire 完整化 or 删 processor（二选一） | 半接线态最误导；wire 时 batch item 必须调用真实 provider execution path 或保留 upstream proxy 语义，不能返回 mock response |
-| mcp / a2a / realtime | experimental-gate | 实现大、无路由，产品化是独立决策 |
-| webhooks | wire or gate | 已有 subscription / delivery processor / signing / HTTP POST 能力，但未挂 gateway event path；按 implemented-but-unwired 处置，不按 stub-only 删除 |
-| semantic_cache / analytics | remove or gate | 默认路径不可达；按维护者产品意向 |
-| virtual_keys | wire or gate | 已有迁移与 storage-backed CRUD，但 gateway 管理/API 路径未接线；不能按 stub-only 删除 |
-| audit logging | wire or gate | 有 `AuditLogger` / `AuditMiddleware` 与 `enterprise.audit_logging` 配置示例，但未证明挂入 server/main；必须进入矩阵与 no-op knob 检查 |
-| user_management | wire or gate | `UserManager` 有 storage-backed 用户/团队/组织域能力，但 gateway 未构造；需与现有 `teams`/key 路由边界统一决策 |
+| batch 持久化 | remove `BatchProcessor`（0.6.x deprecate → 0.7.0 remove） | `/v1/batches` 保留现有 provider proxy；0.6.x 保留 public API 与行为，0.7.0 removal 受 release gates 约束；`AsyncBatchExecutor`、共享类型、schema/history 不在本 removal scope |
+| mcp / a2a / realtime | experimental-gate（default-off） | 实现大、无路由，产品化是独立决策；realtime 在 feature 启用时保留 websockets |
+| webhooks | experimental-gate（default-off） | 已有 subscription / delivery processor / signing / HTTP POST 能力，但尚未挂 gateway event path |
+| semantic_cache | remove | 默认路径不可达，且现有 knob 不得继续成为 no-op 配置 |
+| analytics | remove | 默认路径不可达，且现有 knob 不得继续成为 no-op 配置 |
+| virtual_keys | wire | 已有迁移与 storage-backed CRUD，接入 gateway 管理/API 路径 |
+| audit logging | wire（默认关） | `AuditLogger` / `AuditMiddleware` 与配置必须真实挂入 runtime，默认不开启 |
+| user_management | experimental-gate（default-off） | storage-backed 用户/团队/组织域能力在产品化前不进入默认 gateway surface |
+
+所有受影响 public surface 在 0.6.0 deprecated、0.7.0 removed；0.7.0 breaking removal 必须先通过
+version-workflow gate，并以已验证的 0.6 release/deprecation artifact 为前置证据。
 
 **Phase 3 — 执行**
 
@@ -97,6 +103,10 @@ git log --since=2026-04-06 --format='%h' -- src/core/<module>
 - remove lane：删除模块 + `core/mod.rs` 清理 + README/CLAUDE.md/`docs/` 同步；若 public import 改变，
   同步删除/拒绝相关 config knobs（如 `cache.semantic_cache`、`enterprise.advanced_analytics`）并更新 examples，
   同步 semver、CHANGELOG、deprecation/迁移说明。
+- batch remove lane 严格拆分：0.6.x tranche 只为公开 `BatchProcessor` 增加 deprecation/migration 说明，保持
+  签名与行为不变，且不改 `/v1/batches` provider proxy；0.7.0 tranche 仅删除 `BatchProcessor` 公开入口与其
+  专属实现，并以 version-workflow breaking-release fixture 和已验证 0.6 release 为硬依赖。
+  `AsyncBatchExecutor`、共享 batch 类型、database schema/history 不在该删除范围，除非独立 spec 另行批准。
 
 **Phase 4 — 守护检查**
 
@@ -114,7 +124,7 @@ features 启用的支持 feature（例如 storage-backed cfg）仍按 gateway-fa
 | Product invariant | Implementation area | Verification |
 | --- | --- | --- |
 | P2 wire 三要件 | config + builder + http.rs + request path | U-26 checklist 单测 + 子系统真实行为测试 |
-| P3 remove 干净 | core/mod.rs + README/CLAUDE.md/`docs/` + CHANGELOG | `cargo check --all-features` + 全量测试 + public import/semver 记录 |
+| P3 remove 干净 | core/mod.rs + README/CLAUDE.md/`docs/` + CHANGELOG | `cargo check --all-features` + 全量测试 + public import/semver 记录；batch 另需 0.6 release 与 0.7 workflow gate |
 | P4 gate 真实 | Cargo.toml + cfg + docs.rs feature 列表 + CHANGELOG | default-off feature 组合验证 + deprecation/迁移说明 |
 | P5 安全默认 | guardrails/ip_access 配置 | 默认配置下中间件生效的集成测试 |
 | P6 守护常驻 | CI 检查 | 人为添加未接线模块的负测试 + library-only 模块正测试 |
@@ -145,7 +155,8 @@ observability 初始化必须在 server 启动前完成（tracing 全局注册�
 ## 测试计划
 
 - [ ] Unit tests: 各 wire 子系统的 U-26 三要件（config load 被调用、init 被调用、路由可达）和真实执行断言。
-- [ ] Integration tests: guardrails 恶意输入/输出被拦截；ip_access denied IP 不到达 sentinel handler/provider；batch item 不返回 mock/fabricated result。
+- [ ] Integration tests: guardrails 恶意输入/输出被拦截；ip_access denied IP 不到达 sentinel handler/provider；
+      batch 0.6 compatibility fixture 证明 `BatchProcessor` 行为不变，proxy fixture 证明 `/v1/batches` 仍走既有 provider upstream。
 - [ ] Observability integration tests: 对一条真实 chat/completion 请求注入 test integration，断言
       `on_llm_start` 与 `on_llm_end`/`on_llm_error` 被调用；`/metrics` 只能作为 HTTP middleware 辅助检查。
 - [ ] Manual verification: `curl` 冒烟被 wire 的路由；Langfuse/OTel 或 test integration 记录请求生命周期事件。
