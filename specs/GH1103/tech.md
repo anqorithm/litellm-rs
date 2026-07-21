@@ -12,9 +12,9 @@ Link to `product.md`.
 
 | Area | Files | Current behavior | Why relevant |
 | --- | --- | --- | --- |
-| Canonical runtime authority | `src/core/pricing_service/authority.rs`, `service.rs`, `types.rs` | provider-aware loaded-data lookup and cost calculation power user-visible pricing paths | Must remain the single authority and replacement destination |
-| Compatibility facade | `src/core/cost/mod.rs`, `calculator.rs`, `types.rs`, `utils.rs` | exposes public DTOs/trait/functions and maps authority results into legacy shapes | Public lifecycle and adapter boundary under review |
-| Legacy fallback catalogs | `src/core/cost/calculator/pricing.rs`, `calculator/pricing/**`, `core/cost/providers/**` | authority miss may use provider-specific catalog logic | Each fallback needs evidence-backed disposition |
+| Canonical runtime authority | `src/core/pricing_service/authority.rs`, `src/core/pricing_service/service.rs`, `src/core/pricing_service/types.rs` | provider-aware loaded-data lookup and cost calculation power user-visible pricing paths | Must remain the single authority and replacement destination |
+| Compatibility facade | `src/core/cost/mod.rs`, `src/core/cost/calculator.rs`, `src/core/cost/types.rs`, `src/core/cost/utils.rs` | exposes public DTOs/trait/functions and maps authority results into legacy shapes | Public lifecycle and adapter boundary under review |
+| Legacy fallback catalogs | `src/core/cost/calculator/pricing.rs`, `src/core/cost/calculator/pricing/**`, `src/core/cost/providers/**` | authority miss may use provider-specific catalog logic | Each fallback needs evidence-backed disposition |
 | Duplicate result shapes | `src/core/cost/types.rs:368`, `src/core/pricing_service/types.rs:55` | two `CostResult` types serve compatibility and authority layers | Same name does not prove safe deletion; conversion/consumer inventory is required |
 | Public exports | `src/core/mod.rs`, `src/core/cost/mod.rs`, `src/core/pricing_service/mod.rs` | both modules are public | Downstream library imports create semver risk even when gateway runtime is unchanged |
 | Live consumers | `src/server/routes/ai/spend.rs`, provider modules importing `core::cost`, pricing routes | GH726 routes live calculation through authority-backed helpers, while compatibility imports remain | Tests must distinguish authority calls from type/adaptor use |
