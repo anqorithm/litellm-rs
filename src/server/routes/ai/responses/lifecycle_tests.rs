@@ -22,6 +22,7 @@ fn req(input: &str) -> ResponsesApiRequest {
         previous_response_id: None,
         store: None,
         tools: None,
+        additional_tools: None,
         stream: None,
         background: None,
         max_output_tokens: None,
@@ -211,10 +212,12 @@ async fn lifecycle_handlers_enforce_owner_delete_and_input_items_shape() {
 fn input_items_page_defaults_desc_and_rejects_unsupported_include() {
     let input = ResponseInput::Items(vec![
         ResponseInputItem::Message(ResponseInputMessage {
+            id: None,
             role: "user".to_string(),
             content: ResponseInputContent::Text("first".to_string()),
         }),
         ResponseInputItem::Message(ResponseInputMessage {
+            id: None,
             role: "user".to_string(),
             content: ResponseInputContent::Text("second".to_string()),
         }),

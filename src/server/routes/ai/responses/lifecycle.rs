@@ -397,6 +397,7 @@ fn non_empty_input_items(input: &ResponseInput) -> Vec<ResponseInputItem> {
 fn input_items_from_response_input(input: &ResponseInput) -> Vec<ResponseInputItem> {
     match input {
         ResponseInput::Text(text) => vec![ResponseInputItem::Message(ResponseInputMessage {
+            id: None,
             role: "user".to_string(),
             content: ResponseInputContent::Text(text.clone()),
         })],
@@ -485,6 +486,7 @@ fn output_items_as_input_context(output: &[ResponseOutputItem]) -> Vec<ResponseI
                 return None;
             }
             Some(ResponseInputItem::Message(ResponseInputMessage {
+                id: Some(message.id.clone()),
                 role: "assistant".to_string(),
                 content: ResponseInputContent::Text(text),
             }))

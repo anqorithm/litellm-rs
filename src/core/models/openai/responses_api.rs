@@ -8,6 +8,11 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+pub use crate::core::types::codex::{
+    CodexCustomTool, CodexCustomToolCall, CodexCustomToolCallOutput, CodexFunctionCall,
+    CodexFunctionCallOutput,
+};
+
 // ── Request types ────────────────────────────────────────────────────────────
 
 /// POST /v1/responses request body
@@ -34,6 +39,10 @@ pub struct ResponsesApiRequest {
     /// Built-in or function tools available to the model
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tools: Option<Vec<ResponseTool>>,
+
+    /// Dynamically loaded tools proposed by Codex.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub additional_tools: Option<Vec<ResponseTool>>,
 
     /// Stream the response as server-sent events
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -83,16 +92,31 @@ pub enum ResponseInput {
 }
 
 /// A single item in the `input` array
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Debug, Clone)]
 pub enum ResponseInputItem {
     /// A conversational message (user / assistant / system)
     Message(ResponseInputMessage),
+    /// Function call retained in multi-turn Codex context.
+    FunctionCall(CodexFunctionCall),
+    /// Result returned by Codex for a function call.
+    FunctionCallOutput(CodexFunctionCallOutput),
+    /// Freeform/custom tool call retained in multi-turn context.
+    CustomToolCall(CodexCustomToolCall),
+    /// Result returned by Codex for a freeform/custom tool call.
+    CustomToolCallOutput(CodexCustomToolCallOutput),
+    /// Recognized future or Tier 2 item retained for fail-closed diagnostics.
+    Unsupported {
+        item_type: String,
+        payload: serde_json::Map<String, Value>,
+    },
 }
 
 /// A conversational message inside `input`
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResponseInputMessage {
+    /// Optional item ID supplied by Responses-compatible clients.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
     /// Role: "user" | "assistant" | "system"
     pub role: String,
     /// Content: plain string or array of content parts
@@ -129,25 +153,44 @@ pub enum ResponseInputContentPart {
 // ── Tool types ────────────────────────────────────────────────────────────────
 
 /// A tool definition for the Responses API
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Debug, Clone)]
 pub enum ResponseTool {
     /// Web-search built-in tool
     WebSearch(WebSearchTool),
     /// Alias used in some preview builds
-    #[serde(rename = "web_search_preview")]
     WebSearchPreview(WebSearchTool),
     /// File-search built-in tool
     FileSearch(FileSearchTool),
     /// Code-interpreter built-in tool
     CodeInterpreter(CodeInterpreterTool),
     /// Computer-use built-in tool (preview)
-    #[serde(rename = "computer_use_preview")]
     ComputerUsePreview(ComputerUseTool),
     /// MCP server integration
     Mcp(McpTool),
     /// Regular function-calling tool
     Function(ResponseFunctionTool),
+    /// Codex freeform/custom tool.
+    Custom(CodexCustomTool),
+    /// Recognized future or Tier 2 tool retained for fail-closed diagnostics.
+    Unsupported {
+        tool_type: String,
+        payload: serde_json::Map<String, Value>,
+    },
+}
+
+impl ResponseTool {
+    pub fn feature_name(&self) -> &str {
+        match self {
+            Self::WebSearch(_) | Self::WebSearchPreview(_) => "web_search",
+            Self::FileSearch(_) => "file_search",
+            Self::CodeInterpreter(_) => "code_interpreter",
+            Self::ComputerUsePreview(_) => "computer_use",
+            Self::Mcp(_) => "mcp",
+            Self::Function(_) => "function",
+            Self::Custom(_) => "custom",
+            Self::Unsupported { tool_type, .. } => tool_type,
+        }
+    }
 }
 
 /// Web-search tool configuration
@@ -288,6 +331,8 @@ pub enum ResponseOutputItem {
     Message(ResponseOutputMessage),
     /// A function call invocation
     FunctionCall(ResponseFunctionCall),
+    /// A Codex freeform/custom tool invocation.
+    CustomToolCall(CodexCustomToolCall),
     /// Result of a built-in tool call
     WebSearchCall(ResponseToolCall),
     /// Result of a file-search call
