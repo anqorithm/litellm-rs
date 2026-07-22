@@ -12,7 +12,6 @@ use crate::core::models::openai::responses_api::{
     ResponseInputItem, ResponseOutputContent, ResponseOutputItem, ResponseOutputMessage,
     ResponseTool, ResponseUsage, ResponsesApiRequest, ResponsesApiResponse,
 };
-use crate::core::types::codex::{CodexCompatibilityError, CodexToolOutput};
 use crate::core::types::responses::FinishReason;
 use crate::server::routes::ai::chat::handle_chat_completion_with_state;
 use crate::server::state::AppState;
@@ -75,6 +74,13 @@ pub async fn create_response(
         Ok(request) => request,
         Err(error) => return Ok(openai_errors::gateway_error_response(&error)),
     };
+
+    if let Some(feature) = unsupported_codex_feature(&request) {
+        return Ok(openai_errors::unsupported_codex_feature(
+            feature,
+            &request.model,
+        ));
+    }
 
     let chat_request = match build_chat_request(&request) {
         Ok(r) => r,
@@ -146,15 +152,8 @@ pub(crate) fn build_chat_request(
 ) -> Result<ChatCompletionRequest, String> {
     let mut messages: Vec<ChatMessage> = Vec::new();
 
-    if req
-        .additional_tools
-        .as_ref()
-        .is_some_and(|tools| !tools.is_empty())
-    {
-        return Err(CodexCompatibilityError::UnsupportedFeature {
-            feature: "additional_tools".to_string(),
-        }
-        .to_string());
+    if let Some(feature) = unsupported_codex_feature(req) {
+        return Err(format!("unsupported Codex feature: {feature}"));
     }
 
     if let Some(instructions) = &req.instructions {
@@ -184,8 +183,10 @@ pub(crate) fn build_chat_request(
         ResponseInput::Items(items) => {
             for item in items {
                 let ResponseInputItem::Message(msg) = item else {
-                    messages.push(codex_item_as_chat_message(item)?);
-                    continue;
+                    return Err(format!(
+                        "unsupported Codex feature: {}",
+                        item.feature_name()
+                    ));
                 };
                 let role = parse_role(&msg.role)?;
                 let content = match &msg.content {
@@ -248,42 +249,19 @@ pub(crate) fn build_chat_request(
     let mut tools: Vec<crate::core::models::openai::tools::Tool> = Vec::new();
     if let Some(req_tools) = &req.tools {
         for t in req_tools {
-            match t {
-                ResponseTool::Function(f) => {
-                    tools.push(crate::core::models::openai::tools::Tool {
-                        tool_type: "function".to_string(),
-                        function: crate::core::models::openai::tools::Function {
-                            name: f.function.name.clone(),
-                            description: f.function.description.clone(),
-                            parameters: f.function.parameters.clone(),
-                        },
-                    });
-                }
-                ResponseTool::WebSearch(_)
-                | ResponseTool::WebSearchPreview(_)
-                | ResponseTool::FileSearch(_)
-                | ResponseTool::CodeInterpreter(_)
-                | ResponseTool::ComputerUsePreview(_)
-                | ResponseTool::Mcp(_) => {
-                    return Err(
-                        "built-in tools (web_search, file_search, code_interpreter, mcp, \
-                         computer_use) are not supported via the chat-completions proxy path"
-                            .to_string(),
-                    );
-                }
-                ResponseTool::Custom(_) => {
-                    return Err(CodexCompatibilityError::UnsupportedFeature {
-                        feature: "custom_tool_projection".to_string(),
-                    }
-                    .to_string());
-                }
-                ResponseTool::Unsupported { tool_type, .. } => {
-                    return Err(CodexCompatibilityError::UnsupportedFeature {
-                        feature: tool_type.clone(),
-                    }
-                    .to_string());
-                }
-            }
+            let function = match t {
+                ResponseTool::Function(tool) => &tool.function,
+                ResponseTool::CodexFunction(tool) => tool,
+                _ => return Err(format!("unsupported Codex feature: {}", t.feature_name())),
+            };
+            tools.push(crate::core::models::openai::tools::Tool {
+                tool_type: "function".to_string(),
+                function: crate::core::models::openai::tools::Function {
+                    name: function.name.clone(),
+                    description: function.description.clone(),
+                    parameters: function.parameters.clone(),
+                },
+            });
         }
     }
 
@@ -304,51 +282,32 @@ pub(crate) fn build_chat_request(
     })
 }
 
-fn codex_item_as_chat_message(item: &ResponseInputItem) -> Result<ChatMessage, String> {
-    match item {
-        ResponseInputItem::FunctionCall(call) => Ok(ChatMessage {
-            role: MessageRole::Assistant,
-            content: None,
-            name: None,
-            function_call: None,
-            tool_calls: Some(vec![crate::core::models::openai::tools::ToolCall {
-                id: call.call_id.clone(),
-                tool_type: "function".to_string(),
-                function: crate::core::models::openai::tools::FunctionCall {
-                    name: call.name.clone(),
-                    arguments: call.arguments.clone(),
-                },
-            }]),
-            tool_call_id: None,
-            audio: None,
-        }),
-        ResponseInputItem::FunctionCallOutput(output) => Ok(ChatMessage {
-            role: MessageRole::Tool,
-            content: Some(MessageContent::Text(tool_output_text(&output.output)?)),
-            name: None,
-            function_call: None,
-            tool_calls: None,
-            tool_call_id: Some(output.call_id.clone()),
-            audio: None,
-        }),
-        ResponseInputItem::CustomToolCall(_) | ResponseInputItem::CustomToolCallOutput(_) => {
-            Err(CodexCompatibilityError::UnsupportedFeature {
-                feature: "custom_tool_projection".to_string(),
-            }
-            .to_string())
-        }
-        ResponseInputItem::Unsupported { item_type, .. } => {
-            Err(CodexCompatibilityError::UnsupportedFeature {
-                feature: item_type.clone(),
-            }
-            .to_string())
-        }
-        ResponseInputItem::Message(_) => unreachable!("message items are handled by the caller"),
+fn unsupported_codex_feature(request: &ResponsesApiRequest) -> Option<&str> {
+    if request
+        .additional_tools
+        .as_ref()
+        .is_some_and(|tools| !tools.is_empty())
+    {
+        return Some("additional_tools");
     }
-}
-
-fn tool_output_text(output: &CodexToolOutput) -> Result<String, String> {
-    output.to_chat_text().map_err(|error| error.to_string())
+    if let ResponseInput::Items(items) = &request.input
+        && let Some(item) = items
+            .iter()
+            .find(|item| !matches!(item, ResponseInputItem::Message(_)))
+    {
+        return Some(item.feature_name());
+    }
+    request
+        .tools
+        .as_ref()?
+        .iter()
+        .find(|tool| {
+            !matches!(
+                tool,
+                ResponseTool::Function(_) | ResponseTool::CodexFunction(_)
+            )
+        })
+        .map(ResponseTool::feature_name)
 }
 
 // ── Response conversion ───────────────────────────────────────────────────────

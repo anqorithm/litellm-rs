@@ -398,6 +398,7 @@ fn input_items_from_response_input(input: &ResponseInput) -> Vec<ResponseInputIt
     match input {
         ResponseInput::Text(text) => vec![ResponseInputItem::Message(ResponseInputMessage {
             id: None,
+            phase: None,
             role: "user".to_string(),
             content: ResponseInputContent::Text(text.clone()),
         })],
@@ -487,6 +488,7 @@ fn output_items_as_input_context(output: &[ResponseOutputItem]) -> Vec<ResponseI
             }
             Some(ResponseInputItem::Message(ResponseInputMessage {
                 id: Some(message.id.clone()),
+                phase: None,
                 role: "assistant".to_string(),
                 content: ResponseInputContent::Text(text),
             }))

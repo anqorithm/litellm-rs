@@ -213,11 +213,13 @@ fn input_items_page_defaults_desc_and_rejects_unsupported_include() {
     let input = ResponseInput::Items(vec![
         ResponseInputItem::Message(ResponseInputMessage {
             id: None,
+            phase: None,
             role: "user".to_string(),
             content: ResponseInputContent::Text("first".to_string()),
         }),
         ResponseInputItem::Message(ResponseInputMessage {
             id: None,
+            phase: None,
             role: "user".to_string(),
             content: ResponseInputContent::Text("second".to_string()),
         }),

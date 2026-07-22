@@ -8,9 +8,9 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub use crate::core::types::codex::{
+pub use crate::core::types::codex::wire::{
     CodexCustomTool, CodexCustomToolCall, CodexCustomToolCallOutput, CodexFunctionCall,
-    CodexFunctionCallOutput,
+    CodexFunctionCallOutput, CodexUnsupportedWire,
 };
 
 // ── Request types ────────────────────────────────────────────────────────────
@@ -104,11 +104,8 @@ pub enum ResponseInputItem {
     CustomToolCall(CodexCustomToolCall),
     /// Result returned by Codex for a freeform/custom tool call.
     CustomToolCallOutput(CodexCustomToolCallOutput),
-    /// Recognized future or Tier 2 item retained for fail-closed diagnostics.
-    Unsupported {
-        item_type: String,
-        payload: serde_json::Map<String, Value>,
-    },
+    Unsupported(CodexUnsupportedWire),
+    Unknown(CodexUnsupportedWire),
 }
 
 /// A conversational message inside `input`
@@ -117,6 +114,8 @@ pub struct ResponseInputMessage {
     /// Optional item ID supplied by Responses-compatible clients.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phase: Option<String>,
     /// Role: "user" | "assistant" | "system"
     pub role: String,
     /// Content: plain string or array of content parts
@@ -169,13 +168,11 @@ pub enum ResponseTool {
     Mcp(McpTool),
     /// Regular function-calling tool
     Function(ResponseFunctionTool),
+    CodexFunction(ResponseFunctionDefinition),
     /// Codex freeform/custom tool.
     Custom(CodexCustomTool),
-    /// Recognized future or Tier 2 tool retained for fail-closed diagnostics.
-    Unsupported {
-        tool_type: String,
-        payload: serde_json::Map<String, Value>,
-    },
+    Unsupported(CodexUnsupportedWire),
+    Unknown(CodexUnsupportedWire),
 }
 
 impl ResponseTool {
@@ -186,9 +183,9 @@ impl ResponseTool {
             Self::CodeInterpreter(_) => "code_interpreter",
             Self::ComputerUsePreview(_) => "computer_use",
             Self::Mcp(_) => "mcp",
-            Self::Function(_) => "function",
+            Self::Function(_) | Self::CodexFunction(_) => "function",
             Self::Custom(_) => "custom",
-            Self::Unsupported { tool_type, .. } => tool_type,
+            Self::Unsupported(value) | Self::Unknown(value) => &value.wire_type,
         }
     }
 }
