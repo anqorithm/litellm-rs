@@ -22,6 +22,7 @@ GH-1112 / #1112
 | Vertex parser | `src/core/providers/vertex_ai/mod.rs:482-639` | 大量 lowercase substring 分支，未知值返回 `Custom`。 | B-001/B-006/B-007 的直接根因。 |
 | Vertex advertised models | `src/core/providers/vertex_ai/client.rs:285-335` | `models()` 另建只含 Gemini 1.5 的静态 `ModelInfo` 表。 | 当前第三套事实源。 |
 | Vertex request dispatch | `src/core/providers/vertex_ai/client.rs:120-153,431-507` | chat 先 fuzzy parse，再按 enum 选择 transformer；supported params 又按字符串 `contains("gemini")`。 | exact gate 与 shared request contract 的执行点。 |
+| Vertex Gemini body contract | `src/core/providers/vertex_ai/transformers.rs:29-100,541-762`、`src/core/providers/vertex_ai/common_utils.rs:81-166,246-281` | `GeminiTransformer` 直接从 `ChatRequest` 构造 `GenerationConfig`；另有独立 `validate_parameters`，未消费共享模型请求契约。 | B-008/B-010 必须覆盖实际 request body，而不只覆盖 client 参数 map。 |
 | Vertex URL | `src/core/providers/vertex_ai/client/url.rs:14-61` | URL 根据 enum 类别和 model ID 选择 Google/partner/custom 路径。 | Custom fallback 必须不可达，endpoint ownership 保留。 |
 | Developer auth | `src/core/providers/mod.rs:141-179`、`src/core/providers/gemini/client.rs:70-91` | native Developer URL 校验 route segment 后把 API key 放入 query。 | B-011/B-013 的现有边界。 |
 | Vertex auth | `src/core/providers/vertex_ai/client.rs:81-94`、`src/core/providers/vertex_ai/auth.rs:197-224` | `VertexAuth` 获取 access token，client 设置 Bearer header。 | B-012/B-013 的现有边界。 |
@@ -60,7 +61,10 @@ GH-1112 / #1112
     "src/core/providers/vertex_ai/client.rs",
     "src/core/providers/vertex_ai/client/url.rs",
     "src/core/providers/vertex_ai/client_tests.rs",
+    "src/core/providers/vertex_ai/common_utils.rs",
     "src/core/providers/vertex_ai/tests.rs",
+    "src/core/providers/vertex_ai/transformers.rs",
+    "src/core/providers/vertex_ai/transformers/split_tests.rs",
     "src/utils/ai/models/pricing.rs",
     "src/utils/ai/models/utils_tests.rs"
   ],
@@ -158,6 +162,12 @@ Gemini 与 Vertex transformer 可以保留 wire 命名差异，但只能消费�
 model substring 建参数 allowlist。任何不允许字段、越界值或非法 turn state 产生
 non-retryable invalid-request，发生在 URL 构造、token 获取、预算副作用和 HTTP send 前。
 
+Vertex 的 `common_utils::GenerationConfig` 继续只是 Vertex wire DTO，不成为第二份行为
+contract；`validate_parameters` 必须删除或改为直接委托 `GoogleRequestContract`。
+`GeminiTransformer::transform_chat_request` 接收已经通过 exact model/overlay lookup 的
+contract decision，并只序列化被允许的 generation fields。对应 inline 与 split tests 同时
+覆盖 supported-params 声明、validation verdict 和最终 `generationConfig` 三者一致。
+
 ### 6. Authentication and endpoint isolation
 
 catalog 与 request contract 不接收 credential、header、query、base URL、project、region
@@ -191,7 +201,7 @@ availability 证据停止广告、或属于 #1108 后续刷新。禁止 golden s
 | B-005 | lifecycle gate | retired/unverified fixture 不公开且 upstream counter=0。 |
 | B-006 | Vertex exact parser | `cargo test --locked vertex_ai_model_exact` 覆盖空、case、prefix、suffix 和未知。 |
 | B-007 | Vertex chat dispatch | custom base + unknown model 仍 model-not-found；URL/auth/network counters=0。 |
-| B-008 | shared request contract consumers | 两 provider supported params、validation、body projection 的 table-driven parity test。 |
+| B-008 | shared request contract consumers + Vertex transformer | 两 provider supported params、validation、最终 body projection 的 table-driven parity test。 |
 | B-009 | request preflight | missing contract、unsupported key、range、illegal state 均 invalid-request 且 network=0。 |
 | B-010 | overlapping model parity | 同一 `ChatRequest` matrix 对 Developer/Vertex 得到相同 provider-neutral verdict。 |
 | B-011 | Developer auth boundary | loopback capture：query key 存在、无 Bearer；error/log/catalog 无 sentinel。 |
@@ -252,7 +262,7 @@ preflight 成功后才执行。
 
 - [ ] Focused registry: `cargo test --locked google_model_catalog`
 - [ ] Focused Gemini: `cargo test --locked gemini_provider`
-- [ ] Focused Vertex: `cargo test --locked vertex_ai_model_exact`
+- [ ] Focused Vertex: `cargo test --locked vertex_ai_model_exact`、`cargo test --locked vertex_ai_transformer`
 - [ ] Auth isolation: `cargo test --locked google_auth_isolation`
 - [ ] Utility compatibility: `cargo test --locked model_utils`
 - [ ] Format/build: `cargo fmt --all -- --check && cargo check --locked`
