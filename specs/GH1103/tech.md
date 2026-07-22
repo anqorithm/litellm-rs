@@ -14,13 +14,16 @@ Link to `product.md`.
 | --- | --- | --- | --- |
 | Canonical runtime authority | `src/core/pricing_service/authority.rs`, `src/core/pricing_service/service.rs`, `src/core/pricing_service/types.rs` | provider-aware loaded-data lookup and cost calculation power user-visible pricing paths; `resolve_model_info_for_provider` reaches live provider catalogs through `provider_catalog_model_info` and dedicated Amazon Nova/xAI helpers | Must remain the single authority and replacement destination; every authority-reachable catalog must be inventoried |
 | Compatibility facade | `src/core/cost/mod.rs`, `src/core/cost/calculator.rs`, `src/core/cost/types.rs`, `src/core/cost/utils.rs` | exposes public DTOs/trait/functions and maps authority results into legacy shapes | Public lifecycle and adapter boundary under review |
-| Published pricing baseline | `v0.5.0@de594c81:src/core/cost/**`, `v0.5.0@de594c81:src/core/providers/base/pricing.rs`, `v0.5.0@de594c81:src/core/providers/base/mod.rs` | the released tag exposes `core::cost`, `core::providers::base::pricing::*`, and base-level `PricingDatabase`/`get_pricing_db` re-exports | These exact paths form the tag/package-derived 0.6 compatibility cohort |
+| Published pricing baseline | `v0.5.0@de594c81:src/core/cost/**`, `src/core/providers/base/{pricing.rs,mod.rs}`, `src/utils/{mod.rs,ai/**}` plus feature-gated provider modules | the released tag exposes `core::cost`, provider-base pricing, `utils::{ModelUtils,TokenUtils}` through multiple public paths, and optional provider cost/pricing APIs | All pricing-bearing paths found under default and docs.rs feature sets form the tag/package-derived 0.6 compatibility cohort |
+| Published utility pricing | `v0.5.0@de594c81:src/utils/ai/models/pricing.rs`, `src/utils/ai/models/utils.rs`, `src/utils/ai/tokens.rs`, `src/utils/ai/mod.rs`, `src/utils/mod.rs` | `utils::ModelUtils::get_model_pricing` and `utils::TokenUtils::calculate_cost` (plus nested module paths) contain independent hard-coded lookup/calculation logic | Signature-preserving adapters still need compatibility and authority disposition; top-level struct inventory alone is insufficient |
+| Published feature matrix | `v0.5.0@de594c81:Cargo.toml`, feature-gated `src/core/providers/**` | defaults are `sqlite,redis,metrics,tracing`; docs.rs adds `gateway,postgres,s3,websockets,analytics,providers-extra,providers-extended` and exposes pricing APIs such as Azure re-exports and Bedrock `CostCalculator` | Baseline extraction and fixtures must run both exact feature lanes |
 | Post-v0.5 public pricing facade | `src/core/pricing.rs`, `src/core/mod.rs` | introduced by `04c0774a` after `v0.5.0`; current public `PricingDatabase`, `GLOBAL_PRICING_DB`, `get_pricing_db`, `calculate_cost` and related methods can load/lookup/calculate independently, including legacy `0.0` misses | Must receive current-head authority disposition, but is not a v0.5 published import/signature baseline |
 | Legacy fallback catalogs | `src/core/cost/calculator/pricing.rs`, `src/core/cost/calculator/pricing/**`, `src/core/cost/providers/**` | compatibility paths may use provider-specific catalog logic | Each fallback needs evidence-backed disposition |
 | Live authority fallback catalogs | `src/core/pricing_service/authority.rs::provider_catalog_model_info`, `src/core/cost/calculator/pricing.rs::get_azure_pricing`, `src/core/providers/bedrock/utils/cost.rs::{MODEL_PRICING,CostCalculator}`, `src/core/providers/registry/catalog.rs::amazon_nova_catalog_model_info`, `src/core/providers/openai_like/models.rs::{is_xai_priced_model,get_openai_like_registry}` | `PricingService` currently reads these Azure、Bedrock、Amazon Nova 与 xAI sources on loaded-data misses | Guard must trace every branch/source; provider-owned location does not exempt a live authority input |
 | Duplicate result shapes | `src/core/cost/types.rs:368`, `src/core/pricing_service/types.rs:55` | two `CostResult` types serve compatibility and authority layers | Same name does not prove safe deletion; conversion/consumer inventory is required |
 | Public exports | `src/core/mod.rs`, `src/core/cost/mod.rs`, `src/core/pricing.rs`, `src/core/pricing_service/mod.rs` | all three pricing/cost modules expose public symbols | Downstream library imports create semver risk even when gateway runtime is unchanged |
 | Live consumers and unpriced policy | `src/server/routes/ai/spend.rs`, `src/server/routes/ai/spend/unpriced.rs`, provider modules importing `core::cost`, pricing routes | GH726 routes priced calculation through authority-backed helpers; default `Reject` fails closed, while explicit `AllowUnpriced` reserves and settles configured fallback cost | Tests must distinguish authority calls, compatibility use, and intentional policy fallback |
+| Pricing source boundary | `src/server/http.rs`, `src/core/pricing_service/authority.rs`, `src/core/cost/calculator.rs`, provider-base/utility adapters | live state constructs `PricingService` from configured `pricing.source`; v0.5-signature compatibility adapters have no service parameter and use embedded data | Parity must compare consumers using the same loaded source; cross-source numeric equality is not a valid invariant |
 | Predecessor packet | `specs/GH726/*` | deliberately retained legacy DTO/fallback compatibility after runtime convergence | This issue may narrow that deferral, not rewrite GH726 |
 
 ## 设计方案
@@ -29,9 +32,11 @@ Link to `product.md`.
 
 ### Phase 1 — inventory 与守护
 
-- 生成 tracked inventory，按完整 Rust path 分开记录：(a) `v0.5.0@de594c81` 实际发布的 `core::cost` 与
-  `core::providers::base::pricing` path/re-export；(b) post-v0.5/current-head `core::pricing` public export、production
-  consumer、test-only consumer、DTO conversion、公开 lookup/calculation method 与 fallback owner。
+- 生成 tracked inventory，按完整 Rust path 分开记录：(a) `v0.5.0@de594c81` 实际发布的 `core::cost`、
+  `core::providers::base::pricing`、`utils::ModelUtils::get_model_pricing`、`utils::TokenUtils::calculate_cost` 及其
+  `utils::ai`/deeper module re-export path，并遍历 default/docs.rs feature matrix 下的 provider public pricing/cost API；
+  (b) post-v0.5/current-head `core::pricing` public export、production consumer、test-only consumer、DTO conversion、
+  公开 lookup/calculation method 与 fallback owner。
 - live fallback inventory 必须以 `pricing_service/authority.rs::resolve_model_info_for_provider` 调用图为根，至少锁定
   `provider_catalog_model_info` 的 Azure/Bedrock/xAI branches、`amazon_nova_pricing_model_info`、
   `xai_pricing_model_info`，并追踪到 `core::cost::calculator::pricing`、Bedrock `CostCalculator` catalog、
@@ -39,8 +44,11 @@ Link to `product.md`.
   或 authority-reachable catalog 未登记时 guard 必须失败。
 - 从 `v0.5.0@de594c81` tag 与已发布 package surface 生成 public API baseline manifest；manifest 必须证明
   `src/core/pricing.rs` 在 tag 中不存在，并把当时的 `core::providers::base::pricing` module/re-export 与
-  `core::cost` 完整列为 published cohort。当前树 inventory 必须说明这些 symbol 是保留、重导出还是进入
-  deprecation，不能用 current-head module path 倒推已发布 API。
+  `core::cost`、utility pricing methods 以及 feature-gated provider pricing/cost path 完整列为 published cohort。
+  baseline generator 必须分别在 default features 与 v0.5 docs.rs exact feature set
+  `gateway,postgres,sqlite,redis,s3,metrics,tracing,websockets,analytics,providers-extra,providers-extended` 运行并合并
+  full-path manifest；当前树 inventory 必须说明这些 symbol 是保留、重导出还是进入 deprecation，不能用
+  current-head module path 或默认 feature scan 倒推全部已发布 API。
 - v0.5 published adapter disposition 只能是 `keep_adapter`、`deprecate_0_6_remove_0_7` 或 `needs_decision`。
   post-v0.5 `core::pricing` 先记录 `post_v0_5_unreleased` baseline status，其中可独立 load/lookup/calculate 的
   authority-bearing public facade 仍必须有 `migrate_authority` 或 `needs_decision` authority disposition，但不自动
@@ -52,19 +60,26 @@ Link to `product.md`.
 ### Phase 2 — 0.6 compatibility/deprecation
 
 - `migrate_authority` 项把价格解析/匹配逻辑移到 `PricingService` authority 后，再由 `core::cost` 或批准保留的
-  `core::pricing` adapter 映射 legacy DTO/error；所有 user-visible fallback lookup/calculation 都必须在 authority
-  内运行，compatibility facade 不得复制或保留 catalog lookup 形成第二套 authority。0.6 对 v0.5 published
-  `core::cost`/`core::providers::base::pricing` non-`Result` 签名不得静默改签名；其 legacy miss 行为必须在
-  compatibility matrix 中逐 symbol 记录，且 gateway production 不得使用该行为绕过 pricing policy。
+  `core::pricing`/utility adapter 映射 legacy DTO/error/tuple；所有 user-visible fallback lookup/calculation 都必须在
+  authority 内运行，compatibility facade 不得复制或保留 catalog lookup 形成第二套 authority。0.6 对 v0.5
+  published `core::cost`/`core::providers::base::pricing`/utility/feature-gated provider API 的签名不得静默改签名；
+  legacy miss 行为必须在 compatibility matrix 中逐 symbol 记录，且 gateway production 不得使用该行为绕过 pricing policy。
 - 仅对 v0.5 published cohort 中批准为 `deprecate_0_6_remove_0_7` 的 public symbol 添加
   `#[deprecated(since = "0.6.0", ...)]` 并保持签名、结果与 error contract。post-v0.5/current-head `core::pricing`
   可在 0.6 发布前按 T2 authority decision 迁移或收敛，不要求伪造 v0.5 import fixture，也不自动推迟到 0.7；
   若某 symbol 被有意发布进 0.6，后续 removal 再受该 release 的 public compatibility policy 约束。
-- 用 `v0.5.0` baseline manifest 和下游式 compile fixture 证明每个已发布 `core::cost` 与
-  `core::providers::base::pricing` import 在 0.6 head 仍可用；另用 current-head authority fixture 检查
-  `core::pricing` disposition，不把它混入 tag-derived fixture。再覆盖
-  authority/facade parity、provider alias/fallback、默认 `Reject` policy 的 unknown/incomplete pricing fail-closed，
+- 用 `v0.5.0` baseline manifest 和下游式 compile/behavior fixture 证明每个已发布 `core::cost`、
+  `core::providers::base::pricing`、utility pricing 与 feature-gated provider import 在 0.6 head 仍可用。fixture
+  必须有 default-features lane 与上述 v0.5 docs.rs exact-feature lane；docs.rs lane 至少实际 import/call Azure
+  pricing re-export 与 Bedrock `CostCalculator::{get_model_pricing,calculate_cost}`，不能只证明 feature 可编译。
+  另用 current-head authority fixture 检查 `core::pricing` disposition，不把它混入 tag-derived fixture。再覆盖
+  source-aware authority/facade parity、provider alias/fallback、默认 `Reject` policy 的 unknown/incomplete pricing fail-closed，
   以及显式 `AllowUnpriced` policy 按配置 fallback cost 的 reservation/settlement parity，并同步 CHANGELOG 与迁移说明。
+- authority/facade parity 必须绑定 source identity：(a) custom-source fixture 用带 sentinel price 的临时 source 构造
+  runtime `PricingService`，证明 pricing route、reservation 与 settlement 全部读取同一 loaded authority；(b) embedded
+  fixture 比较 v0.5-signature `core::cost`/provider-base/utility facade 与
+  `PricingService::with_embedded_default()`。禁止比较 custom
+  与 embedded 的数值，或假设 v0.5 facade 已获得 service injection；未来 non-breaking injection 需要独立批准。
 
 ### Phase 3 — release 与 version workflow gate
 
@@ -85,8 +100,8 @@ Link to `product.md`.
 
 | Product invariant | Implementation area | Verification |
 | --- | --- | --- |
-| P1 | `pricing_service/authority.rs`, compatibility adapters, `spend/unpriced.rs`, spend/pricing routes | priced pricing/spend parity; default `Reject` fail-closed; `AllowUnpriced` reserve/settle parity |
-| P2 | `v0.5.0@de594c81` API manifest、approved `core::cost`/`core::providers::base::pricing` exports；separate current-head `core::pricing` authority inventory | tag/package-derived downstream compile fixture only for the published cohort; current-head authority fixture for `core::pricing` |
+| P1 | runtime configured `PricingService`, embedded compatibility adapters, `spend/unpriced.rs`, spend/pricing routes | custom-source live parity and separate embedded facade parity; default `Reject` fail-closed; `AllowUnpriced` reserve/settle parity |
+| P2 | `v0.5.0@de594c81` API manifest for core/provider-base/utility/feature-gated pricing exports；separate current-head `core::pricing` authority inventory | default + exact docs.rs feature downstream fixtures for the published cohort; current-head authority fixture for `core::pricing` |
 | P3 | `provider_catalog_model_info`, Amazon Nova/xAI helpers, Azure/Bedrock/provider-owned catalogs and compatibility fallbacks | exhaustive call-graph/disposition guard plus provider alias/fallback tests |
 | P4 | release/version workflow and approved removal list | deterministic 0.6.x → 0.7.0 fixture and public removal compile fixture |
 | P5 | pricing usage/result conversion and provider regressions | cached/reasoning/multimodal/time-based focused tests |
@@ -95,10 +110,12 @@ Link to `product.md`.
 
 ## 数据流
 
-调用输入仍是 provider、model、usage 与可选 modality/duration metadata。`PricingService` 从已加载数据解析价格，
-并在 authority 内执行 inventory 已登记或批准迁入的 provider fallback 后返回 canonical result；0.6 compatibility
-adapter 只把 canonical result/error 转成逐 symbol 批准的 legacy contract。authority miss 后 adapter 不得运行独立
-catalog lookup。live gateway 在默认 `Reject` policy 下返回显式 not-found/incomplete-pricing error；只有显式
+调用输入仍是 provider、model、usage 与可选 modality/duration metadata。live `PricingService` 从配置的
+`pricing.source` 加载数据并执行 inventory 已登记或批准迁入的 provider fallback 后返回 canonical result；route、
+reservation 与 settlement 共享该 runtime instance/source。无 service 参数的 v0.5-signature compatibility adapter
+使用 embedded authority，并只把该同源 canonical result/error 转成逐 symbol 批准的 legacy contract；不得用它
+代表 custom source。authority miss 后 adapter 不得运行独立 catalog lookup。live gateway 在默认 `Reject` policy
+下返回显式 not-found/incomplete-pricing error；只有显式
 `AllowUnpriced` policy 可按 `unpriced_fallback_cost_per_1k_tokens` 对同一 usage 执行 fallback reservation 与
 settlement，不得把该 policy 泛化成隐式零成本成功。
 本工作不新增持久化、外部请求、后台任务或路由。
@@ -113,9 +130,12 @@ settlement，不得把该 policy 泛化成隐式零成本成功。
 ## 风险
 
 - Security: 不处理 secrets/auth；但错误 fallback 可能低估成本，必须保持 fail-closed。
-- Compatibility: v0.5 published Rust import removal 是 breaking change；0.6 对 `core::cost` 与
-  `core::providers::base::pricing` 的 deprecation、迁移文档与 human approval 为硬门禁。post-v0.5
+- Compatibility: v0.5 published Rust import removal 是 breaking change；0.6 对 `core::cost`、
+  `core::providers::base::pricing`、utility pricing methods 与 feature-gated provider pricing path 的 deprecation、
+  迁移文档与 human approval 为硬门禁。post-v0.5
   `core::pricing` 的 authority 收敛仍需 T2 决策，但不能被误报成 v0.5 signature break。
+- Correctness: custom source 与 embedded source 可合法产生不同结果；测试必须绑定 source identity，不能以跨 source
+  parity 假阳性/假阴性驱动签名变更。
 - Performance: adapter 不得每次重新解析 bundled pricing；继续复用已加载或 `LazyLock` authority。
 - Maintenance: inventory guard 需要完整 path、authority call-graph root 与显式 disposition，避免同名 DTO 或
   provider-owned catalog 因目录位置被误判为无关。
@@ -123,17 +143,18 @@ settlement，不得把该 policy 泛化成隐式零成本成功。
 
 ## 测试计划
 
-- [ ] Inventory guard: v0.5 `core::cost`/`core::providers::base::pricing` published export、post-v0.5
-  `core::pricing` current-head export/production consumer、
+- [ ] Inventory guard: v0.5 `core::cost`/`core::providers::base::pricing`、utility pricing method、default/docs.rs
+  feature-gated published export，以及 post-v0.5 `core::pricing` current-head export/production consumer、
   `provider_catalog_model_info`/Amazon Nova/xAI helper 与全部 authority-reachable/legacy fallback 均有 disposition，
   新增 branch、decoy 与漏项负测试失败。
 - [ ] Unit tests: authority-to-legacy DTO conversion、默认 `Reject` 的 unknown/incomplete pricing fail-closed、
   `AllowUnpriced` configured fallback、provider alias/fallback（Azure、Bedrock、Amazon Nova、xAI）。
-- [ ] Integration tests: pricing route、budget reservation 与 spend settlement 对同一已定价 usage 保持 parity；
-  `AllowUnpriced` 对同一未知 usage 的 reservation/settlement/usage-record cost 保持 parity。
-- [ ] Compatibility: `v0.5.0@de594c81` tag/package-derived `core::cost`/`core::providers::base::pricing` public API
-  manifest 与 0.6 downstream import/legacy behavior fixture；单独的 post-v0.5/current-head `core::pricing` authority
-  disposition fixture；0.7 只对 approved published-cohort removal 运行 compile-fail/替代 import fixture。
+- [ ] Integration tests: custom-source live pricing route/reservation/settlement parity；embedded authority 与
+  v0.5-signature facade parity；`AllowUnpriced` 对同一未知 usage 的 reservation/settlement/usage-record cost parity；
+  不含跨 source equality assertion。
+- [ ] Compatibility: `v0.5.0@de594c81` tag/package-derived core/provider-base/utility/feature-gated public API manifest；
+  default 与 exact docs.rs feature 0.6 downstream import/legacy behavior fixtures；单独的 post-v0.5/current-head
+  `core::pricing` authority disposition fixture；0.7 只对 approved published-cohort removal 运行 compile-fail/替代 import fixture。
 - [ ] Version workflow: deterministic 0.6.x breaking fixture 产出 0.7.0。
 - [ ] Repository: `cargo fmt --all -- --check`; `cargo check --all-targets --all-features --locked`; `cargo clippy --all-targets --all-features --locked -- -D warnings`; `cargo test --all-features --locked -- --test-threads=1`。
 
