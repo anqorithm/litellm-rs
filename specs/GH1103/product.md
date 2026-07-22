@@ -13,9 +13,10 @@ GH-1103 / #1103
 
 ## 目标
 
-- 为 `core::cost` 与公开 `core::pricing` facade 的 symbol、production consumer、compatibility DTO、
-  `PricingService` live provider fallback source 和 test-only consumer 建立完整 inventory，并以已发布
-  `v0.5.0` tag/package API 为兼容基线。
+- 为已发布 `core::cost`、`core::providers::base::pricing` path/re-export，以及 post-v0.5 的当前公开
+  `core::pricing` facade 的 symbol、production consumer、compatibility DTO、`PricingService` live provider
+  fallback source 和 test-only consumer 建立完整 inventory；public compatibility 基线只取 `v0.5.0`
+  tag/package 当时实际发布的 surface。
 - 保持 `PricingService` 是唯一 user-visible pricing authority，不恢复第二套 live pricing source。
 - 将必须兼容的 surface 明确为 adapter；仅对维护者批准的 surface 在 0.6.x 标记 deprecated。
 - 为 0.7.0 removal 定义 release、semver、public API approval 与行为回归门禁。
@@ -35,8 +36,11 @@ GH-1103 / #1103
 1. 对同一已定价 provider、model 与 usage，pricing route、budget reservation、spend settlement 与兼容 facade
    必须继续使用同一个 `PricingService` authority 结果；unknown/incomplete pricing 在默认 `Reject` policy 下
    fail closed，而显式 `AllowUnpriced` policy 必须继续以配置的 fallback cost 保持 reservation/settlement parity。
-2. 0.6.x 必须保持 `v0.5.0` tag/package 已发布 `core::cost` 与 `core::pricing` public symbol 的签名与既有兼容行为；
-   只有 inventory 中经维护者批准的 symbol 可以标记 deprecated，且必须给出替代路径。
+2. 0.6.x 必须保持 `v0.5.0` tag/package 已发布 `core::cost` 与
+   `core::providers::base::{pricing, PricingDatabase, get_pricing_db}` public path/symbol 的签名与既有兼容行为；
+   只有 inventory 中经维护者批准的已发布 symbol 可以标记 deprecated，且必须给出替代路径。
+   `core::pricing` 是 post-v0.5 current-head surface，仍必须完成 authority disposition，但不得误列为 v0.5
+   published compatibility cohort，也不因当前存在而自动套用 0.6 deprecate/0.7 remove 窗口。
 3. 所有 user-visible provider fallback 的 lookup/calculation 必须在 `PricingService` authority 内执行；
    `core::cost` adapter 只能转换 canonical DTO/error；公开 `core::pricing` 中可独立加载或计算价格的 facade
    必须同时获得 compatibility lifecycle 与 authority disposition，未完成决策不得视为 `keep_adapter`。
@@ -52,12 +56,14 @@ GH-1103 / #1103
 
 ## 验收标准
 
-- [ ] inventory 由 `v0.5.0` tag/package public API 基线起步，并覆盖当前全部 `core::cost` re-export、公开
-  `core::pricing` symbol/production import、legacy DTO、`pricing_service/authority.rs::provider_catalog_model_info` 及其 Azure、
-  Bedrock、Amazon Nova、xAI authority source、legacy fallback 和 test-only consumer；source guard 防止遗漏。
-- [ ] 兼容矩阵对 public adapter（含 `core::pricing` facade）记录 `keep_adapter`、
-  `deprecate_0_6_remove_0_7` 或 `needs_decision`；任何 authority-bearing public facade 与 user-visible fallback
-  另记录 `migrate_authority` 或 `needs_decision`，并附 owner evidence，不能仅以 `keep_adapter` 保留独立计算。
+- [ ] inventory 从 `v0.5.0@de594c81` tag/package public API 基线起步；published cohort 覆盖当时实际存在的
+  `core::cost` 与 `core::providers::base::pricing` path/re-export，current-head cohort 另覆盖 post-v0.5
+  `core::pricing` symbol/production import、legacy DTO、`pricing_service/authority.rs::provider_catalog_model_info`
+  及其 Azure、Bedrock、Amazon Nova、xAI authority source、legacy fallback 和 test-only consumer；source guard 防止遗漏或 cohort 混淆。
+- [ ] 兼容矩阵仅对 v0.5 published adapter 记录 `keep_adapter`、`deprecate_0_6_remove_0_7` 或
+  `needs_decision`；post-v0.5 `core::pricing` 显式记录 `post_v0_5_unreleased` baseline status，任何
+  authority-bearing public facade 与 user-visible fallback 另记录 `migrate_authority` 或 `needs_decision`，并附
+  owner evidence，不能仅以 current-head public 或 `keep_adapter` 为由保留独立计算。
 - [ ] 0.6.x tranche 保持相对 `v0.5.0` 的 public compatibility 与 runtime behavior，并提供 CHANGELOG、迁移说明和 tag/package-derived compile/behavior fixtures。
 - [ ] `PricingService` authority、spend parity、provider alias/fallback、默认 `Reject` policy 的 unknown pricing
   fail-closed 与显式 `AllowUnpriced` policy 的 fallback reservation/settlement parity 回归全部通过。
@@ -70,7 +76,8 @@ GH-1103 / #1103
 - provider-local 类型与共享 compatibility DTO 同名时，inventory 必须按完整 module path 区分。
 - bundled pricing 初始化失败时，兼容 adapter 不得通过空 authority 或 fallback 静默低估用户可见成本。
 - `core::pricing::{PricingDatabase, GLOBAL_PRICING_DB, get_pricing_db, calculate_cost}` 及其公开方法即使只被下游
-  library 使用，也必须按完整 path 进入 compatibility/authority 双重 disposition，不能因 gateway 未直接调用而遗漏。
+  library 使用，也必须按完整 path 进入 current-head authority disposition，不能因 gateway 未直接调用而遗漏；
+  但该 module 由 `04c0774a` 在 `v0.5.0@de594c81` 之后新增，不能据此生成 v0.5 published import fixture。
 - `AllowUnpriced` 是显式 policy，不是 pricing miss 的隐式零成本降级；其配置 fallback cost、reservation、
   settlement 与 usage record 必须维持同一语义。
 - 在 0.6.x 新增的合法 adapter 不自动进入 0.7 removal；必须先补齐矩阵与批准证据。
