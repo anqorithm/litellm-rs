@@ -25,6 +25,9 @@ mod codex_compat_tests;
 mod lifecycle;
 pub(crate) use lifecycle::{ResponseOwner, store_response_if_requested};
 pub use lifecycle::{cancel_response, delete_response, get_response, list_response_input_items};
+#[cfg(test)]
+static PROVIDER_DISPATCH_COUNT: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
 
 /// POST /v1/responses handler
 pub async fn create_response(
@@ -86,6 +89,10 @@ pub async fn create_response(
         Ok(r) => r,
         Err(e) => return Ok(openai_errors::validation_error(e)),
     };
+    #[cfg(test)]
+    if req.headers().contains_key("x-codex-upstream-counter") {
+        PROVIDER_DISPATCH_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
 
     if request.background.unwrap_or(false) {
         if request.stream.unwrap_or(false) {
@@ -151,10 +158,6 @@ pub(crate) fn build_chat_request(
     req: &ResponsesApiRequest,
 ) -> Result<ChatCompletionRequest, String> {
     let mut messages: Vec<ChatMessage> = Vec::new();
-
-    if let Some(feature) = unsupported_codex_feature(req) {
-        return Err(format!("unsupported Codex feature: {feature}"));
-    }
 
     if let Some(instructions) = &req.instructions {
         messages.push(ChatMessage {
@@ -297,17 +300,16 @@ fn unsupported_codex_feature(request: &ResponsesApiRequest) -> Option<&str> {
     {
         return Some(item.feature_name());
     }
-    request
-        .tools
-        .as_ref()?
-        .iter()
-        .find(|tool| {
-            !matches!(
-                tool,
-                ResponseTool::Function(_) | ResponseTool::CodexFunction(_)
-            )
-        })
-        .map(ResponseTool::feature_name)
+    request.tools.as_ref()?.iter().find_map(|tool| match tool {
+        ResponseTool::Function(tool) if tool.function.defer_loading == Some(true) => {
+            Some("defer_loading")
+        }
+        ResponseTool::CodexFunction(tool) if tool.defer_loading == Some(true) => {
+            Some("defer_loading")
+        }
+        ResponseTool::Function(_) | ResponseTool::CodexFunction(_) => None,
+        tool => Some(tool.feature_name()),
+    })
 }
 
 // ── Response conversion ───────────────────────────────────────────────────────
