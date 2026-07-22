@@ -25,6 +25,7 @@ pub struct ResponsesApiRequest {
     pub input: ResponseInput,
 
     /// System-level instructions (equivalent to a system message)
+    /// Dynamically loaded tools proposed by Codex.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub instructions: Option<String>,
 
@@ -95,9 +96,13 @@ pub enum ResponseInput {
 pub enum ResponseInputItem {
     /// A conversational message (user / assistant / system)
     Message(ResponseInputMessage),
+    /// Function call retained in multi-turn Codex context.
     FunctionCall(CodexFunctionCall),
+    /// Result returned by Codex for a function call.
     FunctionCallOutput(CodexFunctionCallOutput),
+    /// Freeform/custom tool call retained in multi-turn context.
     CustomToolCall(CodexCustomToolCall),
+    /// Result returned by Codex for a freeform/custom tool call.
     CustomToolCallOutput(CodexCustomToolCallOutput),
     Unsupported(CodexUnsupportedWire),
     Unknown(CodexUnsupportedWire),
@@ -106,6 +111,7 @@ pub enum ResponseInputItem {
 /// A conversational message inside `input`
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResponseInputMessage {
+    /// Optional item ID supplied by Responses-compatible clients.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -163,6 +169,7 @@ pub enum ResponseTool {
     /// Regular function-calling tool
     Function(ResponseFunctionTool),
     CodexFunction(ResponseFunctionDefinition),
+    /// Codex freeform/custom tool.
     Custom(CodexCustomTool),
     Unsupported(CodexUnsupportedWire),
     Unknown(CodexUnsupportedWire),
@@ -323,6 +330,7 @@ pub enum ResponseOutputItem {
     Message(ResponseOutputMessage),
     /// A function call invocation
     FunctionCall(ResponseFunctionCall),
+    /// A Codex freeform/custom tool invocation.
     CustomToolCall(CodexCustomToolCall),
     /// Result of a built-in tool call
     WebSearchCall(ResponseToolCall),

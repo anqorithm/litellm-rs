@@ -1,9 +1,11 @@
+//! Codex-specific types, separated by wire and domain responsibility.
 pub mod wire {
     use crate::core::models::openai::responses_api::{ResponseInputItem, ResponseTool};
     use serde::de::{DeserializeOwned, Error as DeError};
     use serde::ser::Error as SerError;
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
     use serde_json::{Map, Value};
+    /// Codex protocol revision used by the GH-1107 compatibility fixtures.
     pub const CODEX_PROTOCOL_BASELINE: &str = "6e5a2d6b8d148a5554fdceb6f399ca45bd1c78d9";
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct CodexFunctionCall {
@@ -75,6 +77,7 @@ pub mod wire {
         pub description: String,
         pub format: Value,
     }
+    /// A fail-closed wire item that retains only approved diagnostic metadata.
     #[derive(Debug, Clone)]
     pub struct CodexUnsupportedWire {
         pub wire_type: String,
