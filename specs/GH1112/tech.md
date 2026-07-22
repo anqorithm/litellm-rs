@@ -195,7 +195,7 @@ availability 证据停止广告、或属于 #1108 后续刷新。禁止 golden s
 | Product invariant | Implementation area | Verification |
 | --- | --- | --- |
 | B-001 | Google exact registry + Vertex parser | unit table：exact 成功，prefix/suffix/case/substring 全部 typed reject。 |
-| B-002 | `GoogleModelSpec` + deleted old owners | source guard 确认 Vertex/Gemini 无第二份 Gemini core metadata/match 表。 |
+| B-002 | `GoogleModelSpec` + deleted old owners | `cargo check --locked` 证明所有 consumer 只依赖唯一 registry type；双 provider parity fixture 读取同一 spec 并得到一致核心 metadata。 |
 | B-003 | availability overlay | Developer-only、Vertex-only、both、neither fixture 分别比较两个 provider list。 |
 | B-004 | registry/list builders | 重复构建与并发读 100 次均得到同一排序、无重复 ID。 |
 | B-005 | lifecycle gate | retired/unverified fixture 不公开且 upstream counter=0。 |
@@ -206,10 +206,10 @@ availability 证据停止广告、或属于 #1108 后续刷新。禁止 golden s
 | B-010 | overlapping model parity | 同一 `ChatRequest` matrix 对 Developer/Vertex 得到相同 provider-neutral verdict。 |
 | B-011 | Developer auth boundary | loopback capture：query key 存在、无 Bearer；error/log/catalog 无 sentinel。 |
 | B-012 | Vertex auth boundary | loopback capture：Bearer 存在、无 query key；不读取 Gemini API-key field。 |
-| B-013 | source/dependency boundary | source guard：google models module 不 import client/auth/config/reqwest；目录查询 network=0。 |
+| B-013 | crate-private catalog API + dependency boundary | API 只接收静态 model records、不接收 auth/config/client；目录查询 fixture 的 auth/network counters=0；独立 reviewer 核对依赖边界。 |
 | B-014 | alias map | empty alias set + collision/undeclared alias negative fixtures；fuzzy input 不命中。 |
 | B-015 | registry validation | duplicate/missing lifecycle/contract/evidence fixtures 使初始化返回 error，不发布部分列表。 |
-| B-016 | immutable snapshot | concurrent read test + no mutation API source guard。 |
+| B-016 | immutable snapshot | concurrent read test 证明所有 reader 共享同一 snapshot；crate-private API 只暴露 read methods。 |
 | B-017 | migration snapshot | before/after exact ID fixture，所有删除项带 lifecycle/availability disposition。 |
 | B-018 | aggregate regression | positive/negative fixture count guard、credential redaction、upstream=0 与 full provider tests。 |
 
@@ -255,8 +255,8 @@ preflight 成功后才执行。
   不用 Developer 证据补齐。
 - **Performance**：初始化校验 O(models + aliases)，查询 O(1)，排序只在 provider 初始化
   构造列表时发生；请求热路径不克隆完整 catalog。
-- **Maintenance**：移动大 catalog 时容易保留旧 wrapper；source guard 和删除旧路径阻止
-  双 authority 回流。
+- **Maintenance**：移动大 catalog 时容易保留旧 wrapper；删除旧类型后由 Rust 编译器迫使
+  consumer 迁移，provider parity fixtures 与独立 review 阻止双 authority 回流。
 
 ## 测试计划
 
