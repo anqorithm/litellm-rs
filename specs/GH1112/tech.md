@@ -17,17 +17,19 @@ GH-1112 / #1112
 | Gemini registry/types | `src/core/providers/gemini/models/mod.rs:129-206` | `ModelSpec` 同时承载模型信息、能力、价格和限制；registry 以 `HashMap` 存储且 `list_models()` 直接返回 values。 | 当前第一套事实源，列表顺序不稳定。 |
 | Gemini fuzzy family detection | `src/core/providers/gemini/models/mod.rs:210-278` | `from_model_name` 通过 lowercase + `contains` 推断 family。 | B-001/B-014 要把 executable model lookup 与 family 猜测解耦。 |
 | Gemini provider | `src/core/providers/gemini/provider.rs:47-116,141-181` | provider 从 registry 构造模型列表；validation、supported params 与 mapping 分散。 | 共享 contract 的第一个 consumer。 |
+| Gemini final request body | `src/core/providers/gemini/client.rs:93-164,273-328` | public client entry points call a local `transform_chat_request` that serializes generation fields independently of provider validation. | B-008/B-010 must bind the actual Developer `generationConfig`, not only provider-level preflight. |
 | Gemini catalog data | `src/core/providers/gemini/models/catalog/{mod.rs,gemini25.rs,gemini3.rs,gemini31.rs,gemini35.rs,legacy.rs}` | 模型记录按 family 分文件注册到 Gemini-owned registry。 | 数据需迁移到 provider-neutral Google owner，避免 alias wrapper。 |
 | Vertex model enum/capabilities | `src/core/providers/vertex_ai/mod.rs:138-203,205-480` | Gemini、partner 与 `Custom(String)` 混在一个 enum；capability/limit 由独立 match 表维护。 | 当前第二套事实源与 Custom 默认语义。 |
 | Vertex parser | `src/core/providers/vertex_ai/mod.rs:482-639` | 大量 lowercase substring 分支，未知值返回 `Custom`。 | B-001/B-006/B-007 的直接根因。 |
 | Vertex advertised models | `src/core/providers/vertex_ai/client.rs:285-335` | `models()` 另建只含 Gemini 1.5 的静态 `ModelInfo` 表。 | 当前第三套事实源。 |
 | Vertex request dispatch | `src/core/providers/vertex_ai/client.rs:120-153,431-507` | chat 先 fuzzy parse，再按 enum 选择 transformer；supported params 又按字符串 `contains("gemini")`。 | exact gate 与 shared request contract 的执行点。 |
+| Vertex health probe | `src/core/providers/vertex_ai/client/health.rs:5-16` | health check hard-codes `gemini-1.5-flash` and performs auth/network without consulting Vertex availability. | A retired or unavailable probe must not bypass the exact catalog gate. |
 | Vertex Gemini body contract | `src/core/providers/vertex_ai/transformers.rs:29-100,541-762`、`src/core/providers/vertex_ai/common_utils.rs:81-166,246-281` | `GeminiTransformer` 直接从 `ChatRequest` 构造 `GenerationConfig`；另有独立 `validate_parameters`，未消费共享模型请求契约。 | B-008/B-010 必须覆盖实际 request body，而不只覆盖 client 参数 map。 |
 | Vertex batch parser consumer | `src/core/providers/vertex_ai/batches/mod.rs:214-285` | batch request/response path 调用 `parse_vertex_model`，并以 model string 判断 Gemini。 | parser 改为 `Result` 后必须机械迁移该 consumer，保持 batch 产品行为不变。 |
 | Vertex URL | `src/core/providers/vertex_ai/client/url.rs:14-61` | URL 根据 enum 类别和 model ID 选择 Google/partner/custom 路径。 | Custom fallback 必须不可达，endpoint ownership 保留。 |
-| Developer auth | `src/core/providers/mod.rs:141-179`、`src/core/providers/gemini/client.rs:70-91` | native Developer URL 校验 route segment 后把 API key 放入 query。 | B-011/B-013 的现有边界。 |
-| Vertex auth | `src/core/providers/vertex_ai/client.rs:81-94`、`src/core/providers/vertex_ai/auth.rs:197-224` | `VertexAuth` 获取 access token，client 设置 Bearer header。 | B-012/B-013 的现有边界。 |
-| Compatibility consumers | `src/utils/ai/models/pricing.rs:360-381`、`src/utils/ai/models/utils_tests.rs:1-176`、`src/core/providers/gemini/mod.rs:32-67` | utility 与 public helper 直接引用 Gemini registry。 | 迁移时必须改为 canonical Google query，不能保留第二份 wrapper registry。 |
+| Developer auth | `src/core/providers/mod.rs:141-179`、`src/core/providers/gemini/client.rs:70-91`、`src/core/providers/gemini/config.rs:14-88` | native Developer URL 校验 route segment 后把 API key 放入 query；`GeminiConfig` derives raw `Debug`. | B-011/B-013 的 transport 边界必须保留，同时 production Debug 必须 redact key。 |
+| Vertex auth | `src/core/providers/vertex_ai/client.rs:81-94`、`src/core/providers/vertex_ai/auth.rs:17-86,197-224` | `VertexAuth` 获取 access token，client 设置 Bearer header；credential structs derive raw `Debug`. | B-012/B-013 的 transport 边界必须保留，同时 production credential Debug 必须 redact secrets。 |
+| Compatibility consumers | `src/utils/ai/models/pricing.rs:360-381`、`src/utils/ai/models/utils.rs:210-505`、`src/utils/ai/models/utils_tests.rs:1-176`、`src/core/providers/shared.rs:26-63`、`src/core/providers/gemini/mod.rs:32-67` | utility capability logic and shared context-window helper carry Gemini substring/match tables in addition to direct registry users. | 迁移时必须改为 canonical Google query，不能保留第二份 capability/limit wrapper registry。 |
 
 ## Planned Changes
 
@@ -49,6 +51,8 @@ GH-1112 / #1112
     "src/core/providers/google/models/catalog/legacy.rs",
     "src/core/providers/google/models/tests.rs",
     "src/core/providers/gemini/mod.rs",
+    "src/core/providers/gemini/client.rs",
+    "src/core/providers/gemini/config.rs",
     "src/core/providers/gemini/models/mod.rs",
     "src/core/providers/gemini/models/catalog/mod.rs",
     "src/core/providers/gemini/models/catalog/gemini25.rs",
@@ -61,13 +65,17 @@ GH-1112 / #1112
     "src/core/providers/vertex_ai/mod.rs",
     "src/core/providers/vertex_ai/batches/mod.rs",
     "src/core/providers/vertex_ai/client.rs",
+    "src/core/providers/vertex_ai/client/health.rs",
     "src/core/providers/vertex_ai/client/url.rs",
     "src/core/providers/vertex_ai/client_tests.rs",
     "src/core/providers/vertex_ai/common_utils.rs",
     "src/core/providers/vertex_ai/tests.rs",
     "src/core/providers/vertex_ai/transformers.rs",
     "src/core/providers/vertex_ai/transformers/split_tests.rs",
+    "src/core/providers/vertex_ai/auth.rs",
+    "src/core/providers/shared.rs",
     "src/utils/ai/models/pricing.rs",
+    "src/utils/ai/models/utils.rs",
     "src/utils/ai/models/utils_tests.rs"
   ],
   "spec_refs": [
@@ -121,7 +129,8 @@ auth、HTTP client 或 provider config。
 `registry.rs` / `request_contract.rs` / `tests.rs`。旧 `GeminiModelRegistry` 和旧 catalog
 路径删除，不保留 type alias、wrapper registry 或双写兼容层。
 
-`gemini/mod.rs`、pricing utility 和 model utility tests 直接消费 canonical Google API。
+`gemini/mod.rs`、pricing utility、model utility implementation/tests 与
+`core::providers::shared::gemini_context_window` 直接消费 canonical Google API。
 外部可观察 helper 名若是 public compatibility surface，可保留函数名，但实现必须直接
 查询 single registry，且不得暴露第二种 registry/type identity。
 
@@ -131,6 +140,11 @@ auth、HTTP client 或 provider config。
 保证。`validate_request` 先 exact lookup + Developer overlay，再依次执行 common validation
 和 shared request contract；`get_supported_openai_params` 从同一 contract 返回稳定闭集，
 `map_openai_params` 只映射 contract 已允许字段。
+
+`GeminiClient::transform_chat_request` 接收 exact Developer model lookup 得到的
+`GoogleRequestContract` decision，只把已允许且验证通过的字段写入最终
+`generationConfig`。`chat`/`chat_stream` direct client entry points 也必须先执行同一
+preflight；不得因为绕过 `GeminiProvider` facade 而发送 contract-disallowed field。
 
 不在本 issue 添加 #1108 新模型/新 lifecycle 数据；当前记录只做 ownership-preserving
 迁移。若现有记录缺少 Developer/Vertex 来源证据，默认 unavailable 并由 B-017 diff fixture
@@ -156,6 +170,11 @@ custom model enum 不在本次修改范围。
 models 以 exact ID 合并、去重和排序；删除当前 Gemini 1.5 静态表。Vertex request
 dispatch、capability 和 limits 对 Google variant 读取共享 spec，对 partner variant 读取
 partner owner。
+
+`client/health.rs` 从 Vertex-available catalog 的稳定、明确 health-capable fixture 选择
+probe model；若没有合法 probe，则在 credential/token/network 前返回 typed unhealthy
+evidence。不得硬编码可能 retired/unavailable 的 Google model，也不得从 Developer overlay
+推断 Vertex probe availability。
 
 ### 5. Shared request contract without shared transport
 
@@ -187,6 +206,12 @@ catalog 与 request contract 不接收 credential、header、query、base URL、
 - model-not-found/validation errors、Debug/Display 和 catalog snapshot 都无 sentinel；
 - rejected request 的 auth/token/network counters 为零。
 
+为使该 gate 可执行，`GeminiConfig`、`VertexCredentials`、`ServiceAccountKey` 与
+`AuthorizedUserCredentials` 使用显式 redacted `Debug`（并约束任何 Display/log adapter）；
+可以显示非敏感类型/状态，但 API key、private key、client secret、refresh token 与 access
+token 必须统一替换为固定 redaction marker。Gemini 与 Vertex credential 类型仍各自所有，
+不得借 redaction 合并 config 或认证路径。
+
 本 issue 不把 legacy `GeminiConfig::new_vertex_ai` 变成认证桥接层；Vertex transport 仍由
 `VertexAIProvider` 所有。若后续移除/迁移该 public constructor，需要单独兼容性 spec。
 
@@ -202,23 +227,23 @@ availability 证据停止广告、或属于 #1108 后续刷新。禁止 golden s
 | Product invariant | Implementation area | Verification |
 | --- | --- | --- |
 | B-001 | Google exact registry + Vertex parser | unit table：exact 成功，prefix/suffix/case/substring 全部 typed reject。 |
-| B-002 | `GoogleModelSpec` + deleted old owners | `cargo check --locked` 证明所有 consumer 只依赖唯一 registry type；双 provider parity fixture 读取同一 spec 并得到一致核心 metadata。 |
+| B-002 | `GoogleModelSpec` + deleted old owners | `cargo check --locked` 证明 provider、utility 与 shared-limit consumer 只依赖唯一 registry type；双 provider parity fixture 读取同一 spec 并得到一致核心 metadata。 |
 | B-003 | availability overlay | Developer-only、Vertex-only、both、neither fixture 分别比较两个 provider list。 |
 | B-004 | registry/list builders | 重复构建与并发读 100 次均得到同一排序、无重复 ID。 |
 | B-005 | lifecycle gate | retired/unverified fixture 不公开且 upstream counter=0。 |
 | B-006 | Vertex exact parser | `cargo test --locked vertex_ai_model_exact` 覆盖空、case、prefix、suffix 和未知。 |
 | B-007 | Vertex chat dispatch | custom base + unknown model 仍 model-not-found；URL/auth/network counters=0。 |
-| B-008 | shared request contract consumers + Vertex transformer | 两 provider supported params、validation、最终 body projection 的 table-driven parity test。 |
+| B-008 | shared request contract consumers + Gemini client + Vertex transformer | facade/direct-client supported params、validation、最终 body projection 的 table-driven parity test。 |
 | B-009 | request preflight | missing contract、unsupported key、range、illegal state 均 invalid-request 且 network=0。 |
 | B-010 | overlapping model parity | 同一 `ChatRequest` matrix 对 Developer/Vertex 得到相同 provider-neutral verdict。 |
-| B-011 | Developer auth boundary | loopback capture：query key 存在、无 Bearer；error/log/catalog 无 sentinel。 |
-| B-012 | Vertex auth boundary | loopback capture：Bearer 存在、无 query key；不读取 Gemini API-key field。 |
+| B-011 | Developer auth boundary + `GeminiConfig` redacted Debug | loopback capture：query key 存在、无 Bearer；adversarial Debug/Display/error/log/catalog 无 sentinel。 |
+| B-012 | Vertex auth boundary + credential redacted Debug | loopback capture：Bearer 存在、无 query key；credential Debug/Display/log 不泄露 private/client/refresh/access secret，且不读取 Gemini API-key field。 |
 | B-013 | crate-private catalog API + dependency boundary | API 只接收静态 model records、不接收 auth/config/client；目录查询 fixture 的 auth/network counters=0；独立 reviewer 核对依赖边界。 |
 | B-014 | alias map | empty alias set + collision/undeclared alias negative fixtures；fuzzy input 不命中。 |
 | B-015 | registry validation | duplicate/missing lifecycle/contract/evidence fixtures 使初始化返回 error，不发布部分列表。 |
 | B-016 | immutable snapshot | concurrent read test 证明所有 reader 共享同一 snapshot；crate-private API 只暴露 read methods。 |
 | B-017 | migration snapshot | before/after exact ID fixture，所有删除项带 lifecycle/availability disposition。 |
-| B-018 | aggregate regression | positive/negative fixture count guard、credential redaction、upstream=0 与 full provider tests。 |
+| B-018 | aggregate regression | positive/negative fixture count guard、production credential redaction、health/direct-client upstream=0 与 full provider tests。 |
 
 ## 数据流
 
@@ -358,9 +383,20 @@ for raw in Path(lcov_path).read_text(encoding="utf-8").splitlines():
             raise SystemExit(f"malformed BRDA record: {raw}")
         branches.append((source, int(fields[0]), 0 if fields[3] == "-" else int(fields[3])))
 
+def is_test_source(path: str) -> bool:
+    return (
+        "/tests/" in path
+        or path.endswith("/tests.rs")
+        or path.endswith("_test.rs")
+        or path.endswith("_tests.rs")
+    )
+
 changed_production_sources = {
     path for path, lines in changed.items()
-    if lines and path.startswith("src/") and path.endswith(".rs")
+    if lines
+    and path.startswith("src/")
+    and path.endswith(".rs")
+    and not is_test_source(path)
 }
 missing_sources = sorted(changed_production_sources - lcov_sources)
 if missing_sources:
@@ -368,7 +404,8 @@ if missing_sources:
 
 changed_lines = {
     key: hits for key, hits in line_hits.items()
-    if key[1] in changed.get(key[0], set())
+    if key[0] in changed_production_sources
+    and key[1] in changed.get(key[0], set())
 }
 if not changed_lines:
     raise SystemExit("no changed executable Rust lines found in LCOV")

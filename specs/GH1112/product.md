@@ -88,7 +88,8 @@ Vertex AI 应复用模型核心事实和请求契约，同时仍以各自明确�
     广告的 ID 必须由生命周期/availability fixture 解释，不能因重构意外消失。
 18. **B-018** 回归证据必须同时覆盖正例与 schema/类型合法的负例：exact lookup、
     fuzzy rejection、unknown/custom rejection、双 overlay 差异、stable ordering、
-    request-contract parity、网络请求计数为零以及 credential redaction。
+    request-contract parity、网络请求计数为零以及 production credential 类型的
+    Debug/Display/log redaction；测试不能只避免格式化 credential 来绕过 redaction gate。
 
 ## 验收标准
 
@@ -102,7 +103,8 @@ Vertex AI 应复用模型核心事实和请求契约，同时仍以各自明确�
 - [ ] Developer-only、Vertex-only、retired 与 unverified fixture 分别得到正确公开/拒绝
       结果，任一 availability 不从另一入口推断。
 - [ ] 无网络认证测试证明 Developer 请求只使用 query API key、Vertex 请求只使用
-      Bearer token，catalog/error/log 不出现测试凭证。
+      Bearer token；`GeminiConfig`、`VertexCredentials`、`ServiceAccountKey`、
+      `AuthorizedUserCredentials` 的 Debug/Display/log 捕获和 catalog/error 均不出现测试凭证。
 - [ ] #1108、#1111、#1113 的独立验收面没有被本实现顺带修改或宣称完成。
 - [ ] 新增关键 catalog/validation 分支覆盖 100%，新增代码总体 line coverage 至少 80%。
 - [ ] `cargo fmt --check`、`cargo check`、strict Clippy、`cargo test` 与 SpecRail gates 通过。
