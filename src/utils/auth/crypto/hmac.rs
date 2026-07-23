@@ -2,9 +2,36 @@
 
 use crate::utils::error::gateway_error::{GatewayError, Result};
 use hmac::{Hmac, Mac, digest::KeyInit as HmacKeyInit};
-use sha2::Sha256;
+use sha2::{Digest, Sha256};
+use std::fmt;
 
 type HmacSha256 = Hmac<Sha256>;
+
+/// Fixed-size digest used only for matching legacy deployment credentials.
+///
+/// The bytes stay private so callers cannot serialize or format the digest.
+#[derive(Clone, Copy)]
+pub(crate) struct CredentialDigest([u8; 32]);
+
+impl CredentialDigest {
+    pub(crate) fn from_credential(credential: &str) -> Self {
+        Self(Sha256::digest(credential.as_bytes()).into())
+    }
+
+    pub(crate) fn constant_time_matches(&self, other: &Self) -> bool {
+        let mut difference = 0u8;
+        for index in 0..self.0.len() {
+            difference |= self.0[index] ^ other.0[index];
+        }
+        difference == 0
+    }
+}
+
+impl fmt::Debug for CredentialDigest {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("[REDACTED]")
+    }
+}
 
 /// Create HMAC signature
 pub fn create_hmac_signature(secret: &str, data: &str) -> Result<String> {
@@ -165,5 +192,17 @@ mod tests {
     #[test]
     fn test_constant_time_eq_single_char_diff() {
         assert!(!constant_time_eq("hellO", "hello"));
+    }
+
+    #[test]
+    fn credential_digest_is_fixed_size_constant_time_and_redacted() {
+        let short = CredentialDigest::from_credential("a");
+        let short_again = CredentialDigest::from_credential("a");
+        let long = CredentialDigest::from_credential("a much longer credential");
+
+        assert_eq!(short.0.len(), 32);
+        assert!(short.constant_time_matches(&short_again));
+        assert!(!short.constant_time_matches(&long));
+        assert_eq!(format!("{short:?}"), "[REDACTED]");
     }
 }
