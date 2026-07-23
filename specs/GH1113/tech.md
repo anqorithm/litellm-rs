@@ -16,8 +16,12 @@ Link to `product.md`.
 | Vertex provider calculator | `src/core/providers/vertex_ai/client.rs:285-335,408-428` | `models()` carries a separate static price table; `calculate_cost` uses substring branches and returns `Ok(0.0)` for unknown models. | Duplicate authority and silent zero root cause. GH1112 is expected to remove the static model table before this implementation. |
 | Vertex Gemini helper | `src/core/providers/vertex_ai/gemini/mod.rs:341-361` | Public helper owns per-million hard-coded rates and defaults unknown models to Flash. | Second duplicate price table and wrong-model success. |
 | Gemini public helpers | `src/core/providers/gemini/provider.rs:115-123,388-398`, `src/core/providers/gemini/models/mod.rs:288-373` | Inherent/basic/multimodal helpers return `Option<f64>`; trait implementation converts `None` to `Ok(0.0)`; registry fallback has its own per-1k math. | Public failure semantics and calculation authority diverge. |
+| Gemini module and utility pricing lookups | `src/core/providers/gemini/mod.rs:63-70`, `src/utils/ai/models/pricing.rs:3-68,200-220` | Public module lookup returns `Option<(f64, f64)>` from the Gemini registry; `ModelUtils` lowercases/fuzzy-matches and carries hard-coded Gemini tuples. | These are public duplicate Google pricing paths and require a typed/exact disposition. |
+| Core cost compatibility facade | `src/core/cost/calculator.rs:52-125`, `src/core/cost/calculator/pricing.rs:484-510` | The embedded `PricingService` falls back to an empty service on initialization failure, then Gemini/Vertex can fall through to a hard-coded family table. | Compatibility callers can bypass the canonical authority unless initialization and Google fallback both fail closed. |
+| Shared pricing database and HTTP API | `src/core/pricing.rs:192-249,678-682`, `src/server/routes/pricing.rs:121-200` | Public database methods use normalized/fuzzy lookup and return `0.0` on miss; `/v1/pricing` exposes model lookup and calculation without a Google surface contract. | User-facing Google pricing must not retain fuzzy/zero/ambiguous-surface behavior. |
 | Canonical pricing authority | `src/core/pricing_service/authority.rs:24-190,193-247,303-399,421-490`, `src/core/pricing_service/service.rs:108-183` | Loaded provider-aware APIs return `Result`, but shared resolver still permits alias/fuzzy matching and converts provider-local per-1k values. | GH1113 must add an exact Google path without changing unrelated provider compatibility. |
 | Runtime reservation/settlement | `src/server/routes/ai/spend/pricing.rs`, `src/server/routes/ai/spend/completion.rs`, `src/server/routes/ai/chat_streaming.rs`, `src/server/routes/ai/spend.rs` | Live paths use runtime `PricingService`, convert misses to model-not-priced errors, and share budget/spend identities. | Required parity and pre-upstream fail-closed evidence. |
+| Image generation and terminal callbacks | `src/server/routes/ai/images/generation.rs:100-149`, `src/server/routes/ai/callbacks.rs:222-275` | Image generation reserves/settles through policy helpers; callbacks independently recalculate terminal cost and drop it on pricing error. | Typed policy changes must cover the normal image route, and callback cost must match priced or explicit-unpriced settlement. |
 | Explicit unpriced policy | `src/config/models/gateway.rs:242-288`, `src/server/routes/ai/spend/unpriced.rs:9-211`, `src/server/middleware/metrics.rs` | Default is `Reject`; `AllowUnpriced` computes fallback cost, records metrics/logs, and writes `UsageRecord::unpriced` when a key exists. | Preserve as explicit audited policy only; never move it into provider helpers. |
 | GH1112 dependency | `specs/GH1112/product.md`, `specs/GH1112/tech.md`, `specs/GH1112/tasks.md` and its eventual merged `src/core/providers/google/models/**` | Defines exact canonical ID, per-surface availability, and a crate-private neutral catalog; deliberately leaves pricing behavior to GH1113. | Implementation must re-anchor to the merged API rather than guess or recreate a registry. |
 
@@ -32,6 +36,13 @@ Link to `product.md`.
     "src/core/pricing_service/authority.rs",
     "src/core/pricing_service/authority_tests.rs",
     "src/core/pricing_service/mod.rs",
+    "src/core/pricing.rs",
+    "src/core/pricing/tests.rs",
+    "src/core/cost/calculator.rs",
+    "src/core/cost/calculator/pricing.rs",
+    "src/core/cost/calculator/tests/edge_case_tests.rs",
+    "src/core/cost/calculator/tests/pricing_lookup_tests.rs",
+    "src/core/providers/gemini/mod.rs",
     "src/core/providers/gemini/models/mod.rs",
     "src/core/providers/gemini/provider.rs",
     "src/core/providers/gemini/provider_tests.rs",
@@ -39,12 +50,16 @@ Link to `product.md`.
     "src/core/providers/vertex_ai/client_tests.rs",
     "src/core/providers/vertex_ai/gemini/mod.rs",
     "src/core/providers/vertex_ai/tests.rs",
+    "src/utils/ai/models/pricing.rs",
+    "src/server/routes/pricing.rs",
+    "src/server/routes/ai/callbacks.rs",
     "src/server/routes/ai/spend.rs",
     "src/server/routes/ai/spend/pricing.rs",
     "src/server/routes/ai/spend/completion.rs",
     "src/server/routes/ai/spend/unpriced.rs",
     "src/server/routes/ai/gemini/spend.rs",
     "src/server/routes/ai/audio/budgeting.rs",
+    "src/server/routes/ai/images/generation.rs",
     "src/server/routes/ai/images/proxy_spend.rs",
     "src/server/routes/ai/response_cache.rs",
     "src/server/routes/ai/spend_runtime_pricing_tests.rs",
@@ -82,6 +97,11 @@ model validity。对所有 public Google token-cost surface 建 tracked inventor
 - `LLMProvider::calculate_cost` 与 `Provider::calculate_cost`；
 - `GeminiProvider::calculate_cost`；
 - `gemini::models::CostCalculator::{calculate_cost, calculate_multimodal_cost}`；
+- `gemini::get_model_pricing` 与 `ModelUtils::get_model_pricing`；
+- `core::cost::calculator::{generic_cost_per_token, get_model_pricing}`；
+- `PricingDatabase::{calculate, calculate_for_provider}` 与全局
+  `core::pricing::calculate_cost` 的 Google 分支；
+- `/v1/pricing/model/{model_name}` 与 `/v1/pricing/calculate` 的 Google 请求；
 - `vertex_ai::gemini::GeminiCostCalculator::calculate_cost`；
 - `VertexAIProvider::calculate_cost`。
 
@@ -148,14 +168,25 @@ deprecated `Option` wrapper 或可达的 default calculator。`CHANGELOG.md` 列
 - `Option<f64>` / `f64` → `Result<f64, ProviderError>`（provider namespace）；
 - already-typed trait/facade 保持签名，只修正 unknown/incomplete 的错误行为。
 
+`gemini::get_model_pricing`、`ModelUtils::get_model_pricing`、`PricingDatabase` 和
+`core::pricing::calculate_cost` 对非 Google provider 保持兼容；一旦输入声明或解析为
+Gemini/Vertex，则必须要求可判定的 surface/provider 并走 exact typed authority。无法区分
+Developer 与 Vertex surface 的 Google 请求显式失败，不得猜测 Vertex、跨 surface 或回退
+到无 provider fuzzy lookup。`/v1/pricing` 对这些 typed failures 返回稳定的非 2xx error
+envelope；不得以 miss=`0.0` 或 model lookup success 替代错误。
+
 multimodal helper 以 `PricingUsage` 传递 cache/image/audio/video usage；缺对应 price field
 typed fail，不得忽略 modality 或退回 basic token price。
 
 ### 4. Runtime parity 与 AllowUnpriced
 
-reservation、settlement、spend 与 callback 继续使用 `AppState` 中同一个 runtime
+reservation、settlement、spend、normal image generation 与 callback 继续使用 `AppState` 中同一个 runtime
 `PricingService`，并传递实际 selected deployment 的 provider + canonical model。每次 retry
 或 fallback 都新建 lookup；不能复用前一个 candidate 的 breakdown。
+
+callback 不再独立重新计算并在失败时丢弃 cost；它消费与 terminal settlement 相同的
+priced breakdown，或显式 `AllowUnpriced` 已决定并审计的 fallback cost。normal image
+generation 与 proxy image route 均适配同一个 typed policy input，正负矩阵覆盖二者。
 
 crate-private `PricingFailureKind` 只在现有 gateway request-time policy boundary 被分类：
 
@@ -189,9 +220,9 @@ model、image/TTS pricing 与非 Google provider resolver 回归必须保持不�
 | --- | --- | --- |
 | B-001 | merged Google exact registry + exact `PricingService` Google resolver | exact Developer/Vertex surface matrix；unknown/fuzzy/prefix negatives；single-owner source guard |
 | B-002 | authority validation + provider error mapping | unknown/retired/wrong-surface/missing/one-sided/NaN/negative price typed errors；one-sided/zero usage still validates both token fields；no zero/default success |
-| B-003 | provider trait/facade + four public helper owners | compile-time signature fixtures；no `Option`/bare-f64/legacy calculator inventory |
+| B-003 | provider trait/facade + Gemini module/utility + core cost + shared pricing DB + HTTP pricing owners | compile-time signature and route fixtures；no Google `Option`/bare-f64/fuzzy-zero/legacy calculator inventory |
 | B-004 | single unit conversion owner | 1/1k/1M input/output/mixed/large numeric fixtures；no helper-local scaling guard |
-| B-005 | helper, reservation, settlement, spend, callback | exact identity/source sentinel parity and zero-usage validation |
+| B-005 | helper, pricing API, image generation, reservation, settlement, spend, callback | exact identity/source/fallback sentinel parity and zero-usage validation |
 | B-006 | request preflight + retry/fallback | upstream/auth/network/budget/cache/callback counters zero；candidate-specific fresh lookup |
 | B-007 | crate-private pricing-failure kind + gateway policy boundary | `AllowUnpriced` receives only the internal typed fact before public-error mapping；source guard rejects Display/message-prefix parsing and public enum expansion；other errors remain errors |
 | B-008 | unpriced reserve/settle/metrics/log/usage record | positive/zero fallback audit matrix；record failure emits error |
@@ -206,8 +237,9 @@ requested provider/model + usage
   -> runtime PricingService exact loaded-source lookup
   -> typed PricingCostBreakdown
        -> provider/public Result adapter
+       -> /v1/pricing typed response
        -> budget reservation
-       -> settlement + priced spend + callback
+       -> image/runtime settlement + priced spend + callback
 
 crate-private PricingFailureKind
   -> Reject: fail before upstream/mutation
@@ -242,10 +274,12 @@ crate-private PricingFailureKind
 - [ ] Units: 1、1_000、1_000_000 input/output；mixed、zero、large；cache/image/audio/video
   fields for multimodal helper；single conversion owner guard.
 - [ ] Public API: compile fixtures for `LLMProvider`、`Provider` facade、Gemini inherent/basic/
-  multimodal and Vertex Gemini/Vertex provider helpers returning typed `Result`; unknown never
-  `Ok(0.0)` or Flash-priced.
+  multimodal/module/ModelUtils、Vertex Gemini/Vertex provider、`core::cost`、shared
+  `PricingDatabase` Google branches returning typed `Result`; `/v1/pricing` exact-surface
+  route fixtures；unknown never `Ok(0.0)`、HTTP success-zero or Flash-priced.
 - [ ] Runtime parity: custom-source sentinel across helper/runtime adapter、reservation、settlement、
-  spend and callback；retry/fallback uses selected deployment identity.
+  normal/proxy image generation、spend and callback；explicit-unpriced callback preserves fallback
+  cost；retry/fallback uses selected deployment identity.
 - [ ] Policy/audit: default Reject and explicit AllowUnpriced positive/zero-fallback matrices；
   internal typed-fact classifier before public-error mapping；ordinary `InvalidRequest` with the old
   `model_not_priced:` prefix and every non-pricing error remain ineligible；Reject retry recognition

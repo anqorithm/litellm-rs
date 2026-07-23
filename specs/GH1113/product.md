@@ -19,6 +19,9 @@ unknown model 默认套用 Flash 价格；Gemini helper 还以 `Option<f64>` 表
 - 删除或使 duplicate substring、default-Flash、unknown-zero 计算路径不可达。
 - 将 Gemini/Vertex public cost helpers 收敛为 typed `Result` adapter；unknown、missing 或
   incomplete pricing 必须保留 provider/model 上下文并显式失败。
+- 让 Gemini module/utility pricing lookup、`core::cost` compatibility facade、共享
+  `PricingDatabase` 与 `/v1/pricing` 用户入口对 Google 模型遵守同一 exact、typed contract，
+  不再暴露 `Option`、模糊命中或 miss=`0.0` 的旁路。
 - 单一化 per-token、per-1k 与 per-million 单位转换，并证明 public helper、budget reservation
   与 spend settlement 对同一 resolved provider/model/usage 得到相同结果。
 - `AllowUnpriced` 只允许由显式 request-time policy 绕过 typed pricing failure，并保留现有
@@ -45,19 +48,24 @@ unknown model 默认套用 Flash 价格；Gemini helper 还以 `Option<f64>` 表
    negative、NaN 或其他 incomplete pricing 必须返回 typed error。Gemini/Vertex token-priced
    record 无论当前 input/output usage 是否为零，都必须同时具有合法 input 与 output token
    price；不得返回成功 `0.0`、默认 Flash/Pro 价格、空 pricing record 或隐式 embedded fallback。
-3. **B-003** provider trait/facade 与所有在本 scope 内发布的 Gemini/Vertex token-cost helper
-   均返回 typed `Result<f64, ...>`，并薄适配 canonical authority。现有
+3. **B-003** provider trait/facade 与所有在本 scope 内发布的 Gemini/Vertex token-cost 或
+   price-lookup helper 均返回 typed `Result<..., ...>`，并薄适配 canonical authority。这包括
+   Gemini module/ModelUtils lookup、`core::cost` compatibility facade、共享
+   `PricingDatabase` 的 Google 分支和 `/v1/pricing` Google 查询/计算入口。现有
    `LLMProvider::calculate_cost`/`Provider::calculate_cost` 保持
    `Result<f64, ProviderError>`；Gemini inherent/basic/multimodal helper 与 Vertex Gemini helper
-   不再公开 `Option<f64>` 或裸 `f64` 失败语义。不得同时保留可调用的 legacy duplicate calculator。
+   不再公开 `Option<f64>`、`Option<(f64, f64)>` 或裸 `f64` 失败语义；Google miss 不得以
+   `0.0` 或 HTTP success 表示。不得同时保留可调用的 legacy duplicate calculator。
 4. **B-004** authority 的内部价格单位固定为 USD/token。来源为 per-1k 时只转换一次
    `per_token = per_1k / 1_000`；来源为 per-million 时只转换一次
    `per_token = per_million / 1_000_000`；总价仅为各 usage unit 与对应 per-token rate 的
    乘积之和。任何 adapter 不得再次缩放。
 5. **B-005** 同一 provider、canonical model、usage 和 pricing source 经 public helper、
-   budget reservation、settlement、spend record 与 callback terminal cost 必须使用同一
-   resolved identity 和 canonical cost；zero-token usage 可成功为 `0.0`，但只有在 model 和
-   必需 price fields 均合法时，不能把 zero usage 当作跳过 pricing validation。
+   `/v1/pricing`、image-generation reservation/settlement、budget reservation、settlement、
+   spend record 与 callback terminal cost 必须使用同一 resolved identity 和 canonical cost；
+   显式 `AllowUnpriced` 时 callback 也必须报告同一个 fallback cost，而不能因重新计算失败而
+   省略 cost。zero-token usage 可成功为 `0.0`，但只有在 model 和必需 price fields 均合法时，
+   不能把 zero usage 当作跳过 pricing validation。
 6. **B-006** pricing preflight failure 在默认 `Reject` policy 下必须在 upstream、reservation、
    successful callback/cache outcome 和 spend write 前失败。retry/fallback 只能对实际选择的
    新 deployment 重新执行 exact lookup，不能借用前一个或相似 model 的价格。
@@ -90,11 +98,13 @@ unknown model 默认套用 Flash 价格；Gemini helper 还以 `Option<f64>` 表
 - [ ] Gemini Developer 与 Vertex Gemini 的同一 canonical model/usage 只调用一个
   `PricingService` authority；source/call-graph guard 证明 substring/default-Flash/unknown-zero
   calculator 已删除或不可达，且无第二份价格表参与 user-visible cost。
-- [ ] `LLMProvider`、`Provider` facade、Gemini inherent/basic/multimodal helper 与 Vertex Gemini
-  helper 的 scope inventory 全部有 typed `Result` disposition；公开失败不再使用 `Option`/裸
-  `f64`，迁移说明列出旧/新签名及 error mapping。
+- [ ] `LLMProvider`、`Provider` facade、Gemini inherent/basic/multimodal/module/ModelUtils
+  helper、Vertex Gemini helper、`core::cost` facade、共享 `PricingDatabase` Google 分支与
+  `/v1/pricing` Google endpoints 的 scope inventory 全部有 typed `Result` disposition；
+  公开失败不再使用 `Option`/裸 `f64`/HTTP success-zero，迁移说明列出旧/新签名及 error mapping。
 - [ ] 1 token、1k tokens、1M tokens、mixed input/output、zero usage 与大数边界 fixture
-  证明单位只转换一次，结果在 helper/reservation/settlement/spend/callback 间一致。
+  证明单位只转换一次，结果在 helper/`/v1/pricing`/image generation/reservation/
+  settlement/spend/callback 间一致；AllowUnpriced callback 不丢失 fallback cost。
 - [ ] unknown、retired、wrong-surface、missing/incomplete/invalid price 对 public helper 与默认
   gateway path 都 typed fail closed，且 upstream/network、budget reservation、priced spend、
   successful callback/cache side-effect counters 为零。
