@@ -182,6 +182,8 @@ def build_evidence(
     remote_branches: list[dict[str, str]],
     pr_limit: int,
     retained_branch_dispositions: list[dict[str, Any]] | None = None,
+    *,
+    base_ref: str = "main",
 ) -> dict[str, Any]:
     if issue <= 0:
         raise EvidenceError("issue number must be a positive integer")
@@ -200,6 +202,11 @@ def build_evidence(
         remote_branches,
         retained_branch_dispositions or [],
     )
+    base_heads = [
+        branch["head_sha"] for branch in remote_branches if branch["name"] == base_ref
+    ]
+    if len(base_heads) != 1:
+        raise EvidenceError(f"remote branch evidence requires exactly one {base_ref} head")
     return {
         "issue": issue,
         "collected_at": datetime.now(timezone.utc)
@@ -209,6 +216,8 @@ def build_evidence(
         "open_prs_complete": len(open_pr_payload) < pr_limit,
         "open_pr_limit": pr_limit,
         "open_prs": [normalize_open_pr(item, issue) for item in open_pr_payload],
+        "base_ref": base_ref,
+        "base_sha": base_heads[0],
         "remote_branches": sorted(remote_branches, key=lambda branch: branch["name"]),
         "retained_branch_dispositions": dispositions,
     }

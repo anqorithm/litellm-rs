@@ -36,6 +36,12 @@ GH-1107 / #1107
   "issue": 1107,
   "complete": true,
   "paths": [
+    "checks/github_duplicate_evidence.py",
+    "checks/duplicate_work_gate.py",
+    "checks/route_gate.py",
+    "checks/test_duplicate_work_gate.py",
+    "schemas/duplicate_work_evidence.schema.json",
+    "specs/GH1107/tasks.md",
     "README.md",
     "docs/codex-compatibility.md",
     "src/core/models/openai/responses_api.rs",
@@ -83,10 +89,16 @@ GH-1107 / #1107
 ### Retained implementation-branch prerequisite
 
 Before `SP1107-T2`, the bounded retained-branch disposition prerequisite must merge.
-Duplicate-work evidence records each remote branch as exact `{name, head_sha}` and accepts a
-retained branch only when one `maintainer_human` disposition references that same branch and SHA.
-Missing, duplicate, orphan, malformed, stale, or mismatch evidence remains `needs_human` or
-`blocked`; an `active_duplicate` disposition and an open issue-referencing PR remain blocked.
+Duplicate-work evidence records `main` as an exact lowercase 40-character `base_sha` and each
+remote branch as exact `{name, head_sha}`. At gate time the required implement route reruns
+`git ls-remote --heads origin`, requires remote `main`、local `origin/main` 与 evidence base 完全一致，
+requires the complete matching-branch set and SHAs to remain identical, verifies each matching
+commit object exists locally, and proves `git merge-base --is-ancestor <base> <head>`.
+`maintainer_human` disposition is audit evidence bound to an exact branch SHA, not implementation
+authorization; a retained branch therefore still requires an independent implementation
+authorization. Missing, duplicate, orphan, malformed, stale/future-dated, base/branch drift,
+missing object, non-ancestor or mismatch evidence is fail-closed; an `active_duplicate`
+disposition and an open issue-referencing PR remain blocked.
 This prerequisite never deletes, renames, or otherwise mutates historical branches. After it
 merges, T2 regenerates evidence against fresh remote heads and reruns the required implement route;
 pre-merge evidence is invalid for T2. This workflow-only prerequisite does not change Responses,

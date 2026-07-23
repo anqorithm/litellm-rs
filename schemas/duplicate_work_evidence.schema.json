@@ -9,6 +9,8 @@
     "open_prs_complete",
     "open_pr_limit",
     "open_prs",
+    "base_ref",
+    "base_sha",
     "remote_branches",
     "retained_branch_dispositions"
   ],
@@ -54,6 +56,14 @@
       "type": "integer",
       "minimum": 1
     },
+    "base_ref": {
+      "type": "string",
+      "const": "main"
+    },
+    "base_sha": {
+      "type": "string",
+      "minLength": 40
+    },
     "remote_branches": {
       "type": "array",
       "items": {
@@ -70,7 +80,7 @@
           },
           "head_sha": {
             "type": "string",
-            "minLength": 1
+            "minLength": 40
           }
         }
       }
@@ -93,7 +103,7 @@
           },
           "head_sha": {
             "type": "string",
-            "minLength": 1
+            "minLength": 40
           },
           "disposition": {
             "type": "string",
