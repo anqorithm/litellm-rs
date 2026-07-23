@@ -8,28 +8,11 @@ fn codex_request(value: Value) -> ResponsesApiRequest {
     serde_json::from_value(value).unwrap()
 }
 fn tier_two_items() -> [Value; 10] {
-    [
-        json!({"type":"additional_tools","role":"developer","tools":[]}),
-        json!({"type":"local_shell_call","call_id":"c1","status":"completed","action":{}}),
-        json!({"type":"mcp_tool_call_output","call_id":"c1","output":{"content":[]}}),
-        json!({"type":"tool_search_call","call_id":"c1","status":"completed","execution":"client","arguments":{}}),
-        json!({"type":"tool_search_output","call_id":"c1","status":"completed","execution":"client","tools":[]}),
-        json!({"type":"web_search_call","id":"i1","status":"completed"}),
-        json!({"type":"image_generation_call","id":"i1","status":"completed","result":"data"}),
-        json!({"type":"compaction","id":"i1","encrypted_content":"opaque"}),
-        json!({"type":"compaction_trigger"}),
-        json!({"type":"context_compaction","id":"i1","encrypted_content":"opaque"}),
-    ]
+    serde_json::from_str(r#"[{"type":"additional_tools","role":"developer","tools":[]},{"type":"local_shell_call","call_id":"c1","status":"completed","action":{}},{"type":"mcp_tool_call_output","call_id":"c1","output":{"content":[]}},{"type":"tool_search_call","call_id":"c1","status":"completed","execution":"client","arguments":{}},{"type":"tool_search_output","call_id":"c1","status":"completed","execution":"client","tools":[]},{"type":"web_search_call","id":"i1","status":"completed"},{"type":"image_generation_call","id":"i1","status":"completed","result":"data"},{"type":"compaction","id":"i1","encrypted_content":"opaque"},{"type":"compaction_trigger"},{"type":"context_compaction","id":"i1","encrypted_content":"opaque"}]"#).unwrap()
 }
 #[test]
 fn codex_wire_round_trips_every_tier_one_field() {
-    let input: Value = serde_json::from_str(r#"[
-      {"type":"message","id":"msg_1","phase":"commentary","role":"user","content":[{"type":"input_text","text":"run"},{"type":"input_audio","audio_url":"audio"}],"internal_chat_message_metadata_passthrough":{"turn_id":"turn_1"}},
-      {"type":"function_call","id":"fc_1","call_id":"c1","name":"lookup","namespace":"demo","arguments":"{}","status":"completed","internal_chat_message_metadata_passthrough":{"turn_id":"turn_1"}},
-      {"type":"function_call_output","id":"out_1","call_id":"c1","output":"ok","internal_chat_message_metadata_passthrough":{"turn_id":"turn_1"}},
-      {"type":"custom_tool_call","id":"ct_1","call_id":"c2","name":"shell","namespace":"tools","input":"pwd","status":"completed","internal_chat_message_metadata_passthrough":{"turn_id":"turn_1"}},
-      {"type":"custom_tool_call_output","id":"out_2","call_id":"c2","name":"shell","output":[{"type":"input_text","text":"/tmp"},{"type":"input_image","image_url":"image","detail":"high"},{"type":"input_audio","audio_url":"audio"},{"type":"encrypted_content","encrypted_content":"opaque"}],"internal_chat_message_metadata_passthrough":{"turn_id":"turn_1"}}
-    ]"#).unwrap();
+    let input: Value = serde_json::from_str(r#"[{"type":"message","id":"msg_1","phase":"commentary","role":"user","content":[{"type":"input_text","text":"run"},{"type":"input_audio","audio_url":"audio"}],"internal_chat_message_metadata_passthrough":{"turn_id":"turn_1"}},{"type":"function_call","id":"fc_1","call_id":"c1","name":"lookup","namespace":"demo","arguments":"{}","status":"completed","internal_chat_message_metadata_passthrough":{"turn_id":"turn_1"}},{"type":"function_call_output","id":"out_1","call_id":"c1","output":"ok","internal_chat_message_metadata_passthrough":{"turn_id":"turn_1"}},{"type":"custom_tool_call","id":"ct_1","call_id":"c2","name":"shell","namespace":"tools","input":"pwd","status":"completed","internal_chat_message_metadata_passthrough":{"turn_id":"turn_1"}},{"type":"custom_tool_call_output","id":"out_2","call_id":"c2","name":"shell","output":[{"type":"input_text","text":"/tmp"},{"type":"input_image","image_url":"image","detail":"high"},{"type":"input_audio","audio_url":"audio"},{"type":"encrypted_content","encrypted_content":"opaque"}],"internal_chat_message_metadata_passthrough":{"turn_id":"turn_1"}}]"#).unwrap();
     assert_eq!(input.as_array().unwrap().len(), 5, "fixture count drifted");
     let encoded = serde_json::to_value(codex_request(json!({"model":"m","input":input}))).unwrap();
     assert_eq!(encoded["input"], input);
@@ -104,6 +87,7 @@ async fn codex_wire_http_rejects_before_provider_dispatch() {
     fixtures.extend(tier_two_items().map(|item| json!({"model":"m","input":[item]})));
     for tool in [
         json!({"type":"custom","name":"shell","description":"d","format":{}}),
+        json!({"type":"function","name":"f"}),
         json!({"type":"function","name":"f","defer_loading":true}),
         json!({"type":"function","name":"f","strict":true}),
         json!({"type":"namespace"}),

@@ -11,7 +11,7 @@ use dashmap::DashMap;
 use serde::ser::Error as SerializeError;
 use serde::{Deserialize, Serialize, Serializer};
 use serde_json::Value;
-use std::sync::LazyLock;
+use std::{collections::HashSet, sync::LazyLock};
 use tokio::task::JoinHandle;
 use tracing::error;
 
@@ -434,7 +434,10 @@ fn input_items_page(
     let mut items = input_items_from_response_input(input)
         .into_iter()
         .enumerate()
-        .map(|(index, item)| (stable_input_item_id(index, &item), item))
+        .map(|(index, item)| {
+            let id = stable_input_item_id(index, &item);
+            (id.clone(), id, item)
+        })
         .collect::<Vec<_>>();
     match query.order.as_deref().unwrap_or("desc") {
         "asc" => {}
@@ -445,12 +448,19 @@ fn input_items_page(
             )));
         }
     }
+    let ids: HashSet<_> = items.iter().map(|item| item.1.clone()).collect();
+    let mut cursors = HashSet::new();
+    for (index, (cursor, id, _)) in items.iter_mut().enumerate() {
+        while !cursors.insert(cursor.clone()) || (cursor != id && ids.contains(cursor.as_str())) {
+            *cursor = format!("{cursor}:{index}");
+        }
+    }
 
     let mut start = 0;
     if let Some(after) = &query.after {
         let index = items
             .iter()
-            .position(|(id, _)| id == after)
+            .position(|(cursor, _, _)| cursor == after)
             .ok_or_else(|| {
                 GatewayError::validation(format!("Unknown input_items cursor: {after}"))
             })?;
@@ -464,11 +474,11 @@ fn input_items_page(
         .skip(start)
         .take(limit)
         .collect::<Vec<_>>();
-    let first_id = data.first().map(|(id, _)| id.clone());
-    let last_id = data.last().map(|(id, _)| id.clone());
+    let first_id = data.first().map(|(cursor, _, _)| cursor.clone());
+    let last_id = data.last().map(|(cursor, _, _)| cursor.clone());
     let data = data
         .into_iter()
-        .map(|(id, item)| ResponseInputListItem { id, item })
+        .map(|(_, id, item)| ResponseInputListItem { id, item })
         .collect();
 
     Ok(ResponseInputItemsList {

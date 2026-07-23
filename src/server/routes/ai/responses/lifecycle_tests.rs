@@ -212,6 +212,13 @@ async fn lifecycle_handlers_enforce_owner_delete_and_input_items_shape() {
 fn input_items_page_defaults_desc_and_rejects_unsupported_include() {
     let input = ResponseInput::Items(vec![
         ResponseInputItem::Message(ResponseInputMessage {
+            id: Some("msg_1:1".to_string()),
+            phase: None,
+            internal_chat_message_metadata_passthrough: None,
+            role: "user".to_string(),
+            content: ResponseInputContent::Text("collision".to_string()),
+        }),
+        ResponseInputItem::Message(ResponseInputMessage {
             id: Some("msg_1".to_string()),
             phase: None,
             internal_chat_message_metadata_passthrough: None,
@@ -219,7 +226,7 @@ fn input_items_page_defaults_desc_and_rejects_unsupported_include() {
             content: ResponseInputContent::Text("first".to_string()),
         }),
         ResponseInputItem::Message(ResponseInputMessage {
-            id: Some("msg_2".to_string()),
+            id: Some("msg_1".to_string()),
             phase: None,
             internal_chat_message_metadata_passthrough: None,
             role: "user".to_string(),
@@ -238,8 +245,8 @@ fn input_items_page_defaults_desc_and_rejects_unsupported_include() {
     )
     .unwrap();
     assert_eq!(first_page.data.len(), 1);
-    assert_eq!(first_page.first_id.as_deref(), Some("msg_2"));
-    assert_eq!(first_page.last_id.as_deref(), Some("msg_2"));
+    assert_eq!(first_page.first_id.as_deref(), Some("msg_1"));
+    assert_eq!(first_page.last_id.as_deref(), Some("msg_1"));
     assert_eq!(
         serde_json::to_string(&first_page.data[0])
             .unwrap()
@@ -249,7 +256,7 @@ fn input_items_page_defaults_desc_and_rejects_unsupported_include() {
     );
     assert_eq!(
         serde_json::to_value(&first_page.data[0].item).unwrap(),
-        serde_json::to_value(&input_items_from_response_input(&input)[1]).unwrap()
+        serde_json::to_value(&input_items_from_response_input(&input)[2]).unwrap()
     );
     assert!(first_page.has_more);
 
@@ -258,15 +265,16 @@ fn input_items_page_defaults_desc_and_rejects_unsupported_include() {
         &InputItemsQuery {
             after: first_page.last_id,
             include: None,
-            limit: Some(1),
+            limit: Some(2),
             order: None,
         },
     )
     .unwrap();
-    assert_eq!(second_page.data.len(), 1);
+    assert_eq!(second_page.data.len(), 2);
+    assert_ne!(second_page.first_id, second_page.last_id);
     assert_eq!(
         serde_json::to_value(&second_page.data[0].item).unwrap(),
-        serde_json::to_value(&input_items_from_response_input(&input)[0]).unwrap()
+        serde_json::to_value(&input_items_from_response_input(&input)[1]).unwrap()
     );
     assert!(!second_page.has_more);
 
