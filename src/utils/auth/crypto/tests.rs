@@ -641,6 +641,17 @@ fn test_constant_time_eq_different_lengths() {
     assert!(!hmac::constant_time_eq("", "not_empty"));
 }
 
+#[test]
+fn test_credential_digest_comparison_is_redacted() {
+    let short = hmac::CredentialDigest::from_credential("x");
+    let same = hmac::CredentialDigest::from_credential("x");
+    let longer = hmac::CredentialDigest::from_credential("a much longer credential");
+
+    assert!(short.constant_time_matches(&same));
+    assert!(!short.constant_time_matches(&longer));
+    assert_eq!(format!("{short:?}"), "[REDACTED]");
+}
+
 // ==================== Password Hashing Additional Tests ====================
 
 #[test]
