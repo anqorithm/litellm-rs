@@ -28,18 +28,18 @@ Gateway operators cannot configure the runtime router's existing model-alias beh
 ## Behavior Invariants
 
 1. B-001 A non-empty configured model alias resolves to its configured target for normal and streaming routed requests.
-2. B-002 Configured aliases are included once in the OpenAI-compatible model inventory while canonical deployment models remain available.
+2. B-002 Configured aliases are included once in the OpenAI-compatible model inventory while canonical deployment models remain available; startup rejects an alias name that equals any enabled canonical deployment model instead of shadowing that model.
 3. B-003 Empty alias names, empty targets, self-aliases, and direct or transitive alias cycles fail configuration/startup explicitly without serving traffic.
-4. B-004 Alias declaration order does not affect resolution, including valid transitive alias chains.
+4. B-004 Alias declaration order does not affect resolution. Every valid transitive chain is flattened to its final enabled canonical model before publication, including chains longer than the runtime resolver's current 16-hop bound.
 5. B-005 A configured provider priority is copied to every deployment created for that provider, and lower numeric priority wins under `priority_based` routing.
-6. B-006 Omitted provider priority defaults to `0`; omitted or empty alias configuration installs no aliases, preserving existing configuration behavior.
-7. B-007 Disabled providers create no deployments, so their priority cannot affect routing; aliases whose final target has no enabled deployment are rejected before serving traffic.
+6. B-006 Omitted provider priority defaults to `0`. Layered alias maps merge key by key with the later overlay value winning for the same alias; an omitted or empty overlay contributes no keys and therefore preserves base aliases. A standalone omitted or empty map installs no aliases.
+7. B-007 Disabled providers create no deployments, so their priority cannot affect routing. Alias shape and graph errors are rejected during configuration validation; canonical-name collisions and final targets without an enabled deployment are rejected after enabled provider models are expanded but before health checks, router publication, or serving traffic.
 8. B-008 Unknown YAML fields remain rejected, and alias/priority values are configuration data only: they trigger no network calls, persistence, permissions, or background work.
 
 ## Acceptance Criteria
 
-- [ ] YAML parsing tests cover aliases, provider priority, defaults, and unknown fields.
-- [ ] Router construction tests cover direct/transitive aliases, cycles, missing targets, disabled providers, and priority propagation.
+- [ ] YAML parsing and layered-merge tests cover aliases, provider priority, defaults, overlay wins, empty-overlay preservation, and unknown fields.
+- [ ] Router construction tests cover direct/transitive aliases, chains longer than 16 hops, cycles, canonical-name collisions, dynamically expanded targets, missing targets, disabled providers, and priority propagation.
 - [ ] Route/model inventory tests prove aliases are routable and discoverable.
 - [ ] Existing example configuration remains valid without either new field.
 - [ ] Configuration documentation contains a working alias plus primary/fallback example.
@@ -48,7 +48,9 @@ Gateway operators cannot configure the runtime router's existing model-alias beh
 ## Edge Cases
 
 - Duplicate YAML mapping keys follow the parser's existing duplicate-key behavior; this feature does not add silent merge rules.
-- Alias chains may target another alias but must terminate at a model served by an enabled deployment.
+- Layered configuration does not define an alias-deletion sentinel: omitted or explicit `{}` overlays preserve base aliases, while a repeated alias key replaces only that key's target.
+- Alias chains may target another alias but must terminate at a model served by an enabled deployment. The installed runtime snapshot maps each alias directly to that final model.
+- An alias key may not equal an enabled canonical model name, even when the alias would point back to that same model through another alias.
 - Equal provider priorities continue to use the router's existing within-tier selection behavior.
 - Very large numeric priorities are valid `u32` values and remain ordered without arithmetic.
 
