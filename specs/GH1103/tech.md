@@ -22,9 +22,42 @@ Link to `product.md`.
 | Live authority fallback catalogs | `src/core/pricing_service/authority.rs::provider_catalog_model_info`, `src/core/cost/calculator/pricing.rs::get_azure_pricing`, `src/core/providers/bedrock/utils/cost.rs::{MODEL_PRICING,CostCalculator}`, `src/core/providers/registry/catalog.rs::amazon_nova_catalog_model_info`, `src/core/providers/openai_like/models.rs::{is_xai_priced_model,get_openai_like_registry}` | `PricingService` currently reads these Azure、Bedrock、Amazon Nova 与 xAI sources on loaded-data misses | Guard must trace every branch/source; provider-owned location does not exempt a live authority input |
 | Duplicate result shapes | `src/core/cost/types.rs:368`, `src/core/pricing_service/types.rs:55` | two `CostResult` types serve compatibility and authority layers | Same name does not prove safe deletion; conversion/consumer inventory is required |
 | Public exports | `src/core/mod.rs`, `src/core/cost/mod.rs`, `src/core/pricing.rs`, `src/core/pricing_service/mod.rs` | all three pricing/cost modules expose public symbols | Downstream library imports create semver risk even when gateway runtime is unchanged |
+| Direct provider cost API | `src/core/providers/mod.rs::Provider::calculate_cost`, `src/core/traits/provider/llm_provider/trait_definition.rs::LLMProvider::calculate_cost` | the public enum facade strips a provider prefix and dispatches directly to public trait implementations, whose hand-written and macro-generated bodies can retain provider-local pricing behavior | Direct SDK/library callers can bypass the inventoried route and compatibility facades unless the facade, trait, and every implementation receive an explicit authority/compatibility disposition |
 | Live consumers and unpriced policy | `src/server/routes/ai/spend.rs`, `src/server/routes/ai/spend/unpriced.rs`, `src/server/routes/ai/callbacks.rs`, `src/server/routes/ai/response_cache.rs`, chat/embedding routes, provider modules importing `core::cost`, pricing routes | GH726 routes priced calculation through authority-backed helpers; callback terminal events calculate cost through an `Arc<PricingService>`; chat/embedding cache admission checks query `state.budgeted.pricing()`; default `Reject` fails closed, while explicit `AllowUnpriced` reserves and settles configured fallback cost | Tests must distinguish authority calls, compatibility use, callback/cache consumers, and intentional policy fallback |
 | Pricing source boundary | `src/server/http.rs`, `src/core/pricing_service/authority.rs`, `src/core/cost/calculator.rs`, provider-base/utility adapters | live state constructs `PricingService` from configured `pricing.source`; v0.5-signature compatibility adapters have no service parameter and use embedded data | Parity must compare consumers using the same loaded source; cross-source numeric equality is not a valid invariant |
 | Predecessor packet | `specs/GH726/*` | deliberately retained legacy DTO/fallback compatibility after runtime convergence | This issue may narrow that deferral, not rewrite GH726 |
+
+## Planned Changes
+
+```specrail-planned-changes
+{
+  "issue": 1103,
+  "complete": true,
+  "paths": [
+    "src/core/cost/**",
+    "src/core/pricing.rs",
+    "src/core/pricing_service/**",
+    "src/core/providers/base/mod.rs",
+    "src/core/providers/base/pricing.rs",
+    "src/core/providers/mod.rs",
+    "src/core/traits/provider/llm_provider/trait_definition.rs",
+    "src/utils/mod.rs",
+    "src/utils/ai/**",
+    "src/server/routes/ai/spend.rs",
+    "src/server/routes/ai/spend/unpriced.rs",
+    "src/server/routes/ai/callbacks.rs",
+    "src/server/routes/ai/response_cache.rs",
+    "src/server/routes/pricing.rs",
+    "CHANGELOG.md"
+  ],
+  "spec_refs": ["P1", "P2", "P3", "P4", "P5", "P6", "P7"]
+}
+```
+
+Provider-specific hand-written and macro-generated `LLMProvider::calculate_cost` implementations are inventory
+targets reached from the two declared public owner paths, not blanket writable provider scope. T1 must enumerate
+their exact paths before T2; any implementation file needed by an approved T2 disposition must be added explicitly
+to this manifest and re-reviewed before T3 writes it.
 
 ## 设计方案
 
@@ -37,7 +70,8 @@ Link to `product.md`.
   `utils::ai`/deeper module re-export path，并遍历 default、no-default/lite、docs.rs feature matrix 下的 provider
   public pricing/cost API；
   (b) post-v0.5/current-head `core::pricing` public export、production consumer、test-only consumer、DTO conversion、
-  公开 lookup/calculation method 与 fallback owner。
+  公开 lookup/calculation method、`Provider::calculate_cost` enum dispatch、
+  `LLMProvider::calculate_cost` trait declaration及其全部手写/宏生成 implementation 与 fallback owner。
 - live fallback inventory 必须以 `pricing_service/authority.rs::resolve_model_info_for_provider` 调用图为根，至少锁定
   `provider_catalog_model_info` 的 Azure/Bedrock/xAI branches、`amazon_nova_pricing_model_info`、
   `xai_pricing_model_info`，并追踪到 `core::cost::calculator::pricing`、Bedrock `CostCalculator` catalog、
@@ -58,6 +92,7 @@ Link to `product.md`.
   `needs_decision`。任何独立 lookup/calculation authority 都不得仅以 `keep_adapter` 保留。
 - source guard 必须在新增未登记 public export、production consumer 或 fallback 时失败，并把
   `CallbackLifecycle` terminal-cost 与 chat/embedding response-cache pricing gate 固定为 live consumer roots；
+  `Provider::calculate_cost`、`LLMProvider::calculate_cost` 或任一 provider implementation 未登记也必须失败；
   不得依赖字符串命中自动判定某项可删除。
 
 ### Phase 2 — 0.6 compatibility/deprecation
@@ -108,7 +143,7 @@ Link to `product.md`.
 | Product invariant | Implementation area | Verification |
 | --- | --- | --- |
 | P1 | runtime configured `PricingService`, embedded compatibility adapters, `spend/unpriced.rs`, spend/pricing routes, callback lifecycle, chat/embedding response-cache pricing gates | custom-source route/reserve/settle/callback/cache parity and separate embedded facade parity; default `Reject` fail-closed; `AllowUnpriced` reserve/settle parity |
-| P2 | `v0.5.0@de594c81` API manifest for core/provider-base/utility/feature-gated pricing exports；separate current-head `core::pricing` authority inventory | default + no-default/lite + exact docs.rs feature downstream fixtures for the published cohort; current-head authority fixture for `core::pricing` |
+| P2 | `v0.5.0@de594c81` API manifest for core/provider-base/utility/feature-gated pricing exports；separate current-head `core::pricing`、`Provider::calculate_cost` 与 `LLMProvider::calculate_cost` authority inventory | default + no-default/lite + exact docs.rs feature downstream fixtures for the published cohort; current-head direct-call authority/error fixtures for `core::pricing`, Provider facade and LLMProvider implementations |
 | P3 | `provider_catalog_model_info`, Amazon Nova/xAI helpers, Azure/Bedrock/provider-owned catalogs and compatibility fallbacks | exhaustive call-graph/disposition guard plus provider alias/fallback tests |
 | P4 | release/version workflow and approved removal list | deterministic 0.6.x → 0.7.0 fixture and public removal compile fixture |
 | P5 | pricing usage/result conversion, callback lifecycle, cache admission and provider regressions | cached/reasoning/multimodal/time-based focused tests plus callback terminal-cost and chat/embedding cache hit/miss pricing-gate source sentinels |
@@ -154,6 +189,7 @@ settlement，不得把该 policy 泛化成隐式零成本成功。
 - [ ] Inventory guard: v0.5 `core::cost`/`core::providers::base::pricing`、utility pricing method、
   default/no-default-lite/docs.rs
   feature-gated published export，以及 post-v0.5 `core::pricing` current-head export/production consumer、
+  `Provider::calculate_cost`/`LLMProvider::calculate_cost` declaration、dispatch 与全部 implementation、
   `provider_catalog_model_info`/Amazon Nova/xAI helper、callback lifecycle、chat/embedding cache pricing gate 与
   全部 authority-reachable/legacy fallback 均有 disposition，
   新增 branch、decoy 与漏项负测试失败。
@@ -161,7 +197,8 @@ settlement，不得把该 policy 泛化成隐式零成本成功。
   `AllowUnpriced` configured fallback、provider alias/fallback（Azure、Bedrock、Amazon Nova、xAI）。
 - [ ] Integration tests: custom-source live pricing route/reservation/settlement/callback terminal cost/chat+embedding
   cache admission gate parity，且 cache hit/miss 均不绕过 pricing；embedded authority 与
-  v0.5-signature facade parity；`AllowUnpriced` 对同一未知 usage 的 reservation/settlement/usage-record cost parity；
+  v0.5-signature facade parity；Provider enum facade/LLMProvider direct-call fixtures 对每个批准 source/error
+  contract 有相同 disposition；`AllowUnpriced` 对同一未知 usage 的 reservation/settlement/usage-record cost parity；
   不含跨 source equality assertion。
 - [ ] Compatibility: `v0.5.0@de594c81` tag/package-derived core/provider-base/utility/feature-gated public API manifest；
   default、no-default/lite 与 exact docs.rs feature 0.6 downstream import/legacy behavior fixtures；单独的 post-v0.5/current-head

@@ -14,8 +14,9 @@ GH-1103 / #1103
 ## 目标
 
 - 为已发布 `core::cost`、`core::providers::base::pricing`、`utils::{ModelUtils, TokenUtils}` pricing method、
-  feature-gated provider pricing path/re-export，以及 post-v0.5 的当前公开 `core::pricing` facade 的 symbol、
-  production consumer、compatibility DTO、`PricingService` live provider fallback source 和 test-only consumer
+  feature-gated provider pricing path/re-export，以及 post-v0.5 的当前公开 `core::pricing` facade、
+  `Provider::calculate_cost`、`LLMProvider::calculate_cost`、production consumer、compatibility DTO、
+  `PricingService` live provider fallback source和 test-only consumer
   建立完整 inventory；public compatibility 基线只取 `v0.5.0` tag/package 在 default、no-default/lite 与
   docs.rs 对应 feature set 下实际发布的 surface。
 - 保持 `PricingService` 是唯一 user-visible pricing authority，不恢复第二套 live pricing source。
@@ -53,6 +54,9 @@ GH-1103 / #1103
 3. 所有 user-visible provider fallback 的 lookup/calculation 必须在 `PricingService` authority 内执行；
    `core::cost` adapter 只能转换 canonical DTO/error；公开 `core::pricing` 中可独立加载或计算价格的 facade
    必须同时获得 compatibility lifecycle 与 authority disposition，未完成决策不得视为 `keep_adapter`。
+   current-head `Provider::calculate_cost` 与 `LLMProvider::calculate_cost` 是可被下游直接调用的公开 cost
+   surface，必须逐完整 path 记录调用图、实现集合、source behavior 与 compatibility/authority disposition；
+   不能因 gateway route 未直接调用或由 enum dispatch/trait implementation 间接执行而遗漏。
    未归类 fallback 不得删除，也不得继续作为第二套 live pricing source；live gateway 在默认 `Reject` policy
    下不得把 unknown/incomplete pricing 静默变成 0 美元。
 4. 0.7.0 removal 只能删除已在 0.6.x 发布为 deprecated、已有迁移说明、并由 public compatibility fixture
@@ -70,7 +74,8 @@ GH-1103 / #1103
   与 pricing methods，以及 default、`--no-default-features --features lite`、docs.rs feature matrix 下的
   provider pricing/cost API；current-head cohort 另覆盖
   post-v0.5 `core::pricing` symbol/production import、legacy DTO、`pricing_service/authority.rs::provider_catalog_model_info`
-  及其 Azure、Bedrock、Amazon Nova、xAI authority source、legacy fallback、callback lifecycle、
+  及其 Azure、Bedrock、Amazon Nova、xAI authority source、`Provider::calculate_cost`、
+  `LLMProvider::calculate_cost` 的完整实现/dispatch 路径、legacy fallback、callback lifecycle、
   chat/embedding response-cache pricing gate 和 test-only consumer；source guard 防止遗漏或 cohort 混淆。
 - [ ] 兼容矩阵仅对 v0.5 published adapter 记录 `keep_adapter`、`deprecate_0_6_remove_0_7` 或
   `needs_decision`；post-v0.5 `core::pricing` 显式记录 `post_v0_5_unreleased` baseline status，任何
@@ -99,6 +104,9 @@ GH-1103 / #1103
 - `core::pricing::{PricingDatabase, GLOBAL_PRICING_DB, get_pricing_db, calculate_cost}` 及其公开方法即使只被下游
   library 使用，也必须按完整 path 进入 current-head authority disposition，不能因 gateway 未直接调用而遗漏；
   但该 module 由 `04c0774a` 在 `v0.5.0@de594c81` 之后新增，不能据此生成 v0.5 published import fixture。
+- `Provider::calculate_cost` 的 enum dispatch 与 `LLMProvider::calculate_cost` 的各 provider implementation
+  即使只被 SDK/library consumer 直接调用，也必须保持同一已批准 pricing source/error contract；inventory
+  必须区分 facade、trait declaration、macro-generated implementation 与手写 implementation，不得只搜索 route caller。
 - `utils::ModelUtils` 与 `utils::TokenUtils` 同时经 `utils`、`utils::ai` 与更深 module path 公开；inventory 必须按
   完整 import path 记录 `get_model_pricing`/`calculate_cost` 的独立 lookup/calculation authority disposition，不能
   只盘点 struct 的顶层 re-export。
