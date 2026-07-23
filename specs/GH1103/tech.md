@@ -40,6 +40,28 @@ Link to `product.md`.
     "src/core/providers/base/mod.rs",
     "src/core/providers/base/pricing.rs",
     "src/core/providers/mod.rs",
+    "src/core/providers/anthropic/provider.rs",
+    "src/core/providers/azure/mod.rs",
+    "src/core/providers/azure_ai/mod.rs",
+    "src/core/providers/bedrock/provider.rs",
+    "src/core/providers/cloudflare/provider.rs",
+    "src/core/providers/cohere/provider.rs",
+    "src/core/providers/fal_ai/provider.rs",
+    "src/core/providers/gemini/provider.rs",
+    "src/core/providers/github/provider.rs",
+    "src/core/providers/github_copilot/provider.rs",
+    "src/core/providers/meta_llama/mod.rs",
+    "src/core/providers/mistral/mod.rs",
+    "src/core/providers/ollama/provider.rs",
+    "src/core/providers/openai/client.rs",
+    "src/core/providers/openai_like/provider.rs",
+    "src/core/providers/replicate/provider.rs",
+    "src/core/providers/v0/mod.rs",
+    "src/core/providers/vertex_ai/client.rs",
+    "src/core/providers/macros/http_hooks.rs",
+    "src/core/providers/macros/openai_compatible.rs",
+    "src/core/providers/macros/pooled_hooks.rs",
+    "src/core/providers/macros/provider_definitions.rs",
     "src/core/traits/provider/llm_provider/trait_definition.rs",
     "src/utils/mod.rs",
     "src/utils/ai/**",
@@ -54,10 +76,10 @@ Link to `product.md`.
 }
 ```
 
-Provider-specific hand-written and macro-generated `LLMProvider::calculate_cost` implementations are inventory
-targets reached from the two declared public owner paths, not blanket writable provider scope. T1 must enumerate
-their exact paths before T2; any implementation file needed by an approved T2 disposition must be added explicitly
-to this manifest and re-reviewed before T3 writes it.
+The manifest explicitly enumerates every current production hand-written `LLMProvider::calculate_cost`
+implementation and each macro owner that generates one. These files are scoped only to the approved direct-cost
+disposition; unrelated provider behavior remains out of scope. A truly new implementation path discovered after
+this exact-head inventory must be added by reviewed amendment before T3 writes it.
 
 ## 设计方案
 
