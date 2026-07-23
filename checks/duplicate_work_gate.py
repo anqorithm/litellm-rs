@@ -137,11 +137,11 @@ def revalidate_remote_state(
                 return _blocked(f"matching branch commit object is missing locally: {label}")
             ancestor = _run_git(
                 repo,
-                ["merge-base", "--is-ancestor", base_sha, branch["head_sha"]],
+                ["merge-base", "--is-ancestor", branch["head_sha"], base_sha],
             )
             if ancestor.returncode != 0:
                 return _blocked(
-                    f"matching branch is not descended from evidence base: {label}"
+                    f"matching branch is not merged into evidence base: {label}"
                 )
     except (KeyError, SpecRailError) as exc:
         return _blocked(f"gate-time remote revalidation failed: {exc}")
@@ -283,15 +283,6 @@ def evaluate_retained_branch_dispositions(
                 "reasons": [f"retained branch disposition lacks maintainer source evidence: {label}"],
                 "missing": [f"maintainer_source:{label}"],
             }
-    if matching_branches:
-        return {
-            "decision": "needs_human",
-            "reasons": [
-                "maintainer_human retained-branch dispositions are audit evidence "
-                "and do not authorize implementation"
-            ],
-            "missing": ["independent_implementation_authorization"],
-        }
     return None
 
 
@@ -499,6 +490,9 @@ def evaluate_duplicate_work_gate_path(
             "blocked_actions": ["implement"],
             "verification_commands": ["python3 checks/duplicate_work_gate.py --repo . --issue <issue> --evidence <evidence.json>"],
         }
+    preliminary = evaluate_duplicate_work_gate(config, issue, evidence)
+    if preliminary["decision"] != "allowed":
+        return preliminary
     if evidence is not None and _positive_issue(issue):
         remote_result = revalidate_remote_state(repo, config, issue, evidence)
         if remote_result is not None:
@@ -511,7 +505,7 @@ def evaluate_duplicate_work_gate_path(
                 "blocked_actions": ["implement"],
                 "verification_commands": ["python3 checks/github_duplicate_evidence.py --github-repo OWNER/REPO --issue <issue> --json"],
             }
-    return evaluate_duplicate_work_gate(config, issue, evidence)
+    return preliminary
 
 
 def print_human(result: dict[str, Any]) -> None:

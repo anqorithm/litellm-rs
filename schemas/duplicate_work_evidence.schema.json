@@ -62,7 +62,9 @@
     },
     "base_sha": {
       "type": "string",
-      "minLength": 40
+      "minLength": 40,
+      "maxLength": 40,
+      "pattern": "^[0-9a-f]{40}$"
     },
     "remote_branches": {
       "type": "array",
@@ -80,7 +82,9 @@
           },
           "head_sha": {
             "type": "string",
-            "minLength": 40
+            "minLength": 40,
+            "maxLength": 40,
+            "pattern": "^[0-9a-f]{40}$"
           }
         }
       }
@@ -103,7 +107,9 @@
           },
           "head_sha": {
             "type": "string",
-            "minLength": 40
+            "minLength": 40,
+            "maxLength": 40,
+            "pattern": "^[0-9a-f]{40}$"
           },
           "disposition": {
             "type": "string",

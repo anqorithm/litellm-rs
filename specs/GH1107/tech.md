@@ -39,6 +39,8 @@ GH-1107 / #1107
     "checks/github_duplicate_evidence.py",
     "checks/duplicate_work_gate.py",
     "checks/route_gate.py",
+    "checks/schema_contract.py",
+    "checks/specrail_lib.py",
     "checks/test_duplicate_work_gate.py",
     "schemas/duplicate_work_evidence.schema.json",
     "specs/GH1107/tasks.md",
@@ -93,10 +95,12 @@ Duplicate-work evidence records `main` as an exact lowercase 40-character `base_
 remote branch as exact `{name, head_sha}`. At gate time the required implement route reruns
 `git ls-remote --heads origin`, requires remote `main`、local `origin/main` 与 evidence base 完全一致，
 requires the complete matching-branch set and SHAs to remain identical, verifies each matching
-commit object exists locally, and proves `git merge-base --is-ancestor <base> <head>`.
-`maintainer_human` disposition is audit evidence bound to an exact branch SHA, not implementation
-authorization; a retained branch therefore still requires an independent implementation
-authorization. Missing, duplicate, orphan, malformed, stale/future-dated, base/branch drift,
+commit object exists locally, and proves
+`git merge-base --is-ancestor <branch_head> <base_sha>`，即 retained branch 已 merge into 当前
+exact base。`maintainer_human` disposition 仅是绑定 exact branch SHA 的 audit provenance，
+单独不能放行未合并分支；只有 exact `retained_non_conflicting` disposition、合法 audit provenance
+与上述 live merged-branch proof 同时成立时 gate 才可 `allowed`。Missing, duplicate, orphan,
+malformed, stale/future-dated, base/branch drift,
 missing object, non-ancestor or mismatch evidence is fail-closed; an `active_duplicate`
 disposition and an open issue-referencing PR remain blocked.
 This prerequisite never deletes, renames, or otherwise mutates historical branches. After it

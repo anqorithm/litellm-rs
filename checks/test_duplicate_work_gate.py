@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import unittest
+import json
+import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -12,7 +14,9 @@ import subprocess
 from duplicate_work_gate import (
     _legacy_validator_schema,
     _load_schema,
+    SHA_RE,
     evaluate_duplicate_work_gate,
+    evaluate_duplicate_work_gate_path,
     revalidate_remote_state,
 )
 from github_duplicate_evidence import (
@@ -22,6 +26,7 @@ from github_duplicate_evidence import (
     collect_open_prs,
 )
 from route_gate import evaluate_route
+from schema_contract import validate_schema_node
 from specrail_lib import SpecRailError, load_pack, validate_instance
 
 
@@ -69,10 +74,9 @@ class DuplicateWorkGateTest(unittest.TestCase):
     def result(self, payload: dict[str, object]) -> dict[str, object]:
         return evaluate_duplicate_work_gate(self.config, ISSUE, payload)
 
-    def test_exact_human_disposition_is_audit_only(self) -> None:
+    def test_exact_human_disposition_is_eligible_for_live_merged_check(self) -> None:
         result = self.result(evidence([disposition()]))
-        self.assertEqual(result["decision"], "needs_human")
-        self.assertIn("audit evidence", result["reasons"][0])
+        self.assertEqual(result["decision"], "allowed")
         self.assertNotIn(
             "no remote branch matches implementation token gh1107",
             result["satisfied"],
@@ -146,12 +150,36 @@ class DuplicateWorkGateTest(unittest.TestCase):
     def test_schema_fallback_and_gate_declare_sha_contract(self) -> None:
         schema = _load_schema(self.repo)
         self.assertEqual(schema["properties"]["base_sha"]["minLength"], 40)
+        self.assertEqual(schema["properties"]["base_sha"]["maxLength"], 40)
+        self.assertEqual(
+            schema["properties"]["base_sha"]["pattern"], "^[0-9a-f]{40}$"
+        )
         branch_sha = schema["properties"]["remote_branches"]["items"]["properties"]["head_sha"]
         disposition_sha = schema["properties"]["retained_branch_dispositions"]["items"]["properties"]["head_sha"]
         self.assertEqual(branch_sha["minLength"], 40)
+        self.assertEqual(branch_sha["maxLength"], 40)
+        self.assertEqual(branch_sha["pattern"], "^[0-9a-f]{40}$")
         self.assertEqual(disposition_sha["minLength"], 40)
-        self.assertIsNotNone(__import__("duplicate_work_gate").SHA_RE.fullmatch("a" * 40))
-        self.assertIsNone(__import__("duplicate_work_gate").SHA_RE.fullmatch("A" * 40))
+        self.assertEqual(disposition_sha["maxLength"], 40)
+        self.assertEqual(disposition_sha["pattern"], "^[0-9a-f]{40}$")
+        self.assertIsNotNone(SHA_RE.fullmatch("a" * 40))
+        self.assertIsNone(SHA_RE.fullmatch("A" * 40))
+        self.assertEqual(
+            validate_schema_node(
+                schema,
+                Path("schemas/duplicate_work_evidence.schema.json"),
+                runtime_profile=True,
+            ),
+            [],
+        )
+
+    def test_runtime_profile_still_rejects_unknown_schema_keywords(self) -> None:
+        errors = validate_schema_node(
+            {"type": "string", "unknownKeyword": True},
+            Path("schemas/duplicate_work_evidence.schema.json"),
+            runtime_profile=True,
+        )
+        self.assertTrue(any("unsupported JSON Schema keyword" in error for error in errors))
 
     def test_uppercase_sha_blocks_with_legacy_validator(self) -> None:
         payload = evidence([disposition()])
@@ -188,7 +216,10 @@ class DuplicateWorkGateTest(unittest.TestCase):
         if extra_branch:
             lines.append(f"{extra_branch[1]}\trefs/heads/{extra_branch[0]}")
 
+        calls: list[list[str]] = []
+
         def fake_run(_repo: Path, args: list[str]) -> subprocess.CompletedProcess[str]:
+            calls.append(args)
             if args[:2] == ["ls-remote", "--heads"]:
                 return subprocess.CompletedProcess(args, 0, "\n".join(lines) + "\n", "")
             if args[0] == "rev-parse":
@@ -200,9 +231,15 @@ class DuplicateWorkGateTest(unittest.TestCase):
             raise AssertionError(args)
 
         with patch("duplicate_work_gate._run_git", side_effect=fake_run):
-            return revalidate_remote_state(
+            result = revalidate_remote_state(
                 self.repo, self.config, ISSUE, evidence([disposition()])
             )
+        if object_exists and ancestor and remote_base == BASE and remote_head == HEAD and not extra_branch:
+            self.assertIn(
+                ["merge-base", "--is-ancestor", HEAD, BASE],
+                calls,
+            )
+        return result
 
     def test_gate_time_remote_revalidation_accepts_consistent_objects(self) -> None:
         self.assertIsNone(self.remote_result())
@@ -224,6 +261,47 @@ class DuplicateWorkGateTest(unittest.TestCase):
 
     def test_gate_time_non_ancestor_blocks(self) -> None:
         self.assertEqual(self.remote_result(ancestor=False)["decision"], "blocked")
+
+    def test_name_only_evidence_path_blocks_before_live_git(self) -> None:
+        payload = evidence([disposition()])
+        payload["remote_branches"] = [BRANCH]
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json") as handle:
+            json.dump(payload, handle)
+            handle.flush()
+            with patch("duplicate_work_gate._run_git") as run_git:
+                result = evaluate_duplicate_work_gate_path(
+                    self.repo, ISSUE, Path(handle.name)
+                )
+        self.assertEqual(result["decision"], "blocked")
+        self.assertIn("schema validation failed", result["reasons"][0])
+        run_git.assert_not_called()
+
+    def test_exact_disposition_and_live_merged_branch_allow_path(self) -> None:
+        payload = evidence([disposition()])
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json") as handle:
+            json.dump(payload, handle)
+            handle.flush()
+
+            def fake_run(_repo: Path, args: list[str]) -> subprocess.CompletedProcess[str]:
+                if args[:2] == ["ls-remote", "--heads"]:
+                    output = (
+                        f"{BASE}\trefs/heads/main\n"
+                        f"{HEAD}\trefs/heads/{BRANCH}\n"
+                    )
+                    return subprocess.CompletedProcess(args, 0, output, "")
+                if args[0] == "rev-parse":
+                    return subprocess.CompletedProcess(args, 0, BASE + "\n", "")
+                if args[0] == "cat-file":
+                    return subprocess.CompletedProcess(args, 0, "", "")
+                if args == ["merge-base", "--is-ancestor", HEAD, BASE]:
+                    return subprocess.CompletedProcess(args, 0, "", "")
+                raise AssertionError(args)
+
+            with patch("duplicate_work_gate._run_git", side_effect=fake_run):
+                result = evaluate_duplicate_work_gate_path(
+                    self.repo, ISSUE, Path(handle.name)
+                )
+        self.assertEqual(result["decision"], "allowed")
 
     def test_required_route_preserves_duplicate_gate_block(self) -> None:
         args = SimpleNamespace(
@@ -248,6 +326,29 @@ class DuplicateWorkGateTest(unittest.TestCase):
             result = evaluate_route(args)
         self.assertEqual(result["decision"], "blocked")
         self.assertIn("duplicate_work: base drift", result["reasons"])
+
+    def test_required_route_allows_live_merged_branch(self) -> None:
+        args = SimpleNamespace(
+            repo=str(self.repo),
+            route="implement",
+            issue=ISSUE,
+            pr=None,
+            state="ready_to_implement",
+            label=[],
+            artifact=[],
+            evidence=None,
+            duplicate_evidence="unused.json",
+            mode="required",
+        )
+        allowed = {
+            "decision": "allowed",
+            "reasons": ["duplicate work gate passed"],
+            "satisfied": ["live merged branch verified"],
+            "missing": [],
+        }
+        with patch("route_gate.evaluate_duplicate_work_gate_path", return_value=allowed):
+            result = evaluate_route(args)
+        self.assertEqual(result["decision"], "allowed")
 
 
 if __name__ == "__main__":
