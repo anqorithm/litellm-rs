@@ -20,8 +20,11 @@ Link to `product.md`.
 | Core cost compatibility facade | `src/core/cost/calculator.rs:52-125`, `src/core/cost/calculator/pricing.rs:484-510` | The embedded `PricingService` falls back to an empty service on initialization failure, then Gemini/Vertex can fall through to a hard-coded family table. | Compatibility callers can bypass the canonical authority unless initialization and Google fallback both fail closed. |
 | Shared pricing database and HTTP API | `src/core/pricing.rs:192-249,678-682`, `src/server/routes/pricing.rs:121-200` | Public database methods use normalized/fuzzy lookup and return `0.0` on miss; `/v1/pricing` exposes model lookup and calculation without a Google surface contract. | User-facing Google pricing must not retain fuzzy/zero/ambiguous-surface behavior. |
 | Canonical pricing authority | `src/core/pricing_service/authority.rs:24-190,193-247,303-399,421-490`, `src/core/pricing_service/service.rs:108-183` | Loaded provider-aware APIs return `Result`, but shared resolver still permits alias/fuzzy matching and converts provider-local per-1k values. | GH1113 must add an exact Google path without changing unrelated provider compatibility. |
+| Providerless service and usage carrier | `src/core/pricing_service/service.rs:101-155`, `src/core/pricing_service/types.rs:74-89` | Public providerless Google APIs lack surface input; `PricingUsage` lacks video seconds. | These owners need typed surface disposition and lossless video transport. |
 | Runtime reservation/settlement | `src/server/routes/ai/spend/pricing.rs`, `src/server/routes/ai/spend/completion.rs`, `src/server/routes/ai/chat_streaming.rs`, `src/server/routes/ai/spend.rs` | Live paths use runtime `PricingService`, convert misses to model-not-priced errors, and share budget/spend identities. | Required parity and pre-upstream fail-closed evidence. |
 | Image generation and terminal callbacks | `src/server/routes/ai/images/generation.rs:100-149`, `src/server/routes/ai/callbacks.rs:222-275` | Image generation reserves/settles through policy helpers; callbacks independently recalculate terminal cost and drop it on pricing error. | Typed policy changes must cover the normal image route, and callback cost must match priced or explicit-unpriced settlement. |
+| Terminal identity callsites | `src/server/routes/ai/chat.rs:267`, `src/server/routes/ai/completions_streaming.rs:315`, `src/server/routes/ai/gemini/provider.rs:19-24`, `src/server/routes/ai/gemini.rs:163-178,243-255` | Callback callsites do not receive settled cost; Gemini hard-codes requested identity. | B-005 requires callsite ownership to thread terminal cost and selected pricing identity. |
+| Facade/error transport | `src/core/providers/mod.rs:562-586`, `src/core/providers/unified_provider_http_mapping.rs:84-89,308-309` | Facade strips prefix before Google validation; HTTP mapping parses message prefix. | Actual owners are required for Google-only prefix validation and structured Reject mapping. |
 | Explicit unpriced policy | `src/config/models/gateway.rs:242-288`, `src/server/routes/ai/spend/unpriced.rs:9-211`, `src/server/middleware/metrics.rs` | Default is `Reject`; `AllowUnpriced` computes fallback cost, records metrics/logs, and writes `UsageRecord::unpriced` when a key exists. | Preserve as explicit audited policy only; never move it into provider helpers. |
 | GH1112 dependency | `specs/GH1112/product.md`, `specs/GH1112/tech.md`, `specs/GH1112/tasks.md` and its eventual merged `src/core/providers/google/models/**` | Defines exact canonical ID, per-surface availability, and a crate-private neutral catalog; deliberately leaves pricing behavior to GH1113. | Implementation must re-anchor to the merged API rather than guess or recreate a registry. |
 
@@ -36,6 +39,9 @@ Link to `product.md`.
     "src/core/pricing_service/authority.rs",
     "src/core/pricing_service/authority_tests.rs",
     "src/core/pricing_service/mod.rs",
+    "src/core/pricing_service/service.rs",
+    "src/core/pricing_service/service_tests.rs",
+    "src/core/pricing_service/types.rs",
     "src/core/pricing.rs",
     "src/core/pricing/tests.rs",
     "src/core/cost/calculator.rs",
@@ -46,6 +52,8 @@ Link to `product.md`.
     "src/core/providers/gemini/models/mod.rs",
     "src/core/providers/gemini/provider.rs",
     "src/core/providers/gemini/provider_tests.rs",
+    "src/core/providers/mod.rs",
+    "src/core/providers/unified_provider_http_mapping.rs",
     "src/core/providers/vertex_ai/client.rs",
     "src/core/providers/vertex_ai/client_tests.rs",
     "src/core/providers/vertex_ai/gemini/mod.rs",
@@ -53,11 +61,15 @@ Link to `product.md`.
     "src/utils/ai/models/pricing.rs",
     "src/server/routes/pricing.rs",
     "src/server/routes/ai/callbacks.rs",
+    "src/server/routes/ai/chat.rs",
+    "src/server/routes/ai/completions_streaming.rs",
     "src/server/routes/ai/spend.rs",
     "src/server/routes/ai/spend/pricing.rs",
     "src/server/routes/ai/spend/completion.rs",
     "src/server/routes/ai/spend/unpriced.rs",
     "src/server/routes/ai/gemini/spend.rs",
+    "src/server/routes/ai/gemini/provider.rs",
+    "src/server/routes/ai/gemini.rs",
     "src/server/routes/ai/audio/budgeting.rs",
     "src/server/routes/ai/images/generation.rs",
     "src/server/routes/ai/images/proxy_spend.rs",
@@ -74,8 +86,10 @@ Link to `product.md`.
 }
 ```
 
-`src/core/providers/google/models/registry.rs` 仅列作 dependency anchor，不是 writable manifest
-path；本 issue 对 merged GH1112 catalog 只读。若 #1117 合并结果改名、拆分或缺少本 spec
+`src/core/providers/google/models/**` 仅列作 dependency anchor，不是 writable manifest path；
+本 issue 对 merged GH1112/GH1108 catalog 及 price metadata 只读。duplicate-calculator guard
+仅豁免这些 metadata 定义，并须证明其对 live miss fallback/user-visible authority 不可达；
+不得编辑、删除或刷新。若 #1117 合并结果改名、拆分或缺少本 spec
 要求的 exact read API，先更新 manifest、明确所需 catalog API change 并重跑 spec review，
 不得由 pricing task 静默修改 canonical ID/availability owner。`spend/unpriced.rs` 的
 message-prefix classifier 已被 fresh review 证明不满足 B-007，因此本 issue 必须修改它；
@@ -129,6 +143,10 @@ Google catalog 中为兼容迁移而保留的 price metadata 不能在 live miss
 embedded `PricingService` adapter；初始化失败直接 typed error，不能构造空 service。live
 gateway 不得调用该 embedded adapter。
 
+public providerless `PricingService::{get_model_info, calculate_completion_cost}` 的 Google 输入
+必须接收/推导明确 Developer/Vertex surface，否则 typed fail；不得从 record provider 猜测。
+`PricingUsage` 增加 video usage carrier，authority 统一验证与计价，禁止 helper-local fallback。
+
 错误边界使用一个 crate-private closed `PricingFailureKind`，由 `pricing_service::mod` 仅在
 crate 内提供给 request-time policy；public error mapping 发生在 policy eligibility 决策之后，
 不再依赖自由文本：
@@ -175,6 +193,9 @@ Developer 与 Vertex surface 的 Google 请求显式失败，不得猜测 Vertex
 到无 provider fuzzy lookup。`/v1/pricing` 对这些 typed failures 返回稳定的非 2xx error
 envelope；不得以 miss=`0.0` 或 model lookup success 替代错误。
 
+`Provider::calculate_cost` 只在 Google 分支保留 requested prefix 交给 GH1112 exact validation；
+所有非 Google provider 继续使用现有 prefix stripping 语义。
+
 multimodal helper 以 `PricingUsage` 传递 cache/image/audio/video usage；缺对应 price field
 typed fail，不得忽略 modality 或退回 basic token price。
 
@@ -187,6 +208,9 @@ reservation、settlement、spend、normal image generation 与 callback 继续�
 callback 不再独立重新计算并在失败时丢弃 cost；它消费与 terminal settlement 相同的
 priced breakdown，或显式 `AllowUnpriced` 已决定并审计的 fallback cost。normal image
 generation 与 proxy image route 均适配同一个 typed policy input，正负矩阵覆盖二者。
+chat unary/streaming 从 settlement result 向 callback 传递同一 cost；Gemini unary/streaming
+使用 router 实际 selected provider/model/deployment 构造 pricing identity，不改变 selection、
+fallback order 或 endpoint shape。
 
 crate-private `PricingFailureKind` 只在现有 gateway request-time policy boundary 被分类：
 
@@ -198,6 +222,10 @@ crate-private `PricingFailureKind` 只在现有 gateway request-time policy boun
   `InvalidRequest`/`ModelNotFound` 或其他 error 不进入该 branch。为保持全局
   `AllowUnpriced` 行为，现有 completion/usage/Gemini/audio/image pricing callsites 机械适配
   该 typed input；不得改变其价格或 policy 结果。
+
+`unified_provider_http_mapping` 仅按 `InvalidRequest` variant + reserved `"pricing"` provider
+field 产生 model-not-priced HTTP code；删除 message-prefix classifier，普通 InvalidRequest
+仍映射为普通 invalid request。
 
 每次 bypass 继续调用 `record_unpriced_event`/`record_unpriced_spend`，输出结构化 `error`
 log；有 API key 时写 `UsageRecord::unpriced`。provider、model、policy、outcome、usage units
@@ -272,20 +300,24 @@ crate-private PricingFailureKind
   unknown/fuzzy/retired/wrong-surface negatives；missing/one-sided/NaN/negative pricing；
   input-only/output-only/zero usage all reject one-sided token records.
 - [ ] Units: 1、1_000、1_000_000 input/output；mixed、zero、large；cache/image/audio/video
-  fields for multimodal helper；single conversion owner guard.
+  fields 经 `PricingUsage` video carrier；single conversion owner guard.
 - [ ] Public API: compile fixtures for `LLMProvider`、`Provider` facade、Gemini inherent/basic/
   multimodal/module/ModelUtils、Vertex Gemini/Vertex provider、`core::cost`、shared
   `PricingDatabase` Google branches returning typed `Result`; `/v1/pricing` exact-surface
-  route fixtures；unknown never `Ok(0.0)`、HTTP success-zero or Flash-priced.
+  route fixtures；providerless surface matrix；Google prefix validation 与 non-Google prefix
+  compatibility；unknown never `Ok(0.0)`、HTTP success-zero or Flash-priced.
 - [ ] Runtime parity: custom-source sentinel across helper/runtime adapter、reservation、settlement、
   normal/proxy image generation、spend and callback；explicit-unpriced callback preserves fallback
-  cost；retry/fallback uses selected deployment identity.
+  cost；chat unary/streaming threads settled cost；Gemini unary/streaming 与 retry/fallback uses
+  selected deployment identity.
 - [ ] Policy/audit: default Reject and explicit AllowUnpriced positive/zero-fallback matrices；
   internal typed-fact classifier before public-error mapping；ordinary `InvalidRequest` with the old
   `model_not_priced:` prefix and every non-pricing error remain ineligible；Reject retry recognition
   matches only existing variant + reserved provider field；source guard proves no Display/message
   parsing or new public enum variant；metrics/log/`UsageRecord::unpriced` fields and record-failure
-  error capture.
+  error capture；HTTP mapping reserved-provider positive 与 ordinary-prefix negative。
+- [ ] Catalog boundary: GH1112/GH1108 price metadata byte-for-byte unchanged；guard 只豁免定义且
+  call graph 证明其不能作为 live miss fallback 或 user-visible cost。
 - [ ] Security: Gemini key/Vertex Bearer loopback isolation and adversarial error/log/audit redaction.
 - [ ] Regression: partner models、Vertex image generation/TTS、non-Google pricing resolvers.
 - [ ] Coverage: new executable lines ≥80%；exact rejection、unit conversion、error mapping、
@@ -302,3 +334,6 @@ Implementation PR 可整体 revert 回到旧 helper，但旧 unknown-zero/defaul
 紧急回滚状态，不能被标记正确或 `AllowUnpriced`。本改动无 schema migration。若 public
 signature rollout 需要分批，先保留同名 typed adapter 并在一个 release note 中迁移 callers；
 不得用旧 `Option`/裸 `f64` wrapper 恢复第二 authority。
+分项回滚必须成组回滚 authority 与 service/video carrier、Google facade prefix branch、
+HTTP structured mapping、chat/Gemini identity threading及 callers；不得留下混合状态。
+catalog metadata 始终只读且不属于回滚 diff；非 Google prefix 语义不得改变。

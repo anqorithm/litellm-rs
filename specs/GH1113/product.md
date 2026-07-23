@@ -44,6 +44,8 @@ unknown model 默认套用 Flash 价格；Gemini helper 还以 `Option<f64>` 表
    surface 通过 GH1112 catalog 做 exact canonical-ID 与 availability 校验，再以
    `(pricing_provider, canonical_model_id)` 查询同一个 runtime `PricingService`；不得使用
    lowercase/substring/family 猜测、默认 model 或跨 surface availability 代替 exact lookup。
+   Provider facade 只对 Google 分支把显式 prefix 交给 exact validation，非 Google prefix
+   stripping 保持不变；providerless `PricingService` API 不得绕过 surface 判定。
 2. **B-002** unknown、retired、surface-unavailable、missing-price、只有单边 token price、
    negative、NaN 或其他 incomplete pricing 必须返回 typed error。Gemini/Vertex token-priced
    record 无论当前 input/output usage 是否为零，都必须同时具有合法 input 与 output token
@@ -59,13 +61,14 @@ unknown model 默认套用 Flash 价格；Gemini helper 还以 `Option<f64>` 表
 4. **B-004** authority 的内部价格单位固定为 USD/token。来源为 per-1k 时只转换一次
    `per_token = per_1k / 1_000`；来源为 per-million 时只转换一次
    `per_token = per_million / 1_000_000`；总价仅为各 usage unit 与对应 per-token rate 的
-   乘积之和。任何 adapter 不得再次缩放。
+   乘积之和。任何 adapter 不得再次缩放；`PricingUsage` 必须无损携带 video usage。
 5. **B-005** 同一 provider、canonical model、usage 和 pricing source 经 public helper、
    `/v1/pricing`、image-generation reservation/settlement、budget reservation、settlement、
    spend record 与 callback terminal cost 必须使用同一 resolved identity 和 canonical cost；
    显式 `AllowUnpriced` 时 callback 也必须报告同一个 fallback cost，而不能因重新计算失败而
    省略 cost。zero-token usage 可成功为 `0.0`，但只有在 model 和必需 price fields 均合法时，
-   不能把 zero usage 当作跳过 pricing validation。
+   不能把 zero usage 当作跳过 pricing validation。chat unary/streaming 与 Gemini route 必须把
+   settlement cost 和实际 selected pricing identity 传到 callback。
 6. **B-006** pricing preflight failure 在默认 `Reject` policy 下必须在 upstream、reservation、
    successful callback/cache outcome 和 spend write 前失败。retry/fallback 只能对实际选择的
    新 deployment 重新执行 exact lookup，不能借用前一个或相似 model 的价格。
@@ -74,8 +77,8 @@ unknown model 默认套用 Flash 价格；Gemini helper 还以 `Option<f64>` 表
    policy boundary；只有该 typed fact 且最终合并配置明确选择 `AllowUnpriced` 时，才可按
    配置的 fallback cost 继续。policy 决策后 public helper/Reject path 才映射到现有
    `ProviderError` variants；不得新增 public enum variant，也禁止解析 Display/message
-   prefix。其他 `InvalidRequest`、`ModelNotFound`、auth/network/budget 等普通错误不得被该
-   policy 吞掉。
+   prefix。HTTP mapping 也只能按 reserved `"pricing"` provider field 识别 Reject，不得解析
+   message。其他 `InvalidRequest`、`ModelNotFound`、auth/network/budget 错误不得被吞掉。
 8. **B-008** 每次 `AllowUnpriced` 绕过必须携带原始 provider、model、policy、outcome 与
    fallback cost，记录现有 unpriced event/spend metric 和结构化 error log；存在 API-key
    context 时还必须写入 `UsageRecord::unpriced`。reservation、settlement、usage record
@@ -89,7 +92,8 @@ unknown model 默认套用 Flash 价格；Gemini helper 还以 `Option<f64>` 表
    project、location、prompt 或 response 内容。
 10. **B-010** GH1112 的 catalog/availability/auth/request-contract 行为保持不变；本 issue
     只能读取其 crate-private exact-ID API。partner models 继续走现有独立 pricing owner，
-    不得因 Gemini 收敛被错误路由到 Google pricing。
+    不得因 Gemini 收敛被错误路由到 Google pricing。GH1112/GH1108 catalog price metadata
+    保持只读；guard 可明确豁免定义，但须证明它们不能成为 live fallback/user-visible authority。
 
 ## 验收标准
 
@@ -104,7 +108,8 @@ unknown model 默认套用 Flash 价格；Gemini helper 还以 `Option<f64>` 表
   公开失败不再使用 `Option`/裸 `f64`/HTTP success-zero，迁移说明列出旧/新签名及 error mapping。
 - [ ] 1 token、1k tokens、1M tokens、mixed input/output、zero usage 与大数边界 fixture
   证明单位只转换一次，结果在 helper/`/v1/pricing`/image generation/reservation/
-  settlement/spend/callback 间一致；AllowUnpriced callback 不丢失 fallback cost。
+  settlement/spend/callback 间一致；video 经 `PricingUsage` 传递；AllowUnpriced callback
+  不丢失 fallback cost，unary/streaming/Gemini route 使用 settlement identity。
 - [ ] unknown、retired、wrong-surface、missing/incomplete/invalid price 对 public helper 与默认
   gateway path 都 typed fail closed，且 upstream/network、budget reservation、priced spend、
   successful callback/cache side-effect counters 为零。
@@ -120,7 +125,8 @@ unknown model 默认套用 Flash 价格；Gemini helper 还以 `Option<f64>` 表
 ## 边界情况
 
 - requested model 带显式 provider prefix 时，只能由 GH1112 批准的 exact canonicalization
-  去除/验证 prefix；未知 prefix、空 ID 或额外 suffix 不得模糊命中。
+  去除/验证 prefix；未知 prefix、空 ID 或额外 suffix 不得模糊命中；非 Google provider
+  保持当前 facade prefix compatibility。
 - 同一 canonical ID 在 Developer 与 Vertex availability 不同时，pricing lookup 必须先按
   surface 拒绝 unavailable 入口，即使 pricing source 中存在同名记录。
 - zero input + zero output 仍先验证 provider/model/price completeness，再返回合法 `0.0`。
