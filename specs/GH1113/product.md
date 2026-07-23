@@ -62,18 +62,21 @@ unknown model 默认套用 Flash 价格；Gemini helper 还以 `Option<f64>` 表
    successful callback/cache outcome 和 spend write 前失败。retry/fallback 只能对实际选择的
    新 deployment 重新执行 exact lookup，不能借用前一个或相似 model 的价格。
 7. **B-007** `AllowUnpriced` 不是 provider helper 或 authority 的返回分支。exact authority
-   的 closed pricing-failure kind 必须穷举映射为结构化
-   `ProviderError::PricingUnavailable`（名称可在 implementation review 中等价调整，但必须是
-   独立 variant）；只有 gateway request-time code 对该 variant 做类型匹配且最终合并配置明确
-   选择 `AllowUnpriced` 时，才可按配置的 fallback cost 继续。禁止解析 Display/message
-   prefix；其他 `InvalidRequest`、`ModelNotFound`、auth/network/budget 等错误不得被该 policy 吞掉。
+   的 closed `PricingFailureKind` 必须保持 crate-private 并直接传到 gateway request-time
+   policy boundary；只有该 typed fact 且最终合并配置明确选择 `AllowUnpriced` 时，才可按
+   配置的 fallback cost 继续。policy 决策后 public helper/Reject path 才映射到现有
+   `ProviderError` variants；不得新增 public enum variant，也禁止解析 Display/message
+   prefix。其他 `InvalidRequest`、`ModelNotFound`、auth/network/budget 等普通错误不得被该
+   policy 吞掉。
 8. **B-008** 每次 `AllowUnpriced` 绕过必须携带原始 provider、model、policy、outcome 与
    fallback cost，记录现有 unpriced event/spend metric 和结构化 error log；存在 API-key
    context 时还必须写入 `UsageRecord::unpriced`。reservation、settlement、usage record
    的 fallback cost 必须一致；记录失败必须显式 `error`，不得伪装为 priced success。
-9. **B-009** public helper 的 typed error 必须以 closed pricing-failure kind 稳定区分
-   unknown、surface-unavailable、missing 与 invalid pricing，并穷举映射到独立的 structured
-   provider-error variant，保留 provider + canonical/requested model 上下文；error、
+9. **B-009** public helper 的 typed error 必须从 closed pricing-failure kind 穷举映射：
+   unknown/surface-unavailable 使用现有 `ProviderError::ModelNotFound`，missing/invalid price
+   使用现有 `ProviderError::Configuration`；不得扩展 exhaustive public enum。Reject path
+   可使用既有 `InvalidRequest { provider: "pricing", ... }` 作为结构化终态标签，但 eligibility
+   在此前已由 internal kind 决定。映射保留 provider + canonical/requested model 上下文；error、
    Debug、Display、metric label 与 audit record 不包含 Gemini API key、Vertex Bearer token、
    project、location、prompt 或 response 内容。
 10. **B-010** GH1112 的 catalog/availability/auth/request-contract 行为保持不变；本 issue

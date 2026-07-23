@@ -31,8 +31,7 @@ Link to `product.md`.
   "paths": [
     "src/core/pricing_service/authority.rs",
     "src/core/pricing_service/authority_tests.rs",
-    "src/core/providers/unified_provider_error.rs",
-    "src/core/providers/unified_provider_methods.rs",
+    "src/core/pricing_service/mod.rs",
     "src/core/providers/gemini/models/mod.rs",
     "src/core/providers/gemini/provider.rs",
     "src/core/providers/gemini/provider_tests.rs",
@@ -40,7 +39,14 @@ Link to `product.md`.
     "src/core/providers/vertex_ai/client_tests.rs",
     "src/core/providers/vertex_ai/gemini/mod.rs",
     "src/core/providers/vertex_ai/tests.rs",
+    "src/server/routes/ai/spend.rs",
+    "src/server/routes/ai/spend/pricing.rs",
+    "src/server/routes/ai/spend/completion.rs",
     "src/server/routes/ai/spend/unpriced.rs",
+    "src/server/routes/ai/gemini/spend.rs",
+    "src/server/routes/ai/audio/budgeting.rs",
+    "src/server/routes/ai/images/proxy_spend.rs",
+    "src/server/routes/ai/response_cache.rs",
     "src/server/routes/ai/spend_runtime_pricing_tests.rs",
     "src/server/routes/ai/spend_tests.rs",
     "src/server/routes/ai/execution_retry_delay_tests.rs",
@@ -103,14 +109,20 @@ Google catalog 中为兼容迁移而保留的 price metadata 不能在 live miss
 embedded `PricingService` adapter；初始化失败直接 typed error，不能构造空 service。live
 gateway 不得调用该 embedded adapter。
 
-错误边界使用一个 crate-private closed pricing-failure kind，并穷举映射到现有 public error
-层级；不再依赖自由文本：
+错误边界使用一个 crate-private closed `PricingFailureKind`，由 `pricing_service::mod` 仅在
+crate 内提供给 request-time policy；public error mapping 发生在 policy eligibility 决策之后，
+不再依赖自由文本：
 
 - exact authority 内部 failure kind 至少穷举 `UnknownModel`、`SurfaceUnavailable`、
-  `MissingPrice`、`InvalidPrice`；普通 `GatewayError` 文本不能决定 policy eligibility；
-- provider/public facade 穷举映射到独立结构化
-  `ProviderError::PricingUnavailable { provider, model, reason }`（最终字段名可等价调整），
-  `AllowUnpriced` 只按 variant 匹配，不得匹配 `message.starts_with(...)`；
+  `MissingPrice`、`InvalidPrice`；runtime reservation/preflight 直接传递该 typed fact，
+  普通 `GatewayError`/`ProviderError` 文本不能决定 policy eligibility；
+- public provider/helper 在 policy boundary 外穷举映射到现有 variants：
+  `UnknownModel`/`SurfaceUnavailable` → `ProviderError::ModelNotFound`，
+  `MissingPrice`/`InvalidPrice` → `ProviderError::Configuration`；
+- default Reject 可在 eligibility 决策后映射为现有
+  `ProviderError::InvalidRequest { provider: "pricing", ... }`。retry/fallback 若需识别该
+  Reject 终态，只能匹配 enum variant + reserved `"pricing"` provider field；禁止读取 message。
+  source guard 保证该 reserved construction 只有一个 owner；
 - mapping 只包含 provider/requested+canonical model 和 field class，不包含 secret 或内容。
 
 ### 3. 单位与 public helper 收敛
@@ -145,13 +157,16 @@ reservation、settlement、spend 与 callback 继续使用 `AppState` 中同一�
 `PricingService`，并传递实际 selected deployment 的 provider + canonical model。每次 retry
 或 fallback 都新建 lookup；不能复用前一个 candidate 的 breakdown。
 
-typed pricing-unavailable error 只在现有 gateway request-time policy boundary 被分类：
+crate-private `PricingFailureKind` 只在现有 gateway request-time policy boundary 被分类：
 
 - `Reject`：记录 reject evidence 并在 provider call/budget mutation/success side effect 前返回；
 - `AllowUnpriced`：仅配置明确选择该 variant 时，以
   `unpriced_fallback_cost_per_1k_tokens` 和同一 usage 计算 reservation/settlement；
-- classifier 必须对 structured provider-error variant 做 closed match；authentication、network、
-  serialization、budget、普通 `InvalidRequest`/`ModelNotFound` 或其他 error 不进入该 branch。
+- policy functions 必须接收 internal typed fact，不接受任意 `Display`、`GatewayError` 或
+  `ProviderError`；authentication、network、serialization、budget、普通
+  `InvalidRequest`/`ModelNotFound` 或其他 error 不进入该 branch。为保持全局
+  `AllowUnpriced` 行为，现有 completion/usage/Gemini/audio/image pricing callsites 机械适配
+  该 typed input；不得改变其价格或 policy 结果。
 
 每次 bypass 继续调用 `record_unpriced_event`/`record_unpriced_spend`，输出结构化 `error`
 log；有 API key 时写 `UsageRecord::unpriced`。provider、model、policy、outcome、usage units
@@ -178,7 +193,7 @@ model、image/TTS pricing 与非 Google provider resolver 回归必须保持不�
 | B-004 | single unit conversion owner | 1/1k/1M input/output/mixed/large numeric fixtures；no helper-local scaling guard |
 | B-005 | helper, reservation, settlement, spend, callback | exact identity/source sentinel parity and zero-usage validation |
 | B-006 | request preflight + retry/fallback | upstream/auth/network/budget/cache/callback counters zero；candidate-specific fresh lookup |
-| B-007 | closed pricing-failure kind + structured provider-error variant + gateway classifier | `AllowUnpriced` matches only the structured pricing-unavailable variant；source guard rejects Display/message-prefix parsing；other errors remain errors |
+| B-007 | crate-private pricing-failure kind + gateway policy boundary | `AllowUnpriced` receives only the internal typed fact before public-error mapping；source guard rejects Display/message-prefix parsing and public enum expansion；other errors remain errors |
 | B-008 | unpriced reserve/settle/metrics/log/usage record | positive/zero fallback audit matrix；record failure emits error |
 | B-009 | GatewayError→ProviderError mapping/redaction | exact variants/context fixtures plus sentinel secret/content capture |
 | B-010 | GH1112 auth/catalog and partner paths | Google auth isolation + partner/image/TTS non-regression |
@@ -194,7 +209,7 @@ requested provider/model + usage
        -> budget reservation
        -> settlement + priced spend + callback
 
-structured pricing-unavailable variant
+crate-private PricingFailureKind
   -> Reject: fail before upstream/mutation
   -> explicit AllowUnpriced only:
        fallback reserve -> fallback settle
@@ -206,9 +221,8 @@ structured pricing-unavailable variant
 
 - **Correctness**：Google price keys/provider aliases currently permit fuzzy cross-match；exact
   resolver must be isolated so unrelated providers retain compatibility while Google cannot drift。
-- **Compatibility**：public `Option`/bare-`f64` helpers and the public `ProviderError` variant set
-  change；migration note and compile
-  fixtures are mandatory，but user has explicitly selected typed `Result` convergence。
+- **Compatibility**：public `Option`/bare-`f64` helper signatures change as approved；the exhaustive
+  public `ProviderError` variant set must not change。migration note and compile fixtures are mandatory。
 - **Data**：GH1112 may move price metadata without refreshing values；implementation must use the
   loaded runtime source and may not invent missing prices。
 - **Security**：provider/model and field class are safe audit dimensions；credentials、project/location
@@ -233,9 +247,11 @@ structured pricing-unavailable variant
 - [ ] Runtime parity: custom-source sentinel across helper/runtime adapter、reservation、settlement、
   spend and callback；retry/fallback uses selected deployment identity.
 - [ ] Policy/audit: default Reject and explicit AllowUnpriced positive/zero-fallback matrices；
-  closed structured-variant classifier；ordinary `InvalidRequest` with the old
-  `model_not_priced:` prefix and every non-pricing error remain ineligible；source guard proves
-  no Display/message parsing；metrics/log/`UsageRecord::unpriced` fields and record-failure error capture.
+  internal typed-fact classifier before public-error mapping；ordinary `InvalidRequest` with the old
+  `model_not_priced:` prefix and every non-pricing error remain ineligible；Reject retry recognition
+  matches only existing variant + reserved provider field；source guard proves no Display/message
+  parsing or new public enum variant；metrics/log/`UsageRecord::unpriced` fields and record-failure
+  error capture.
 - [ ] Security: Gemini key/Vertex Bearer loopback isolation and adversarial error/log/audit redaction.
 - [ ] Regression: partner models、Vertex image generation/TTS、non-Google pricing resolvers.
 - [ ] Coverage: new executable lines ≥80%；exact rejection、unit conversion、error mapping、
