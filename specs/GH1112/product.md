@@ -84,8 +84,11 @@ Vertex AI 应复用模型核心事实和请求契约，同时仍以各自明确�
     空列表或部分列表后启动成功。
 16. **B-016** 并发读模型目录与请求契约必须只观察到同一不可变快照；初始化完成后
     目录不得按请求修改，重复/并发查询不得产生顺序漂移或部分状态。
-17. **B-017** 迁移后现有已证实且仍 available 的 exact model ID 保持兼容；删除或停止
-    广告的 ID 必须由生命周期/availability fixture 解释，不能因重构意外消失。
+17. **B-017** 迁移后现有已证实且仍 available 的 exact model ID 保持兼容；
+    `vertex_ai::models::VertexAIModel` 与 `parse_vertex_model` 的公开导入路径继续指向唯一
+    canonical Vertex 类型和 exact `Result` parser，不得以 alias/wrapper 保留旧
+    fuzzy/`Custom` chat 语义；删除或停止广告的 ID 必须由 lifecycle/availability fixture
+    解释，不能因重构意外消失。
 18. **B-018** 回归证据必须同时覆盖正例与 schema/类型合法的负例：exact lookup、
     fuzzy rejection、unknown/custom rejection、双 overlay 差异、stable ordering、
     request-contract parity、网络请求计数为零以及 production credential 类型的

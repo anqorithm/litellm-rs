@@ -21,6 +21,7 @@ GH-1112 / #1112
 | Gemini catalog data | `src/core/providers/gemini/models/catalog/{mod.rs,gemini25.rs,gemini3.rs,gemini31.rs,gemini35.rs,legacy.rs}` | 模型记录按 family 分文件注册到 Gemini-owned registry。 | 数据需迁移到 provider-neutral Google owner，避免 alias wrapper。 |
 | Vertex model enum/capabilities | `src/core/providers/vertex_ai/mod.rs:138-203,205-480` | Gemini、partner 与 `Custom(String)` 混在一个 enum；capability/limit 由独立 match 表维护。 | 当前第二套事实源与 Custom 默认语义。 |
 | Vertex parser | `src/core/providers/vertex_ai/mod.rs:482-639` | 大量 lowercase substring 分支，未知值返回 `Custom`。 | B-001/B-006/B-007 的直接根因。 |
+| Vertex model compatibility facade | `src/core/providers/vertex_ai/models.rs:1-4` | public `models` module re-exports root `VertexAIModel` and `parse_vertex_model`, so the compiled facade changes with the root type/parser contract. | B-017 requires the existing import path to expose the same canonical Vertex identity and exact `Result` parser without preserving fuzzy/`Custom` semantics. |
 | Vertex advertised models | `src/core/providers/vertex_ai/client.rs:285-335` | `models()` 另建只含 Gemini 1.5 的静态 `ModelInfo` 表。 | 当前第三套事实源。 |
 | Vertex request dispatch | `src/core/providers/vertex_ai/client.rs:120-153,431-507` | chat 先 fuzzy parse，再按 enum 选择 transformer；supported params 又按字符串 `contains("gemini")`。 | exact gate 与 shared request contract 的执行点。 |
 | Vertex health probe | `src/core/providers/vertex_ai/client/health.rs:5-16` | health check hard-codes `gemini-1.5-flash` and performs auth/network without consulting Vertex availability. | A retired or unavailable probe must not bypass the exact catalog gate. |
@@ -63,6 +64,7 @@ GH-1112 / #1112
     "src/core/providers/gemini/provider.rs",
     "src/core/providers/gemini/provider_tests.rs",
     "src/core/providers/vertex_ai/mod.rs",
+    "src/core/providers/vertex_ai/models.rs",
     "src/core/providers/vertex_ai/batches/mod.rs",
     "src/core/providers/vertex_ai/client.rs",
     "src/core/providers/vertex_ai/client/health.rs",
@@ -152,10 +154,16 @@ preflight；不得因为绕过 `GeminiProvider` facade 而发送 contract-disall
 
 ### 4. Vertex exact classification
 
-把 Google Gemini chat model 从 `VertexAIModel` 的重复 variant/match 表中移除，改为
-`VertexModel::Google(GoogleModelId)`；partner model 保留独立 exact catalog/enum。
-`parse_vertex_model` 改为返回 `Result<VertexModel, ProviderError>`：先 exact Google+Vertex
-overlay lookup，再 exact partner lookup，否则 typed model-not-found。
+把 Google Gemini chat model 从 `VertexAIModel` 的重复 variant/match 表中移除，把该
+canonical enum 的结构收敛为 `VertexAIModel::Google(GoogleModelId)`；partner model 保留
+独立 exact catalog/variant。`parse_vertex_model` 改为返回
+`Result<VertexAIModel, ProviderError>`：先 exact Google+Vertex overlay lookup，再 exact
+partner lookup，否则 typed model-not-found。
+
+`vertex_ai/models.rs` 继续作为既有公开导入路径的薄 re-export facade，但只能重导出根模块
+中同一个 canonical `VertexAIModel` 与 exact `Result` parser。它不得定义 type alias、
+wrapper parser、兼容 fuzzy 分支或第二份 model identity；所有使用旧 Gemini variants 或
+假定 parser infallible 的内部 caller 在同一 T3 中机械迁移。
 
 `Custom(String)` 不再是 chat parse fallback；原 custom URL 分支对 chat 不可达。custom
 `api_base` 只替换 transport base，不放宽 model gate。Embedding/image/model-garden 的独立
@@ -242,7 +250,7 @@ availability 证据停止广告、或属于 #1108 后续刷新。禁止 golden s
 | B-014 | alias map | empty alias set + collision/undeclared alias negative fixtures；fuzzy input 不命中。 |
 | B-015 | registry validation | duplicate/missing lifecycle/contract/evidence fixtures 使初始化返回 error，不发布部分列表。 |
 | B-016 | immutable snapshot | concurrent read test 证明所有 reader 共享同一 snapshot；crate-private API 只暴露 read methods。 |
-| B-017 | migration snapshot | before/after exact ID fixture，所有删除项带 lifecycle/availability disposition。 |
+| B-017 | migration snapshot + `vertex_ai/models.rs` compatibility facade | before/after exact ID fixture，所有删除项带 lifecycle/availability disposition；compile fixture 证明既有 facade imports 指向同一 canonical `VertexAIModel` 与 exact `Result` parser，且没有 alias/wrapper/fuzzy fallback。 |
 | B-018 | aggregate regression | positive/negative fixture count guard、production credential redaction、health/direct-client upstream=0 与 full provider tests。 |
 
 ## 数据流
