@@ -1,7 +1,9 @@
 //! Gateway configuration integration
-//!
-//! This module contains the from_gateway_config method for creating
 //! a Router from gateway configuration.
+
+#[cfg(test)]
+#[path = "gateway_config_tests.rs"]
+mod gateway_config_tests;
 
 use super::config::RouterConfig;
 use super::deployment::{
@@ -12,40 +14,131 @@ use super::unified::Router;
 use crate::config::Validate;
 use crate::config::models::provider::ProviderConfig;
 use crate::config::models::router::GatewayRouterConfig;
+use crate::core::providers::provider_type::ProviderType;
+use crate::core::providers::registry::{self as provider_registry, ProviderDispatchKind};
 use crate::core::providers::{Provider, create_provider};
 
-/// Return the only credential provenance audited for the conservative D3Ca
-/// intermediate state.
-///
-/// The canonical OpenAI factory inserts a non-empty top-level `api_key` before
-/// merging settings and its builder consumes that exact value. A custom
-/// Authorization header makes the upstream credential ambiguous. Aliases,
-/// settings-sourced credentials, catalog dispatch and provider-specific/env
-/// fallbacks remain intentionally unpublishable until D3Cb normalizes them at
-/// the construction boundary.
-fn proven_top_level_legacy_credential(config: &ProviderConfig) -> Option<&str> {
-    let selector = config.provider_type.trim();
-    let credential = config.api_key.as_str();
-    let has_competing_credential = ["api_key", "api_token", "google_api_key", "gemini_api_key"]
-        .into_iter()
-        .any(|key| config.settings.contains_key(key));
-    let has_custom_authorization = ["headers", "custom_headers"].into_iter().any(|key| {
+/// Construction-only handoff. Raw credentials never enter a deployment or snapshot.
+struct NormalizedProviderConstruction {
+    config: ProviderConfig,
+    legacy_metadata: Option<LegacySelectorMetadata>,
+}
+
+fn non_blank(value: &str) -> Option<&str> {
+    (!value.trim().is_empty()).then_some(value)
+}
+
+fn setting(config: &ProviderConfig, key: &str) -> Option<String> {
+    config
+        .settings
+        .get(key)
+        .and_then(serde_json::Value::as_str)
+        .and_then(non_blank)
+        .map(str::to_owned)
+}
+
+fn environment(keys: &[&str]) -> Option<String> {
+    keys.iter()
+        .filter_map(|key| std::env::var(key).ok())
+        .find_map(|value| non_blank(&value).map(str::to_owned))
+}
+
+fn has_custom_authorization(config: &ProviderConfig) -> bool {
+    ["headers", "custom_headers"].into_iter().any(|key| {
         config
             .settings
             .get(key)
             .and_then(serde_json::Value::as_object)
             .is_some_and(|headers| {
-                headers.iter().any(|(name, value)| {
-                    name.eq_ignore_ascii_case("authorization") && value.is_string()
-                })
+                headers
+                    .iter()
+                    .any(|(name, _)| name.eq_ignore_ascii_case("authorization"))
             })
-    });
+    })
+}
 
-    (selector == "openai"
-        && !credential.trim().is_empty()
-        && !has_competing_credential
-        && !has_custom_authorization)
-        .then_some(credential)
+fn catalog_definition(selector: &str) -> Option<&'static provider_registry::ProviderDefinition> {
+    let normalized = selector.trim().to_ascii_lowercase();
+    let definition = provider_registry::get_definition(&normalized)?;
+    match provider_registry::entry_for_name(&normalized) {
+        Some(entry) if entry.dispatch_kind == ProviderDispatchKind::CatalogOpenAiLike => {
+            Some(definition)
+        }
+        Some(_) => None,
+        None => Some(definition),
+    }
+}
+
+fn normalize_provider_construction(config: &ProviderConfig) -> NormalizedProviderConstruction {
+    let mut normalized = config.clone();
+    let selector = if config.provider_type.trim().is_empty() {
+        config.name.trim()
+    } else {
+        config.provider_type.trim()
+    };
+    let top_level = non_blank(&config.api_key).map(str::to_owned);
+
+    let effective_credential = if let Some(definition) = catalog_definition(selector) {
+        top_level.or_else(|| {
+            environment(
+                &std::iter::once(definition.auth_env_var)
+                    .chain(definition.alternate_auth_env_vars.iter().copied())
+                    .collect::<Vec<_>>(),
+            )
+        })
+    } else {
+        match selector.parse::<ProviderType>() {
+            Ok(ProviderType::Cloudflare) => setting(config, "api_token")
+                .or(top_level)
+                .or_else(|| environment(&["CLOUDFLARE_API_TOKEN"])),
+            Ok(ProviderType::Replicate) => top_level
+                .or_else(|| setting(config, "api_key"))
+                .or_else(|| setting(config, "api_token"))
+                .or_else(|| environment(&["REPLICATE_API_TOKEN", "REPLICATE_API_KEY"])),
+            Ok(ProviderType::FalAI) => top_level
+                .or_else(|| setting(config, "api_key"))
+                .or_else(|| environment(&["FAL_AI_API_KEY"])),
+            Ok(ProviderType::Cohere) => top_level
+                .or_else(|| setting(config, "api_key"))
+                .or_else(|| environment(&["COHERE_API_KEY"])),
+            Ok(ProviderType::Gemini) => top_level
+                .or_else(|| setting(config, "api_key"))
+                .or_else(|| setting(config, "google_api_key"))
+                .or_else(|| setting(config, "gemini_api_key"))
+                .or_else(|| environment(&["GEMINI_API_KEY", "GOOGLE_API_KEY"])),
+            Ok(_) => top_level.or_else(|| setting(config, "api_key")),
+            Err(_) => None,
+        }
+    };
+
+    if let Some(credential) = effective_credential.as_ref() {
+        normalized.api_key = credential.clone();
+        for key in ["api_key", "google_api_key", "gemini_api_key"] {
+            normalized.settings.remove(key);
+        }
+        if matches!(
+            selector.parse::<ProviderType>(),
+            Ok(ProviderType::Cloudflare)
+        ) {
+            normalized.api_key.clear();
+            normalized
+                .settings
+                .insert("api_token".to_string(), credential.clone().into());
+        } else {
+            normalized.settings.remove("api_token");
+        }
+    } else if config.api_key.trim().is_empty() {
+        normalized.api_key.clear();
+    }
+
+    let legacy_metadata = (!has_custom_authorization(config))
+        .then_some(effective_credential.as_deref())
+        .flatten()
+        .map(LegacySelectorMetadata::from_stored_credential);
+    NormalizedProviderConstruction {
+        config: normalized,
+        legacy_metadata,
+    }
 }
 
 /// Build runtime router config from gateway YAML router config.
@@ -90,21 +183,24 @@ impl Router {
                 continue;
             }
 
+            let construction = normalize_provider_construction(provider_config);
+            let normalized_config = construction.config;
+            let provider_name = normalized_config.name.clone();
+            let configured_models = normalized_config.models.clone();
+            let tags = normalized_config.tags.clone();
+            let deployment_config = deployment_config_from_provider(&normalized_config)?;
             // Create provider instance via the single canonical factory.
-            let provider = create_provider(provider_config.clone())
-                .await
-                .map_err(|e| {
-                    RouterError::DeploymentNotFound(format!(
-                        "Failed to create provider {}: {}",
-                        provider_config.name, e
-                    ))
-                })?;
-            let legacy_metadata = proven_top_level_legacy_credential(provider_config)
-                .map(LegacySelectorMetadata::from_stored_credential);
+            let provider = create_provider(normalized_config).await.map_err(|e| {
+                RouterError::DeploymentNotFound(format!(
+                    "Failed to create provider {}: {}",
+                    provider_name, e
+                ))
+            })?;
+            let legacy_metadata = construction.legacy_metadata;
 
             // Determine which models this deployment serves
-            let models: Vec<String> = if !provider_config.models.is_empty() {
-                provider_config.models.clone()
+            let models: Vec<String> = if !configured_models.is_empty() {
+                configured_models
             } else {
                 provider
                     .list_models()
@@ -117,11 +213,12 @@ impl Router {
             if models.is_empty() {
                 // Create a single deployment with provider name
                 let deployment = create_deployment_from_config(
-                    &provider_config.name,
+                    &provider_name,
                     provider.clone(),
-                    &provider_config.name,
-                    provider_config,
-                )?;
+                    &provider_name,
+                    deployment_config.clone(),
+                    tags.clone(),
+                );
                 match legacy_metadata {
                     Some(metadata) => router.add_gateway_deployment(deployment, metadata),
                     None => router.add_deployment(deployment),
@@ -129,13 +226,14 @@ impl Router {
             } else {
                 // Create one deployment per model
                 for model in models {
-                    let deployment_id = format!("{}-{}", provider_config.name, model);
+                    let deployment_id = format!("{}-{}", provider_name, model);
                     let deployment = create_deployment_from_config(
                         &deployment_id,
                         provider.clone(),
                         &model,
-                        provider_config,
-                    )?;
+                        deployment_config.clone(),
+                        tags.clone(),
+                    );
                     match legacy_metadata.clone() {
                         Some(metadata) => router.add_gateway_deployment(deployment, metadata),
                         None => router.add_deployment(deployment),
@@ -154,18 +252,17 @@ fn create_deployment_from_config(
     deployment_id: &str,
     provider: Provider,
     model: &str,
-    config: &ProviderConfig,
-) -> Result<Deployment, RouterError> {
-    let deployment_config = deployment_config_from_provider(config)?;
-
-    Ok(Deployment::new(
+    deployment_config: DeploymentConfig,
+    tags: Vec<String>,
+) -> Deployment {
+    Deployment::new(
         deployment_id.to_string(),
         provider,
         model.to_string(),
         model.to_string(),
     )
     .with_config(deployment_config)
-    .with_tags(config.tags.clone()))
+    .with_tags(tags)
 }
 
 fn deployment_config_from_provider(
@@ -251,6 +348,9 @@ mod tests {
     assert_not_impl_any!(
         LegacySelectorMetadata: std::fmt::Display, serde::Serialize, serde::de::DeserializeOwned
     );
+    assert_not_impl_any!(
+        NormalizedProviderConstruction: std::fmt::Debug, std::fmt::Display, serde::Serialize
+    );
 
     fn credential_test_provider(name: &str, api_key: &str) -> ProviderConfig {
         ProviderConfig {
@@ -263,21 +363,31 @@ mod tests {
     }
 
     #[test]
-    fn conservative_provenance_rejects_alias_catalog_and_env_fallback_candidates() {
-        let canonical = credential_test_provider("canonical", "sk-canonical");
+    fn normalization_preserves_native_precedence_and_alias_identity() {
+        let mut native = credential_test_provider("native", "top-level");
+        native
+            .settings
+            .insert("api_key".to_string(), "shadowed".into());
+        let normalized = normalize_provider_construction(&native);
+        assert!(normalized.legacy_metadata.is_some());
+        assert_eq!(normalized.config.api_key, "top-level");
+        assert!(!normalized.config.settings.contains_key("api_key"));
+
+        native.api_key = " ".to_string();
+        let settings_fallback = normalize_provider_construction(&native);
+        assert_eq!(settings_fallback.config.api_key, "shadowed");
+
+        let mut canonical = credential_test_provider("canonical", "alias-key");
+        canonical.provider_type = "gemini".to_string();
+        let mut alias = canonical.clone();
+        alias.provider_type = "google-gemini".to_string();
+        let canonical = normalize_provider_construction(&canonical);
+        let alias = normalize_provider_construction(&alias);
+        assert_eq!(canonical.config.api_key, alias.config.api_key);
         assert_eq!(
-            proven_top_level_legacy_credential(&canonical),
-            Some("sk-canonical")
+            canonical.config.provider_type.parse::<ProviderType>().ok(),
+            alias.config.provider_type.parse::<ProviderType>().ok()
         );
-
-        for provider_type in ["azure-openai", "openrouter", "cohere"] {
-            let mut unproven = credential_test_provider("unproven", "sk-unproven");
-            unproven.provider_type = provider_type.to_string();
-            assert_eq!(proven_top_level_legacy_credential(&unproven), None);
-        }
-
-        let empty_top_level = credential_test_provider("env-fallback", "");
-        assert_eq!(proven_top_level_legacy_credential(&empty_top_level), None);
     }
 
     #[test]
@@ -531,7 +641,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn unproven_gateway_credentials_do_not_publish_selector_metadata() {
+    async fn normalized_gateway_credentials_publish_only_effective_digest() {
         let mut settings_only = credential_test_provider("settings-only", "");
         settings_only
             .settings
@@ -544,7 +654,7 @@ mod tests {
             settings_router
                 .load_routing_snapshot()
                 .resolve_legacy_credential("credential-model", "sk-settings-only"),
-            Err(ProviderError::ModelNotFound { .. })
+            Ok(deployment) if deployment == "settings-only-credential-model"
         ));
 
         for (setting_key, authorization_header) in [
@@ -578,13 +688,14 @@ mod tests {
             Ok(router) => router,
             Err(error) => panic!("Cloudflare conflict fixture should build: {error}"),
         };
-        for unproven_credential in ["top-level-key", "settings-token"] {
-            assert!(matches!(
-                cloudflare_router
-                    .load_routing_snapshot()
-                    .resolve_legacy_credential("credential-model", unproven_credential),
-                Err(ProviderError::ModelNotFound { .. })
-            ));
-        }
+        let snapshot = cloudflare_router.load_routing_snapshot();
+        assert!(matches!(
+            snapshot.resolve_legacy_credential("credential-model", "top-level-key"),
+            Err(ProviderError::ModelNotFound { .. })
+        ));
+        assert!(matches!(
+            snapshot.resolve_legacy_credential("credential-model", "settings-token"),
+            Ok(deployment) if deployment == "cloudflare-conflict-credential-model"
+        ));
     }
 }
