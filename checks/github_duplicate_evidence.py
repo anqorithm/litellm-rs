@@ -77,18 +77,59 @@ def collect_open_prs(github_repo: str, limit: int) -> list[Any]:
     )
 
 
-def collect_remote_branches(remote: str) -> list[str]:
+def collect_remote_branches(remote: str) -> list[dict[str, str]]:
     completed = _run_command(["git", "ls-remote", "--heads", remote])
     if completed.returncode != 0:
         detail = completed.stderr.strip() or completed.stdout.strip() or "no output"
         raise EvidenceError(f"git ls-remote failed for {remote}: {detail}")
 
-    branches: list[str] = []
+    branches: list[dict[str, str]] = []
     for line in completed.stdout.splitlines():
-        _sha, sep, ref = line.partition("\t")
+        sha, sep, ref = line.partition("\t")
         if sep and ref.startswith("refs/heads/"):
-            branches.append(ref.removeprefix("refs/heads/"))
-    return sorted(branches)
+            branches.append({"name": ref.removeprefix("refs/heads/"), "head_sha": sha})
+    return sorted(branches, key=lambda branch: branch["name"])
+
+
+def load_retained_branch_dispositions(path: str | None) -> list[dict[str, Any]]:
+    if path is None:
+        return []
+    try:
+        with open(path, encoding="utf-8") as handle:
+            payload = json.load(handle)
+    except OSError as exc:
+        raise EvidenceError(f"cannot read retained branch dispositions: {exc}") from exc
+    except json.JSONDecodeError as exc:
+        raise EvidenceError(f"invalid retained branch dispositions JSON: {exc.msg}") from exc
+    if not isinstance(payload, list) or not all(isinstance(item, dict) for item in payload):
+        raise EvidenceError("retained branch dispositions must be a JSON array of objects")
+    return payload
+
+
+def bind_retained_branch_dispositions(
+    remote_branches: list[dict[str, str]],
+    dispositions: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    heads = {branch["name"]: branch["head_sha"] for branch in remote_branches}
+    bound: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for disposition in dispositions:
+        branch = disposition.get("branch")
+        head_sha = disposition.get("head_sha")
+        if not isinstance(branch, str) or not branch:
+            raise EvidenceError("retained branch disposition requires non-empty branch")
+        if branch in seen:
+            raise EvidenceError(f"duplicate retained branch disposition for {branch}")
+        seen.add(branch)
+        if branch not in heads:
+            raise EvidenceError(f"retained branch disposition references unknown remote branch {branch}")
+        if head_sha != heads[branch]:
+            raise EvidenceError(
+                f"retained branch disposition SHA mismatch for {branch}: "
+                f"expected {heads[branch]}, got {head_sha}"
+            )
+        bound.append(disposition)
+    return bound
 
 
 def references_issue_text(text: str, issue: int) -> bool:
@@ -138,15 +179,27 @@ def normalize_open_pr(item: Any, issue: int) -> dict[str, Any]:
 def build_evidence(
     issue: int,
     open_pr_payload: list[Any],
-    remote_branches: list[str],
+    remote_branches: list[dict[str, str]],
     pr_limit: int,
+    retained_branch_dispositions: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     if issue <= 0:
         raise EvidenceError("issue number must be a positive integer")
     if pr_limit <= 0:
         raise EvidenceError("PR limit must be a positive integer")
-    if not all(isinstance(branch, str) and branch.strip() for branch in remote_branches):
-        raise EvidenceError("remote branch names must be non-empty strings")
+    if not all(
+        isinstance(branch, dict)
+        and isinstance(branch.get("name"), str)
+        and branch["name"].strip()
+        and isinstance(branch.get("head_sha"), str)
+        and re.fullmatch(r"[0-9a-f]{40}", branch["head_sha"])
+        for branch in remote_branches
+    ):
+        raise EvidenceError("remote branches must contain non-empty names and 40-character SHAs")
+    dispositions = bind_retained_branch_dispositions(
+        remote_branches,
+        retained_branch_dispositions or [],
+    )
     return {
         "issue": issue,
         "collected_at": datetime.now(timezone.utc)
@@ -156,7 +209,8 @@ def build_evidence(
         "open_prs_complete": len(open_pr_payload) < pr_limit,
         "open_pr_limit": pr_limit,
         "open_prs": [normalize_open_pr(item, issue) for item in open_pr_payload],
-        "remote_branches": sorted(branch.strip() for branch in remote_branches),
+        "remote_branches": sorted(remote_branches, key=lambda branch: branch["name"]),
+        "retained_branch_dispositions": dispositions,
     }
 
 
@@ -165,11 +219,12 @@ def collect_duplicate_evidence(
     issue: int,
     remote: str,
     pr_limit: int,
+    retained_branch_dispositions: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     repo = parse_github_repo(github_repo)
     open_prs = collect_open_prs(repo, pr_limit)
     branches = collect_remote_branches(remote)
-    return build_evidence(issue, open_prs, branches, pr_limit)
+    return build_evidence(issue, open_prs, branches, pr_limit, retained_branch_dispositions)
 
 
 def main() -> int:
@@ -180,6 +235,10 @@ def main() -> int:
     parser.add_argument("--issue", required=True, type=parse_issue_number, help="Issue number")
     parser.add_argument("--remote", default="origin", help="Git remote to inspect")
     parser.add_argument("--pr-limit", type=int, default=100, help="Maximum open PRs to inspect")
+    parser.add_argument(
+        "--retained-branch-dispositions",
+        help="JSON array of maintainer dispositions bound to exact remote branch SHAs",
+    )
     parser.add_argument("--json", action="store_true", help="Print JSON output")
     args = parser.parse_args()
 
@@ -189,6 +248,7 @@ def main() -> int:
             args.issue,
             args.remote,
             args.pr_limit,
+            load_retained_branch_dispositions(args.retained_branch_dispositions),
         )
     except EvidenceError as exc:
         print(f"error: {exc}", file=sys.stderr)

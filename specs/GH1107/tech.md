@@ -80,6 +80,18 @@ GH-1107 / #1107
 }
 ```
 
+### Retained implementation-branch prerequisite
+
+Before `SP1107-T2`, the bounded retained-branch disposition prerequisite must merge.
+Duplicate-work evidence records each remote branch as exact `{name, head_sha}` and accepts a
+retained branch only when one `maintainer_human` disposition references that same branch and SHA.
+Missing, duplicate, orphan, malformed, stale, or mismatch evidence remains `needs_human` or
+`blocked`; an `active_duplicate` disposition and an open issue-referencing PR remain blocked.
+This prerequisite never deletes, renames, or otherwise mutates historical branches. After it
+merges, T2 regenerates evidence against fresh remote heads and reruns the required implement route;
+pre-merge evidence is invalid for T2. This workflow-only prerequisite does not change Responses,
+Codex protocol, providers, or catalog metadata ownership.
+
 清单是 GH-1107 当前设计的完整候选路径。任一 implementation tranche 发现必须修改
 清单外文件，或任一 tranche 超过 10 个非文档文件 / 500 changed lines，先提交 spec
 amendment；不得边实现边扩大 allowlist。SP1107-T1 经独立复审要求补齐完整 Tier 2

@@ -22,6 +22,7 @@ from specrail_lib import (
 
 SEGMENT_SPLIT_RE = re.compile(r"[/-]+")
 PLACEHOLDER_RE = re.compile(r"\{[^}]+\}")
+SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
 
 def _positive_issue(value: int | None) -> bool:
@@ -71,9 +72,110 @@ def branch_segments(branch: str) -> set[str]:
     return {segment.lower() for segment in SEGMENT_SPLIT_RE.split(branch) if segment}
 
 
-def matching_contract_branches(branches: list[str], token: str) -> list[str]:
+def matching_contract_branches(branches: list[dict[str, Any]], token: str) -> list[dict[str, str]]:
     wanted = token.lower()
-    return sorted(branch for branch in branches if wanted in branch_segments(branch))
+    return sorted(
+        [
+            {"name": str(branch["name"]), "head_sha": str(branch["head_sha"])}
+            for branch in branches
+            if wanted in branch_segments(str(branch["name"]))
+        ],
+        key=lambda branch: branch["name"],
+    )
+
+
+def evaluate_retained_branch_dispositions(
+    evidence: dict[str, Any],
+    matching_branches: list[dict[str, str]],
+) -> dict[str, Any] | None:
+    remote_branches = evidence["remote_branches"]
+    dispositions = evidence["retained_branch_dispositions"]
+    if any(not SHA_RE.fullmatch(branch["head_sha"]) for branch in remote_branches):
+        return {
+            "decision": "blocked",
+            "reasons": ["remote branch evidence contains an invalid head SHA"],
+            "missing": [],
+        }
+    if any(not SHA_RE.fullmatch(disposition["head_sha"]) for disposition in dispositions):
+        return {
+            "decision": "blocked",
+            "reasons": ["retained branch disposition contains an invalid head SHA"],
+            "missing": [],
+        }
+    remote_heads = {branch["name"]: branch["head_sha"] for branch in remote_branches}
+    if len(remote_heads) != len(remote_branches):
+        return {
+            "decision": "blocked",
+            "reasons": ["duplicate remote branch names in duplicate work evidence"],
+            "missing": [],
+        }
+
+    matching_names = {branch["name"] for branch in matching_branches}
+    indexed: dict[str, list[dict[str, Any]]] = {}
+    for disposition in dispositions:
+        branch = disposition["branch"]
+        if branch not in remote_heads:
+            return {
+                "decision": "blocked",
+                "reasons": [f"retained branch disposition references absent remote branch {branch}"],
+                "missing": [],
+            }
+        if branch not in matching_names:
+            return {
+                "decision": "blocked",
+                "reasons": [f"retained branch disposition is outside this issue contract: {branch}"],
+                "missing": [],
+            }
+        indexed.setdefault(branch, []).append(disposition)
+
+    for branch in matching_branches:
+        name = branch["name"]
+        head_sha = branch["head_sha"]
+        entries = indexed.get(name, [])
+        label = f"{name}@{head_sha}"
+        if not entries:
+            return {
+                "decision": "needs_human",
+                "reasons": [f"retained implementation branch requires a human disposition: {label}"],
+                "missing": [f"retained_branch_disposition:{label}"],
+            }
+        if len(entries) != 1:
+            return {
+                "decision": "blocked",
+                "reasons": [f"duplicate retained branch dispositions for {label}"],
+                "missing": [],
+            }
+        entry = entries[0]
+        if entry["head_sha"] != head_sha:
+            return {
+                "decision": "needs_human",
+                "reasons": [f"retained branch disposition SHA is stale or mismatched for {label}"],
+                "missing": [f"fresh_retained_branch_disposition:{label}"],
+            }
+        if entry["disposition"] == "active_duplicate":
+            return {
+                "decision": "blocked",
+                "reasons": [f"retained branch is an active duplicate: {label}"],
+                "missing": [],
+            }
+        if entry["disposition"] != "retained_non_conflicting":
+            return {
+                "decision": "needs_human",
+                "reasons": [f"retained branch disposition does not permit implementation: {label}"],
+                "missing": [f"permitting_retained_branch_disposition:{label}"],
+            }
+        source = entry["source"]
+        if (
+            source["kind"] != "maintainer_human"
+            or not source["reference"].strip()
+            or not source["recorded_at"].strip()
+        ):
+            return {
+                "decision": "needs_human",
+                "reasons": [f"retained branch disposition lacks maintainer source evidence: {label}"],
+                "missing": [f"maintainer_source:{label}"],
+            }
+    return None
 
 
 def evaluate_duplicate_work_gate(
@@ -180,21 +282,23 @@ def evaluate_duplicate_work_gate(
 
     branches = matching_contract_branches(evidence["remote_branches"], token)
     if branches:
-        reasons.append(
-            "remote branches match GH-"
-            f"{issue} implementation branch contract: {', '.join(branches)}"
+        disposition_result = evaluate_retained_branch_dispositions(evidence, branches)
+        if disposition_result is not None:
+            return {
+                "decision": disposition_result["decision"],
+                "issue": issue,
+                "reasons": reasons + disposition_result["reasons"],
+                "satisfied": satisfied,
+                "missing": disposition_result["missing"],
+                "blocked_actions": ["implement"],
+                "verification_commands": ["python3 checks/duplicate_work_gate.py --repo . --issue <issue> --evidence <evidence.json>"],
+            }
+        satisfied.append(
+            "all retained implementation branches have exact maintainer dispositions"
         )
-        return {
-            "decision": "needs_human",
-            "issue": issue,
-            "reasons": reasons,
-            "satisfied": satisfied,
-            "missing": ["branch_ownership_decision"],
-            "blocked_actions": ["implement"],
-            "verification_commands": ["python3 checks/duplicate_work_gate.py --repo . --issue <issue> --evidence <evidence.json>"],
-        }
 
-    satisfied.append(f"no remote branch matches implementation token {token}")
+    else:
+        satisfied.append(f"no remote branch matches implementation token {token}")
     return {
         "decision": "allowed",
         "issue": issue,
