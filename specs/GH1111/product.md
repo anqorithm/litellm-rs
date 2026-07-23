@@ -63,9 +63,14 @@ streaming 中映射为稳定的 canonical `ToolCall`；调用方回送的结果�
 7. **B-007** `functionCall.args`、`ToolUse.input` 和 function-style arguments 必须是合法的
    JSON object；缺失、`null`、scalar、array、无法解析的 JSON 或空 tool name 必须显式
    失败，不得补成 `{}`、空名称或普通文本成功。
-8. **B-008** `ToolResult.content` 为 object 时保持字段和值；array、scalar 或 `null` 必须
-   通过稳定的 `result` envelope 无损表达。`is_error=true` 必须保留原内容并产生稳定错误
-   标记；`is_error=false` 与缺失必须按既有 canonical 语义处理，不得删除结果。
+8. **B-008** `ContentPart::ToolResult.content` 为 object 时保持字段和值；array、scalar 或
+   `null` 必须通过稳定的 `result` envelope 无损表达。带顶层 `tool_call_id` 的 tool-role
+   message 若为 `MessageContent::Text(text)`，必须规范化为 `{"result": text}`；若为
+   `MessageContent::Parts(parts)`，必须规范化为 `{"result": [part_0, ...]}`，每个允许的
+   canonical part 保留显式 type/字段和值且顺序不变，空 parts 保留为空数组。顶层 ID 与
+   parts 内嵌 `ToolUse`/`ToolResult` 属于重复/歧义表示并按 B-005 拒绝；缺失 content 也
+   显式失败。`is_error=true` 必须以 `{"result": original, "is_error": true}` 保留原内容
+   并产生稳定错误标记；`is_error=false` 与缺失按既有 canonical 语义处理，不得删除结果。
 9. **B-009** streaming 可以分多个 chunks 传递文本与多个 calls，但同一 call 只能有一次
    身份创建、单调 arguments delta 和一个终态；重复上游 part、取消、断连或 parser error
    不得产生重复 call、伪 `tool_calls` 完成或随后成功终态。
@@ -133,7 +138,8 @@ streaming 中映射为稳定的 canonical `ToolCall`；调用方回送的结果�
 
 - 同名工具产生两个不同 call ID：两条 ledger entry 独立，result 只能按 ID 关联。
 - assistant message 同时携带文本和多个 calls：文本保持现有拼接语义，calls 保持 part 顺序。
-- tool result 为 `null`、array、字符串或 error object：均按 B-008 可逆表达，不能变空字符串。
+- tool result 为 `null`、array、字符串或 error object：均按 B-008 可逆表达，不能变空字符串；
+  顶层 Text 固定进入 `result` envelope，顶层 Parts 逐项保留 type/字段/顺序。
 - upstream 在多个 chunks 重复发送完整 functionCall：同 ID 只能产生一次身份，重复不变内容可
   幂等，内容冲突必须失败。
 - tool call 后 provider fallback 到另一 provider：旧 provider ledger 不得跨边界复用。
