@@ -100,7 +100,10 @@ streaming 中映射为稳定的 canonical `ToolCall`；调用方回送的结果�
     安全摘要和稳定 error kind。
 18. **B-018** 完成证据必须包含正负 fixture、pre-network/auth counters、unary/stream
     聚合等价、Gemini/Vertex auth isolation、现有非工具回归以及新增代码 line coverage ≥80%；
-    call correlation、invalid wire、secret isolation 和 terminal-state 分支为 100%。
+    call correlation、invalid wire、secret isolation 和 terminal-state 分支为 100%。scheduled run
+    必须执行 full coverage 并上传报告，且不得执行 changed-line checker；`pull_request` 与
+    `workflow_dispatch`/manual run 必须用 immutable base 执行 changed-line gate，缺失或无效 base
+    必须失败，不能降级为 scheduled/full-coverage 成功。
 
 ## 验收标准
 
@@ -116,6 +119,9 @@ streaming 中映射为稳定的 canonical `ToolCall`；调用方回送的结果�
       artifact 均不含 sentinel secret 或完整 tool output。
 - [ ] 现有 text/image/reasoning、usage、budget、retry、tool declaration 与 provider routing
       回归测试保持通过。
+- [ ] scheduled coverage run 完整生成并上传 coverage evidence，且不运行 changed-line checker；
+      PR 与 manual coverage run 在各自 immutable base 上执行 changed-line/critical-branch gate，
+      base 缺失、无效或 coverage evidence 不足均失败。
 - [ ] `cargo fmt --all -- --check`、`cargo check --all-features`、strict Clippy、全量测试、
       SpecRail workflow/spec gate、独立 reviewer、CI、review threads 与 `pr_gate` 全绿。
 

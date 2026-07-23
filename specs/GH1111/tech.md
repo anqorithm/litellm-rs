@@ -23,7 +23,7 @@ GH-1111 / #1111
 | Shared provider utilities | `src/core/providers/shared.rs:1-10,69-90` | 有通用 provider helper，但没有 Google tool wire/ledger；把该语义塞入 generic shared 会模糊 owner。 | GH1112 已批准 neutral Google owner，本 issue 不再创建第二个 generic owner。 |
 | Vertex actual request path | `src/core/providers/vertex_ai/client.rs:55-116,119-165,269-335` | chat path 使用 `GeminiTransformer` 后由 `make_request` 获取 Bearer；声明 streaming，但 trait 未实现 stream method。 | B-010–B-012 的真实运行路径和认证边界。 |
 | Vertex transformer | `src/core/providers/vertex_ai/transformers.rs:19-110,113-190,194-274` | tool declarations 存在；canonical ToolUse/ToolResult 被拒绝，response 只读 text、丢弃 calls。 | 与 Developer 必须共享 semantic contract。 |
-| Coverage workflow | `.github/workflows/ci-coverage.yml:54-55,71-84` | 已安装 `cargo-llvm-cov`，但 installer 使用浮动 `@cargo-llvm-cov`，coverage 只在 schedule/manual 跑，命令未启用 branch，也未执行 GH1111 fail-closed policy checker。 | B-018 的工具版本、exact-head CI 与退出契约必须成为同一可审查门禁。 |
+| Coverage workflow | `.github/workflows/ci-coverage.yml:3-6,54-55,71-84` | coverage 只在 schedule/manual 跑，installer 使用浮动 `@cargo-llvm-cov`，命令未启用 branch，且尚无 PR changed-line gate；scheduled/full coverage 与 PR/manual immutable-base gate 的职责未分离。 | B-018 必须固定工具版本，并把 scheduled full coverage/upload 与 PR/manual changed-line enforcement 明确隔离。 |
 | Vertex wire DTO | `src/core/providers/vertex_ai/common_utils.rs:33-77` | 实际 transformer 使用 `Part::FunctionCall/FunctionResponse`，字段缺少显式 camelCase rename。 | 需要由 adapter 生成正确 `functionCall`/`functionResponse` wire。 |
 | Vertex secondary trait path | `src/core/providers/vertex_ai/client.rs:461-627,629-729` | `transform_request` 直接序列化 canonical messages；`transform_response` 只取首个 text part。 | 不修会保留第二条错误语义路径。 |
 | Vertex URL/auth | `src/core/providers/vertex_ai/client/url.rs:20-70`、`src/core/providers/vertex_ai/client.rs:79-115` | streaming URL 已支持 `?alt=sse`；request 使用 `VertexAuth` Bearer。 | 可以实现真实 Vertex SSE，同时保持认证隔离。 |
@@ -194,8 +194,8 @@ state。fixture 分别强制一次 pre-output retry 和一次跨 provider fallba
 尚未产生输出的 attempt 才允许 retry/fallback。若 fixture 暴露真实 router defect，必须先更新
 planned-path manifest 并重新审查，不能在清单外顺手修改 `execute_impl.rs`。
 
-新增 `scripts/guards/check_changed_coverage.py`，以 `cargo llvm-cov --branch --lcov` 输出和
-`origin/main...HEAD` changed lines 为输入。`scripts/guards/coverage/gh1111.json` 是 fail-closed
+新增 `scripts/guards/check_changed_coverage.py`，以 `cargo llvm-cov --branch --lcov` 输出和 immutable
+base 相对 exact head 的 changed lines 为输入。`scripts/guards/coverage/gh1111.json` 是 fail-closed
 policy，固定 `minimum_changed_line_percent=80`、`critical_branch_percent=100`，并显式列出
 correlation registration/consumption、strict provider response parsing、Developer/Vertex
 pre-auth validation 和 SSE terminal-state 的 path+symbol branch allowlist。checker 对缺失文件、
@@ -210,12 +210,14 @@ pre-auth validation 和 SSE terminal-state 的 path+symbol branch allowlist。ch
   并以 `tool: cargo-llvm-cov@0.8.7` 固定工具版本；CI 先断言
   `cargo llvm-cov --version` 精确匹配；
 - 保留 schedule/manual，并为 GH1111 manifest、coverage checker/policy 或 workflow 自身变化
-  增加有界 `pull_request` path trigger；PR run 的 base 使用 immutable
-  `${{ github.event.pull_request.base.sha }}`，manual run 要求显式 full base SHA input；
-- workflow 生成 `--branch` LCOV，随后运行 policy checker。充足 evidence 必须 exit 0；
-  missing/malformed/empty/低于 80%/关键 branch 未达 100% 必须非零并使 job 失败；
-- 无论 checker 成败都上传 LCOV、policy result 和 exact head/base metadata artifact，供独立
-  reviewer 与 PR gate 绑定同一 SHA；不得依赖 Codecov `target:auto` 代替本地 policy。
+  增加有界 `pull_request` path trigger。PR run 的 base 只能使用 immutable
+  `${{ github.event.pull_request.base.sha }}`；manual run 必须要求显式 full immutable base SHA input；
+- scheduled run 必须执行 full workspace coverage 并上传 LCOV/exact-head metadata，但绝不运行
+  changed-line checker，也不要求或推断 base SHA；
+- PR 与 manual run 生成 `--branch` LCOV 后必须运行 policy checker。充足 evidence 必须 exit 0；
+  missing/malformed/empty/低于 80%/关键 branch 未达 100%，以及缺失或无效 immutable base，均必须非零并使 job 失败；
+- 所有 trigger 都上传 LCOV 和 exact-head metadata；PR/manual 还上传 policy result 与 immutable
+  base metadata，供独立 reviewer 与 PR gate 绑定同一 SHA；不得依赖 Codecov `target:auto` 代替本地 policy。
 
 ## Product-to-Test Mapping
 
@@ -238,7 +240,7 @@ pre-auth validation 和 SSE terminal-state 的 path+symbol branch allowlist。ch
 | B-015 | existing non-tool and mixed-content fixtures | `cargo test --lib --all-features gemini_provider && cargo test --lib --all-features vertex_ai_transformer` |
 | B-016 | crate-private neutral API、删除/停止导出旧 semantic owners、双 provider parity | `cargo check --all-features` 强制 Gemini/Vertex consumers 只依赖 `google/` owner；`cargo test --lib --all-features google_tool_provider_parity`；independent dependency review 核验无第二 ledger/validator。窄 import audit 仅作 advisory，不是完成证据 |
 | B-017 | adversarial sentinel/error capture | `cargo test --lib --all-features google_tool_error_redaction` |
-| B-018 | executable changed-line/critical-branch coverage gate + pinned CI toolchain + full deterministic/remote gates | `python3 scripts/guards/check_changed_coverage.py --self-test`；生成 branch LCOV 后以 immutable base SHA 和 `--policy scripts/guards/coverage/gh1111.json` 执行：充足 evidence exit 0，missing/malformed/empty/低阈值非零；`ci-coverage.yml` 固定 installer SHA + `cargo-llvm-cov@0.8.7` 并上传 exact-head artifact；final fmt/check/clippy/test；exact-head review、CI、reviewThreads 与 `pr_gate.py` |
+| B-018 | trigger-separated coverage evidence: scheduled full coverage/upload; PR/manual changed-line/critical-branch gate + pinned CI toolchain + full deterministic/remote gates | `python3 scripts/guards/check_changed_coverage.py --self-test`；PR/manual 生成 branch LCOV 后以 immutable base SHA 和 `--policy scripts/guards/coverage/gh1111.json` 执行：充足 evidence exit 0，missing/malformed/empty/低阈值/invalid base 非零；scheduled run 不调用 checker 但上传 full LCOV/exact-head artifact；`ci-coverage.yml` 固定 installer SHA + `cargo-llvm-cov@0.8.7`；final fmt/check/clippy/test；exact-head review、CI、reviewThreads 与 `pr_gate.py` |
 
 ## 数据流
 
@@ -306,10 +308,11 @@ assistant call 重建新 ledger；不持久化全局状态，也不跨 provider/
 - [ ] Regression: `cargo test --lib --all-features vertex_ai`。
 - [ ] Coverage checker self-test: `python3 scripts/guards/check_changed_coverage.py --self-test`。
 - [ ] Coverage report: `cargo llvm-cov --all-features --workspace --branch --lcov --output-path artifacts/coverage/GH1111/lcov.info`。
-- [ ] Coverage gate: `python3 scripts/guards/check_changed_coverage.py --lcov artifacts/coverage/GH1111/lcov.info --base "$COVERAGE_BASE_SHA" --policy scripts/guards/coverage/gh1111.json`；充足 exact-head evidence 必须 exit 0；changed lines <80%、policy critical branches <100%、missing/malformed/empty evidence 必须非零。
+- [ ] PR/manual coverage gate: `python3 scripts/guards/check_changed_coverage.py --lcov artifacts/coverage/GH1111/lcov.info --base "$COVERAGE_BASE_SHA" --policy scripts/guards/coverage/gh1111.json`；充足 exact-head/immutable-base evidence 必须 exit 0；changed lines <80%、policy critical branches <100%、missing/malformed/empty evidence 或 base 无效必须非零。scheduled run 不调用此命令。
 - [ ] Coverage CI contract: `.github/workflows/ci-coverage.yml` 使用
       `taiki-e/install-action@c44f6b046f1c29ae5918b1e0bfdbb2f1813836fd` 安装
-      `cargo-llvm-cov@0.8.7`，执行同一 branch LCOV/checker，并保存 base/head/result artifact。
+      `cargo-llvm-cov@0.8.7`；scheduled run 执行 full coverage/upload，PR/manual 执行 branch
+      LCOV/checker，并保存相应 head/base/result artifact。
 - [ ] Deterministic: `cargo fmt --all -- --check`。
 - [ ] Build: `cargo check --all-features`。
 - [ ] Lint: `cargo clippy --all-targets --all-features -- -D warnings`。
