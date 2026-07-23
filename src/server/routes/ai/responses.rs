@@ -318,6 +318,11 @@ fn unsupported_codex_feature(request: &ResponsesApiRequest) -> Option<&str> {
             Some("defer_loading")
         }
         ResponseTool::CodexFunction(tool) if tool.strict == Some(true) => Some("strict"),
+        ResponseTool::CodexFunction(tool)
+            if tool.description.is_none() || tool.parameters.is_none() || tool.strict.is_none() =>
+        {
+            Some("function_schema")
+        }
         ResponseTool::Function(_) | ResponseTool::CodexFunction(_) => None,
         tool => Some(tool.feature_name()),
     })

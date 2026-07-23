@@ -104,6 +104,7 @@ async fn codex_wire_http_rejects_before_provider_dispatch() {
     fixtures.extend(tier_two_items().map(|item| json!({"model":"m","input":[item]})));
     for tool in [
         json!({"type":"custom","name":"shell","description":"d","format":{}}),
+        json!({"type":"function","name":"f"}),
         json!({"type":"function","name":"f","defer_loading":true}),
         json!({"type":"function","name":"f","strict":true}),
         json!({"type":"namespace"}),

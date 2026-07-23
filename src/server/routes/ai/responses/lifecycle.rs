@@ -434,7 +434,10 @@ fn input_items_page(
     let mut items = input_items_from_response_input(input)
         .into_iter()
         .enumerate()
-        .map(|(index, item)| (stable_input_item_id(index, &item), item))
+        .map(|(index, item)| {
+            let id = stable_input_item_id(index, &item);
+            (id.clone(), id, item)
+        })
         .collect::<Vec<_>>();
     match query.order.as_deref().unwrap_or("desc") {
         "asc" => {}
@@ -445,12 +448,18 @@ fn input_items_page(
             )));
         }
     }
+    for index in 0..items.len() {
+        let id = items[index].1.clone();
+        if items.iter().filter(|item| item.1 == id).nth(1).is_some() {
+            items[index].0 = format!("{id}:{index}");
+        }
+    }
 
     let mut start = 0;
     if let Some(after) = &query.after {
         let index = items
             .iter()
-            .position(|(id, _)| id == after)
+            .position(|(cursor, _, _)| cursor == after)
             .ok_or_else(|| {
                 GatewayError::validation(format!("Unknown input_items cursor: {after}"))
             })?;
@@ -464,11 +473,11 @@ fn input_items_page(
         .skip(start)
         .take(limit)
         .collect::<Vec<_>>();
-    let first_id = data.first().map(|(id, _)| id.clone());
-    let last_id = data.last().map(|(id, _)| id.clone());
+    let first_id = data.first().map(|(cursor, _, _)| cursor.clone());
+    let last_id = data.last().map(|(cursor, _, _)| cursor.clone());
     let data = data
         .into_iter()
-        .map(|(id, item)| ResponseInputListItem { id, item })
+        .map(|(_, id, item)| ResponseInputListItem { id, item })
         .collect();
 
     Ok(ResponseInputItemsList {

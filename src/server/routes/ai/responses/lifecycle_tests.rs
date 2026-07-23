@@ -219,7 +219,7 @@ fn input_items_page_defaults_desc_and_rejects_unsupported_include() {
             content: ResponseInputContent::Text("first".to_string()),
         }),
         ResponseInputItem::Message(ResponseInputMessage {
-            id: Some("msg_2".to_string()),
+            id: Some("msg_1".to_string()),
             phase: None,
             internal_chat_message_metadata_passthrough: None,
             role: "user".to_string(),
@@ -238,8 +238,8 @@ fn input_items_page_defaults_desc_and_rejects_unsupported_include() {
     )
     .unwrap();
     assert_eq!(first_page.data.len(), 1);
-    assert_eq!(first_page.first_id.as_deref(), Some("msg_2"));
-    assert_eq!(first_page.last_id.as_deref(), Some("msg_2"));
+    assert_eq!(first_page.first_id.as_deref(), Some("msg_1:0"));
+    assert_eq!(first_page.last_id.as_deref(), Some("msg_1:0"));
     assert_eq!(
         serde_json::to_string(&first_page.data[0])
             .unwrap()
