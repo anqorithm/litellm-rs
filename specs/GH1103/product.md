@@ -16,7 +16,8 @@ GH-1103 / #1103
 - 为已发布 `core::cost`、`core::providers::base::pricing`、`utils::{ModelUtils, TokenUtils}` pricing method、
   feature-gated provider pricing path/re-export，以及 post-v0.5 的当前公开 `core::pricing` facade 的 symbol、
   production consumer、compatibility DTO、`PricingService` live provider fallback source 和 test-only consumer
-  建立完整 inventory；public compatibility 基线只取 `v0.5.0` tag/package 在对应 feature set 下实际发布的 surface。
+  建立完整 inventory；public compatibility 基线只取 `v0.5.0` tag/package 在 default、no-default/lite 与
+  docs.rs 对应 feature set 下实际发布的 surface。
 - 保持 `PricingService` 是唯一 user-visible pricing authority，不恢复第二套 live pricing source。
 - 将必须兼容的 surface 明确为 adapter；仅对维护者批准的 surface 在 0.6.x 标记 deprecated。
 - 为 0.7.0 removal 定义 release、semver、public API approval 与行为回归门禁。
@@ -33,9 +34,10 @@ GH-1103 / #1103
 
 ## Behavior Invariants
 
-1. 对同一已定价 provider、model、usage 与 pricing source，pricing route、budget reservation、spend settlement
-   必须使用同一个 runtime `PricingService` configured/loaded authority 结果；custom `pricing.source` parity 只在这些
-   live consumers 之间比较。保留 v0.5 签名、无法接收 runtime service 的 `core::cost`、provider-base pricing 与
+1. 对同一已定价 provider、model、usage 与 pricing source，pricing route、budget reservation、spend settlement、
+   callback lifecycle terminal cost，以及 chat/embedding response-cache admission pricing gate 必须使用同一个
+   runtime `PricingService` configured/loaded authority 结果；custom `pricing.source` parity 只在这些 live consumers
+   之间比较。保留 v0.5 签名、无法接收 runtime service 的 `core::cost`、provider-base pricing 与
    utility compatibility facade 只与 `PricingService::with_embedded_default()` 的同 embedded source 结果比较，
    不得声称它与 custom source 数值相等。
    unknown/incomplete pricing 在默认 `Reject` policy 下 fail closed，而显式 `AllowUnpriced` policy 必须继续以配置的
@@ -43,7 +45,8 @@ GH-1103 / #1103
 2. 0.6.x 必须保持 `v0.5.0` tag/package 已发布 `core::cost` 与
    `core::providers::base::{pricing, PricingDatabase, get_pricing_db}`、
    `utils::ModelUtils::get_model_pricing`、`utils::TokenUtils::calculate_cost` 及对应 public re-export/module path，
-   以及 v0.5 docs.rs feature set 暴露的 provider pricing/cost API（至少 Azure/Bedrock）的签名与既有兼容行为；
+   以及 v0.5 no-default/lite 和 docs.rs feature set 暴露的 pricing/cost API（docs.rs 至少 Azure/Bedrock）的签名
+   与既有兼容行为；
    只有 inventory 中经维护者批准的已发布 symbol 可以标记 deprecated，且必须给出替代路径。
    `core::pricing` 是 post-v0.5 current-head surface，仍必须完成 authority disposition，但不得误列为 v0.5
    published compatibility cohort，也不因当前存在而自动套用 0.6 deprecate/0.7 remove 窗口。
@@ -64,19 +67,24 @@ GH-1103 / #1103
 
 - [ ] inventory 从 `v0.5.0@de594c81` tag/package public API 基线起步；published cohort 覆盖当时实际存在的
   `core::cost`、`core::providers::base::pricing`、`utils::{ModelUtils, TokenUtils}` 的全部 public re-export/module path
-  与 pricing methods，以及 default/docs.rs feature matrix 下的 provider pricing/cost API；current-head cohort 另覆盖
+  与 pricing methods，以及 default、`--no-default-features --features lite`、docs.rs feature matrix 下的
+  provider pricing/cost API；current-head cohort 另覆盖
   post-v0.5 `core::pricing` symbol/production import、legacy DTO、`pricing_service/authority.rs::provider_catalog_model_info`
-  及其 Azure、Bedrock、Amazon Nova、xAI authority source、legacy fallback 和 test-only consumer；source guard 防止遗漏或 cohort 混淆。
+  及其 Azure、Bedrock、Amazon Nova、xAI authority source、legacy fallback、callback lifecycle、
+  chat/embedding response-cache pricing gate 和 test-only consumer；source guard 防止遗漏或 cohort 混淆。
 - [ ] 兼容矩阵仅对 v0.5 published adapter 记录 `keep_adapter`、`deprecate_0_6_remove_0_7` 或
   `needs_decision`；post-v0.5 `core::pricing` 显式记录 `post_v0_5_unreleased` baseline status，任何
   authority-bearing public facade 与 user-visible fallback 另记录 `migrate_authority` 或 `needs_decision`，并附
   owner evidence，不能仅以 current-head public 或 `keep_adapter` 为由保留独立计算。
 - [ ] 0.6.x tranche 保持相对 `v0.5.0` 的 public compatibility 与 runtime behavior，并提供 CHANGELOG、迁移说明，
-  以及两组 tag/package-derived compile/behavior fixtures：(a) default features；(b) v0.5 docs.rs exact set
+  以及三组 tag/package-derived compile/behavior fixtures：(a) default features；(b)
+  `--no-default-features --features lite` API-only；(c) v0.5 docs.rs exact set
   `gateway,postgres,sqlite,redis,s3,metrics,tracing,websockets,analytics,providers-extra,providers-extended`；fixture
-  必须覆盖 feature-gated Azure/Bedrock 等 public pricing/cost path，而非只验证默认编译。
+  必须覆盖 lite lane 的 public pricing imports/behavior 与 docs.rs feature-gated Azure/Bedrock pricing/cost path，
+  而非只验证默认编译。
 - [ ] source-aware parity 分为两组独立回归：custom `pricing.source` 的 pricing route/budget reservation/spend
-  settlement 共享同一 runtime loaded authority；embedded compatibility facade 只与 embedded authority parity。
+  settlement、callback terminal cost、chat/embedding response-cache admission pricing gate 共享同一 runtime loaded
+  authority；embedded compatibility facade 只与 embedded authority parity。
   未经另行批准，不假设新增 authority injection 参数或更改 v0.5 签名，也不做跨 source 数值相等断言。
 - [ ] `PricingService` authority、spend parity、provider alias/fallback、默认 `Reject` policy 的 unknown pricing
   fail-closed 与显式 `AllowUnpriced` policy 的 fallback reservation/settlement parity 回归全部通过。
@@ -96,6 +104,8 @@ GH-1103 / #1103
   只盘点 struct 的顶层 re-export。
 - custom `pricing.source` 可故意覆盖 embedded 价格；正确性是同 source consumer parity，不是 custom 与 embedded
   价格相等。若未来要让无 service 参数的 v0.5 facade 接收 runtime authority，必须另行批准 non-breaking injection 设计。
+- callback terminal cost 或 cache-enabled deployment 的 admission gate 若偏离 route/reservation/settlement 的
+  configured source，必须显式失败；不得用 embedded fallback 或 cache hit 掩盖 source divergence。
 - `AllowUnpriced` 是显式 policy，不是 pricing miss 的隐式零成本降级；其配置 fallback cost、reservation、
   settlement 与 usage record 必须维持同一语义。
 - 在 0.6.x 新增的合法 adapter 不自动进入 0.7 removal；必须先补齐矩阵与批准证据。
