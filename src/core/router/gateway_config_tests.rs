@@ -4,16 +4,12 @@ mod matrix {
     use crate::core::providers::unified_provider::ProviderError;
     use std::sync::{Mutex, MutexGuard};
     static ENV_LOCK: Mutex<()> = Mutex::new(());
+    #[rustfmt::skip]
     const ENVS: &[&str] = &[
-        "MIMO_API_KEY",
-        "XIAOMI_API_KEY",
-        "CLOUDFLARE_API_TOKEN",
-        "REPLICATE_API_TOKEN",
-        "REPLICATE_API_KEY",
-        "FAL_AI_API_KEY",
-        "COHERE_API_KEY",
-        "GEMINI_API_KEY",
-        "GOOGLE_API_KEY",
+        "MIMO_API_KEY", "XIAOMI_API_KEY", "CLOUDFLARE_API_TOKEN",
+        "REPLICATE_API_TOKEN", "REPLICATE_API_KEY", "FAL_AI_API_KEY",
+        "COHERE_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY",
+        "PERPLEXITY_API_KEY", "GITHUB_TOKEN",
     ];
     const GEM_TOP: &str = "gem-top-test-api-key-12345678901234567890";
     const GEM_SETTINGS: &str = "gem-settings-test-api-key-12345678901234567890";
@@ -156,10 +152,14 @@ mod matrix {
         Case { name: "catalog-primary", selector: "xiaomi_mimo", top: " ", settings: &[], env: &[("MIMO_API_KEY","primary"),("XIAOMI_API_KEY","alternate")], selected: Some("primary"), shadowed: &["alternate"] },
         Case { name: "catalog-alternate", selector: "xiaomi_mimo", top: "", settings: &[], env: &[("MIMO_API_KEY"," "),("XIAOMI_API_KEY","alternate")], selected: Some("alternate"), shadowed: &[] },
         Case { name: "catalog-blank", selector: "xiaomi_mimo", top: " ", settings: &[], env: &[("MIMO_API_KEY"," "),("XIAOMI_API_KEY","")], selected: None, shadowed: &[] },
+        Case { name: "catalog-alias-pplx", selector: "pplx", top: "", settings: &[], env: &[("PERPLEXITY_API_KEY","primary")], selected: Some("primary"), shadowed: &[] },
+        Case { name: "catalog-alias-github", selector: "github-models", top: "", settings: &[], env: &[("GITHUB_TOKEN","primary")], selected: Some("primary"), shadowed: &[] },
         Case { name: "cf-settings", selector: "cf", top: "top", settings: &[("api_token","settings")], env: &[("CLOUDFLARE_API_TOKEN","env")], selected: Some("settings"), shadowed: &["top","env"] },
         Case { name: "cf-top", selector: "cloudflare", top: "top", settings: &[("api_token"," ")], env: &[("CLOUDFLARE_API_TOKEN","env")], selected: Some("top"), shadowed: &["env"] },
         Case { name: "cf-env", selector: "workers-ai", top: " ", settings: &[("api_token","")], env: &[("CLOUDFLARE_API_TOKEN","env")], selected: Some("env"), shadowed: &[] },
         Case { name: "cf-blank", selector: "cloudflare", top: " ", settings: &[("api_token","")], env: &[("CLOUDFLARE_API_TOKEN"," ")], selected: None, shadowed: &[] },
+        Case { name: "cf-api-key", selector: "cloudflare", top: " ", settings: &[("api_token",""),("api_key","settings")], env: &[("CLOUDFLARE_API_TOKEN","env")], selected: Some("settings"), shadowed: &["env"] },
+        Case { name: "bedrock-api-key-ignored", selector: "bedrock", top: "stray", settings: &[("aws_access_key_id","AKIATEST123456789012"),("aws_secret_access_key","test-secret-key")], env: &[], selected: None, shadowed: &[] },
         Case { name: "rep-top", selector: "replicate", top: "top", settings: &[("api_key","settings"),("api_token","token")], env: &[("REPLICATE_API_TOKEN","env1"),("REPLICATE_API_KEY","env2")], selected: Some("top"), shadowed: &["settings","token","env1","env2"] },
         Case { name: "rep-settings", selector: "replicate-ai", top: " ", settings: &[("api_key","settings"),("api_token","token")], env: &[("REPLICATE_API_TOKEN","env1")], selected: Some("settings"), shadowed: &["token","env1"] },
         Case { name: "rep-token", selector: "replicate", top: "", settings: &[("api_key"," "),("api_token","token")], env: &[("REPLICATE_API_TOKEN","env1")], selected: Some("token"), shadowed: &["env1"] },

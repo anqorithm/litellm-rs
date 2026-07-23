@@ -59,13 +59,12 @@ fn has_custom_authorization(config: &ProviderConfig) -> bool {
 
 fn catalog_definition(selector: &str) -> Option<&'static provider_registry::ProviderDefinition> {
     let normalized = selector.trim().to_ascii_lowercase();
-    let definition = provider_registry::get_definition(&normalized)?;
     match provider_registry::entry_for_name(&normalized) {
         Some(entry) if entry.dispatch_kind == ProviderDispatchKind::CatalogOpenAiLike => {
-            Some(definition)
+            provider_registry::get_definition(entry.canonical_name)
         }
         Some(_) => None,
-        None => Some(definition),
+        None => provider_registry::get_definition(&normalized),
     }
 }
 
@@ -90,6 +89,7 @@ fn normalize_provider_construction(config: &ProviderConfig) -> NormalizedProvide
         match selector.parse::<ProviderType>() {
             Ok(ProviderType::Cloudflare) => setting(config, "api_token")
                 .or(top_level)
+                .or_else(|| setting(config, "api_key"))
                 .or_else(|| environment(&["CLOUDFLARE_API_TOKEN"])),
             Ok(ProviderType::Replicate) => top_level
                 .or_else(|| setting(config, "api_key"))
@@ -106,8 +106,8 @@ fn normalize_provider_construction(config: &ProviderConfig) -> NormalizedProvide
                 .or_else(|| setting(config, "google_api_key"))
                 .or_else(|| setting(config, "gemini_api_key"))
                 .or_else(|| environment(&["GEMINI_API_KEY", "GOOGLE_API_KEY"])),
+            Ok(ProviderType::Bedrock) | Err(_) => None,
             Ok(_) => top_level.or_else(|| setting(config, "api_key")),
-            Err(_) => None,
         }
     };
 
