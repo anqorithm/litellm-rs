@@ -29,10 +29,10 @@ Link to `product.md`.
   "complete": true,
   "dependency_gate": "PR #1117 merged and exact GH1112 catalog API re-anchored",
   "paths": [
-    "src/core/providers/google/models/registry.rs",
-    "src/core/providers/google/models/tests.rs",
     "src/core/pricing_service/authority.rs",
     "src/core/pricing_service/authority_tests.rs",
+    "src/core/providers/unified_provider_error.rs",
+    "src/core/providers/unified_provider_methods.rs",
     "src/core/providers/gemini/models/mod.rs",
     "src/core/providers/gemini/provider.rs",
     "src/core/providers/gemini/provider_tests.rs",
@@ -53,11 +53,12 @@ Link to `product.md`.
 }
 ```
 
-`src/core/providers/google/models/registry.rs` 与 `tests.rs` 是 GH1112 计划中的 future paths；
-只有 #1117 合并后路径和 symbol 仍一致才可使用。若合并结果改名、拆分或把 pricing fields
-放在另一 neutral file，先更新本 manifest、重跑 spec review，再实施。除测试外，
-`spend/unpriced.rs` 仅在 fresh fixture 证明现有 audit contract 缺口时可改；不得借此扩大
-policy 或 persistence scope。
+`src/core/providers/google/models/registry.rs` 仅列作 dependency anchor，不是 writable manifest
+path；本 issue 对 merged GH1112 catalog 只读。若 #1117 合并结果改名、拆分或缺少本 spec
+要求的 exact read API，先更新 manifest、明确所需 catalog API change 并重跑 spec review，
+不得由 pricing task 静默修改 canonical ID/availability owner。`spend/unpriced.rs` 的
+message-prefix classifier 已被 fresh review 证明不满足 B-007，因此本 issue 必须修改它；
+不得借此扩大 policy 或 persistence scope。
 
 ## 设计方案
 
@@ -91,7 +92,8 @@ public token-cost helper、硬编码 Gemini price tuple、substring/default bran
 2. 以明确的 pricing-provider mapping + canonical ID 查询当前已加载 pricing source；
 3. 只接受 exact key 或 GH1112 显式 alias；Google path 禁止进入
    `is_shared_model_match`、longest-candidate、family substring 或另一 surface 的 availability；
-4. 验证当前 usage 所需 price fields 为 finite、非负且完整；
+4. 对 Gemini/Vertex token-priced record 始终验证 input/output token price 同时存在、
+   finite 且非负；modal price 仅在对应 usage 非零时额外要求；
 5. 返回现有 `PricingCostBreakdown`/`CostResult` typed result，保留 requested provider、
    resolved canonical model 与 pricing source identity 的可测试上下文。
 
@@ -101,12 +103,14 @@ Google catalog 中为兼容迁移而保留的 price metadata 不能在 live miss
 embedded `PricingService` adapter；初始化失败直接 typed error，不能构造空 service。live
 gateway 不得调用该 embedded adapter。
 
-错误边界复用现有类型，不新增第三套 public error：
+错误边界使用一个 crate-private closed pricing-failure kind，并穷举映射到现有 public error
+层级；不再依赖自由文本：
 
-- authority 返回 `GatewayError`，model absence/unavailability 与 invalid/incomplete pricing
-  采用稳定、可分类的 variant/message contract；
-- provider/public facade 映射为 `ProviderError::ModelNotFound` 或
-  `ProviderError::Configuration`/`InvalidRequest`，不得映射为 success；
+- exact authority 内部 failure kind 至少穷举 `UnknownModel`、`SurfaceUnavailable`、
+  `MissingPrice`、`InvalidPrice`；普通 `GatewayError` 文本不能决定 policy eligibility；
+- provider/public facade 穷举映射到独立结构化
+  `ProviderError::PricingUnavailable { provider, model, reason }`（最终字段名可等价调整），
+  `AllowUnpriced` 只按 variant 匹配，不得匹配 `message.starts_with(...)`；
 - mapping 只包含 provider/requested+canonical model 和 field class，不包含 secret 或内容。
 
 ### 3. 单位与 public helper 收敛
@@ -141,12 +145,13 @@ reservation、settlement、spend 与 callback 继续使用 `AppState` 中同一�
 `PricingService`，并传递实际 selected deployment 的 provider + canonical model。每次 retry
 或 fallback 都新建 lookup；不能复用前一个 candidate 的 breakdown。
 
-typed model-not-priced error 只在现有 gateway request-time policy boundary 被分类：
+typed pricing-unavailable error 只在现有 gateway request-time policy boundary 被分类：
 
 - `Reject`：记录 reject evidence 并在 provider call/budget mutation/success side effect 前返回；
 - `AllowUnpriced`：仅配置明确选择该 variant 时，以
   `unpriced_fallback_cost_per_1k_tokens` 和同一 usage 计算 reservation/settlement；
-- authentication、network、serialization、budget 或其他 error 不进入该 branch。
+- classifier 必须对 structured provider-error variant 做 closed match；authentication、network、
+  serialization、budget、普通 `InvalidRequest`/`ModelNotFound` 或其他 error 不进入该 branch。
 
 每次 bypass 继续调用 `record_unpriced_event`/`record_unpriced_spend`，输出结构化 `error`
 log；有 API key 时写 `UsageRecord::unpriced`。provider、model、policy、outcome、usage units
@@ -168,12 +173,12 @@ model、image/TTS pricing 与非 Google provider resolver 回归必须保持不�
 | Invariant | Implementation area | Verification |
 | --- | --- | --- |
 | B-001 | merged Google exact registry + exact `PricingService` Google resolver | exact Developer/Vertex surface matrix；unknown/fuzzy/prefix negatives；single-owner source guard |
-| B-002 | authority validation + provider error mapping | unknown/retired/wrong-surface/missing/one-sided/NaN/negative price typed errors；no zero/default success |
+| B-002 | authority validation + provider error mapping | unknown/retired/wrong-surface/missing/one-sided/NaN/negative price typed errors；one-sided/zero usage still validates both token fields；no zero/default success |
 | B-003 | provider trait/facade + four public helper owners | compile-time signature fixtures；no `Option`/bare-f64/legacy calculator inventory |
 | B-004 | single unit conversion owner | 1/1k/1M input/output/mixed/large numeric fixtures；no helper-local scaling guard |
 | B-005 | helper, reservation, settlement, spend, callback | exact identity/source sentinel parity and zero-usage validation |
 | B-006 | request preflight + retry/fallback | upstream/auth/network/budget/cache/callback counters zero；candidate-specific fresh lookup |
-| B-007 | gateway policy classifier | `AllowUnpriced` accepts only typed model-not-priced failure；other errors remain errors |
+| B-007 | closed pricing-failure kind + structured provider-error variant + gateway classifier | `AllowUnpriced` matches only the structured pricing-unavailable variant；source guard rejects Display/message-prefix parsing；other errors remain errors |
 | B-008 | unpriced reserve/settle/metrics/log/usage record | positive/zero fallback audit matrix；record failure emits error |
 | B-009 | GatewayError→ProviderError mapping/redaction | exact variants/context fixtures plus sentinel secret/content capture |
 | B-010 | GH1112 auth/catalog and partner paths | Google auth isolation + partner/image/TTS non-regression |
@@ -189,7 +194,7 @@ requested provider/model + usage
        -> budget reservation
        -> settlement + priced spend + callback
 
-typed model-not-priced error
+structured pricing-unavailable variant
   -> Reject: fail before upstream/mutation
   -> explicit AllowUnpriced only:
        fallback reserve -> fallback settle
@@ -201,7 +206,8 @@ typed model-not-priced error
 
 - **Correctness**：Google price keys/provider aliases currently permit fuzzy cross-match；exact
   resolver must be isolated so unrelated providers retain compatibility while Google cannot drift。
-- **Compatibility**：public `Option`/bare-`f64` helpers change signature；migration note and compile
+- **Compatibility**：public `Option`/bare-`f64` helpers and the public `ProviderError` variant set
+  change；migration note and compile
   fixtures are mandatory，but user has explicitly selected typed `Result` convergence。
 - **Data**：GH1112 may move price metadata without refreshing values；implementation must use the
   loaded runtime source and may not invent missing prices。
@@ -217,7 +223,8 @@ typed model-not-priced error
 - [ ] Dependency/manifest: confirm #1117 merge SHA, exact merged Google paths/symbols, fresh duplicate
   search, and reviewed manifest amendment if paths changed.
 - [ ] Exact authority: Developer/Vertex availability matrix；canonical/prefixed/alias positives；
-  unknown/fuzzy/retired/wrong-surface negatives；missing/one-sided/NaN/negative pricing.
+  unknown/fuzzy/retired/wrong-surface negatives；missing/one-sided/NaN/negative pricing；
+  input-only/output-only/zero usage all reject one-sided token records.
 - [ ] Units: 1、1_000、1_000_000 input/output；mixed、zero、large；cache/image/audio/video
   fields for multimodal helper；single conversion owner guard.
 - [ ] Public API: compile fixtures for `LLMProvider`、`Provider` facade、Gemini inherent/basic/
@@ -226,8 +233,9 @@ typed model-not-priced error
 - [ ] Runtime parity: custom-source sentinel across helper/runtime adapter、reservation、settlement、
   spend and callback；retry/fallback uses selected deployment identity.
 - [ ] Policy/audit: default Reject and explicit AllowUnpriced positive/zero-fallback matrices；
-  non-pricing error negative matrix；metrics/log/`UsageRecord::unpriced` fields and record-failure
-  error capture.
+  closed structured-variant classifier；ordinary `InvalidRequest` with the old
+  `model_not_priced:` prefix and every non-pricing error remain ineligible；source guard proves
+  no Display/message parsing；metrics/log/`UsageRecord::unpriced` fields and record-failure error capture.
 - [ ] Security: Gemini key/Vertex Bearer loopback isolation and adversarial error/log/audit redaction.
 - [ ] Regression: partner models、Vertex image generation/TTS、non-Google pricing resolvers.
 - [ ] Coverage: new executable lines ≥80%；exact rejection、unit conversion、error mapping、

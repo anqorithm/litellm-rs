@@ -42,8 +42,9 @@ unknown model 默认套用 Flash 价格；Gemini helper 还以 `Option<f64>` 表
    `(pricing_provider, canonical_model_id)` 查询同一个 runtime `PricingService`；不得使用
    lowercase/substring/family 猜测、默认 model 或跨 surface availability 代替 exact lookup。
 2. **B-002** unknown、retired、surface-unavailable、missing-price、只有单边 token price、
-   negative、NaN 或其他 incomplete pricing 必须返回 typed error；不得返回成功 `0.0`、默认
-   Flash/Pro 价格、空 pricing record 或隐式 embedded fallback。
+   negative、NaN 或其他 incomplete pricing 必须返回 typed error。Gemini/Vertex token-priced
+   record 无论当前 input/output usage 是否为零，都必须同时具有合法 input 与 output token
+   price；不得返回成功 `0.0`、默认 Flash/Pro 价格、空 pricing record 或隐式 embedded fallback。
 3. **B-003** provider trait/facade 与所有在本 scope 内发布的 Gemini/Vertex token-cost helper
    均返回 typed `Result<f64, ...>`，并薄适配 canonical authority。现有
    `LLMProvider::calculate_cost`/`Provider::calculate_cost` 保持
@@ -60,15 +61,19 @@ unknown model 默认套用 Flash 价格；Gemini helper 还以 `Option<f64>` 表
 6. **B-006** pricing preflight failure 在默认 `Reject` policy 下必须在 upstream、reservation、
    successful callback/cache outcome 和 spend write 前失败。retry/fallback 只能对实际选择的
    新 deployment 重新执行 exact lookup，不能借用前一个或相似 model 的价格。
-7. **B-007** `AllowUnpriced` 不是 provider helper 或 authority 的返回分支。只有 gateway
-   request-time code 观察到 typed model-not-priced failure 且最终合并配置明确选择
-   `AllowUnpriced` 时，才可按配置的 fallback cost 继续；其他错误类型不得被该 policy 吞掉。
+7. **B-007** `AllowUnpriced` 不是 provider helper 或 authority 的返回分支。exact authority
+   的 closed pricing-failure kind 必须穷举映射为结构化
+   `ProviderError::PricingUnavailable`（名称可在 implementation review 中等价调整，但必须是
+   独立 variant）；只有 gateway request-time code 对该 variant 做类型匹配且最终合并配置明确
+   选择 `AllowUnpriced` 时，才可按配置的 fallback cost 继续。禁止解析 Display/message
+   prefix；其他 `InvalidRequest`、`ModelNotFound`、auth/network/budget 等错误不得被该 policy 吞掉。
 8. **B-008** 每次 `AllowUnpriced` 绕过必须携带原始 provider、model、policy、outcome 与
    fallback cost，记录现有 unpriced event/spend metric 和结构化 error log；存在 API-key
    context 时还必须写入 `UsageRecord::unpriced`。reservation、settlement、usage record
    的 fallback cost 必须一致；记录失败必须显式 `error`，不得伪装为 priced success。
-9. **B-009** public helper 的 typed error 必须稳定区分 model not found/unavailable 与
-   invalid/incomplete pricing，并保留 provider + canonical/requested model 上下文；error、
+9. **B-009** public helper 的 typed error 必须以 closed pricing-failure kind 稳定区分
+   unknown、surface-unavailable、missing 与 invalid pricing，并穷举映射到独立的 structured
+   provider-error variant，保留 provider + canonical/requested model 上下文；error、
    Debug、Display、metric label 与 audit record 不包含 Gemini API key、Vertex Bearer token、
    project、location、prompt 或 response 内容。
 10. **B-010** GH1112 的 catalog/availability/auth/request-contract 行为保持不变；本 issue
@@ -106,8 +111,8 @@ unknown model 默认套用 Flash 价格；Gemini helper 还以 `Option<f64>` 表
 - 同一 canonical ID 在 Developer 与 Vertex availability 不同时，pricing lookup 必须先按
   surface 拒绝 unavailable 入口，即使 pricing source 中存在同名记录。
 - zero input + zero output 仍先验证 provider/model/price completeness，再返回合法 `0.0`。
-- 只有 input 或只有 output tokens 时，仍要求该 usage 实际需要的字段存在；不得用缺失字段
-  的 `0.0` 代替 typed error。
+- 只有 input 或只有 output tokens 时，Gemini/Vertex token-priced record 仍必须同时具有合法
+  input/output token price；这是 record completeness gate，不随本次 usage shape 放宽。
 - custom `pricing.source` 可以与 embedded source 数值不同；live gateway consumers 对
   configured runtime source 做 parity，无法接收 runtime service 的 compatibility helper 只能
   显式使用 embedded authority，且不得被 live gateway 调用。
