@@ -275,12 +275,110 @@ preflight 成功后才执行。
 - [ ] Format/build: `cargo fmt --all -- --check && cargo check --locked`
 - [ ] Strict lint: `cargo clippy --locked --all-targets -- -D warnings`
 - [ ] Full suite: `cargo test --locked`
-- [ ] Coverage artifact: `cargo llvm-cov --locked --all-features --workspace --lcov --output-path artifacts/coverage/GH1112/lcov.info`；CodeCov/LCOV changed-line report 必须证明新增代码 line coverage ≥80%，catalog validation、exact rejection、auth isolation 与 request-contract fail-closed 分支为 100%，未达标即阻塞。
+- [ ] Coverage artifact: `cargo llvm-cov --locked --all-features --workspace --branch --lcov --output-path artifacts/coverage/GH1112/lcov.info`；随后原样执行下方 exact-head gate。它以 `COVERAGE_BASE_SHA...HEAD` 的 Rust diff 为分母，要求新增可执行行 line coverage ≥80%，并要求新增 catalog/validation/exact-rejection/request-contract branch record 100% 命中；missing base、missing LCOV file、无新增可执行行、无关键分支、malformed record 或任一未命中都以非零退出。auth isolation 继续由 B-011/B-012/B-013 的行为 fixture 证明，不用普通 line report 冒充认证边界证明。
 - [ ] SpecRail: `python3 checks/check_workflow.py --repo . --spec-dir specs/GH1112 && python3 checks/check_workflow.py --repo .`
 - [ ] Diff integrity: `git diff --check`
 
 full suite、strict Clippy 与 SpecRail gates 由 coordinator 在 exact implementation head 各执行
 一次；reviewer 默认只做 inspection/focused checks，避免重复 target-dir 锁等待。
+
+### Exact-head coverage gate
+
+`COVERAGE_BASE_SHA` 必须是本 implementation tranche 从最新 `origin/main` 创建时记录的
+40 位 commit；禁止用会移动的 branch name 或自动更新 golden。`cargo llvm-cov --branch`
+必须与 gate 串行运行，且两条命令绑定同一个 clean `HEAD`：
+
+```bash
+test "${COVERAGE_BASE_SHA:-}" != "" &&
+test "$(git rev-parse "$COVERAGE_BASE_SHA^{commit}")" = "$COVERAGE_BASE_SHA" &&
+test -f artifacts/coverage/GH1112/lcov.info &&
+python3 - "$COVERAGE_BASE_SHA" artifacts/coverage/GH1112/lcov.info <<'PY'
+from fnmatch import fnmatch
+from pathlib import Path
+import re
+import subprocess
+import sys
+
+base, lcov_path = sys.argv[1:3]
+if re.fullmatch(r"[0-9a-f]{40}", base) is None:
+    raise SystemExit("COVERAGE_BASE_SHA must be a full commit SHA")
+
+diff = subprocess.run(
+    ["git", "diff", "--unified=0", "--no-color", f"{base}...HEAD", "--", "*.rs"],
+    check=True,
+    text=True,
+    capture_output=True,
+).stdout
+changed: dict[str, set[int]] = {}
+current_path: str | None = None
+for raw in diff.splitlines():
+    if raw.startswith("+++ b/"):
+        current_path = raw[6:]
+        changed.setdefault(current_path, set())
+        continue
+    if raw.startswith("@@ ") and current_path is not None:
+        match = re.search(r"\+(\d+)(?:,(\d+))?", raw)
+        if match is None:
+            raise SystemExit(f"malformed diff hunk: {raw}")
+        start = int(match.group(1))
+        count = int(match.group(2) or "1")
+        changed[current_path].update(range(start, start + count))
+
+root = Path.cwd().resolve()
+line_hits: dict[tuple[str, int], int] = {}
+branches: list[tuple[str, int, int]] = []
+source: str | None = None
+for raw in Path(lcov_path).read_text(encoding="utf-8").splitlines():
+    if raw.startswith("SF:"):
+        value = Path(raw[3:])
+        try:
+            source = value.resolve().relative_to(root).as_posix() if value.is_absolute() else value.as_posix()
+        except ValueError:
+            source = None
+    elif raw.startswith("DA:") and source is not None:
+        fields = raw[3:].split(",")
+        if len(fields) < 2:
+            raise SystemExit(f"malformed DA record: {raw}")
+        line_hits[(source, int(fields[0]))] = int(fields[1])
+    elif raw.startswith("BRDA:") and source is not None:
+        fields = raw[5:].split(",")
+        if len(fields) != 4:
+            raise SystemExit(f"malformed BRDA record: {raw}")
+        branches.append((source, int(fields[0]), 0 if fields[3] == "-" else int(fields[3])))
+
+changed_lines = {
+    key: hits for key, hits in line_hits.items()
+    if key[1] in changed.get(key[0], set())
+}
+if not changed_lines:
+    raise SystemExit("no changed executable Rust lines found in LCOV")
+covered_lines = sum(hits > 0 for hits in changed_lines.values())
+line_percent = covered_lines * 100.0 / len(changed_lines)
+if line_percent < 80.0:
+    raise SystemExit(f"changed-line coverage {line_percent:.2f}% is below 80%")
+
+critical_patterns = (
+    "src/core/providers/google/**",
+    "src/core/providers/gemini/provider.rs",
+    "src/core/providers/vertex_ai/mod.rs",
+    "src/core/providers/vertex_ai/batches/mod.rs",
+    "src/core/providers/vertex_ai/client.rs",
+    "src/core/providers/vertex_ai/common_utils.rs",
+    "src/core/providers/vertex_ai/transformers.rs",
+)
+critical = [
+    record for record in branches
+    if record[1] in changed.get(record[0], set())
+    and any(fnmatch(record[0], pattern) for pattern in critical_patterns)
+]
+if not critical:
+    raise SystemExit("no changed critical branch records found in LCOV")
+uncovered = [(path, line) for path, line, hits in critical if hits <= 0]
+if uncovered:
+    raise SystemExit(f"uncovered critical branches: {uncovered}")
+print(f"changed_line_coverage={line_percent:.2f}% critical_branches={len(critical)} covered=100%")
+PY
+```
 
 ## 回滚方案
 
