@@ -84,7 +84,10 @@ GH-1107 / #1107
 清单外文件，或任一 tranche 超过 10 个非文档文件 / 500 changed lines，先提交 spec
 amendment；不得边实现边扩大 allowlist。SP1107-T1 经独立复审要求补齐完整 Tier 2
 handler matrix、provider-dispatch=0 证据并恢复正常 rustfmt、独立断言及注释后，单独
-批准至最多 550 changed lines；该例外不改变文件 allowlist，也不适用于后续 tranche。
+批准至最多 550 changed lines。合并门禁的后续 review 又要求修复 input-list 重复 ID、
+空 `additional_tools`、Codex passthrough metadata、message `input_audio` 和 flat function
+`strict` 的 wire/fail-closed 缺口，因此 SP1107-T1 最终上限调整为 650 changed lines；
+该例外不改变文件 allowlist，也不适用于后续 tranche。
 
 ## 设计方案
 
