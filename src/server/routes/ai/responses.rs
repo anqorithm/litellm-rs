@@ -219,6 +219,11 @@ pub(crate) fn build_chat_request(
                                         }
                                     }
                                 }
+                                ResponseInputContentPart::InputAudio { .. } => {
+                                    return Err(
+                                        "unsupported Codex feature: input_audio".to_string()
+                                    );
+                                }
                             }
                         }
                         if content_parts.len() == 1 {
@@ -286,19 +291,24 @@ pub(crate) fn build_chat_request(
 }
 
 fn unsupported_codex_feature(request: &ResponsesApiRequest) -> Option<&str> {
-    if request
-        .additional_tools
-        .as_ref()
-        .is_some_and(|tools| !tools.is_empty())
-    {
+    if request.additional_tools.is_some() {
         return Some("additional_tools");
     }
-    if let ResponseInput::Items(items) = &request.input
-        && let Some(item) = items
-            .iter()
-            .find(|item| !matches!(item, ResponseInputItem::Message(_)))
-    {
-        return Some(item.feature_name());
+    if let ResponseInput::Items(items) = &request.input {
+        for item in items {
+            match item {
+                ResponseInputItem::Message(message) => {
+                    if let ResponseInputContent::Parts(parts) = &message.content
+                        && parts
+                            .iter()
+                            .any(|part| matches!(part, ResponseInputContentPart::InputAudio { .. }))
+                    {
+                        return Some("input_audio");
+                    }
+                }
+                item => return Some(item.feature_name()),
+            }
+        }
     }
     request.tools.as_ref()?.iter().find_map(|tool| match tool {
         ResponseTool::Function(tool) if tool.function.defer_loading == Some(true) => {
@@ -307,6 +317,7 @@ fn unsupported_codex_feature(request: &ResponsesApiRequest) -> Option<&str> {
         ResponseTool::CodexFunction(tool) if tool.defer_loading == Some(true) => {
             Some("defer_loading")
         }
+        ResponseTool::CodexFunction(tool) if tool.strict == Some(true) => Some("strict"),
         ResponseTool::Function(_) | ResponseTool::CodexFunction(_) => None,
         tool => Some(tool.feature_name()),
     })

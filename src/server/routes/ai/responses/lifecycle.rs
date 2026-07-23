@@ -8,7 +8,9 @@ use crate::server::state::AppState;
 use crate::utils::error::gateway_error::GatewayError;
 use actix_web::{HttpRequest, HttpResponse, Result as ActixResult, web};
 use dashmap::DashMap;
-use serde::{Deserialize, Serialize};
+use serde::ser::Error as SerializeError;
+use serde::{Deserialize, Serialize, Serializer};
+use serde_json::Value;
 use std::sync::LazyLock;
 use tokio::task::JoinHandle;
 use tracing::error;
@@ -48,11 +50,21 @@ struct ResponseInputItemsList {
     has_more: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 struct ResponseInputListItem {
     id: String,
-    #[serde(flatten)]
     item: ResponseInputItem,
+}
+
+impl Serialize for ResponseInputListItem {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let Value::Object(mut item) = serde_json::to_value(&self.item).map_err(S::Error::custom)?
+        else {
+            return Err(S::Error::custom("response input item must be an object"));
+        };
+        item.insert("id".to_string(), Value::String(self.id.clone()));
+        item.serialize(serializer)
+    }
 }
 
 #[derive(Deserialize)]
@@ -399,6 +411,7 @@ fn input_items_from_response_input(input: &ResponseInput) -> Vec<ResponseInputIt
         ResponseInput::Text(text) => vec![ResponseInputItem::Message(ResponseInputMessage {
             id: None,
             phase: None,
+            internal_chat_message_metadata_passthrough: None,
             role: "user".to_string(),
             content: ResponseInputContent::Text(text.clone()),
         })],
@@ -470,6 +483,12 @@ fn input_items_page(
 fn stable_input_item_id(index: usize, item: &ResponseInputItem) -> String {
     use sha2::{Digest, Sha256};
 
+    if let Ok(Value::Object(payload)) = serde_json::to_value(item)
+        && let Some(id) = payload.get("id").and_then(Value::as_str)
+        && !id.is_empty()
+    {
+        return id.to_string();
+    }
     let value = serde_json::to_string(&(index, item)).unwrap_or_else(|_| index.to_string());
     let digest = Sha256::digest(value.as_bytes());
     format!("item_{}", hex::encode(&digest[..8]))
@@ -489,6 +508,7 @@ fn output_items_as_input_context(output: &[ResponseOutputItem]) -> Vec<ResponseI
             Some(ResponseInputItem::Message(ResponseInputMessage {
                 id: Some(message.id.clone()),
                 phase: None,
+                internal_chat_message_metadata_passthrough: None,
                 role: "assistant".to_string(),
                 content: ResponseInputContent::Text(text),
             }))

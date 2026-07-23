@@ -10,7 +10,7 @@ use serde_json::Value;
 
 pub use crate::core::types::codex::wire::{
     CodexCustomTool, CodexCustomToolCall, CodexCustomToolCallOutput, CodexFunctionCall,
-    CodexFunctionCallOutput, CodexUnsupportedWire,
+    CodexFunctionCallOutput, CodexInternalChatMessageMetadataPassthrough, CodexUnsupportedWire,
 };
 
 // ── Request types ────────────────────────────────────────────────────────────
@@ -116,6 +116,9 @@ pub struct ResponseInputMessage {
     pub id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub phase: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub internal_chat_message_metadata_passthrough:
+        Option<CodexInternalChatMessageMetadataPassthrough>,
     /// Role: "user" | "assistant" | "system"
     pub role: String,
     /// Content: plain string or array of content parts
@@ -145,6 +148,8 @@ pub enum ResponseInputContentPart {
         #[serde(skip_serializing_if = "Option::is_none")]
         detail: Option<String>,
     },
+    /// URL-referenced audio input from the Codex wire protocol.
+    InputAudio { audio_url: String },
     /// Plain text output (used in assistant turns returned by the API)
     OutputText { text: String },
 }

@@ -212,14 +212,16 @@ async fn lifecycle_handlers_enforce_owner_delete_and_input_items_shape() {
 fn input_items_page_defaults_desc_and_rejects_unsupported_include() {
     let input = ResponseInput::Items(vec![
         ResponseInputItem::Message(ResponseInputMessage {
-            id: None,
+            id: Some("msg_1".to_string()),
             phase: None,
+            internal_chat_message_metadata_passthrough: None,
             role: "user".to_string(),
             content: ResponseInputContent::Text("first".to_string()),
         }),
         ResponseInputItem::Message(ResponseInputMessage {
-            id: None,
+            id: Some("msg_2".to_string()),
             phase: None,
+            internal_chat_message_metadata_passthrough: None,
             role: "user".to_string(),
             content: ResponseInputContent::Text("second".to_string()),
         }),
@@ -236,11 +238,19 @@ fn input_items_page_defaults_desc_and_rejects_unsupported_include() {
     )
     .unwrap();
     assert_eq!(first_page.data.len(), 1);
+    assert_eq!(first_page.first_id.as_deref(), Some("msg_2"));
+    assert_eq!(first_page.last_id.as_deref(), Some("msg_2"));
+    assert_eq!(
+        serde_json::to_string(&first_page.data[0])
+            .unwrap()
+            .matches("\"id\":")
+            .count(),
+        1
+    );
     assert_eq!(
         serde_json::to_value(&first_page.data[0].item).unwrap(),
         serde_json::to_value(&input_items_from_response_input(&input)[1]).unwrap()
     );
-    assert_eq!(first_page.first_id, first_page.last_id);
     assert!(first_page.has_more);
 
     let second_page = input_items_page(

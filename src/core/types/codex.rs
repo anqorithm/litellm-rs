@@ -8,6 +8,11 @@ pub mod wire {
     /// Codex protocol revision used by the GH-1107 compatibility fixtures.
     pub const CODEX_PROTOCOL_BASELINE: &str = "6e5a2d6b8d148a5554fdceb6f399ca45bd1c78d9";
     #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct CodexInternalChatMessageMetadataPassthrough {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub turn_id: Option<String>,
+    }
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct CodexFunctionCall {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub id: Option<String>,
@@ -18,6 +23,9 @@ pub mod wire {
         pub arguments: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub status: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub internal_chat_message_metadata_passthrough:
+            Option<CodexInternalChatMessageMetadataPassthrough>,
     }
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct CodexFunctionCallOutput {
@@ -25,6 +33,9 @@ pub mod wire {
         pub id: Option<String>,
         pub call_id: String,
         pub output: CodexToolOutput,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub internal_chat_message_metadata_passthrough:
+            Option<CodexInternalChatMessageMetadataPassthrough>,
     }
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct CodexCustomToolCall {
@@ -37,6 +48,9 @@ pub mod wire {
         pub input: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub status: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub internal_chat_message_metadata_passthrough:
+            Option<CodexInternalChatMessageMetadataPassthrough>,
     }
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct CodexCustomToolCallOutput {
@@ -46,6 +60,9 @@ pub mod wire {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub name: Option<String>,
         pub output: CodexToolOutput,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub internal_chat_message_metadata_passthrough:
+            Option<CodexInternalChatMessageMetadataPassthrough>,
     }
     #[derive(Debug, Clone, Serialize, Deserialize)]
     #[serde(untagged)]
