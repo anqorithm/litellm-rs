@@ -23,6 +23,7 @@ GH-1112 / #1112
 | Vertex advertised models | `src/core/providers/vertex_ai/client.rs:285-335` | `models()` 另建只含 Gemini 1.5 的静态 `ModelInfo` 表。 | 当前第三套事实源。 |
 | Vertex request dispatch | `src/core/providers/vertex_ai/client.rs:120-153,431-507` | chat 先 fuzzy parse，再按 enum 选择 transformer；supported params 又按字符串 `contains("gemini")`。 | exact gate 与 shared request contract 的执行点。 |
 | Vertex Gemini body contract | `src/core/providers/vertex_ai/transformers.rs:29-100,541-762`、`src/core/providers/vertex_ai/common_utils.rs:81-166,246-281` | `GeminiTransformer` 直接从 `ChatRequest` 构造 `GenerationConfig`；另有独立 `validate_parameters`，未消费共享模型请求契约。 | B-008/B-010 必须覆盖实际 request body，而不只覆盖 client 参数 map。 |
+| Vertex batch parser consumer | `src/core/providers/vertex_ai/batches/mod.rs:214-285` | batch request/response path 调用 `parse_vertex_model`，并以 model string 判断 Gemini。 | parser 改为 `Result` 后必须机械迁移该 consumer，保持 batch 产品行为不变。 |
 | Vertex URL | `src/core/providers/vertex_ai/client/url.rs:14-61` | URL 根据 enum 类别和 model ID 选择 Google/partner/custom 路径。 | Custom fallback 必须不可达，endpoint ownership 保留。 |
 | Developer auth | `src/core/providers/mod.rs:141-179`、`src/core/providers/gemini/client.rs:70-91` | native Developer URL 校验 route segment 后把 API key 放入 query。 | B-011/B-013 的现有边界。 |
 | Vertex auth | `src/core/providers/vertex_ai/client.rs:81-94`、`src/core/providers/vertex_ai/auth.rs:197-224` | `VertexAuth` 获取 access token，client 设置 Bearer header。 | B-012/B-013 的现有边界。 |
@@ -58,6 +59,7 @@ GH-1112 / #1112
     "src/core/providers/gemini/provider.rs",
     "src/core/providers/gemini/provider_tests.rs",
     "src/core/providers/vertex_ai/mod.rs",
+    "src/core/providers/vertex_ai/batches/mod.rs",
     "src/core/providers/vertex_ai/client.rs",
     "src/core/providers/vertex_ai/client/url.rs",
     "src/core/providers/vertex_ai/client_tests.rs",
@@ -144,6 +146,11 @@ overlay lookup，再 exact partner lookup，否则 typed model-not-found。
 `Custom(String)` 不再是 chat parse fallback；原 custom URL 分支对 chat 不可达。custom
 `api_base` 只替换 transport base，不放宽 model gate。Embedding/image/model-garden 的独立
 custom model enum 不在本次修改范围。
+
+`batches/mod.rs` 是 `parse_vertex_model` 的现有 consumer，随 parser signature 做机械迁移：
+使用相同 exact classification 并传播 typed error，不新增 batch capability、wire 字段或
+生命周期声明。这样每个 task head 都能编译，也不会用 compatibility wrapper 保留 fuzzy
+语义。
 
 `VertexAIProvider::models()` 由 `models_for(VertexAi)` 生成 Google `ModelInfo`，与 partner
 models 以 exact ID 合并、去重和排序；删除当前 Gemini 1.5 静态表。Vertex request
@@ -268,6 +275,7 @@ preflight 成功后才执行。
 - [ ] Format/build: `cargo fmt --all -- --check && cargo check --locked`
 - [ ] Strict lint: `cargo clippy --locked --all-targets -- -D warnings`
 - [ ] Full suite: `cargo test --locked`
+- [ ] Coverage artifact: `cargo llvm-cov --locked --all-features --workspace --lcov --output-path artifacts/coverage/GH1112/lcov.info`；CodeCov/LCOV changed-line report 必须证明新增代码 line coverage ≥80%，catalog validation、exact rejection、auth isolation 与 request-contract fail-closed 分支为 100%，未达标即阻塞。
 - [ ] SpecRail: `python3 checks/check_workflow.py --repo . --spec-dir specs/GH1112 && python3 checks/check_workflow.py --repo .`
 - [ ] Diff integrity: `git diff --check`
 
