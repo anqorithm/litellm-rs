@@ -14,7 +14,7 @@ GH-1111 / #1111
 
 | Area | Files | Current behavior | Why relevant |
 | --- | --- | --- | --- |
-| Canonical tool messages | `src/core/types/chat.rs:18-53`、`src/core/types/content.rs:5-65`、`src/core/types/tools.rs:55-74` | 顶层 `tool_calls`/`tool_call_id` 与 parts `ToolUse`/`ToolResult` 都能表达 call/result；function arguments 为 JSON string。 | B-003–B-008 的输入 authority；无需新增 public type。 |
+| Canonical tool messages | `src/core/types/chat.rs:18-53`、`src/core/types/content.rs:5-65`、`src/core/types/tools.rs:55-74` | 顶层 `tool_calls`/`tool_call_id` 与 parts `ToolUse`/`ToolResult` 都能表达 call/result；尚无逐 call thought signature 字段；legacy `functions`/`function_call` 仍需明确 disposition。 | B-001–B-008 的输入 authority；必须为既有 canonical 类型增加向后兼容的可选字段。 |
 | Gemini Developer request | `src/core/providers/gemini/client.rs:252-337,339-430` | message role 直接映射，tool role 写为 `function`；`ToolUse`/`ToolResult` 明确返回 multimodal error，空 parts 会补空文本。 | 第二回合失败的直接根因。 |
 | Gemini Developer unary response | `src/core/providers/gemini/client.rs:457-547` | 已读取 `functionCall`，但空 name/args 被默认值吞掉，call ID 由 candidate/part 生成。 | 保留稳定 ID 思路，改为严格 shared parser。 |
 | Gemini capability/dispatch | `src/core/providers/gemini/provider.rs:85-112,126-150,215-313` | model feature 仅在有 tool declaration 时检查；provider 声明 ToolCalling，unary/stream 分别进入 client 和 `GeminiStream`。 | B-005/B-012 的 preflight 与实际 transport。 |
@@ -39,6 +39,8 @@ GH-1111 / #1111
   "paths": [
     "src/core/providers/google/mod.rs",
     "src/core/providers/google/tool_loop.rs",
+    "src/core/types/tools.rs",
+    "src/core/types/content.rs",
     "src/core/providers/gemini/client.rs",
     "src/core/providers/gemini/provider.rs",
     "src/core/providers/gemini/provider_tests.rs",
@@ -55,6 +57,7 @@ GH-1111 / #1111
     "src/core/providers/vertex_ai/tests.rs",
     "src/core/router/tests/execution_tests.rs",
     "src/core/router/tests/fallback_tests.rs",
+    "src/core/router/execute_impl.rs",
     ".github/workflows/ci-coverage.yml",
     "scripts/guards/check_changed_coverage.py",
     "scripts/guards/coverage/gh1111.json"
@@ -87,7 +90,10 @@ endpoint：
 - `stream_function_call_deltas(parts, candidate_index, stream_state)` 生成稳定 tool-call delta；
 - `normalize_tool_result(value, is_error)` 产生可逆 response object。
 
-所有 Rust 字段保持 snake_case；只有 adapter 序列化边界使用显式 `functionCall`、
+`ToolCall` 与 `ContentPart::ToolUse` 新增 `#[serde(default, skip_serializing_if = "Option::is_none")]`
+的 canonical `thought_signature: Option<String>`；缺失字段的既有 payload 必须保持 serde
+兼容。签名是 opaque bytes/string authority，只能附着、转交与 replay，不得解析、重写或跨 call
+移动。所有 Rust 字段保持 snake_case；只有 adapter 序列化边界使用显式 `functionCall`、
 `functionResponse` 和对应 camelCase 字段。helper 返回 `ProviderError`，provider name 作为闭集
 参数传入，禁止 `Any`、warning+fallback 或吞异常。
 
@@ -100,6 +106,16 @@ Ledger 顺序扫描规则：
 4. result 只解析已经登记且未消费的 ID，name 永远从 ledger 读取；
 5. 扫描结束不要求每个 call 都已有 result，允许模型刚产生 call 的合法下一步；已经提供 result
    的 call 必须一对一且无剩余非法表示。
+6. legacy `ChatRequest.functions` declarations 与 `ChatRequest.function_call` /
+   `ChatMessage.function_call` 只有在 shape 完整且不与 modern `tools`/`tool_choice`/`tool_calls`
+   共存时才规范化到同一 ledger；malformed、重复名称/call 或 legacy-modern coexistence 均返回
+   `InvalidRequest`，不得被 adapter 忽略。
+   - `functions[]` 的非空 name、可选 description 与 object parameters 按原顺序规范化为
+     canonical declarations；
+   - request `function_call` 的 `auto`/`none`/非空具体 name 进入同一 tool-choice disposition；
+   - message `function_call` 的非空 name 与 object arguments 规范化为单 call；因 legacy shape
+     无 upstream ID，使用同一 turn-aware fallback generator；
+   - 任何其他 JSON shape、重复 name/call 或 legacy-modern coexistence 均 fail closed。
 
 结果 payload 使用唯一规范化函数。`ContentPart::ToolResult.content` 的 object 原样作为
 `functionResponse.response`；array/scalar/`null` 进入 `{"result": value}`。若
@@ -120,6 +136,8 @@ error 和 ambiguous fixtures 得到 byte-equivalent provider-neutral response ob
 Gemini Developer `transform_chat_request` 和 Vertex `GeminiTransformer` 在处理普通 text/image
 前先取得 shared plan：
 
+- canonical `Tool` 的 name/description/parameters/order 映射到 Gemini Developer
+  `tools[].functionDeclarations[]`；不支持的 declaration shape 在 auth/network 前失败；
 - assistant call 使用 role=`model` + `functionCall`；
 - tool result 使用 role=`user` + `functionResponse`；
 - 普通 content 继续由原 adapter 转换，shared helper 不接触 multimodal/auth；
@@ -127,8 +145,22 @@ Gemini Developer `transform_chat_request` 和 Vertex `GeminiTransformer` 在处�
   既有空文本兼容行为，非法 tool part 不能走该 fallback；
 - 全部 validation 在 `make_request`、API key URL 构造和 `VertexAuth::get_access_token` 前完成。
 
-Vertex `common_utils::Part` 对 `FunctionCall` / `FunctionResponse` 使用显式 serde rename，禁止
-依赖 Rust variant/field 名碰巧符合 wire。`client.rs::transform_request` 必须委托实际
+`parallel_tool_calls` 对两个 provider 使用同一明确 disposition：
+
+| Canonical value | Gemini Developer | Vertex AI |
+| --- | --- | --- |
+| absent | 省略限制并保持 provider default | 省略限制并保持 provider default |
+| `true` | 允许 provider 并行语义 | 允许 provider 并行语义 |
+| `false` | 当前 wire 无可靠的禁止并行控制，pre-auth `InvalidRequest` | 当前 wire 无可靠的禁止并行控制，pre-auth `InvalidRequest` |
+
+`tool_choice` disposition 同样穷尽：absent 省略 ToolConfig；`auto`、`none`、forced-valid 分别
+映射 provider `functionCallingConfig` 的自动、禁用、仅允许指定声明名称语义；unknown string、
+malformed specific choice、forced name 不在 declarations 中均 pre-auth reject。
+
+Vertex Tool、ToolConfig 与 `common_utils::Part` 必须在 serde 边界显式产生 camelCase
+`functionDeclarations`、`functionCallingConfig`、`allowedFunctionNames`、`functionCall` 与
+`functionResponse`，并由 golden JSON 禁止对应 snake_case key；不得依赖 Rust field/variant
+名称碰巧符合 wire。`client.rs::transform_request` 必须委托实际
 `GeminiTransformer`，不能继续直接序列化 `ChatMessage`；partner models 保持原路径。
 
 ### 3. Unary response parity
@@ -136,8 +168,13 @@ Vertex `common_utils::Part` 对 `FunctionCall` / `FunctionResponse` 使用显式
 Developer client 与 Vertex transformer 都调用 shared strict parser：
 
 - candidate index 优先使用 upstream `index`，缺失时才使用 array position；非法负数/溢出失败；
-- part index 与 candidate index 生成 `call_<candidate>_<part>`；
+- 非空 upstream `functionCall.id` 是 correlation authority，逐字写入 canonical output 并用于
+  后续 `functionResponse`；仅在缺失时才合成 fallback；
+- fallback ID 包含稳定 message/turn identity、candidate index 与 part index，保证同一请求历史
+  中不同 assistant turns 即使坐标相同也稳定且唯一；
 - name 必须非空，args 必须存在且为 object；不再 `unwrap_or("")` / `unwrap_or({})`；
+- wire `thoughtSignature`（若存在）映射到对应 call 的 canonical `thought_signature`，unary 输出
+  与下一轮 request replay 原样保留；
 - text 继续按现有顺序拼接，tool calls 单独保持 part order；
 - 只要有 tool call，finish reason 固定为 `ToolCalls`；无 tool call 时沿用已声明的 finish mapping，
   未知非空 finish reason 返回 parsing error而不是 Stop。
@@ -150,7 +187,8 @@ calls。未被实际运行路径引用的 `vertex_ai/gemini/mod.rs` 不在本 is
 扩展 `base/sse/gemini.rs::GeminiTransformer`：构造时接收 provider name 与 model，并持有每个
 stream 独立的 call state；Developer `GeminiStream` 继续拥有一个 transformer instance。
 
-- 每个 functionCall 首个 delta 写 index、稳定 ID、type、name；后续只追加 arguments；
+- 每个 functionCall 首个 delta 写 index、upstream ID（若有，否则含 turn identity 的稳定
+  fallback）、type、name 与对应 thought signature；后续只追加 arguments；
 - 重复完全相同 part 幂等，冲突内容返回 parsing error；
 - 有 call 的 terminal chunk 使用 `FinishReason::ToolCalls`；
 - malformed chunk、断连、取消不合成成功 terminal。
@@ -186,13 +224,17 @@ policy 保持 authority；shared helper 不决定 retry。
 
 ### 7. Router attempt 隔离与 coverage 门禁
 
-Router production ownership 保持在 `execute_impl.rs`，本 issue 默认只读。新增的 integration
-fixtures 放入既有 `execution_tests.rs` 与 `fallback_tests.rs`：operation closure 每次被 router
+Router attempt classification 必须区分客户端产生的 Google `InvalidRequest` 与真实 provider
+失败：前者在 pre-auth/network 返回时不得记录 deployment failure、cooldown 或 health mutation，
+后者仍沿用既有失败 accounting。`execute_impl.rs` 仅允许实现这一有界 classification，不得改变
+其他 provider/retry 语义。新增的 integration fixtures 放入既有 `execution_tests.rs` 与
+`fallback_tests.rs`：先以 failing router fixture 锁定上述 counters/state，再修改 production；
+operation closure 每次被 router
 调用时必须从不可变 request snapshot 重新执行 provider preflight 并构造新的 ledger/stream
 state。fixture 分别强制一次 pre-output retry 和一次跨 provider fallback，并断言：attempt 使用
 不同 ledger identity；旧 attempt 的 partial state 不可见；已消费 result/call 不会重复；只有
-尚未产生输出的 attempt 才允许 retry/fallback。若 fixture 暴露真实 router defect，必须先更新
-planned-path manifest 并重新审查，不能在清单外顺手修改 `execute_impl.rs`。
+尚未产生输出的 attempt 才允许 retry/fallback。每类 invalid history 前后还必须快照 deployment
+failure count、cooldown/health、auth、network、upstream、callback、retry 与 fallback counters。
 
 新增 `scripts/guards/check_changed_coverage.py`，以 `cargo llvm-cov --branch --lcov` 输出和 immutable
 base 相对 exact head 的 changed lines 为输入。`scripts/guards/coverage/gh1111.json` 是 fail-closed
@@ -225,21 +267,21 @@ pre-auth validation 和 SSE terminal-state 的 path+symbol branch allowlist。ch
 
 | Product invariant | Implementation area | Verification |
 | --- | --- | --- |
-| B-001 | shared response parser + Developer/Vertex unary adapters | `cargo test --lib --all-features google_tool_unary_order_and_finish_reason` |
-| B-002 | shared ID scheme + Gemini/Vertex SSE aggregation | `cargo test --lib --all-features google_tool_unary_stream_equivalence` |
-| B-003 | shared request planner + both request adapters | `cargo test --lib --all-features google_tool_call_request_mapping` |
+| B-001 | shared response parser + canonical signatures + Developer/Vertex unary adapters | `cargo test --lib --all-features google_tool_upstream_id_round_trip`；`cargo test --lib --all-features google_tool_thought_signature_round_trip` |
+| B-002 | upstream-ID precedence + turn-aware fallback + Gemini/Vertex SSE aggregation | `cargo test --lib --all-features google_tool_unary_stream_equivalence`；`cargo test --lib --all-features google_tool_fallback_id_turn_uniqueness` |
+| B-003 | declaration/legacy planner + both request adapters | `cargo test --lib --all-features google_tool_call_request_mapping`；`cargo test --lib --all-features google_tool_declaration_mapping`；`cargo test --lib --all-features google_tool_legacy_function_fields_map_or_reject` |
 | B-004 | ledger result resolution + role/response adapters | `cargo test --lib --all-features google_tool_result_request_mapping` |
-| B-005 | ledger negative matrix before clients | `cargo test --lib --all-features google_tool_correlation_rejects_before_auth_network` |
-| B-006 | ordered multi-call ledger | `cargo test --lib --all-features google_parallel_tool_calls_preserve_identity` |
+| B-005 | ledger negative matrix + router attempt classification | `cargo test --lib --all-features google_tool_correlation_rejects_before_auth_network`；`cargo test --lib --all-features google_tool_invalid_history_router_state_unchanged` |
+| B-006 | ordered multi-call ledger + parallel disposition | `cargo test --lib --all-features google_parallel_tool_calls_preserve_identity`；`cargo test --lib --all-features google_tool_parallel_disabled_matrix` |
 | B-007 | strict args/name validation | `cargo test --lib --all-features google_tool_invalid_arguments_matrix` |
 | B-008 | result normalization | `cargo test --lib --all-features google_tool_result_normalization_matrix` |
 | B-009 | per-stream state/terminal handling | `cargo test --lib --all-features google_tool_stream_terminal_matrix` |
 | B-010 | shared fixture run through both adapters | `cargo test --lib --all-features google_tool_provider_parity` |
 | B-011 | separate client/auth loopback capture | `cargo test --lib --all-features google_tool_auth_isolation` |
-| B-012 | provider/model capability and actual stream dispatch | `cargo test --lib --all-features google_tool_capability_matches_dispatch` |
+| B-012 | provider/model capability, declaration wire, Vertex camelCase, actual stream dispatch | `cargo test --lib --all-features google_tool_capability_matches_dispatch`；`cargo test --lib --all-features google_tool_declaration_mapping`；`cargo test --lib --all-features vertex_tool_wire_camel_case` |
 | B-013 | per-attempt ledger lifecycle + real router retry/fallback fixtures | `cargo test --lib --all-features google_tool_retry_fallback_fresh_ledger`；fixture 覆盖 pre-output retry 与跨 provider fallback，证明 fresh ledger/stream state、无重复 result/call |
 | B-014 | strict malformed provider response matrix | `cargo test --lib --all-features google_tool_malformed_response_matrix` |
-| B-015 | existing non-tool and mixed-content fixtures | `cargo test --lib --all-features gemini_provider && cargo test --lib --all-features vertex_ai_transformer` |
+| B-015 | tool-choice/legacy disposition + existing non-tool and mixed-content fixtures | `cargo test --lib --all-features google_tool_choice_mapping_or_reject`；`cargo test --lib --all-features google_tool_legacy_function_fields_map_or_reject`；`cargo test --lib --all-features gemini_provider && cargo test --lib --all-features vertex_ai_transformer` |
 | B-016 | crate-private neutral API、删除/停止导出旧 semantic owners、双 provider parity | `cargo check --all-features` 强制 Gemini/Vertex consumers 只依赖 `google/` owner；`cargo test --lib --all-features google_tool_provider_parity`；independent dependency review 核验无第二 ledger/validator。窄 import audit 仅作 advisory，不是完成证据 |
 | B-017 | adversarial sentinel/error capture | `cargo test --lib --all-features google_tool_error_redaction` |
 | B-018 | trigger-separated, fail-closed coverage evidence: scheduled full coverage/upload; PR/manual changed-line/critical-branch gate + pinned CI toolchain + full deterministic/remote gates | `python3 scripts/guards/check_changed_coverage.py --self-test`；PR/manual 生成 branch LCOV 后以 immutable base SHA 和 `--policy scripts/guards/coverage/gh1111.json` 执行：充足 evidence exit 0，missing/malformed/empty/低阈值/invalid base 非零；scheduled run 不调用 checker 但上传 full LCOV/exact-head artifact；所有 trigger 的 required upload 使用 `fail_ci_if_error: true`，上传失败非零；`ci-coverage.yml` 固定 installer SHA + `cargo-llvm-cov@0.8.7`；final fmt/check/clippy/test；exact-head review、CI、reviewThreads 与 `pr_gate.py` |
@@ -250,9 +292,11 @@ Request：`ChatRequest` → model/request preflight → shared ordered tool ledg
 parts + neutral tool parts → provider-specific URL/auth → HTTP。任何 ledger/wire error 在 URL secret
 注入或 Vertex token acquisition 前返回。
 
-Response：provider JSON/SSE → shared strict functionCall parser/state → canonical `ToolCall` /
-`ToolCallDelta` → existing router/callback/usage。下一回合客户端回送 call ID 时，从该请求历史中的
-assistant call 重建新 ledger；不持久化全局状态，也不跨 provider/retry 共享。
+Response：provider JSON/SSE → shared strict functionCall parser/state → upstream ID 优先、否则
+turn-aware fallback → canonical `ToolCall`/`ToolCallDelta`（含可选 opaque `thought_signature`）→
+existing router/callback/usage。下一回合客户端回送 call ID 时，从该请求历史中的 assistant call
+重建新 ledger，并把同一 ID/signature 原样 replay 到 `functionResponse`/`functionCall`；不持久化
+全局状态，也不跨 provider/retry 共享。
 
 ## 依赖与执行顺序
 
@@ -298,9 +342,15 @@ assistant call 重建新 ledger；不持久化全局状态，也不跨 provider/
 
 - [ ] Shared unit: call/result happy path、并行/同名 calls、object/scalar/error result。
 - [ ] Shared negative: empty/unknown/duplicate/mismatch/result-before-call/ambiguous representation。
+- [ ] Request controls: Gemini `functionDeclarations` golden；Vertex Tool/ToolConfig camelCase golden；
+      parallel absent/true/false、tool_choice 全闭集、legacy map-or-reject matrix。
+- [ ] IDs/signatures: upstream ID round trip、跨 turn fallback uniqueness、optional canonical serde、
+      unary/stream/replay thought signature parity。
 - [ ] Unary: Gemini 与 Vertex mixed text + multi functionCall golden fixtures。
 - [ ] Streaming: Gemini 与 Vertex fragmented/multiple/repeated/malformed/cancel fixtures及 unary parity。
 - [ ] Pre-network/auth: invalid request counters 全零。
+- [ ] Router invalid history: deployment failure/cooldown/health 与 retry/fallback/callback counters
+      前后不变，真实 provider failure accounting 保持。
 - [ ] Auth isolation: Developer API key-only；Vertex Bearer-only；sentinel 不出现在 error/log/artifact。
 - [ ] Capability: 每个 advertised provider/model/transport 实际 dispatch 成功；partner path 不变。
 - [ ] Router lifecycle: `cargo test --lib --all-features google_tool_retry_fallback_fresh_ledger`，覆盖

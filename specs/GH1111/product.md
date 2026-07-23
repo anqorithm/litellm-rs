@@ -43,23 +43,33 @@ streaming 中映射为稳定的 canonical `ToolCall`；调用方回送的结果�
 
 1. **B-001** 当 Gemini/Vertex 响应包含一个或多个合法 `functionCall` part 时，每个 part
    必须映射为一个 canonical `ToolCall`，保留 candidate 顺序、part 顺序、非空名称和完整
-   JSON arguments；存在 tool call 的 choice 必须使用 `finish_reason=tool_calls`。
+   JSON arguments；非空 upstream `functionCall.id` 必须逐字保留，缺失时才可合成 ID；每个 call
+   的 opaque thought signature（若存在）必须附着于对应 canonical call 并可在后续请求中原样
+   replay，不得检查或改写；存在 tool call 的 choice 必须使用 `finish_reason=tool_calls`。
 2. **B-002** 同一 provider 响应经 unary 解析与 streaming 聚合后，必须得到相同的 choice
    index、tool-call index、call ID、名称、arguments、文本和最终 `finish_reason`；call ID
-   必须由稳定的 candidate/part 身份生成，不得依赖时间、随机数或 chunk 到达顺序。
+   优先使用非空 upstream ID；仅在缺失时，才由稳定的 message/turn、candidate 与 part 身份
+   合成，且在整个请求历史中唯一，不得依赖时间、随机数或 chunk 到达顺序。
 3. **B-003** canonical assistant `tool_calls` 或 `ContentPart::ToolUse` 必须按原始顺序映射为
-   Gemini model-role `functionCall`，保留非空 call ID、名称和 JSON input；一次 call 恰好
-   产生一个 wire part。
+   Gemini model-role `functionCall`，保留非空 call ID、名称、JSON input 与可选 opaque
+   thought signature；一次 call 恰好产生一个 wire part，result replay 必须使用同一 upstream
+   或 fallback ID。canonical `Tool` 必须在 Gemini Developer wire 中序列化为
+   `tools[].functionDeclarations`；Vertex 的 Tool/ToolConfig wire key 必须为 camelCase。
+   不支持或 malformed 的 declaration shape 必须在 auth/network 前失败。
+   `ChatMessage.function_call` 与 `ChatRequest.functions`/`function_call` 必须规范化到同一
+   declaration/call ledger，或在 auth/network 前显式拒绝，不得静默忽略。
 4. **B-004** canonical tool-role `tool_call_id` 或 `ContentPart::ToolResult.tool_use_id` 必须
    唯一关联同一请求历史中先前出现的 call，并映射为 user-role `functionResponse`；wire
    name 必须来自被关联的 call，不能从结果消息猜测或使用空字符串。
 5. **B-005** 缺失或空 call ID、未知 ID、重复 call ID、重复消费同一结果、结果早于 call、
-   call/result 类型不匹配、同一语义同时出现在顶层与 content parts 等非法状态，必须返回
-   typed 4xx/`ProviderError::InvalidRequest`，且上游请求计数、credential acquisition 和
-   成功 callback 计数均为零。
+   call/result 类型不匹配、legacy 与 modern 表示歧义、同一语义同时出现在顶层与 content
+   parts 等客户端非法状态，必须返回 typed 4xx/`ProviderError::InvalidRequest`；上游请求、
+   credential acquisition、成功 callback、retry/fallback 计数均为零，且任何 deployment
+   failure count、cooldown 与 health state 必须保持不变。
 6. **B-006** 多个并行 calls 与 results 必须保持一对一关联和确定顺序；相同工具名的不同
    call 不得串线，结果到达顺序不得覆盖 call identity，`parallel_tool_calls=false` 也不得
-   被实现层擅自改成并行。
+   被实现层擅自改成并行：必须映射为禁止并行的 provider 配置，或在 auth/network 前返回
+   typed `InvalidRequest`；absent/true/false 均必须有明确 disposition。
 7. **B-007** `functionCall.args`、`ToolUse.input` 和 function-style arguments 必须是合法的
    JSON object；缺失、`null`、scalar、array、无法解析的 JSON 或空 tool name 必须显式
    失败，不得补成 `{}`、空名称或普通文本成功。
@@ -83,6 +93,8 @@ streaming 中映射为稳定的 canonical `ToolCall`；调用方回送的结果�
 12. **B-012** provider/model 只有在当前 transport 能完成 declaration → call response →
     next-turn result 的闭环时才可声明 `ToolCalling`；声明 streaming 的路径必须真正实现
     `chat_completion_stream`，不得在路由后落入默认 `NotSupported` 或把 SSE 当 unary JSON。
+    Gemini Developer 必须发送 `tools[].functionDeclarations`；Vertex 必须发送 camelCase
+    `functionDeclarations`、`toolConfig.functionCallingConfig` 与 `allowedFunctionNames`。
 13. **B-013** 同一请求的 tool call/result preflight 必须在每次发送及 retry 前重放；retry
     或 fallback 不得复用部分 stream、重复发送已消费 result、重复 tool call 或跨 provider
     复用旧 ledger。
@@ -91,7 +103,9 @@ streaming 中映射为稳定的 canonical `ToolCall`；调用方回送的结果�
     fallback 把错误响应伪装成成功。
 15. **B-015** 不含工具的 text/image/reasoning 请求、tool declaration、usage 与现有 finish
     reason 行为保持兼容；合法的混合 text + functionCall 响应同时保留文本和 calls，不因其中
-    一类存在而丢弃另一类。
+    一类存在而丢弃另一类。`tool_choice` 的 absent、`auto`、`none`、合法 forced function
+    必须映射为 provider ToolConfig 语义；未知、malformed、forced name 未声明等值必须在
+    auth/network 前拒绝。任何 legacy function 字段也必须按 B-003 map-or-reject。
 16. **B-016** tool-loop helper 必须是 crate-private 的单一 Google semantic owner；Gemini
     与 Vertex adapter 只能负责各自 wire/transport/auth，不得新增第二套 provider dispatch、
     model catalog、call ledger 或复制一份稍有差异的 validation。
@@ -111,7 +125,15 @@ streaming 中映射为稳定的 canonical `ToolCall`；调用方回送的结果�
 - [ ] Gemini Developer API 与 Vertex AI 都通过单 call、多 call、多 result 的两回合 golden
       request/response fixture，wire 中使用正确的 `functionCall` / `functionResponse` 和 role。
 - [ ] 缺失/空/未知/重复/mismatched ID、result-before-call、重复表示、非法 name/args/result
-      matrix 全部在上游与 credential counter 为零时失败。
+      matrix 全部在上游与 credential counter 为零时失败，且 deployment failure/cooldown/health
+      state 不变。
+- [ ] Gemini wire golden fixture 证明 canonical declarations 使用
+      `tools[].functionDeclarations`；Vertex wire 仅使用 camelCase `functionDeclarations`、
+      `toolConfig.functionCallingConfig`、`allowedFunctionNames`，不出现对应 snake_case key。
+- [ ] upstream functionCall ID 与 thought signature 在 unary、stream、canonical serde 和下一轮
+      replay 中逐 call 原样保留；缺失 ID 的 fallback 在跨两个 assistant turns 时稳定且不同。
+- [ ] `parallel_tool_calls` absent/true/false、`tool_choice` 全闭集以及 legacy
+      `functions`/`function_call` 的 map-or-reject matrix 均在双 provider 上通过。
 - [ ] Gemini 与 Vertex streaming fixture 均能聚合为对应 unary fixture 的同一 ordered
       `ToolCall` 列表；取消、断连与 malformed chunk 不产生伪完成。
 - [ ] capability fixture 证明每个声明的 provider/model/transport 都能执行完整 tool round
@@ -146,6 +168,10 @@ streaming 中映射为稳定的 canonical `ToolCall`；调用方回送的结果�
 
 - 同名工具产生两个不同 call ID：两条 ledger entry 独立，result 只能按 ID 关联。
 - assistant message 同时携带文本和多个 calls：文本保持现有拼接语义，calls 保持 part 顺序。
+- 两个 assistant turns 在相同 candidate/part 坐标返回无 ID call：fallback ID 必须稳定但跨
+  turn 不同；若上游提供非空 ID，则 fallback 不得覆盖。
+- `parallel_tool_calls=false`、未知/malformed `tool_choice`、forced 未声明函数，以及 legacy 与
+  modern function 字段共存：必须按各自 disposition 映射或 pre-auth/network 拒绝，不得忽略。
 - tool result 为 `null`、array、字符串或 error object：均按 B-008 可逆表达，不能变空字符串；
   顶层 Text 固定进入 `result` envelope，顶层 Parts 逐项保留 type/字段/顺序。
 - upstream 在多个 chunks 重复发送完整 functionCall：同 ID 只能产生一次身份，重复不变内容可
