@@ -9,7 +9,10 @@
     "open_prs_complete",
     "open_pr_limit",
     "open_prs",
-    "remote_branches"
+    "base_ref",
+    "base_sha",
+    "remote_branches",
+    "retained_branch_dispositions"
   ],
   "additionalProperties": false,
   "properties": {
@@ -53,11 +56,95 @@
       "type": "integer",
       "minimum": 1
     },
+    "base_ref": {
+      "type": "string",
+      "const": "main"
+    },
+    "base_sha": {
+      "type": "string",
+      "minLength": 40,
+      "maxLength": 40,
+      "pattern": "^[0-9a-f]{40}$"
+    },
     "remote_branches": {
       "type": "array",
       "items": {
-        "type": "string",
-        "minLength": 1
+        "type": "object",
+        "required": [
+          "name",
+          "head_sha"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "head_sha": {
+            "type": "string",
+            "minLength": 40,
+            "maxLength": 40,
+            "pattern": "^[0-9a-f]{40}$"
+          }
+        }
+      }
+    },
+    "retained_branch_dispositions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "branch",
+          "head_sha",
+          "disposition",
+          "source"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "branch": {
+            "type": "string",
+            "minLength": 1
+          },
+          "head_sha": {
+            "type": "string",
+            "minLength": 40,
+            "maxLength": 40,
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "disposition": {
+            "type": "string",
+            "enum": [
+              "retained_non_conflicting",
+              "active_duplicate",
+              "needs_human"
+            ]
+          },
+          "source": {
+            "type": "object",
+            "required": [
+              "kind",
+              "reference",
+              "recorded_at"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "maintainer_human"
+                ]
+              },
+              "reference": {
+                "type": "string",
+                "minLength": 1
+              },
+              "recorded_at": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
       }
     }
   }

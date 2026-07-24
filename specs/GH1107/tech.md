@@ -36,6 +36,14 @@ GH-1107 / #1107
   "issue": 1107,
   "complete": true,
   "paths": [
+    "checks/github_duplicate_evidence.py",
+    "checks/duplicate_work_gate.py",
+    "checks/route_gate.py",
+    "checks/schema_contract.py",
+    "checks/specrail_lib.py",
+    "checks/test_duplicate_work_gate.py",
+    "schemas/duplicate_work_evidence.schema.json",
+    "specs/GH1107/tasks.md",
     "README.md",
     "docs/codex-compatibility.md",
     "src/core/models/openai/responses_api.rs",
@@ -79,6 +87,26 @@ GH-1107 / #1107
   ]
 }
 ```
+
+### Retained implementation-branch prerequisite
+
+Before `SP1107-T2`, the bounded retained-branch disposition prerequisite must merge.
+Duplicate-work evidence records `main` as an exact lowercase 40-character `base_sha` and each
+remote branch as exact `{name, head_sha}`. At gate time the required implement route reruns
+`git ls-remote --heads origin`, requires remote `main`、local `origin/main` 与 evidence base 完全一致，
+requires the complete matching-branch set and SHAs to remain identical, verifies each matching
+commit object exists locally, and proves
+`git merge-base --is-ancestor <branch_head> <base_sha>`，即 retained branch 已 merge into 当前
+exact base。`maintainer_human` disposition 仅是绑定 exact branch SHA 的 audit provenance，
+单独不能放行未合并分支；只有 exact `retained_non_conflicting` disposition、合法 audit provenance
+与上述 live merged-branch proof 同时成立时 gate 才可 `allowed`。Missing, duplicate, orphan,
+malformed, stale/future-dated, base/branch drift,
+missing object, non-ancestor or mismatch evidence is fail-closed; an `active_duplicate`
+disposition and an open issue-referencing PR remain blocked.
+This prerequisite never deletes, renames, or otherwise mutates historical branches. After it
+merges, T2 regenerates evidence against fresh remote heads and reruns the required implement route;
+pre-merge evidence is invalid for T2. This workflow-only prerequisite does not change Responses,
+Codex protocol, providers, or catalog metadata ownership.
 
 清单是 GH-1107 当前设计的完整候选路径。任一 implementation tranche 发现必须修改
 清单外文件，或任一 tranche 超过 10 个非文档文件 / 500 changed lines，先提交 spec

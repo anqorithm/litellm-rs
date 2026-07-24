@@ -6,7 +6,9 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +24,8 @@ from specrail_lib import (
 
 SEGMENT_SPLIT_RE = re.compile(r"[/-]+")
 PLACEHOLDER_RE = re.compile(r"\{[^}]+\}")
+SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+EVIDENCE_MAX_AGE = timedelta(minutes=15)
 
 
 def _positive_issue(value: int | None) -> bool:
@@ -37,6 +41,111 @@ def _load_schema(repo: Path) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise SpecRailError("duplicate work evidence schema must be an object")
     return data
+
+
+def _legacy_validator_schema(value: Any) -> Any:
+    """Strip pattern only; SHA syntax is enforced by this gate below."""
+    if isinstance(value, dict):
+        return {
+            key: _legacy_validator_schema(item)
+            for key, item in value.items()
+            if key != "pattern"
+        }
+    if isinstance(value, list):
+        return [_legacy_validator_schema(item) for item in value]
+    return value
+
+
+def _blocked(reason: str) -> dict[str, Any]:
+    return {"decision": "blocked", "reasons": [reason], "missing": []}
+
+
+def _run_git(repo: Path, args: list[str]) -> subprocess.CompletedProcess[str]:
+    try:
+        return subprocess.run(
+            ["git", "-C", str(repo), *args],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError as exc:
+        raise SpecRailError("git executable was not found in PATH") from exc
+
+
+def _git_output(repo: Path, args: list[str], label: str) -> str:
+    completed = _run_git(repo, args)
+    if completed.returncode != 0:
+        detail = completed.stderr.strip() or completed.stdout.strip() or "no output"
+        raise SpecRailError(f"{label} failed: {detail}")
+    return completed.stdout.strip()
+
+
+def revalidate_remote_state(
+    repo: Path,
+    config: PackConfig,
+    issue: int,
+    evidence: dict[str, Any],
+) -> dict[str, Any] | None:
+    token = impl_branch_token(config, issue)
+    if token is None:
+        return _blocked("cannot revalidate remote branches without an implementation token")
+    try:
+        remote_output = _git_output(
+            repo,
+            ["ls-remote", "--heads", "origin"],
+            "gate-time git ls-remote",
+        )
+        remote_branches: list[dict[str, str]] = []
+        for line in remote_output.splitlines():
+            sha, sep, ref = line.partition("\t")
+            if not sep or not ref.startswith("refs/heads/") or not SHA_RE.fullmatch(sha):
+                return _blocked("gate-time remote branch output is malformed")
+            remote_branches.append(
+                {"name": ref.removeprefix("refs/heads/"), "head_sha": sha}
+            )
+        remote_heads = {branch["name"]: branch["head_sha"] for branch in remote_branches}
+        if len(remote_heads) != len(remote_branches):
+            return _blocked("gate-time remote branch output contains duplicate names")
+        base_ref = evidence["base_ref"]
+        base_sha = evidence["base_sha"]
+        remote_base = remote_heads.get(base_ref)
+        if remote_base is None:
+            return _blocked(f"gate-time remote base branch is missing: {base_ref}")
+        local_base = _git_output(
+            repo,
+            ["rev-parse", "--verify", f"refs/remotes/origin/{base_ref}"],
+            "local remote-tracking base lookup",
+        )
+        if not SHA_RE.fullmatch(local_base):
+            return _blocked("local remote-tracking base SHA is malformed")
+        if len({base_sha, remote_base, local_base}) != 1:
+            return _blocked(
+                "base drift: evidence, gate-time remote, and local origin base differ"
+            )
+        evidence_matching = matching_contract_branches(
+            evidence["remote_branches"], token
+        )
+        remote_matching = matching_contract_branches(remote_branches, token)
+        if evidence_matching != remote_matching:
+            return _blocked(
+                "matching implementation branch set or head changed since evidence collection"
+            )
+        for branch in remote_matching:
+            label = f"{branch['name']}@{branch['head_sha']}"
+            exists = _run_git(repo, ["cat-file", "-e", f"{branch['head_sha']}^{{commit}}"])
+            if exists.returncode != 0:
+                return _blocked(f"matching branch commit object is missing locally: {label}")
+            ancestor = _run_git(
+                repo,
+                ["merge-base", "--is-ancestor", branch["head_sha"], base_sha],
+            )
+            if ancestor.returncode != 0:
+                return _blocked(
+                    f"matching branch is not merged into evidence base: {label}"
+                )
+    except (KeyError, SpecRailError) as exc:
+        return _blocked(f"gate-time remote revalidation failed: {exc}")
+    return None
 
 
 def _load_evidence(path: Path | None) -> dict[str, Any] | None:
@@ -71,9 +180,110 @@ def branch_segments(branch: str) -> set[str]:
     return {segment.lower() for segment in SEGMENT_SPLIT_RE.split(branch) if segment}
 
 
-def matching_contract_branches(branches: list[str], token: str) -> list[str]:
+def matching_contract_branches(branches: list[dict[str, Any]], token: str) -> list[dict[str, str]]:
     wanted = token.lower()
-    return sorted(branch for branch in branches if wanted in branch_segments(branch))
+    return sorted(
+        [
+            {"name": str(branch["name"]), "head_sha": str(branch["head_sha"])}
+            for branch in branches
+            if wanted in branch_segments(str(branch["name"]))
+        ],
+        key=lambda branch: branch["name"],
+    )
+
+
+def evaluate_retained_branch_dispositions(
+    evidence: dict[str, Any],
+    matching_branches: list[dict[str, str]],
+) -> dict[str, Any] | None:
+    remote_branches = evidence["remote_branches"]
+    dispositions = evidence["retained_branch_dispositions"]
+    if any(not SHA_RE.fullmatch(branch["head_sha"]) for branch in remote_branches):
+        return {
+            "decision": "blocked",
+            "reasons": ["remote branch evidence contains an invalid head SHA"],
+            "missing": [],
+        }
+    if any(not SHA_RE.fullmatch(disposition["head_sha"]) for disposition in dispositions):
+        return {
+            "decision": "blocked",
+            "reasons": ["retained branch disposition contains an invalid head SHA"],
+            "missing": [],
+        }
+    remote_heads = {branch["name"]: branch["head_sha"] for branch in remote_branches}
+    if len(remote_heads) != len(remote_branches):
+        return {
+            "decision": "blocked",
+            "reasons": ["duplicate remote branch names in duplicate work evidence"],
+            "missing": [],
+        }
+
+    matching_names = {branch["name"] for branch in matching_branches}
+    indexed: dict[str, list[dict[str, Any]]] = {}
+    for disposition in dispositions:
+        branch = disposition["branch"]
+        if branch not in remote_heads:
+            return {
+                "decision": "blocked",
+                "reasons": [f"retained branch disposition references absent remote branch {branch}"],
+                "missing": [],
+            }
+        if branch not in matching_names:
+            return {
+                "decision": "blocked",
+                "reasons": [f"retained branch disposition is outside this issue contract: {branch}"],
+                "missing": [],
+            }
+        indexed.setdefault(branch, []).append(disposition)
+
+    for branch in matching_branches:
+        name = branch["name"]
+        head_sha = branch["head_sha"]
+        entries = indexed.get(name, [])
+        label = f"{name}@{head_sha}"
+        if not entries:
+            return {
+                "decision": "needs_human",
+                "reasons": [f"retained implementation branch requires a human disposition: {label}"],
+                "missing": [f"retained_branch_disposition:{label}"],
+            }
+        if len(entries) != 1:
+            return {
+                "decision": "blocked",
+                "reasons": [f"duplicate retained branch dispositions for {label}"],
+                "missing": [],
+            }
+        entry = entries[0]
+        if entry["head_sha"] != head_sha:
+            return {
+                "decision": "needs_human",
+                "reasons": [f"retained branch disposition SHA is stale or mismatched for {label}"],
+                "missing": [f"fresh_retained_branch_disposition:{label}"],
+            }
+        if entry["disposition"] == "active_duplicate":
+            return {
+                "decision": "blocked",
+                "reasons": [f"retained branch is an active duplicate: {label}"],
+                "missing": [],
+            }
+        if entry["disposition"] != "retained_non_conflicting":
+            return {
+                "decision": "needs_human",
+                "reasons": [f"retained branch disposition does not permit implementation: {label}"],
+                "missing": [f"permitting_retained_branch_disposition:{label}"],
+            }
+        source = entry["source"]
+        if (
+            source["kind"] != "maintainer_human"
+            or not source["reference"].strip()
+            or not source["recorded_at"].strip()
+        ):
+            return {
+                "decision": "needs_human",
+                "reasons": [f"retained branch disposition lacks maintainer source evidence: {label}"],
+                "missing": [f"maintainer_source:{label}"],
+            }
+    return None
 
 
 def evaluate_duplicate_work_gate(
@@ -108,7 +318,7 @@ def evaluate_duplicate_work_gate(
         }
 
     try:
-        validate_instance(_load_schema(config.repo), evidence)
+        validate_instance(_legacy_validator_schema(_load_schema(config.repo)), evidence)
     except SpecRailError as exc:
         return {
             "decision": "blocked",
@@ -129,6 +339,60 @@ def evaluate_duplicate_work_gate(
             "missing": [],
             "blocked_actions": ["implement"],
             "verification_commands": ["python3 checks/duplicate_work_gate.py --repo . --issue <issue> --evidence <evidence.json>"],
+        }
+
+    for field in ("base_sha",):
+        if not SHA_RE.fullmatch(str(evidence.get(field, ""))):
+            return {
+                "decision": "blocked",
+                "issue": issue,
+                "reasons": [f"duplicate work evidence contains invalid {field}"],
+                "satisfied": [],
+                "missing": [],
+                "blocked_actions": ["implement"],
+                "verification_commands": ["python3 checks/duplicate_work_gate.py --repo . --issue <issue> --evidence <evidence.json>"],
+            }
+    for collection, field in (
+        ("remote_branches", "head_sha"),
+        ("retained_branch_dispositions", "head_sha"),
+    ):
+        if any(
+            not SHA_RE.fullmatch(str(item.get(field, "")))
+            for item in evidence[collection]
+        ):
+            return {
+                "decision": "blocked",
+                "issue": issue,
+                "reasons": [f"duplicate work evidence contains invalid {collection} SHA"],
+                "satisfied": [],
+                "missing": [],
+                "blocked_actions": ["implement"],
+                "verification_commands": ["python3 checks/duplicate_work_gate.py --repo . --issue <issue> --evidence <evidence.json>"],
+            }
+    try:
+        collected_at = datetime.fromisoformat(
+            str(evidence["collected_at"]).replace("Z", "+00:00")
+        )
+    except (TypeError, ValueError):
+        return {
+            "decision": "blocked",
+            "issue": issue,
+            "reasons": ["duplicate work evidence collected_at is invalid"],
+            "satisfied": [],
+            "missing": [],
+            "blocked_actions": ["implement"],
+            "verification_commands": ["python3 checks/github_duplicate_evidence.py --github-repo OWNER/REPO --issue <issue> --json"],
+        }
+    now = datetime.now(timezone.utc)
+    if collected_at.tzinfo is None or collected_at > now or now - collected_at > EVIDENCE_MAX_AGE:
+        return {
+            "decision": "blocked",
+            "issue": issue,
+            "reasons": ["duplicate work evidence is stale or future-dated"],
+            "satisfied": [],
+            "missing": [],
+            "blocked_actions": ["implement"],
+            "verification_commands": ["python3 checks/github_duplicate_evidence.py --github-repo OWNER/REPO --issue <issue> --json"],
         }
 
     duplicate_prs = [
@@ -180,21 +444,23 @@ def evaluate_duplicate_work_gate(
 
     branches = matching_contract_branches(evidence["remote_branches"], token)
     if branches:
-        reasons.append(
-            "remote branches match GH-"
-            f"{issue} implementation branch contract: {', '.join(branches)}"
+        disposition_result = evaluate_retained_branch_dispositions(evidence, branches)
+        if disposition_result is not None:
+            return {
+                "decision": disposition_result["decision"],
+                "issue": issue,
+                "reasons": reasons + disposition_result["reasons"],
+                "satisfied": satisfied,
+                "missing": disposition_result["missing"],
+                "blocked_actions": ["implement"],
+                "verification_commands": ["python3 checks/duplicate_work_gate.py --repo . --issue <issue> --evidence <evidence.json>"],
+            }
+        satisfied.append(
+            "all retained implementation branches have exact maintainer dispositions"
         )
-        return {
-            "decision": "needs_human",
-            "issue": issue,
-            "reasons": reasons,
-            "satisfied": satisfied,
-            "missing": ["branch_ownership_decision"],
-            "blocked_actions": ["implement"],
-            "verification_commands": ["python3 checks/duplicate_work_gate.py --repo . --issue <issue> --evidence <evidence.json>"],
-        }
 
-    satisfied.append(f"no remote branch matches implementation token {token}")
+    else:
+        satisfied.append(f"no remote branch matches implementation token {token}")
     return {
         "decision": "allowed",
         "issue": issue,
@@ -224,7 +490,22 @@ def evaluate_duplicate_work_gate_path(
             "blocked_actions": ["implement"],
             "verification_commands": ["python3 checks/duplicate_work_gate.py --repo . --issue <issue> --evidence <evidence.json>"],
         }
-    return evaluate_duplicate_work_gate(config, issue, evidence)
+    preliminary = evaluate_duplicate_work_gate(config, issue, evidence)
+    if preliminary["decision"] != "allowed":
+        return preliminary
+    if evidence is not None and _positive_issue(issue):
+        remote_result = revalidate_remote_state(repo, config, issue, evidence)
+        if remote_result is not None:
+            return {
+                "decision": remote_result["decision"],
+                "issue": issue,
+                "reasons": remote_result["reasons"],
+                "satisfied": [],
+                "missing": remote_result["missing"],
+                "blocked_actions": ["implement"],
+                "verification_commands": ["python3 checks/github_duplicate_evidence.py --github-repo OWNER/REPO --issue <issue> --json"],
+            }
+    return preliminary
 
 
 def print_human(result: dict[str, Any]) -> None:
