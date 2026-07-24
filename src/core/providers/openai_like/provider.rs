@@ -666,6 +666,9 @@ impl LLMProvider for OpenAILikeProvider {
         if self.provider_name == "amazon_nova" {
             return crate::core::providers::registry::catalog::amazon_nova_catalog_model_infos();
         }
+        if self.provider_name == "github" {
+            return crate::core::providers::registry::github_policy::github_catalog_model_infos();
+        }
         &[]
     }
 

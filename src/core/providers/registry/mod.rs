@@ -8,6 +8,7 @@
 
 pub mod catalog;
 pub mod definition;
+pub(crate) mod github_policy;
 pub mod lifecycle;
 pub mod support_matrix;
 pub mod types;
