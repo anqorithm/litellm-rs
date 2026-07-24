@@ -74,6 +74,8 @@ impl GatewayConfigBuilder {
             monitoring: crate::config::models::monitoring::MonitoringConfig::default(),
             cache: crate::config::models::cache::CacheConfig::default(),
             rate_limit: crate::config::models::rate_limit::RateLimitConfig::default(),
+            guardrails: GatewayConfig::default().guardrails,
+            ip_access: crate::core::ip_access::IpAccessConfig::default(),
             enterprise: crate::config::models::enterprise::EnterpriseConfig::default(),
             pricing: crate::config::models::gateway::GatewayPricingConfig::default(),
         };

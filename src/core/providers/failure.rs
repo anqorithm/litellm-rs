@@ -134,6 +134,7 @@ impl From<&ProviderError> for ProviderFailureFacts {
 }
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
     use crate::core::providers::bedrock::BedrockErrorMapper;

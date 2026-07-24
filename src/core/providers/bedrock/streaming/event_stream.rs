@@ -215,6 +215,7 @@ mod strict_frame_tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn maps_modeled_service_exceptions_to_structured_provider_errors() {
         let cases = [
             ("validationException", "invalid_request", None, false),

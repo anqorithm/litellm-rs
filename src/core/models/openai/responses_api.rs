@@ -8,6 +8,11 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+pub use crate::core::types::codex::wire::{
+    CodexCustomTool, CodexCustomToolCall, CodexCustomToolCallOutput, CodexFunctionCall,
+    CodexFunctionCallOutput, CodexInternalChatMessageMetadataPassthrough, CodexUnsupportedWire,
+};
+
 // ── Request types ────────────────────────────────────────────────────────────
 
 /// POST /v1/responses request body
@@ -20,6 +25,7 @@ pub struct ResponsesApiRequest {
     pub input: ResponseInput,
 
     /// System-level instructions (equivalent to a system message)
+    /// Dynamically loaded tools proposed by Codex.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub instructions: Option<String>,
 
@@ -34,6 +40,9 @@ pub struct ResponsesApiRequest {
     /// Built-in or function tools available to the model
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tools: Option<Vec<ResponseTool>>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub additional_tools: Option<Vec<ResponseTool>>,
 
     /// Stream the response as server-sent events
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -83,16 +92,33 @@ pub enum ResponseInput {
 }
 
 /// A single item in the `input` array
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Debug, Clone)]
 pub enum ResponseInputItem {
     /// A conversational message (user / assistant / system)
     Message(ResponseInputMessage),
+    /// Function call retained in multi-turn Codex context.
+    FunctionCall(CodexFunctionCall),
+    /// Result returned by Codex for a function call.
+    FunctionCallOutput(CodexFunctionCallOutput),
+    /// Freeform/custom tool call retained in multi-turn context.
+    CustomToolCall(CodexCustomToolCall),
+    /// Result returned by Codex for a freeform/custom tool call.
+    CustomToolCallOutput(CodexCustomToolCallOutput),
+    Unsupported(CodexUnsupportedWire),
+    Unknown(CodexUnsupportedWire),
 }
 
 /// A conversational message inside `input`
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResponseInputMessage {
+    /// Optional item ID supplied by Responses-compatible clients.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phase: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub internal_chat_message_metadata_passthrough:
+        Option<CodexInternalChatMessageMetadataPassthrough>,
     /// Role: "user" | "assistant" | "system"
     pub role: String,
     /// Content: plain string or array of content parts
@@ -122,6 +148,8 @@ pub enum ResponseInputContentPart {
         #[serde(skip_serializing_if = "Option::is_none")]
         detail: Option<String>,
     },
+    /// URL-referenced audio input from the Codex wire protocol.
+    InputAudio { audio_url: String },
     /// Plain text output (used in assistant turns returned by the API)
     OutputText { text: String },
 }
@@ -129,25 +157,42 @@ pub enum ResponseInputContentPart {
 // ── Tool types ────────────────────────────────────────────────────────────────
 
 /// A tool definition for the Responses API
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Debug, Clone)]
 pub enum ResponseTool {
     /// Web-search built-in tool
     WebSearch(WebSearchTool),
     /// Alias used in some preview builds
-    #[serde(rename = "web_search_preview")]
     WebSearchPreview(WebSearchTool),
     /// File-search built-in tool
     FileSearch(FileSearchTool),
     /// Code-interpreter built-in tool
     CodeInterpreter(CodeInterpreterTool),
     /// Computer-use built-in tool (preview)
-    #[serde(rename = "computer_use_preview")]
     ComputerUsePreview(ComputerUseTool),
     /// MCP server integration
     Mcp(McpTool),
     /// Regular function-calling tool
     Function(ResponseFunctionTool),
+    CodexFunction(ResponseFunctionDefinition),
+    /// Codex freeform/custom tool.
+    Custom(CodexCustomTool),
+    Unsupported(CodexUnsupportedWire),
+    Unknown(CodexUnsupportedWire),
+}
+
+impl ResponseTool {
+    pub fn feature_name(&self) -> &str {
+        match self {
+            Self::WebSearch(_) | Self::WebSearchPreview(_) => "web_search",
+            Self::FileSearch(_) => "file_search",
+            Self::CodeInterpreter(_) => "code_interpreter",
+            Self::ComputerUsePreview(_) => "computer_use",
+            Self::Mcp(_) => "mcp",
+            Self::Function(_) | Self::CodexFunction(_) => "function",
+            Self::Custom(_) => "custom",
+            Self::Unsupported(value) | Self::Unknown(value) => &value.wire_type,
+        }
+    }
 }
 
 /// Web-search tool configuration
@@ -236,6 +281,8 @@ pub struct ResponseFunctionDefinition {
     /// Whether to enforce strict schema adherence
     #[serde(skip_serializing_if = "Option::is_none")]
     pub strict: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub defer_loading: Option<bool>,
 }
 
 /// Reasoning / extended-thinking configuration
@@ -288,6 +335,8 @@ pub enum ResponseOutputItem {
     Message(ResponseOutputMessage),
     /// A function call invocation
     FunctionCall(ResponseFunctionCall),
+    /// A Codex freeform/custom tool invocation.
+    CustomToolCall(CodexCustomToolCall),
     /// Result of a built-in tool call
     WebSearchCall(ResponseToolCall),
     /// Result of a file-search call

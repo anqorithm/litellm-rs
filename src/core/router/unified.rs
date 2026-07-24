@@ -4,13 +4,14 @@
 //! routing strategies, and intelligent request routing across multiple providers.
 
 use super::config::RouterConfig;
-use super::deployment::{Deployment, DeploymentId};
+use super::deployment::{Deployment, DeploymentId, LegacySelectorMetadata};
 use super::error::CooldownReason;
 use super::execution::infer_cooldown_reason;
 use super::fallback::{FallbackConfig, FallbackType};
 use crate::core::providers::Provider;
 use crate::core::providers::unified_provider::ProviderError;
 use crate::core::types::model::ProviderCapability;
+use crate::utils::auth::crypto::hmac::CredentialDigest;
 use arc_swap::ArcSwap;
 use dashmap::DashMap;
 use parking_lot::Mutex;
@@ -63,6 +64,7 @@ pub struct RoutingSnapshot {
     pub(crate) model_index: HashMap<String, Vec<DeploymentId>>,
     pub(crate) model_order: Vec<String>,
     pub(crate) model_aliases: HashMap<String, String>,
+    legacy_selector_metadata: HashMap<DeploymentId, LegacySelectorMetadata>,
 }
 
 impl RoutingSnapshot {
@@ -73,6 +75,7 @@ impl RoutingSnapshot {
             model_index: HashMap::new(),
             model_order: Vec::new(),
             model_aliases: HashMap::new(),
+            legacy_selector_metadata: HashMap::new(),
         }
     }
 
@@ -97,6 +100,10 @@ impl RoutingSnapshot {
             model_index: HashMap::new(),
             model_order: Vec::new(),
             model_aliases: previous.model_aliases.clone(),
+            // A bulk replacement carries no fresh credential provenance. Runtime
+            // state may follow a stable deployment ID, but selector metadata may
+            // not: retaining it would accept an old credential after rotation.
+            legacy_selector_metadata: HashMap::new(),
         };
 
         for mut deployment in deployments {
@@ -105,7 +112,6 @@ impl RoutingSnapshot {
             }
             snapshot.insert_deployment(deployment);
         }
-
         // Duplicate deployment IDs retain their existing last-wins behavior.
         // Reapply input group order after indexing so a temporary empty group
         // cannot move behind groups that first appeared later in the input.
@@ -142,14 +148,79 @@ impl RoutingSnapshot {
         }
     }
 
+    fn insert_deployment_with_legacy_metadata(
+        &mut self,
+        deployment: Deployment,
+        metadata: LegacySelectorMetadata,
+    ) {
+        let deployment_id = deployment.id.clone();
+        self.insert_deployment(deployment);
+        self.legacy_selector_metadata
+            .insert(deployment_id, metadata);
+    }
+
     fn remove_deployment(&mut self, id: &str) -> Option<Deployment> {
         let removed = self.deployments.remove(id);
+        self.legacy_selector_metadata.remove(id);
 
         if let Some(ref deployment) = removed {
             self.remove_from_model_index(&deployment.model_name, id);
         }
 
         removed.map(|deployment| deployment.as_ref().clone())
+    }
+
+    #[allow(dead_code)] // Consumed by the staged D3 legacy-selector migration.
+    pub(crate) fn resolve_legacy_credential(
+        &self,
+        model_name: &str,
+        credential: &str,
+    ) -> Result<DeploymentId, ProviderError> {
+        self.resolve_legacy_credential_with(model_name, credential, |raw| {
+            CredentialDigest::from_credential(raw)
+        })
+    }
+
+    fn resolve_legacy_credential_with(
+        &self,
+        model_name: &str,
+        credential: &str,
+        digest: impl FnOnce(&str) -> CredentialDigest,
+    ) -> Result<DeploymentId, ProviderError> {
+        let request_digest = digest(credential);
+        let resolved_model = self.resolve_model_name(model_name);
+        let candidates = self.model_index.get(&resolved_model);
+        let mut matched = None;
+        let mut match_count = 0usize;
+
+        for deployment_id in candidates.into_iter().flatten() {
+            let Some(metadata) = self.legacy_selector_metadata.get(deployment_id) else {
+                continue;
+            };
+            if metadata.credential_matches(&request_digest) {
+                match_count += 1;
+                matched.get_or_insert_with(|| deployment_id.clone());
+            }
+        }
+
+        match (match_count, matched) {
+            (1, Some(deployment_id)) => Ok(deployment_id),
+            (0, _) => Err(ProviderError::model_not_found("router", resolved_model)),
+            _ => Err(ProviderError::configuration(
+                "router",
+                "legacy credential selector matched multiple deployments",
+            )),
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn resolve_legacy_credential_with_test_hasher(
+        &self,
+        model_name: &str,
+        credential: &str,
+        digest: impl FnOnce(&str) -> CredentialDigest,
+    ) -> Result<DeploymentId, ProviderError> {
+        self.resolve_legacy_credential_with(model_name, credential, digest)
     }
 
     fn remove_from_model_index(&mut self, model_name: &str, deployment_id: &str) {
@@ -336,7 +407,20 @@ impl Router {
 
     /// Add a deployment to the router
     pub fn add_deployment(&self, deployment: Deployment) {
-        self.update_routing_snapshot(|snapshot| snapshot.insert_deployment(deployment));
+        self.update_routing_snapshot(|snapshot| {
+            snapshot.legacy_selector_metadata.remove(&deployment.id);
+            snapshot.insert_deployment(deployment)
+        });
+    }
+
+    pub(crate) fn add_gateway_deployment(
+        &self,
+        deployment: Deployment,
+        metadata: LegacySelectorMetadata,
+    ) {
+        self.update_routing_snapshot(|snapshot| {
+            snapshot.insert_deployment_with_legacy_metadata(deployment, metadata)
+        });
     }
 
     /// Remove a deployment from the router

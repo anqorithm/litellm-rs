@@ -63,6 +63,11 @@ impl ContextualError {
     }
 
     /// Check if this error is retryable
+    #[deprecated(
+        since = "0.6.0",
+        note = "use RetryPolicy::decide with ProviderFailureFacts for provider routing/retry; removal tracked in 0.7.0 follow-up (SP965-T010)"
+    )]
+    #[allow(deprecated)]
     pub fn is_retryable(&self) -> bool {
         self.inner.is_retryable()
     }
@@ -83,6 +88,7 @@ impl ContextualError {
     }
 
     /// Convert to a JSON-serializable error response
+    #[allow(deprecated)]
     pub fn to_error_response(&self) -> serde_json::Value {
         serde_json::json!({
             "error": {

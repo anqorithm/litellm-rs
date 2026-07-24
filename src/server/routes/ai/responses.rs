@@ -19,9 +19,15 @@ use actix_web::{HttpRequest, HttpResponse, Result as ActixResult, web};
 use tracing::{error, info};
 
 use super::openai_errors;
+#[cfg(test)]
+#[path = "responses/codex_compat_tests.rs"]
+mod codex_compat_tests;
 mod lifecycle;
 pub(crate) use lifecycle::{ResponseOwner, store_response_if_requested};
 pub use lifecycle::{cancel_response, delete_response, get_response, list_response_input_items};
+#[cfg(test)]
+static PROVIDER_DISPATCH_COUNT: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
 
 /// POST /v1/responses handler
 pub async fn create_response(
@@ -72,10 +78,21 @@ pub async fn create_response(
         Err(error) => return Ok(openai_errors::gateway_error_response(&error)),
     };
 
+    if let Some(feature) = unsupported_codex_feature(&request) {
+        return Ok(openai_errors::unsupported_codex_feature(
+            feature,
+            &request.model,
+        ));
+    }
+
     let chat_request = match build_chat_request(&request) {
         Ok(r) => r,
         Err(e) => return Ok(openai_errors::validation_error(e)),
     };
+    #[cfg(test)]
+    if req.headers().contains_key("x-codex-upstream-counter") {
+        PROVIDER_DISPATCH_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
 
     if request.background.unwrap_or(false) {
         if request.stream.unwrap_or(false) {
@@ -168,7 +185,12 @@ pub(crate) fn build_chat_request(
         }
         ResponseInput::Items(items) => {
             for item in items {
-                let ResponseInputItem::Message(msg) = item;
+                let ResponseInputItem::Message(msg) = item else {
+                    return Err(format!(
+                        "unsupported Codex feature: {}",
+                        item.feature_name()
+                    ));
+                };
                 let role = parse_role(&msg.role)?;
                 let content = match &msg.content {
                     ResponseInputContent::Text(t) => MessageContent::Text(t.clone()),
@@ -196,6 +218,11 @@ pub(crate) fn build_chat_request(
                                             );
                                         }
                                     }
+                                }
+                                ResponseInputContentPart::InputAudio { .. } => {
+                                    return Err(
+                                        "unsupported Codex feature: input_audio".to_string()
+                                    );
                                 }
                             }
                         }
@@ -230,30 +257,19 @@ pub(crate) fn build_chat_request(
     let mut tools: Vec<crate::core::models::openai::tools::Tool> = Vec::new();
     if let Some(req_tools) = &req.tools {
         for t in req_tools {
-            match t {
-                ResponseTool::Function(f) => {
-                    tools.push(crate::core::models::openai::tools::Tool {
-                        tool_type: "function".to_string(),
-                        function: crate::core::models::openai::tools::Function {
-                            name: f.function.name.clone(),
-                            description: f.function.description.clone(),
-                            parameters: f.function.parameters.clone(),
-                        },
-                    });
-                }
-                ResponseTool::WebSearch(_)
-                | ResponseTool::WebSearchPreview(_)
-                | ResponseTool::FileSearch(_)
-                | ResponseTool::CodeInterpreter(_)
-                | ResponseTool::ComputerUsePreview(_)
-                | ResponseTool::Mcp(_) => {
-                    return Err(
-                        "built-in tools (web_search, file_search, code_interpreter, mcp, \
-                         computer_use) are not supported via the chat-completions proxy path"
-                            .to_string(),
-                    );
-                }
-            }
+            let function = match t {
+                ResponseTool::Function(tool) => &tool.function,
+                ResponseTool::CodexFunction(tool) => tool,
+                _ => return Err(format!("unsupported Codex feature: {}", t.feature_name())),
+            };
+            tools.push(crate::core::models::openai::tools::Tool {
+                tool_type: "function".to_string(),
+                function: crate::core::models::openai::tools::Function {
+                    name: function.name.clone(),
+                    description: function.description.clone(),
+                    parameters: function.parameters.clone(),
+                },
+            });
         }
     }
 
@@ -271,6 +287,44 @@ pub(crate) fn build_chat_request(
         store: req.store,
         metadata: req.metadata.clone(),
         ..Default::default()
+    })
+}
+
+fn unsupported_codex_feature(request: &ResponsesApiRequest) -> Option<&str> {
+    if request.additional_tools.is_some() {
+        return Some("additional_tools");
+    }
+    if let ResponseInput::Items(items) = &request.input {
+        for item in items {
+            match item {
+                ResponseInputItem::Message(message) => {
+                    if let ResponseInputContent::Parts(parts) = &message.content
+                        && parts
+                            .iter()
+                            .any(|part| matches!(part, ResponseInputContentPart::InputAudio { .. }))
+                    {
+                        return Some("input_audio");
+                    }
+                }
+                item => return Some(item.feature_name()),
+            }
+        }
+    }
+    request.tools.as_ref()?.iter().find_map(|tool| match tool {
+        ResponseTool::Function(tool) if tool.function.defer_loading == Some(true) => {
+            Some("defer_loading")
+        }
+        ResponseTool::CodexFunction(tool) if tool.defer_loading == Some(true) => {
+            Some("defer_loading")
+        }
+        ResponseTool::CodexFunction(tool) if tool.strict == Some(true) => Some("strict"),
+        ResponseTool::CodexFunction(tool)
+            if tool.description.is_none() || tool.parameters.is_none() || tool.strict.is_none() =>
+        {
+            Some("function_schema")
+        }
+        ResponseTool::Function(_) | ResponseTool::CodexFunction(_) => None,
+        tool => Some(tool.feature_name()),
     })
 }
 
@@ -463,6 +517,7 @@ mod tests {
             previous_response_id: None,
             store: None,
             tools: None,
+            additional_tools: None,
             stream: None,
             background: None,
             max_output_tokens: None,

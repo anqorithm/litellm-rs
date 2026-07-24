@@ -7,7 +7,7 @@ use actix_web::dev::{Service, ServiceRequest, ServiceResponse, Transform, forwar
 use actix_web::http::StatusCode;
 use actix_web::{Error, HttpResponse, body::BoxBody};
 use futures::future::{LocalBoxFuture, Ready, ready};
-use std::sync::Arc;
+use std::{rc::Rc, sync::Arc};
 use tracing::{debug, warn};
 
 use super::control::IpAccessControl;
@@ -38,7 +38,7 @@ where
 
     fn new_transform(&self, service: S) -> Self::Future {
         ready(Ok(IpAccessMiddlewareService {
-            service,
+            service: Rc::new(service),
             controller: self.controller.clone(),
         }))
     }
@@ -46,7 +46,7 @@ where
 
 /// Service implementation for IP access middleware
 pub struct IpAccessMiddlewareService<S> {
-    service: S,
+    service: Rc<S>,
     controller: Arc<IpAccessControl>,
 }
 
@@ -87,7 +87,7 @@ where
         // Extract client IP
         let remote_addr = req
             .connection_info()
-            .realip_remote_addr()
+            .peer_addr()
             .unwrap_or("unknown")
             .to_string();
 
@@ -100,7 +100,7 @@ where
         let client_ip = controller.extract_client_ip(&remote_addr, forwarded_for.as_deref());
 
         let config = controller.config().clone();
-        let fut = self.service.call(req);
+        let service = Rc::clone(&self.service);
 
         Box::pin(async move {
             // Check if IP is allowed
@@ -124,13 +124,11 @@ where
                     .to_string(),
                 );
 
-                return Ok(
-                    ServiceResponse::new(fut.await?.into_parts().0, response).map_into_boxed_body()
-                );
+                return Ok(req.into_response(response).map_into_boxed_body());
             }
 
             debug!("IP access granted for: {}", client_ip);
-            let res = fut.await?;
+            let res = service.call(req).await?;
             Ok(res.map_into_boxed_body())
         })
     }
@@ -139,12 +137,76 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::ip_access::config::IpAccessConfig;
+    use crate::core::ip_access::config::{IpAccessConfig, IpRuleConfig};
+    use crate::core::ip_access::types::IpAccessMode;
+    use actix_web::{App, test as actix_test, web};
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     #[test]
     fn test_middleware_creation() {
         let config = IpAccessConfig::default();
         let controller = Arc::new(IpAccessControl::new(config).unwrap());
         let _middleware = IpAccessMiddleware::new(controller);
+    }
+
+    #[actix_web::test]
+    async fn denied_request_never_executes_downstream_service() {
+        let config = IpAccessConfig {
+            enabled: true,
+            mode: IpAccessMode::Blocklist,
+            blocklist: vec![IpRuleConfig::new("127.0.0.1")],
+            ..IpAccessConfig::default()
+        };
+        let controller = Arc::new(IpAccessControl::new(config).expect("valid IP policy"));
+        let calls = Arc::new(AtomicUsize::new(0));
+        let app = actix_test::init_service(
+            App::new()
+                .app_data(web::Data::new(Arc::clone(&calls)))
+                .wrap(IpAccessMiddleware::new(controller))
+                .route(
+                    "/sentinel",
+                    web::get().to(|calls: web::Data<Arc<AtomicUsize>>| async move {
+                        calls.fetch_add(1, Ordering::SeqCst);
+                        HttpResponse::Ok().finish()
+                    }),
+                ),
+        )
+        .await;
+        let request = actix_test::TestRequest::get()
+            .uri("/sentinel")
+            .peer_addr("127.0.0.1:9000".parse().expect("valid socket address"))
+            .to_request();
+
+        let response = actix_test::call_service(&app, request).await;
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[actix_web::test]
+    async fn untrusted_forwarded_for_cannot_spoof_the_client_ip() {
+        let config = IpAccessConfig {
+            enabled: true,
+            mode: IpAccessMode::Blocklist,
+            blocklist: vec![IpRuleConfig::new("203.0.113.9")],
+            trust_proxy: false,
+            ..IpAccessConfig::default()
+        };
+        let controller = Arc::new(IpAccessControl::new(config).expect("valid IP policy"));
+        let app =
+            actix_test::init_service(App::new().wrap(IpAccessMiddleware::new(controller)).route(
+                "/sentinel",
+                web::get().to(|| async { HttpResponse::Ok().finish() }),
+            ))
+            .await;
+        let request = actix_test::TestRequest::get()
+            .uri("/sentinel")
+            .insert_header(("x-forwarded-for", "203.0.113.9"))
+            .peer_addr("127.0.0.1:9000".parse().expect("valid socket address"))
+            .to_request();
+
+        let response = actix_test::call_service(&app, request).await;
+
+        assert_eq!(response.status(), StatusCode::OK);
     }
 }

@@ -30,6 +30,9 @@ pub(super) async fn handle_streaming_completion(
     );
 
     let request = Arc::new(adapter_request.chat_request);
+    if let Err(error) = crate::server::guardrails::check_chat_input(state, request.as_ref()).await {
+        return Ok(openai_errors::gateway_error_response(&error));
+    }
     let requested_model = request.model.clone();
 
     let core_request = match chat::build_core_chat_request_with_stream_usage(

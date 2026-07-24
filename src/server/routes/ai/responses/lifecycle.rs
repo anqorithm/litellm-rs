@@ -8,8 +8,10 @@ use crate::server::state::AppState;
 use crate::utils::error::gateway_error::GatewayError;
 use actix_web::{HttpRequest, HttpResponse, Result as ActixResult, web};
 use dashmap::DashMap;
-use serde::{Deserialize, Serialize};
-use std::sync::LazyLock;
+use serde::ser::Error as SerializeError;
+use serde::{Deserialize, Serialize, Serializer};
+use serde_json::Value;
+use std::{collections::HashSet, sync::LazyLock};
 use tokio::task::JoinHandle;
 use tracing::error;
 
@@ -48,11 +50,21 @@ struct ResponseInputItemsList {
     has_more: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 struct ResponseInputListItem {
     id: String,
-    #[serde(flatten)]
     item: ResponseInputItem,
+}
+
+impl Serialize for ResponseInputListItem {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let Value::Object(mut item) = serde_json::to_value(&self.item).map_err(S::Error::custom)?
+        else {
+            return Err(S::Error::custom("response input item must be an object"));
+        };
+        item.insert("id".to_string(), Value::String(self.id.clone()));
+        item.serialize(serializer)
+    }
 }
 
 #[derive(Deserialize)]
@@ -397,6 +409,9 @@ fn non_empty_input_items(input: &ResponseInput) -> Vec<ResponseInputItem> {
 fn input_items_from_response_input(input: &ResponseInput) -> Vec<ResponseInputItem> {
     match input {
         ResponseInput::Text(text) => vec![ResponseInputItem::Message(ResponseInputMessage {
+            id: None,
+            phase: None,
+            internal_chat_message_metadata_passthrough: None,
             role: "user".to_string(),
             content: ResponseInputContent::Text(text.clone()),
         })],
@@ -419,7 +434,10 @@ fn input_items_page(
     let mut items = input_items_from_response_input(input)
         .into_iter()
         .enumerate()
-        .map(|(index, item)| (stable_input_item_id(index, &item), item))
+        .map(|(index, item)| {
+            let id = stable_input_item_id(index, &item);
+            (id.clone(), id, item)
+        })
         .collect::<Vec<_>>();
     match query.order.as_deref().unwrap_or("desc") {
         "asc" => {}
@@ -430,12 +448,19 @@ fn input_items_page(
             )));
         }
     }
+    let ids: HashSet<_> = items.iter().map(|item| item.1.clone()).collect();
+    let mut cursors = HashSet::new();
+    for (index, (cursor, id, _)) in items.iter_mut().enumerate() {
+        while !cursors.insert(cursor.clone()) || (cursor != id && ids.contains(cursor.as_str())) {
+            *cursor = format!("{cursor}:{index}");
+        }
+    }
 
     let mut start = 0;
     if let Some(after) = &query.after {
         let index = items
             .iter()
-            .position(|(id, _)| id == after)
+            .position(|(cursor, _, _)| cursor == after)
             .ok_or_else(|| {
                 GatewayError::validation(format!("Unknown input_items cursor: {after}"))
             })?;
@@ -449,11 +474,11 @@ fn input_items_page(
         .skip(start)
         .take(limit)
         .collect::<Vec<_>>();
-    let first_id = data.first().map(|(id, _)| id.clone());
-    let last_id = data.last().map(|(id, _)| id.clone());
+    let first_id = data.first().map(|(cursor, _, _)| cursor.clone());
+    let last_id = data.last().map(|(cursor, _, _)| cursor.clone());
     let data = data
         .into_iter()
-        .map(|(id, item)| ResponseInputListItem { id, item })
+        .map(|(_, id, item)| ResponseInputListItem { id, item })
         .collect();
 
     Ok(ResponseInputItemsList {
@@ -468,6 +493,12 @@ fn input_items_page(
 fn stable_input_item_id(index: usize, item: &ResponseInputItem) -> String {
     use sha2::{Digest, Sha256};
 
+    if let Ok(Value::Object(payload)) = serde_json::to_value(item)
+        && let Some(id) = payload.get("id").and_then(Value::as_str)
+        && !id.is_empty()
+    {
+        return id.to_string();
+    }
     let value = serde_json::to_string(&(index, item)).unwrap_or_else(|_| index.to_string());
     let digest = Sha256::digest(value.as_bytes());
     format!("item_{}", hex::encode(&digest[..8]))
@@ -485,6 +516,9 @@ fn output_items_as_input_context(output: &[ResponseOutputItem]) -> Vec<ResponseI
                 return None;
             }
             Some(ResponseInputItem::Message(ResponseInputMessage {
+                id: Some(message.id.clone()),
+                phase: None,
+                internal_chat_message_metadata_passthrough: None,
                 role: "assistant".to_string(),
                 content: ResponseInputContent::Text(text),
             }))

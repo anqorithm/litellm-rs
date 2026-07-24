@@ -68,6 +68,11 @@ pub(crate) async fn handle_streaming_response(
         include_usage: Some(true),
     });
     let chat_request = Arc::new(chat_request);
+    if let Err(error) =
+        crate::server::guardrails::check_chat_input(state, chat_request.as_ref()).await
+    {
+        return Ok(openai_errors::gateway_error_response(&error));
+    }
     let model_name = chat_request.model.clone();
     let resp_id = format!("resp_{}", uuid_v4_hex());
     let created_at = current_unix_ts();

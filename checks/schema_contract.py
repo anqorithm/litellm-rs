@@ -29,6 +29,7 @@ ADOPTED_SCHEMA_KEYWORDS = frozenset(
     }
 )
 RUNTIME_PROFILE_SCHEMAS = frozenset({"duplicate_work_evidence.schema.json"})
+RUNTIME_PROFILE_DECLARATION_KEYS = frozenset({"pattern"})
 UNRESOLVED_REFERENCE_KEYWORDS = ("$dynamicRef", "$ref")
 
 SCHEMA_MAP_KEYWORDS = ("$defs", "dependentSchemas", "patternProperties", "properties")
@@ -305,7 +306,9 @@ def _validate_runtime_profile(
     schema_path: str,
     errors: list[str],
 ) -> None:
-    for keyword in sorted(set(schema) - SUPPORTED_SCHEMA_KEYS):
+    for keyword in sorted(
+        set(schema) - SUPPORTED_SCHEMA_KEYS - RUNTIME_PROFILE_DECLARATION_KEYS
+    ):
         if keyword in ADOPTED_SCHEMA_KEYWORDS:
             errors.append(
                 f"{relative_path}: {schema_path}: runtime profile does not support "

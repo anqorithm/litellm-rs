@@ -140,6 +140,7 @@ impl GuardrailConfig {
 
 /// OpenAI Moderation API configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct OpenAIModerationConfig {
     /// Whether OpenAI moderation is enabled
     #[serde(default)]
@@ -248,6 +249,7 @@ impl OpenAIModerationConfig {
 
 /// PII detection configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PIIConfig {
     /// Whether PII detection is enabled
     #[serde(default)]
@@ -349,6 +351,7 @@ impl PIIConfig {
 
 /// Prompt injection detection configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PromptInjectionConfig {
     /// Whether prompt injection detection is enabled
     #[serde(default)]

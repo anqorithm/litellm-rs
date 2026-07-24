@@ -7,6 +7,7 @@ use super::types::{IpAccessMode, IpAccessResult, IpRule};
 
 /// Main configuration for IP access control
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct IpAccessConfig {
     /// Whether IP access control is enabled
     #[serde(default)]
@@ -221,6 +222,7 @@ impl IpAccessConfig {
 
 /// IP rule configuration (serializable)
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct IpRuleConfig {
     /// IP address or CIDR
     pub value: String,

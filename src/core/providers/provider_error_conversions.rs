@@ -97,6 +97,7 @@ impl ProviderErrorTrait for ProviderError {
         }
     }
 
+    #[allow(deprecated)]
     fn is_retryable(&self) -> bool {
         // Delegate to the main implementation
         ProviderError::is_retryable(self)
