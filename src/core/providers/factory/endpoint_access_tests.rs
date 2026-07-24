@@ -318,3 +318,76 @@ async fn gateway_selector_normalization_preserves_endpoint_alias_policy() {
         .await
         .expect("normalized Azure selector must retain its endpoint alias");
 }
+
+/// Regression for #1123: a catalog provider whose default base URL is localhost
+/// must start with zero endpoint configuration, while a user-supplied endpoint
+/// still goes through the SSRF guard under the configured access policy.
+#[tokio::test]
+async fn localhost_catalog_default_starts_without_endpoint_config() {
+    use crate::core::providers::registry as provider_registry;
+
+    let mut covered = 0usize;
+    for name in ["vllm", "hosted_vllm", "lm_studio", "llamafile"] {
+        let Some(def) = provider_registry::get_definition(name) else {
+            continue;
+        };
+        if !def.base_url.contains("localhost") {
+            continue;
+        }
+        covered += 1;
+
+        let config = ProviderConfig {
+            name: format!("local-{name}"),
+            provider_type: name.to_string(),
+            api_key: String::new(),
+            ..Default::default()
+        };
+        assert_eq!(
+            config.endpoint_access,
+            crate::core::net::ProviderEndpointAccess::PublicOnly,
+            "the repro relies on the default access policy staying PublicOnly"
+        );
+        create_provider(config)
+            .await
+            .unwrap_or_else(|error| panic!("zero-config '{name}' must start: {error}"));
+
+        let explicit = ProviderConfig {
+            name: format!("local-{name}-explicit"),
+            provider_type: name.to_string(),
+            api_key: String::new(),
+            base_url: Some(def.base_url.to_string()),
+            ..Default::default()
+        };
+        assert!(
+            create_provider(explicit).await.is_err(),
+            "explicit localhost base_url under PublicOnly must stay blocked for {name}"
+        );
+    }
+    assert!(
+        covered > 0,
+        "no localhost catalog provider was exercised; the regression would be vacuous"
+    );
+}
+
+/// Auto-detection must not widen access for catalog providers whose default
+/// base URL is public.
+#[tokio::test]
+async fn public_catalog_default_is_not_widened_to_private() {
+    use crate::core::providers::registry as provider_registry;
+
+    for (name, def) in provider_registry::PROVIDER_CATALOG.iter() {
+        if def.base_url.contains("localhost") {
+            continue;
+        }
+        let config = ProviderConfig {
+            name: (*name).to_string(),
+            provider_type: (*name).to_string(),
+            api_key: "test-key".into(),
+            ..Default::default()
+        };
+        let provider = create_provider(config)
+            .await
+            .unwrap_or_else(|error| panic!("Catalog provider '{name}': {error}"));
+        assert!(matches!(&provider, Provider::OpenAILike(_)));
+    }
+}
