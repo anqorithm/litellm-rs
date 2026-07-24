@@ -1,4 +1,6 @@
 //! Gateway configuration integration
+//!
+//! This module contains the from_gateway_config method for creating
 //! a Router from gateway configuration.
 
 #[cfg(test)]
