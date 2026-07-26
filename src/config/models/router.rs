@@ -23,6 +23,9 @@ pub struct GatewayRouterConfig {
     /// Load balancer configuration
     #[serde(default)]
     pub load_balancer: LoadBalancerConfig,
+    /// Model fallback chains, keyed by requested model name
+    #[serde(default)]
+    pub fallbacks: FallbacksConfig,
 }
 
 impl GatewayRouterConfig {
@@ -31,6 +34,7 @@ impl GatewayRouterConfig {
         self.strategy = other.strategy;
         self.circuit_breaker = self.circuit_breaker.merge(other.circuit_breaker);
         self.load_balancer = self.load_balancer.merge(other.load_balancer);
+        self.fallbacks = self.fallbacks.merge(other.fallbacks);
         self
     }
 }
@@ -41,7 +45,68 @@ impl Default for GatewayRouterConfig {
             strategy: default_gateway_routing_strategy(),
             circuit_breaker: CircuitBreakerConfig::default(),
             load_balancer: LoadBalancerConfig::default(),
+            fallbacks: FallbacksConfig::default(),
         }
+    }
+}
+
+/// Model fallback configuration (YAML config model)
+///
+/// Each map goes from a requested model name to the ordered list of models to
+/// try when that model fails. `general` applies to any error; the typed maps
+/// take precedence for their error class (mirrors Python LiteLLM's
+/// `router_settings.fallbacks` / `context_window_fallbacks`).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FallbacksConfig {
+    /// General fallbacks used for any error type without a specific mapping
+    #[serde(default)]
+    pub general: std::collections::HashMap<String, Vec<String>>,
+    /// Fallbacks used when the input exceeds the model's context window
+    #[serde(default)]
+    pub context_window: std::collections::HashMap<String, Vec<String>>,
+    /// Fallbacks used when content is rejected by safety filtering
+    #[serde(default)]
+    pub content_policy: std::collections::HashMap<String, Vec<String>>,
+    /// Fallbacks used when the model's rate limit is exceeded
+    #[serde(default)]
+    pub rate_limit: std::collections::HashMap<String, Vec<String>>,
+}
+
+impl FallbacksConfig {
+    /// Merge fallback configurations; `other` entries override per model key
+    pub fn merge(mut self, other: Self) -> Self {
+        self.general.extend(other.general);
+        self.context_window.extend(other.context_window);
+        self.content_policy.extend(other.content_policy);
+        self.rate_limit.extend(other.rate_limit);
+        self
+    }
+
+    /// True when no fallback mapping is configured at all
+    pub fn is_empty(&self) -> bool {
+        self.general.is_empty()
+            && self.context_window.is_empty()
+            && self.content_policy.is_empty()
+            && self.rate_limit.is_empty()
+    }
+
+    /// Build the runtime [`crate::core::router::FallbackConfig`]
+    pub fn to_runtime(&self) -> crate::core::router::FallbackConfig {
+        let mut config = crate::core::router::FallbackConfig::new();
+        for (model, fallbacks) in &self.general {
+            config = config.add_general(model, fallbacks.clone());
+        }
+        for (model, fallbacks) in &self.context_window {
+            config = config.add_context_window(model, fallbacks.clone());
+        }
+        for (model, fallbacks) in &self.content_policy {
+            config = config.add_content_policy(model, fallbacks.clone());
+        }
+        for (model, fallbacks) in &self.rate_limit {
+            config = config.add_rate_limit(model, fallbacks.clone());
+        }
+        config
     }
 }
 
@@ -343,6 +408,7 @@ mod tests {
             strategy: RoutingStrategyConfig::LatencyBased,
             circuit_breaker: CircuitBreakerConfig::default(),
             load_balancer: LoadBalancerConfig::default(),
+            fallbacks: FallbacksConfig::default(),
         };
         assert_eq!(config.strategy, RoutingStrategyConfig::LatencyBased);
     }
@@ -353,6 +419,7 @@ mod tests {
             strategy: RoutingStrategyConfig::PriorityBased,
             circuit_breaker: CircuitBreakerConfig::default(),
             load_balancer: LoadBalancerConfig::default(),
+            fallbacks: FallbacksConfig::default(),
         };
         let json = serde_json::to_value(&config).unwrap();
         assert_eq!(json["strategy"], "priority_based");
@@ -376,9 +443,68 @@ mod tests {
             strategy: RoutingStrategyConfig::LatencyBased,
             circuit_breaker: CircuitBreakerConfig::default(),
             load_balancer: LoadBalancerConfig::default(),
+            fallbacks: FallbacksConfig::default(),
         };
         let merged = base.merge(other);
         assert_eq!(merged.strategy, RoutingStrategyConfig::LatencyBased);
+    }
+
+    // ==================== FallbacksConfig Tests ====================
+
+    #[test]
+    fn test_fallbacks_config_deserialization() {
+        let yaml = r#"
+strategy: "round_robin"
+fallbacks:
+  general:
+    speed-flagship: ["speed-flagship-fallback"]
+  context_window:
+    speed-flagship: ["speed-flagship-fallback"]
+"#;
+        let config: GatewayRouterConfig = serde_yml::from_str(yaml).unwrap();
+        assert_eq!(
+            config.fallbacks.general["speed-flagship"],
+            vec!["speed-flagship-fallback".to_string()]
+        );
+        assert!(!config.fallbacks.is_empty());
+
+        let runtime = config.fallbacks.to_runtime();
+        assert_eq!(
+            runtime.get_fallbacks_for_type(
+                "speed-flagship",
+                crate::core::router::FallbackType::General
+            ),
+            vec!["speed-flagship-fallback".to_string()]
+        );
+        assert!(runtime.validate().is_ok());
+    }
+
+    #[test]
+    fn test_fallbacks_config_default_is_empty() {
+        let config: GatewayRouterConfig = serde_yml::from_str("strategy: \"round_robin\"").unwrap();
+        assert!(config.fallbacks.is_empty());
+    }
+
+    #[test]
+    fn test_fallbacks_config_merge_overrides_per_model() {
+        let base: FallbacksConfig = serde_yml::from_str(
+            "general:\n  model-a: [\"fallback-1\"]\n  model-b: [\"fallback-2\"]",
+        )
+        .unwrap();
+        let other: FallbacksConfig =
+            serde_yml::from_str("general:\n  model-a: [\"fallback-3\"]").unwrap();
+
+        let merged = base.merge(other);
+        assert_eq!(merged.general["model-a"], vec!["fallback-3".to_string()]);
+        assert_eq!(merged.general["model-b"], vec!["fallback-2".to_string()]);
+    }
+
+    #[test]
+    fn test_fallbacks_config_cycle_detected_by_runtime_validate() {
+        let config: FallbacksConfig =
+            serde_yml::from_str("general:\n  model-a: [\"model-b\"]\n  model-b: [\"model-a\"]")
+                .unwrap();
+        assert!(config.to_runtime().validate().is_err());
     }
 
     #[test]

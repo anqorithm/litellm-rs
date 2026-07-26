@@ -139,7 +139,7 @@ impl HttpServer {
             )
             .map_err(|e| GatewayError::Config(format!("Invalid router config: {}", e)))?;
 
-        let unified_router = crate::core::router::UnifiedRouter::from_gateway_config(
+        let mut unified_router = crate::core::router::UnifiedRouter::from_gateway_config(
             &config.gateway.providers,
             Some(runtime_router_config),
         )
@@ -150,6 +150,24 @@ impl HttpServer {
                 e
             ))
         })?;
+
+        if !config.gateway.router.fallbacks.is_empty() {
+            let fallback_config = config.gateway.router.fallbacks.to_runtime();
+            fallback_config.validate().map_err(|cycles| {
+                GatewayError::Config(format!(
+                    "Invalid router.fallbacks configuration: {}",
+                    cycles.join("; ")
+                ))
+            })?;
+            unified_router.set_fallback_config(fallback_config);
+            info!(
+                "Router fallbacks configured for {} model(s)",
+                config.gateway.router.fallbacks.general.len()
+                    + config.gateway.router.fallbacks.context_window.len()
+                    + config.gateway.router.fallbacks.content_policy.len()
+                    + config.gateway.router.fallbacks.rate_limit.len()
+            );
+        }
 
         let callback_runtime =
             crate::server::callbacks::build_callback_runtime(&config.gateway.monitoring.callbacks)
