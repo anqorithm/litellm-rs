@@ -106,7 +106,7 @@ This is a **high-performance AI Gateway** written in Rust that provides OpenAI-c
 - `src/auth/` - Multi-layered authentication (JWT, API keys, RBAC)
 - `src/core/providers/` - Pluggable provider system (OpenAI, Anthropic, Azure, Google, etc.)
 - `src/core/router/` - Intelligent routing with multiple strategies
-- `src/core/mcp/` - Module-only experimental MCP gateway code; not mounted by the HTTP server
+- `src/core/mcp/` - MCP gateway, mounted at `POST /mcp` when `mcp.servers` is configured
 - `src/core/a2a/` - Module-only experimental A2A gateway code; not mounted by the HTTP server
 - `src/storage/` - Multi-backend storage (PostgreSQL, Redis, S3, Vector DB)
 - `src/monitoring/` - Observability (Prometheus, tracing, health checks)
@@ -232,14 +232,18 @@ If `git status` shows `DU` (deleted-by-us, unresolved) files under `src/core/pro
 4. **Authentication**: extend auth modules in `src/auth/`
 5. **Configuration**: update models in `src/config/models/`
 6. **Monitoring**: add metrics in respective modules
-7. **MCP servers**: `src/core/mcp/` is module-only today; adding runtime MCP support requires config, AppState construction, routes, and subsystem registry updates
+7. **MCP servers**: configure under `mcp.servers` in the gateway YAML; the gateway is built in `src/server/http.rs` and served by `src/server/routes/mcp.rs`
 8. **A2A agents**: `src/core/a2a/` is module-only today; adding runtime A2A support requires config, AppState construction, routes, and subsystem registry updates
 
 ## Protocol Gateways
 
-### MCP Gateway (`src/core/mcp/`) - Module Only
+### MCP Gateway (`src/core/mcp/`) - Wired
 
-The MCP code is not mounted by the gateway runtime today. Do not document it as an HTTP/runtime capability until config, startup construction, routes, and subsystem registry status are updated.
+Configured MCP servers are registered at startup and aggregated behind a single
+JSON-RPC endpoint at `POST /mcp` (`initialize`, `notifications/initialized`,
+`tools/list`, `tools/call`). Tool names are prefixed as `mcp_{server}__{tool}`.
+Only the HTTP and SSE transports are served; stdio and WebSocket are rejected by
+config validation.
 
 Model Context Protocol for connecting LLMs to external tools:
 - `config.rs` - Server configuration, authentication (Bearer, API Key, OAuth 2.0)

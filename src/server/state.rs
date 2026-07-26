@@ -58,6 +58,8 @@ pub struct AppState {
     pub guardrails: Arc<GuardrailEngine>,
     /// IP policy consumed by the outer HTTP middleware.
     pub ip_access: Arc<IpAccessControl>,
+    /// Aggregated MCP gateway, present only when MCP servers are configured.
+    pub mcp_gateway: Option<Arc<crate::core::mcp::gateway::McpGateway>>,
 }
 
 impl AppState {
@@ -99,6 +101,7 @@ impl AppState {
             callbacks: CallbackDispatcher::disabled(),
             guardrails: Arc::new(GuardrailEngine::disabled()),
             ip_access: Arc::new(IpAccessControl::disabled()),
+            mcp_gateway: None,
         }
     }
 
@@ -116,6 +119,15 @@ impl AppState {
     ) -> Self {
         self.guardrails = guardrails;
         self.ip_access = ip_access;
+        self
+    }
+
+    /// Attach the constructed MCP gateway.
+    pub fn with_mcp_gateway(
+        mut self,
+        mcp_gateway: Option<Arc<crate::core::mcp::gateway::McpGateway>>,
+    ) -> Self {
+        self.mcp_gateway = mcp_gateway;
         self
     }
 

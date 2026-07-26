@@ -36,7 +36,6 @@ pub const GH838_TEMPORARY_EXEMPTIONS: &[&str] = &[
     "a2a",
     "batch",
     "integrations",
-    "mcp",
     "observability",
     "user_management",
     "virtual_keys",
@@ -181,9 +180,9 @@ pub const CORE_SUBSYSTEMS: &[CoreSubsystem] = &[
     },
     CoreSubsystem {
         name: "mcp",
-        decision: SubsystemDecision::TemporaryExemption,
-        runtime_path: None,
-        note: "MCP gateway is not mounted; Responses API only passes MCP tool descriptors through.",
+        decision: SubsystemDecision::Wired,
+        runtime_path: Some("AppState mcp_gateway and the /mcp JSON-RPC route"),
+        note: "McpGateway is constructed at startup when mcp.servers is set and serves aggregated tools/list and tools/call.",
     },
     CoreSubsystem {
         name: "models",

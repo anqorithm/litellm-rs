@@ -44,20 +44,22 @@
 //!
 //! # Configuration
 //!
-//! MCP servers can be configured via YAML:
+//! MCP servers are configured in the gateway YAML under `mcp.servers` and
+//! translated into these types by
+//! [`crate::config::models::mcp::GatewayMcpConfig`]:
 //!
 //! ```yaml
-//! mcp_servers:
-//!   github:
-//!     url: "https://api.github.com/mcp"
-//!     transport: http
-//!     auth_type: bearer_token
-//!     auth_value: "${GITHUB_TOKEN}"
-//!
-//!   local_tools:
-//!     url: "/path/to/mcp-server"
-//!     transport: stdio
+//! mcp:
+//!   servers:
+//!     github:
+//!       url: "https://api.github.com/mcp"
+//!       transport: http
+//!       auth:
+//!         type: bearer_token
+//!         value: "${GITHUB_TOKEN}"
 //! ```
+//!
+//! Only the HTTP and SSE transports are served by the gateway runtime.
 
 pub mod config;
 pub mod error;

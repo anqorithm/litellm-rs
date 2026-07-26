@@ -601,7 +601,7 @@ fn issue_838_subsystems_have_explicit_non_silent_decisions() {
         ("guardrails", SubsystemDecision::Wired),
         ("integrations", SubsystemDecision::TemporaryExemption),
         ("ip_access", SubsystemDecision::Wired),
-        ("mcp", SubsystemDecision::TemporaryExemption),
+        ("mcp", SubsystemDecision::Wired),
         ("observability", SubsystemDecision::TemporaryExemption),
         ("realtime", SubsystemDecision::FeatureGated),
         ("semantic_cache", SubsystemDecision::ConfigRejected),

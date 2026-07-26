@@ -162,6 +162,7 @@ impl HttpServer {
             IpAccessControl::shared(config.gateway.ip_access.clone()).map_err(|error| {
                 GatewayError::Config(format!("Invalid IP access configuration: {error}"))
             })?;
+        let mcp_gateway = Self::build_mcp_gateway(&config.gateway.mcp).await?;
         let state = AppState::new_with_unified_router(
             config.clone(),
             auth,
@@ -171,7 +172,8 @@ impl HttpServer {
             budget_limits,
         )
         .with_callbacks(callback_runtime.dispatcher())
-        .with_request_policies(guardrails, ip_access);
+        .with_request_policies(guardrails, ip_access)
+        .with_mcp_gateway(mcp_gateway);
 
         Ok(Self {
             config: config.gateway.server.clone(),
@@ -256,6 +258,54 @@ impl HttpServer {
             .configure(routes::admin_dashboard::configure_routes)
             .configure(routes::ai::configure_routes)
             .configure(routes::pricing::configure_pricing_routes)
+            .configure(routes::mcp::configure_routes)
+    }
+
+    /// Build the aggregated MCP gateway when servers are configured.
+    ///
+    /// Server connections are established lazily on first tool use, so this
+    /// only registers servers and validates their configuration. Registration
+    /// failures honor `mcp.allow_degraded` the same way as other optional
+    /// dependencies.
+    async fn build_mcp_gateway(
+        config: &crate::config::models::mcp::GatewayMcpConfig,
+    ) -> Result<Option<Arc<crate::core::mcp::gateway::McpGateway>>> {
+        if !config.has_enabled_servers() {
+            return Ok(None);
+        }
+
+        match crate::core::mcp::gateway::McpGateway::from_config(config.to_runtime_config()).await {
+            Ok(gateway) => {
+                let servers = gateway.list_servers().await;
+                info!(
+                    "MCP gateway registered {} server(s): {}",
+                    servers.len(),
+                    servers.join(", ")
+                );
+                Ok(Some(Arc::new(gateway)))
+            }
+            Err(e) => {
+                if config.allow_degraded {
+                    error!(
+                        "MCP gateway construction failed; gateway will serve traffic without \
+                         the /mcp surface (mcp.allow_degraded=true). Error: {}",
+                        e
+                    );
+                    Ok(None)
+                } else {
+                    error!(
+                        "MCP gateway construction failed and mcp.allow_degraded=false; failing \
+                         startup. Set mcp.allow_degraded=true to keep running without the /mcp \
+                         surface. Error: {}",
+                        e
+                    );
+                    Err(GatewayError::Config(format!(
+                        "Failed to initialize MCP gateway from config: {}",
+                        e
+                    )))
+                }
+            }
+        }
     }
 
     fn validate_cors_config(cors_config: &CorsConfig) -> Result<()> {
@@ -730,6 +780,114 @@ mod tests {
         let body = MetricsMiddleware::render_prometheus();
         assert!(body.contains("gateway_http_requests_total 0"));
         assert!(body.contains("gateway_http_responses_total{class=\"2xx\"} 0"));
+    }
+
+    #[tokio::test]
+    async fn app_factory_mounts_mcp_surface_with_structured_unconfigured_error() {
+        let mut config = Config::default();
+        config.gateway.auth.enable_jwt = false;
+        config.gateway.auth.enable_api_key = false;
+        config.gateway.auth.allow_anonymous = true;
+        config.gateway.monitoring.metrics.enabled = false;
+        config.gateway.storage.database.enabled = false;
+        config.gateway.storage.redis.enabled = false;
+        config.gateway.pricing.source = None;
+
+        let server = match HttpServer::new(&config).await {
+            Ok(server) => server,
+            Err(error) => panic!("server startup failed: {error}"),
+        };
+        assert!(server.state().mcp_gateway.is_none());
+
+        let app = actix_test::init_service(HttpServer::create_app(web::Data::new(
+            server.state().clone(),
+        )))
+        .await;
+
+        let req = actix_test::TestRequest::post()
+            .uri("/mcp/")
+            .set_json(serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/list"
+            }))
+            .to_request();
+        let resp = actix_test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::NOT_IMPLEMENTED);
+
+        let body: serde_json::Value = actix_test::read_body_json(resp).await;
+        assert_eq!(body["jsonrpc"], "2.0");
+        assert_eq!(body["id"], 1);
+        assert_eq!(body["error"]["code"], -32001);
+        assert!(
+            body["error"]["message"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("mcp.servers")
+        );
+    }
+
+    #[tokio::test]
+    async fn new_wires_mcp_gateway_when_servers_configured() {
+        let mut config = Config::default();
+        config.gateway.storage.database.enabled = false;
+        config.gateway.storage.redis.enabled = false;
+        config.gateway.pricing.source = None;
+        config.gateway.mcp.servers.insert(
+            "vertus_tools".to_string(),
+            crate::config::models::mcp::GatewayMcpServerConfig {
+                url: "https://1.1.1.1/mcp".to_string(),
+                static_headers: std::collections::BTreeMap::from([(
+                    "X-Service-Key".to_string(),
+                    "service-key-value".to_string(),
+                )]),
+                ..Default::default()
+            },
+        );
+
+        let server = match HttpServer::new(&config).await {
+            Ok(server) => server,
+            Err(error) => panic!("configured MCP servers should wire at startup: {error}"),
+        };
+
+        let gateway = match server.state().mcp_gateway.as_ref() {
+            Some(gateway) => gateway,
+            None => panic!("configured MCP servers must produce a gateway"),
+        };
+        assert_eq!(
+            gateway.list_servers().await,
+            vec!["vertus_tools".to_string()]
+        );
+    }
+
+    #[tokio::test]
+    async fn new_fails_when_mcp_server_registration_is_rejected() {
+        let mut config = Config::default();
+        config.gateway.storage.database.enabled = false;
+        config.gateway.storage.redis.enabled = false;
+        config.gateway.pricing.source = None;
+        // A loopback target is rejected by the outbound SSRF policy during
+        // server registration.
+        config.gateway.mcp.servers.insert(
+            "loopback_tools".to_string(),
+            crate::config::models::mcp::GatewayMcpServerConfig {
+                url: "http://127.0.0.1:9000/mcp".to_string(),
+                ..Default::default()
+            },
+        );
+
+        let result = HttpServer::new(&config).await;
+        assert!(
+            result.is_err(),
+            "rejected MCP server with allow_degraded=false must fail startup"
+        );
+
+        config.gateway.mcp.allow_degraded = true;
+        let server = match HttpServer::new(&config).await {
+            Ok(server) => server,
+            Err(error) => panic!("allow_degraded should keep startup running: {error}"),
+        };
+        assert!(server.state().mcp_gateway.is_none());
     }
 
     #[tokio::test]

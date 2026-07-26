@@ -144,6 +144,20 @@ ip_access:
   trust_proxy: false
   max_proxy_hops: 1
 
+# MCP servers are aggregated behind a single JSON-RPC endpoint at POST /mcp.
+# Tools are exposed as mcp_{server}__{tool}; connections are opened lazily on
+# first use. Leave `servers` empty to keep the /mcp surface unconfigured.
+mcp:
+  allow_degraded: false
+  servers: {}
+  # servers:
+  #   vertus_tools:
+  #     url: "https://42.vertus.ai/mcp/"
+  #     transport: http
+  #     timeout_ms: 30000
+  #     static_headers:
+  #       X-Service-Key: "${VERTUS_SERVICE_KEY}"
+
 monitoring:
   metrics:
     enabled: true
