@@ -116,6 +116,15 @@ impl From<crate::core::providers::ProviderError> for SDKError {
         let code = redacted.canonical_code();
         let message = redacted.to_string();
 
+        // ModelNotFound keeps its dedicated SDK variant even though its
+        // canonical/HTTP mapping is InvalidRequest/400 (Python LiteLLM parity).
+        if matches!(
+            redacted,
+            crate::core::providers::ProviderError::ModelNotFound { .. }
+        ) {
+            return SDKError::ModelNotFound(message);
+        }
+
         match code {
             ErrorCode::Authentication | ErrorCode::Authorization => SDKError::AuthError(message),
             ErrorCode::RateLimited | ErrorCode::QuotaExceeded => SDKError::RateLimitError(message),

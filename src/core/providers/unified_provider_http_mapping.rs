@@ -75,8 +75,10 @@ pub fn provider_http_error_facts(error: &ProviderError) -> ProviderHttpErrorFact
             "insufficient_quota",
             "insufficient_quota",
         ),
+        // Python LiteLLM parity (INF-37 owner decision normalize_rust_to_400):
+        // an unknown requested model is a client error, not a missing route.
         ProviderError::ModelNotFound { .. } => facts(
-            404,
+            400,
             "MODEL_NOT_FOUND",
             "invalid_request_error",
             "model_not_found",

@@ -99,7 +99,7 @@ mod provider_error_tests {
     fn test_model_not_found_factory() {
         let err = ProviderError::model_not_found("openai", "gpt-5");
         assert_eq!(err.provider(), "openai");
-        assert_eq!(err.http_status(), 404);
+        assert_eq!(err.http_status(), 400);
         assert!(!err.is_retryable());
     }
 
@@ -381,7 +381,7 @@ mod provider_error_tests {
         assert_eq!(ProviderError::authentication("a", "b").http_status(), 401);
         assert_eq!(ProviderError::rate_limit("a", None).http_status(), 429);
         assert_eq!(ProviderError::quota_exceeded("a", "b").http_status(), 402);
-        assert_eq!(ProviderError::model_not_found("a", "b").http_status(), 404);
+        assert_eq!(ProviderError::model_not_found("a", "b").http_status(), 400);
         assert_eq!(ProviderError::invalid_request("a", "b").http_status(), 400);
         assert_eq!(ProviderError::not_supported("a", "b").http_status(), 501);
         assert_eq!(ProviderError::not_implemented("a", "b").http_status(), 501);

@@ -72,9 +72,8 @@ impl CanonicalError for ProviderError {
             ProviderError::Authentication { .. } => ErrorCode::Authentication,
             ProviderError::RateLimit { .. } => ErrorCode::RateLimited,
             ProviderError::QuotaExceeded { .. } => ErrorCode::QuotaExceeded,
-            ProviderError::ModelNotFound { .. } | ProviderError::DeploymentError { .. } => {
-                ErrorCode::NotFound
-            }
+            ProviderError::ModelNotFound { .. } => ErrorCode::InvalidRequest,
+            ProviderError::DeploymentError { .. } => ErrorCode::NotFound,
             ProviderError::InvalidRequest { .. }
             | ProviderError::ContextLengthExceeded { .. }
             | ProviderError::ContentFiltered { .. }

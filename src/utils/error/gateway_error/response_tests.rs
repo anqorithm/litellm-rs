@@ -434,7 +434,8 @@ fn test_provider_error_model_not_found_response() {
     };
     let error = GatewayError::Provider(provider_error);
     let response = error.error_response();
-    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    // Python LiteLLM parity: unknown model is a client error (400), not 404.
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
 #[test]
