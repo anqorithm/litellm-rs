@@ -58,7 +58,12 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
         web::scope("/health")
             .route("", web::get().to(health_check))
             .route("/ready", web::get().to(readiness_check))
-            .route("/detailed", web::get().to(detailed_health_check)),
+            .route("/detailed", web::get().to(detailed_health_check))
+            // Python LiteLLM proxy aliases, kept so existing probes and
+            // monitoring keep working when this gateway replaces it.
+            .route("/liveliness", web::get().to(health_check))
+            .route("/liveness", web::get().to(health_check))
+            .route("/readiness", web::get().to(readiness_check)),
     )
     .route("/status", web::get().to(system_status))
     .route("/version", web::get().to(version_info))
