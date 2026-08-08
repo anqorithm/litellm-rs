@@ -60,6 +60,7 @@ impl Validate for GatewayConfig {
         self.guardrails.validate()?;
         crate::config::models::validate_gateway_guardrails(&self.guardrails)?;
         self.ip_access.validate()?;
+        self.mcp.validate()?;
         Validate::validate(&self.enterprise)?;
         Validate::validate(&self.pricing)?;
 

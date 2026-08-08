@@ -95,7 +95,7 @@ Runtime wiring decisions are tracked in [`src/core/subsystem_registry.rs`](./src
 | --- | --- | --- |
 | `core/guardrails` | wire | Default-on prompt-injection checks run before provider execution and on non-streaming output; `guardrails.enabled: false` is the explicit opt-out. |
 | `core/ip_access` | wire | Configured allow/block rules run as an outer Actix middleware and short-circuit before downstream side effects; empty/default rules allow all. |
-| `core/mcp` | experimental-gate | MCP gateway is not mounted; Responses API only passes MCP tool descriptors through to providers. |
+| `core/mcp` | wire | `McpGateway` is constructed at startup when `mcp.servers` is configured and serves aggregated `tools/list` and `tools/call` over JSON-RPC at `POST /mcp`. |
 | `core/a2a` | experimental-gate | A2A gateway types compile, but no route or `AppState` entry mounts them. |
 | `core/realtime` | experimental-gate | Realtime WebSocket types exist, but no gateway route is mounted. |
 | `core/observability` and `core/integrations` | experimental-gate | Basic tracing, metrics middleware, and health endpoints are wired elsewhere; Langfuse/OpenTelemetry managers and exporters are not initialized by the binary. |

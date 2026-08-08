@@ -6,6 +6,7 @@ use super::auth::AuthConfig;
 use super::cache::CacheConfig;
 use super::enterprise::EnterpriseConfig;
 use super::guardrails::{default_gateway_guardrails, deserialize_gateway_guardrails};
+use super::mcp::GatewayMcpConfig;
 use super::monitoring::MonitoringConfig;
 use super::provider::ProviderConfig;
 use super::rate_limit::RateLimitConfig;
@@ -489,6 +490,10 @@ pub struct GatewayConfig {
     /// IP access policy. Empty/default rules preserve allow-all behavior.
     #[serde(default)]
     pub ip_access: IpAccessConfig,
+    /// MCP gateway configuration. An empty `servers` map leaves the `/mcp`
+    /// JSON-RPC surface unconfigured.
+    #[serde(default)]
+    pub mcp: GatewayMcpConfig,
     /// Enterprise features configuration
     #[serde(default)]
     pub enterprise: EnterpriseConfig,
@@ -515,6 +520,7 @@ impl Default for GatewayConfig {
             rate_limit: RateLimitConfig::default(),
             guardrails: default_gateway_guardrails(),
             ip_access: IpAccessConfig::default(),
+            mcp: GatewayMcpConfig::default(),
             enterprise: EnterpriseConfig::default(),
             pricing: GatewayPricingConfig::default(),
         }
@@ -653,6 +659,7 @@ impl GatewayConfig {
         self.rate_limit = self.rate_limit.merge(other.rate_limit);
         self.guardrails = other.guardrails;
         self.ip_access = other.ip_access;
+        self.mcp = self.mcp.merge(other.mcp);
         self.enterprise = self.enterprise.merge(other.enterprise);
         self.pricing = self.pricing.merge(other.pricing);
 
