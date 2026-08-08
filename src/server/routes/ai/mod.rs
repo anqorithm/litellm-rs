@@ -510,7 +510,8 @@ mod tests {
         let embeddings_resp = test::call_service(&app, embeddings_req).await;
         let embeddings_status = embeddings_resp.status();
         let embeddings_body: Value = test::read_body_json(embeddings_resp).await;
-        assert_eq!(embeddings_status, StatusCode::NOT_FOUND);
+        // Python LiteLLM parity: unknown model is a client error (400).
+        assert_eq!(embeddings_status, StatusCode::BAD_REQUEST);
         assert!(
             embeddings_body
                 .get("error")
