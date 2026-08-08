@@ -408,6 +408,7 @@ mod tests {
             strategy: RoutingStrategyConfig::LatencyBased,
             circuit_breaker: CircuitBreakerConfig::default(),
             load_balancer: LoadBalancerConfig::default(),
+            fallbacks: Default::default(),
         };
         let runtime = runtime_router_config_from_gateway(&gateway).unwrap();
         assert_eq!(
@@ -427,6 +428,7 @@ mod tests {
                 success_threshold: 5,
             },
             load_balancer: LoadBalancerConfig::default(),
+            fallbacks: Default::default(),
         };
         let runtime = runtime_router_config_from_gateway(&gateway).unwrap();
         assert_eq!(runtime.allowed_fails, 8);
@@ -444,6 +446,7 @@ mod tests {
                 sticky_sessions: true,
                 ..LoadBalancerConfig::default()
             },
+            fallbacks: Default::default(),
         };
 
         let err = runtime_router_config_from_gateway(&gateway).unwrap_err();
@@ -459,6 +462,7 @@ mod tests {
                 session_timeout: 900,
                 ..LoadBalancerConfig::default()
             },
+            fallbacks: Default::default(),
         };
 
         let err = runtime_router_config_from_gateway(&gateway).unwrap_err();

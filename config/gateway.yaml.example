@@ -80,6 +80,15 @@ router:
     # values are rejected during config validation until runtime affinity exists.
     # sticky_sessions: false
     # session_timeout: 3600
+  # Model fallback chains: when the requested model fails (after per-model
+  # retries), the listed models are tried in order. `general` applies to any
+  # error; `context_window`, `content_policy`, and `rate_limit` take precedence
+  # for their error class. Cycles are rejected at startup.
+  # fallbacks:
+  #   general:
+  #     gpt-4o: ["claude-sonnet-4-5", "gemini-2.5-pro"]
+  #   context_window:
+  #     gpt-4o-mini: ["gpt-4o"]
 
 storage:
   database:
