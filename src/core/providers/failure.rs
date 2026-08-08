@@ -218,7 +218,12 @@ mod tests {
             402,
             false
         );
-        case!(ProviderError::model_not_found(p, m), NotFound, 404, false);
+        case!(
+            ProviderError::model_not_found(p, m),
+            InvalidRequest,
+            400,
+            false
+        );
         case!(
             ProviderError::invalid_request(p, m),
             InvalidRequest,

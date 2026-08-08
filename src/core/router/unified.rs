@@ -725,6 +725,27 @@ impl Router {
         fallbacks
     }
 
+    /// Record that execution moved on to a fallback model (metric + trace).
+    ///
+    /// Shared by the router-API execute path and the HTTP route execution path
+    /// so `RouterStats::fallback_triggered` counts both.
+    pub fn note_fallback_triggered(
+        &self,
+        original_model: &str,
+        fallback_model: &str,
+        fallback_index: u32,
+        error: &ProviderError,
+    ) {
+        self.fallback_triggered_count.fetch_add(1, Relaxed);
+        tracing::info!(
+            original_model = %original_model,
+            fallback_model = %fallback_model,
+            fallback_index = fallback_index,
+            error_type = %error.redacted(),
+            "fallback triggered, trying next model"
+        );
+    }
+
     /// Get all models to try (original model + fallbacks)
     pub fn get_models_with_fallbacks(
         &self,

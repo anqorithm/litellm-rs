@@ -57,12 +57,62 @@ impl Drop for StreamingDeploymentLease {
     }
 }
 
+/// Run the per-model retry loop for `requested_model`, then walk the configured
+/// fallback chain (error-type aware, cycle-safe, capped by `max_fallbacks`).
+/// This is the HTTP-path twin of `UnifiedRouter::execute*` fallback handling:
+/// without it, `router_settings.fallbacks` never fires for API traffic.
 pub(super) async fn execute_with_selected_deployment<T, F, Fut>(
     router: &UnifiedRouter,
     requested_model: &str,
     capability: ProviderCapability,
     operation: F,
 ) -> Result<T, GatewayError>
+where
+    F: Fn(Provider, String, String) -> Fut + Clone,
+    Fut: std::future::Future<Output = Result<(T, u64), ProviderError>>,
+{
+    let mut tried = HashSet::new();
+    tried.insert(requested_model.to_string());
+    let mut queue = std::collections::VecDeque::new();
+    let mut current = requested_model.to_string();
+    let mut fallbacks_used: u32 = 0;
+
+    loop {
+        let err = match execute_model_with_retries(
+            router,
+            &current,
+            capability.clone(),
+            operation.clone(),
+        )
+        .await
+        {
+            Ok(value) => return Ok(value),
+            Err(err) => err,
+        };
+
+        for model in router.get_fallbacks(&current, UnifiedRouter::infer_fallback_type(&err)) {
+            if tried.insert(model.clone()) {
+                queue.push_back(model);
+            }
+        }
+
+        match queue.pop_front() {
+            Some(next) if fallbacks_used < router.config().max_fallbacks => {
+                fallbacks_used += 1;
+                router.note_fallback_triggered(requested_model, &next, fallbacks_used, &err);
+                current = next;
+            }
+            _ => return Err(GatewayError::Provider(err)),
+        }
+    }
+}
+
+async fn execute_model_with_retries<T, F, Fut>(
+    router: &UnifiedRouter,
+    requested_model: &str,
+    capability: ProviderCapability,
+    operation: F,
+) -> Result<T, ProviderError>
 where
     F: Fn(Provider, String, String) -> Fut + Clone,
     Fut: std::future::Future<Output = Result<(T, u64), ProviderError>>,
@@ -85,7 +135,7 @@ where
                 if !excluded_budget_deployments.is_empty()
                     && let Some(err) = last_error.clone()
                 {
-                    return Err(GatewayError::Provider(err));
+                    return Err(err);
                 }
 
                 let provider_err = router_error_to_provider_error(router_err);
@@ -104,7 +154,7 @@ where
                     continue;
                 }
 
-                return Err(GatewayError::Provider(provider_err));
+                return Err(provider_err);
             }
         };
 
@@ -161,17 +211,15 @@ where
                     cooldown_reason,
                 );
                 drop(deployment_lease);
-                return Err(GatewayError::Provider(err));
+                return Err(err);
             }
         }
     }
 
-    Err(GatewayError::Provider(last_error.unwrap_or_else(|| {
-        ProviderError::Other {
-            provider: "router",
-            message: "Unknown error during selected deployment retry".to_string(),
-        }
-    })))
+    Err(last_error.unwrap_or_else(|| ProviderError::Other {
+        provider: "router",
+        message: "Unknown error during selected deployment retry".to_string(),
+    }))
 }
 
 #[cfg(test)]
@@ -198,12 +246,61 @@ fn retry_delay_for_error(
 #[path = "execution_retry_delay_tests.rs"]
 mod retry_delay_tests;
 
+/// Streaming twin of `execute_with_selected_deployment`: per-model retries,
+/// then the configured fallback chain. Fallback only applies before the first
+/// output chunk — once a stream is handed out, failures are the lease's.
 pub(super) async fn execute_stream_with_selected_deployment<T, F, Fut>(
     router: Arc<UnifiedRouter>,
     requested_model: &str,
     capability: ProviderCapability,
     operation: F,
 ) -> Result<(T, StreamingDeploymentLease), GatewayError>
+where
+    F: Fn(Provider, String, String) -> Fut + Clone,
+    Fut: std::future::Future<Output = Result<T, ProviderError>>,
+{
+    let mut tried = HashSet::new();
+    tried.insert(requested_model.to_string());
+    let mut queue = std::collections::VecDeque::new();
+    let mut current = requested_model.to_string();
+    let mut fallbacks_used: u32 = 0;
+
+    loop {
+        let err = match execute_stream_model_with_retries(
+            router.clone(),
+            &current,
+            capability.clone(),
+            operation.clone(),
+        )
+        .await
+        {
+            Ok(value) => return Ok(value),
+            Err(err) => err,
+        };
+
+        for model in router.get_fallbacks(&current, UnifiedRouter::infer_fallback_type(&err)) {
+            if tried.insert(model.clone()) {
+                queue.push_back(model);
+            }
+        }
+
+        match queue.pop_front() {
+            Some(next) if fallbacks_used < router.config().max_fallbacks => {
+                fallbacks_used += 1;
+                router.note_fallback_triggered(requested_model, &next, fallbacks_used, &err);
+                current = next;
+            }
+            _ => return Err(GatewayError::Provider(err)),
+        }
+    }
+}
+
+async fn execute_stream_model_with_retries<T, F, Fut>(
+    router: Arc<UnifiedRouter>,
+    requested_model: &str,
+    capability: ProviderCapability,
+    operation: F,
+) -> Result<(T, StreamingDeploymentLease), ProviderError>
 where
     F: Fn(Provider, String, String) -> Fut + Clone,
     Fut: std::future::Future<Output = Result<T, ProviderError>>,
@@ -226,7 +323,7 @@ where
                 if !excluded_budget_deployments.is_empty()
                     && let Some(err) = last_error.clone()
                 {
-                    return Err(GatewayError::Provider(err));
+                    return Err(err);
                 }
 
                 let provider_err = router_error_to_provider_error(router_err);
@@ -245,7 +342,7 @@ where
                     continue;
                 }
 
-                return Err(GatewayError::Provider(provider_err));
+                return Err(provider_err);
             }
         };
         let deployment = deployment_lease.clone_deployment();
@@ -297,17 +394,15 @@ where
                     cooldown_reason,
                 );
                 drop(deployment_lease);
-                return Err(GatewayError::Provider(err));
+                return Err(err);
             }
         }
     }
 
-    Err(GatewayError::Provider(last_error.unwrap_or_else(|| {
-        ProviderError::Other {
-            provider: "router",
-            message: "Unknown error during streaming retry".to_string(),
-        }
-    })))
+    Err(last_error.unwrap_or_else(|| ProviderError::Other {
+        provider: "router",
+        message: "Unknown error during streaming retry".to_string(),
+    }))
 }
 
 #[cfg(test)]
@@ -733,6 +828,200 @@ mod tests {
             .get_deployment("primary-budget-exhausted")
             .expect("primary deployment should exist");
         assert_eq!(primary.state.fail_requests.load(Ordering::Relaxed), 0);
+        lease.finish_success(0);
+    }
+
+    async fn build_fallback_router() -> UnifiedRouter {
+        let router = UnifiedRouter::new(RouterConfig {
+            num_retries: 0,
+            ..Default::default()
+        })
+        .with_fallback_config(
+            crate::core::router::FallbackConfig::new()
+                .add_general("primary-model", vec!["backup-model".to_string()]),
+        );
+
+        let primary = Provider::Anthropic(
+            AnthropicProvider::new(AnthropicConfig::new("sk-test-key"))
+                .expect("test provider should build"),
+        );
+        let backup = Provider::OpenAI(
+            OpenAIProvider::with_api_key("sk-test-key")
+                .await
+                .expect("test provider should build"),
+        );
+
+        router.add_deployment(Deployment::new(
+            "primary-deployment".to_string(),
+            primary,
+            "claude-3-haiku".to_string(),
+            "primary-model".to_string(),
+        ));
+        router.add_deployment(Deployment::new(
+            "backup-deployment".to_string(),
+            backup,
+            "gpt-4o-mini".to_string(),
+            "backup-model".to_string(),
+        ));
+
+        router
+    }
+
+    #[tokio::test]
+    async fn test_execute_uses_configured_fallback_model_after_failure() {
+        let router = build_fallback_router().await;
+        let attempts = Arc::new(Mutex::new(Vec::new()));
+
+        let (provider, model) = execute_with_selected_deployment(
+            &router,
+            "primary-model",
+            ProviderCapability::ChatCompletion,
+            {
+                let attempts = attempts.clone();
+                move |provider, model, _deployment_id| {
+                    let attempts = attempts.clone();
+                    async move {
+                        attempts.lock().unwrap().push(model.clone());
+                        if model == "claude-3-haiku" {
+                            Err(ProviderError::Authentication {
+                                provider: "anthropic",
+                                message: "invalid key".to_string(),
+                            })
+                        } else {
+                            Ok(((provider.name().to_string(), model), 0))
+                        }
+                    }
+                }
+            },
+        )
+        .await
+        .expect("fallback model should be used after primary failure");
+
+        assert_eq!(provider, "openai");
+        assert_eq!(model, "gpt-4o-mini");
+        assert_eq!(
+            attempts.lock().unwrap().as_slice(),
+            ["claude-3-haiku", "gpt-4o-mini"]
+        );
+        assert_eq!(router.routing_metrics().fallback_triggered, 1);
+    }
+
+    #[tokio::test]
+    async fn test_execute_without_fallback_returns_original_error() {
+        let router = build_test_router().await;
+
+        let err = execute_with_selected_deployment(
+            &router,
+            "gpt-4",
+            ProviderCapability::ChatCompletion,
+            |_provider, _model, _deployment_id| async {
+                Err::<(String, u64), _>(ProviderError::Authentication {
+                    provider: "openai",
+                    message: "invalid key".to_string(),
+                })
+            },
+        )
+        .await
+        .expect_err("error should propagate when no fallback is configured");
+
+        assert!(matches!(
+            err,
+            GatewayError::Provider(ProviderError::Authentication { .. })
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_execute_fallback_chain_stops_on_cycle() {
+        let router = UnifiedRouter::new(RouterConfig {
+            num_retries: 0,
+            ..Default::default()
+        })
+        .with_fallback_config(
+            crate::core::router::FallbackConfig::new()
+                .add_general("primary-model", vec!["backup-model".to_string()])
+                .add_general("backup-model", vec!["primary-model".to_string()]),
+        );
+        let provider = Provider::OpenAI(
+            OpenAIProvider::with_api_key("sk-test-key")
+                .await
+                .expect("test provider should build"),
+        );
+        router.add_deployment(Deployment::new(
+            "primary-deployment".to_string(),
+            provider.clone(),
+            "gpt-4o-mini".to_string(),
+            "primary-model".to_string(),
+        ));
+        router.add_deployment(Deployment::new(
+            "backup-deployment".to_string(),
+            provider,
+            "gpt-4o".to_string(),
+            "backup-model".to_string(),
+        ));
+        let calls = Arc::new(Mutex::new(0u32));
+
+        let err = execute_with_selected_deployment(
+            &router,
+            "primary-model",
+            ProviderCapability::ChatCompletion,
+            {
+                let calls = calls.clone();
+                move |_provider, _model, _deployment_id| {
+                    let calls = calls.clone();
+                    async move {
+                        *calls.lock().unwrap() += 1;
+                        Err::<(String, u64), _>(ProviderError::Authentication {
+                            provider: "openai",
+                            message: "invalid key".to_string(),
+                        })
+                    }
+                }
+            },
+        )
+        .await
+        .expect_err("cyclic fallback chain must terminate with the error");
+
+        assert!(matches!(err, GatewayError::Provider(_)));
+        assert_eq!(*calls.lock().unwrap(), 2, "each model tried exactly once");
+    }
+
+    #[tokio::test]
+    async fn test_execute_stream_uses_configured_fallback_model_after_failure() {
+        let router = Arc::new(build_fallback_router().await);
+        let attempts = Arc::new(Mutex::new(Vec::new()));
+
+        let ((provider, model), lease) = execute_stream_with_selected_deployment(
+            router.clone(),
+            "primary-model",
+            ProviderCapability::ChatCompletionStream,
+            {
+                let attempts = attempts.clone();
+                move |provider, model, _deployment_id| {
+                    let attempts = attempts.clone();
+                    async move {
+                        attempts.lock().unwrap().push(model.clone());
+                        if model == "claude-3-haiku" {
+                            Err(ProviderError::Authentication {
+                                provider: "anthropic",
+                                message: "invalid key".to_string(),
+                            })
+                        } else {
+                            Ok((provider.name().to_string(), model))
+                        }
+                    }
+                }
+            },
+        )
+        .await
+        .expect("fallback model should be used for stream startup failure");
+
+        assert_eq!(provider, "openai");
+        assert_eq!(model, "gpt-4o-mini");
+        assert_eq!(
+            attempts.lock().unwrap().as_slice(),
+            ["claude-3-haiku", "gpt-4o-mini"]
+        );
+        assert_eq!(router.routing_metrics().fallback_triggered, 1);
         lease.finish_success(0);
     }
 

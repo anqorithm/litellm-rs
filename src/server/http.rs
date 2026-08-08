@@ -139,7 +139,7 @@ impl HttpServer {
             )
             .map_err(|e| GatewayError::Config(format!("Invalid router config: {}", e)))?;
 
-        let unified_router = crate::core::router::UnifiedRouter::from_gateway_config(
+        let mut unified_router = crate::core::router::UnifiedRouter::from_gateway_config(
             &config.gateway.providers,
             Some(runtime_router_config),
         )
@@ -150,6 +150,24 @@ impl HttpServer {
                 e
             ))
         })?;
+
+        if !config.gateway.router.fallbacks.is_empty() {
+            let fallback_config = config.gateway.router.fallbacks.to_runtime();
+            fallback_config.validate().map_err(|cycles| {
+                GatewayError::Config(format!(
+                    "Invalid router.fallbacks configuration: {}",
+                    cycles.join("; ")
+                ))
+            })?;
+            unified_router.set_fallback_config(fallback_config);
+            info!(
+                "Router fallbacks configured for {} model(s)",
+                config.gateway.router.fallbacks.general.len()
+                    + config.gateway.router.fallbacks.context_window.len()
+                    + config.gateway.router.fallbacks.content_policy.len()
+                    + config.gateway.router.fallbacks.rate_limit.len()
+            );
+        }
 
         let callback_runtime =
             crate::server::callbacks::build_callback_runtime(&config.gateway.monitoring.callbacks)
@@ -254,6 +272,7 @@ impl HttpServer {
             .configure(routes::keys::configure_routes)
             .configure(routes::teams::configure_routes)
             .configure(routes::budget::configure_budget_routes)
+            .configure(routes::litellm_compat::configure_routes)
             .configure(routes::admin::configure_routes)
             .configure(routes::admin_dashboard::configure_routes)
             .configure(routes::ai::configure_routes)
@@ -643,6 +662,81 @@ mod tests {
             "disabled DB must keep startup running with in-memory budgets, got: {:?}",
             result.err()
         );
+    }
+
+    #[tokio::test]
+    async fn app_factory_serves_litellm_compat_ops_endpoints() {
+        let mut config = Config::default();
+        config.gateway.auth.enable_jwt = false;
+        config.gateway.auth.enable_api_key = false;
+        config.gateway.auth.allow_anonymous = true;
+        config.gateway.storage.database.enabled = false;
+        config.gateway.storage.redis.enabled = false;
+        config.gateway.pricing.source = None;
+
+        let server = match HttpServer::new(&config).await {
+            Ok(server) => server,
+            Err(error) => panic!("server startup failed: {error}"),
+        };
+        let app = actix_test::init_service(HttpServer::create_app(web::Data::new(
+            server.state().clone(),
+        )))
+        .await;
+
+        for uri in ["/health/liveliness", "/health/liveness"] {
+            let resp = actix_test::call_service(
+                &app,
+                actix_test::TestRequest::get().uri(uri).to_request(),
+            )
+            .await;
+            assert_eq!(resp.status(), StatusCode::OK, "{uri} should be aliased");
+            drop(actix_test::read_body(resp).await);
+        }
+
+        // Readiness legitimately reports 503 here (storage disabled); the
+        // alias only has to exist and answer with readiness semantics.
+        let resp = actix_test::call_service(
+            &app,
+            actix_test::TestRequest::get()
+                .uri("/health/readiness")
+                .to_request(),
+        )
+        .await;
+        assert_ne!(resp.status(), StatusCode::NOT_FOUND);
+        drop(actix_test::read_body(resp).await);
+
+        let resp = actix_test::call_service(
+            &app,
+            actix_test::TestRequest::get()
+                .uri("/model/info")
+                .to_request(),
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body: serde_json::Value = actix_test::read_body_json(resp).await;
+        assert!(body["data"].is_array());
+
+        let resp = actix_test::call_service(
+            &app,
+            actix_test::TestRequest::get()
+                .uri("/global/spend")
+                .to_request(),
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body: serde_json::Value = actix_test::read_body_json(resp).await;
+        assert!(body["spend"].is_number());
+
+        let resp = actix_test::call_service(
+            &app,
+            actix_test::TestRequest::get()
+                .uri("/global/spend/models")
+                .to_request(),
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body: serde_json::Value = actix_test::read_body_json(resp).await;
+        assert!(body.is_array());
     }
 
     #[tokio::test]
