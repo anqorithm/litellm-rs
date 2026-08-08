@@ -9,6 +9,7 @@ pub mod auth;
 pub mod budget;
 pub mod health;
 pub mod keys;
+pub mod litellm_compat;
 pub mod pricing;
 pub mod teams;
 
