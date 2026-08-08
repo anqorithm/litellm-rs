@@ -21,6 +21,7 @@ SUPPORTED_SCHEMA_KEYS = SCHEMA_ANNOTATION_KEYS | {
     "exclusiveMaximum",
     "exclusiveMinimum",
     "items",
+    "maxLength",
     "minItems",
     "minLength",
     "minimum",
@@ -256,6 +257,12 @@ def validate_instance(schema: dict[str, Any], data: Any, path: str = "$") -> Non
             raise SpecRailError(f"{path}: minLength requires a string instance")
         if len(data) < int(schema["minLength"]):
             raise SpecRailError(f"{path}: string is shorter than minLength")
+
+    if "maxLength" in schema:
+        if not isinstance(data, str):
+            raise SpecRailError(f"{path}: maxLength requires a string instance")
+        if len(data) > int(schema["maxLength"]):
+            raise SpecRailError(f"{path}: string is longer than maxLength")
 
     if "minItems" in schema:
         if not isinstance(data, list):

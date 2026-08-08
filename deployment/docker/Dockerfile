@@ -33,7 +33,7 @@ RUN mkdir -p src/bin && \
     echo "fn main() {}" > benches/e2e_benchmarks.rs
 
 # Build dependencies (this layer will be cached)
-RUN cargo build --release --locked --features "postgres sqlite redis s3 metrics tracing websockets analytics"
+RUN cargo build --release --locked --features "postgres sqlite redis s3 metrics tracing websockets analytics providers-extra providers-extended"
 RUN rm -rf src/*
 
 # Copy source code and necessary files
@@ -41,7 +41,7 @@ COPY src ./src
 COPY config ./config
 
 # Build the application
-RUN cargo build --release --locked --features "postgres sqlite redis s3 metrics tracing websockets analytics"
+RUN cargo build --release --locked --features "postgres sqlite redis s3 metrics tracing websockets analytics providers-extra providers-extended"
 
 # Runtime stage
 FROM debian:bookworm-slim

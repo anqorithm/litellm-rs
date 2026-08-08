@@ -57,6 +57,25 @@ pub(crate) fn validation_error(message: impl Into<String>) -> HttpResponse {
     ))
 }
 
+pub(crate) fn unsupported_codex_feature(feature: &str, model: &str) -> HttpResponse {
+    let feature = safe_codex_diagnostic(feature);
+    let model = safe_codex_diagnostic(model);
+    build_response(spec(
+        StatusCode::BAD_REQUEST,
+        format!("unsupported Codex feature: {feature}; model={model}; provider=unselected"),
+        "invalid_request_error",
+        "unsupported_codex_feature",
+    ))
+}
+
+fn safe_codex_diagnostic(value: &str) -> String {
+    crate::utils::sanitize_for_logging(value.trim())
+        .replace(['\n', '\r', ';'], "_")
+        .chars()
+        .take(128)
+        .collect()
+}
+
 pub(crate) fn unauthorized_error(message: impl Into<String>) -> HttpResponse {
     build_response(spec(
         StatusCode::UNAUTHORIZED,

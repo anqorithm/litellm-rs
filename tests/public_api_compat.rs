@@ -12,6 +12,8 @@ use litellm_rs::core::providers::amazon_nova::{
 use litellm_rs::core::providers::custom_api::{
     CustomApiErrorMapper, CustomHttpxConfig, CustomHttpxProvider, PROVIDER_NAME,
 };
+#[cfg(not(clippy))]
+use litellm_rs::core::providers::github::{GitHubConfig, GitHubProvider, get_model_info};
 
 #[cfg(not(clippy))]
 #[test]
@@ -44,4 +46,19 @@ fn custom_api_deprecated_in_0_6() {
         .expect("0.6 public construction must remain available without issuing a request");
     let _from_endpoint = CustomHttpxProvider::with_endpoint("https://8.8.8.8/v1/chat")
         .expect("0.6 with_endpoint signature must remain available without issuing a request");
+}
+
+#[cfg(not(clippy))]
+#[tokio::test]
+async fn github_deprecated_in_0_6() {
+    let model = get_model_info("gpt-4o")
+        .expect("0.6 native github model metadata must remain available without issuing a request");
+    assert_eq!(model.display_name, "GPT-4o");
+    let config = GitHubConfig {
+        api_key: Some("compat-only-key".to_string()),
+        ..Default::default()
+    };
+    let _provider = GitHubProvider::new(config)
+        .await
+        .expect("0.6 public construction must remain available without issuing a request");
 }

@@ -22,6 +22,8 @@
 
 use crate::core::net::ProviderEndpointAccess;
 use crate::core::providers::Provider;
+use crate::utils::auth::crypto::hmac::CredentialDigest;
+use std::fmt;
 use std::ops::Deref;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, Ordering};
@@ -30,6 +32,36 @@ use url::Url;
 
 /// Deployment identifier (unique within router)
 pub type DeploymentId = String;
+
+/// Immutable legacy-selector metadata published beside a deployment.
+///
+/// It deliberately contains no raw credential and has no serialization or
+/// display implementation.
+#[derive(Clone)]
+pub(crate) struct LegacySelectorMetadata {
+    credential_digest: CredentialDigest,
+}
+
+impl LegacySelectorMetadata {
+    pub(crate) fn from_stored_credential(credential: &str) -> Self {
+        Self {
+            credential_digest: CredentialDigest::from_credential(credential),
+        }
+    }
+
+    pub(crate) fn credential_matches(&self, request_digest: &CredentialDigest) -> bool {
+        self.credential_digest.constant_time_matches(request_digest)
+    }
+}
+
+impl fmt::Debug for LegacySelectorMetadata {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("LegacySelectorMetadata")
+            .field("credential_digest", &"[REDACTED]")
+            .finish()
+    }
+}
 
 /// Normalized retry timing for a gateway-configured deployment.
 ///

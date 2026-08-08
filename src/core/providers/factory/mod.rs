@@ -142,6 +142,18 @@ pub async fn create_provider(
             base_endpoint.or(settings_base_url.as_deref()),
         );
         oai_config.base.endpoint_access = endpoint_access;
+        // Auto-detect private network access for catalog providers whose default
+        // base URL is localhost (e.g. vllm, lm_studio, ollama).  When the user
+        // relies on the catalog default and has not explicitly set the endpoint
+        // access policy, switch to PrivateNetwork so the SSRF guard permits the
+        // outbound connection to localhost.
+        if endpoint_access == ProviderEndpointAccess::PublicOnly
+            && base_endpoint.is_none()
+            && settings_base_url.is_none()
+            && selector_allows_implicit_private(provider_selector)
+        {
+            oai_config.base.endpoint_access = ProviderEndpointAccess::PrivateNetwork;
+        }
         oai_config.base.timeout = timeout;
         oai_config.base.max_retries = max_retries;
 
@@ -298,6 +310,10 @@ mod tests {
             let mut opposite = config.clone();
             opposite.endpoint_access = if is_local { PublicOnly } else { PrivateNetwork };
             if is_local {
+                // Use an explicit base URL matching the catalog default so the
+                // auto-detection of catalog-default localhost does not kick in;
+                // the SSRF guard must still block PublicOnly + localhost.
+                opposite.base_url = Some(def.base_url.to_string());
                 assert!(create_provider(opposite).await.is_err());
             } else {
                 assert!(crate::config::Validate::validate(&opposite).is_err());
